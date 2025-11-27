@@ -1,0 +1,3 @@
+- Get a sample csv
+- Test pipeline on small LLM
+- Integrate vLLM
