@@ -37,57 +37,78 @@ def format_result(result: ExecutionResult) -> str:
     
     return "\n".join(parts) if parts else "[no output]"
 
-def build_prompt(dataset_description: str) -> str:
-    """Build system prompt with dataset context."""
-    return f"""You have a Python notebook. Run code with <code> tags:
-
-<code>
+# Initial exploration code - runs automatically before Turn 1 so the model sees real data
+BOOTSTRAP_CODE = """
 import pandas as pd
+import numpy as np
+
+# Load and get first impressions
 df = pd.read_csv("data.csv")
-print(df.head())
-</code>
+print("=== SHAPE ===")
+print(f"Rows: {len(df)}, Columns: {len(df.columns)}")
+print(f"Columns: {list(df.columns)}")
 
-STATE PERSISTS between turns.
+print("\\n=== FIRST 5 ROWS ===")
+print(df.head().to_string())
 
-DATASET CONTEXT:
+print("\\n=== DATA TYPES ===")
+print(df.dtypes.to_string())
+
+print("\\n=== NUMERIC SUMMARY ===")
+print(df.describe().to_string())
+
+print("\\n=== CATEGORICAL COLUMNS ===")
+for col in df.select_dtypes(include=['object']).columns:
+    print(f"{col}: {df[col].nunique()} unique → {df[col].value_counts().head(3).to_dict()}")
+
+print("\\n=== MISSING VALUES ===")
+missing = df.isnull().sum()
+if missing.sum() > 0:
+    print(missing[missing > 0].to_string())
+else:
+    print("No null values (but check for placeholder strings like '?' or 'NA')")
+""".strip()
+
+def build_prompt(dataset_description: str, bootstrap_output: str) -> str:
+    """Build system prompt with dataset context and initial exploration results."""
+    return f"""You are a senior data scientist creating exam questions. Your goal is to demonstrate expert-level thinking: understanding what the data represents, forming hypotheses, and crafting questions that test deep comprehension.
+
+DATASET CONTEXT (provided by user):
 {dataset_description}
 
-TASK: Explore data.csv and craft exam-style questions that REQUIRE computation. Use your domain knowledge above to ask meaningful questions.
+I've already run initial exploration. Here's what the data looks like:
 
-FORMATTING RULES:
-- Wrap runnable Python in <code> ... </code>.
-- Wrap each question as {{question}}Question text → answer type{{/question}}. Use tight answer types (number, percentage, category name, yes/no, count, etc.).
-- When you have 6+ strong, non-duplicate questions overall, write DONE on its own line and stop.
+```
+{bootstrap_output}
+```
 
-TURN TEMPLATE (must follow in this order every turn):
-What I saw:
-- 1–3 concise bullets of NEW observations from code you ran this turn (shape, types, missingness, distributions, notable values, relationships). Do NOT omit this section.
-Questions:
-- 3–5 varied, non-redundant questions that require computation and reference the observations above.
-Next code:
-<code>
-# runnable Python that advances exploration (cleaning, stats, comparisons)
-</code>
+YOUR TASK:
+1. First, explain what you think this dataset is really about. What story does it tell? What would a domain expert care about?
+2. Explore further to understand patterns, relationships, and edge cases.
+3. Craft exam questions at THREE difficulty levels:
+   - MEDIUM: Direct computations (means, counts, percentages)
+   - HARD: Multi-step analysis (group comparisons, correlations, filtering + aggregation)
+   - VERY HARD: Insight questions requiring domain reasoning (anomalies, relationships between variables, what-if scenarios)
 
-MANDATORY BEHAVIOR:
-- If you ever miss the template or a section, start the next reply with "RETRY" and then follow the template correctly.
-- Always run code each turn. If a code cell errors, fix it next turn (e.g., convert INTERNODE columns from "?" strings to numeric).
-- Track what you already asked; do NOT repeat or lightly restate prior questions.
-- Cover multiple columns over time: TL, IN, TR, TREE, BR, and several INTERNODE_* columns. Include differences/ratios between internodes, missingness checks, extremes, and group comparisons.
-- Prefer computations that test understanding (means/medians/std/ranges, top/bottom groups, deltas between stages, correlations after cleaning).
+FORMATTING:
+- Run code with <code>...</code> tags. State persists between turns.
+- Tag each question with difficulty: {{question}}[MEDIUM] Question → answer type{{/question}}
+- Answer types: number, percentage, category name, yes/no, count, list
 
-HELPFUL STARTING CODE (you may adapt):
-# Clean INTERNODE_* columns: turn '?' to NaN and cast numeric
-int_cols = [c for c in df.columns if c.startswith("INTERNODE_")]
-df[int_cols] = df[int_cols].replace("?", pd.NA)
-df[int_cols] = df[int_cols].apply(pd.to_numeric, errors="coerce")
+TURN STRUCTURE:
+1. **My interpretation**: What does this data/output tell us? (1-2 sentences of insight)
+2. **Questions**: 3-5 new questions at varied difficulties, grounded in what you just saw
+3. **Next exploration**: <code> block that digs deeper (clean data, compute stats, find patterns)
 
-EXAMPLE PATTERNS (do NOT reuse verbatim):
-{{question}}Which treatment has the widest TL range? → category name{{/question}}
-{{question}}What percent of rows have any INTERNODE_* missing? → percentage{{/question}}
-{{question}}Which tree shows the largest drop between INTERNODE_3 and INTERNODE_4 means? → category name{{/question}}
+THINK LIKE AN EXPERT:
+- Why would someone collect this data? What decisions would it inform?
+- What relationships SHOULD exist if the domain logic holds?
+- Where might the data be messy, surprising, or misleading?
+- What would separate a student who memorized formulas from one who understands the domain?
 
-Start now."""
+When you have 8+ strong questions across all difficulty levels, write DONE and list your final questions grouped by difficulty.
+
+Begin by sharing your interpretation of what this dataset is about, then continue exploring."""
 
 # --- Configuration ---
 csv_path = "data.csv"
@@ -112,7 +133,15 @@ shutil.copy(csv_path, workdir)
 with JupyterKernel(workdir=workdir) as kernel:
     llm = APILLM()
     try:
-        system_prompt = build_prompt(dataset_description)
+        # Run bootstrap exploration so the model sees real data first
+        print("="*60)
+        print("BOOTSTRAP: Running initial exploration...")
+        print("="*60)
+        bootstrap_result = kernel.execute(BOOTSTRAP_CODE)
+        bootstrap_output = bootstrap_result.stdout or "[no output]"
+        print(bootstrap_output[:2000] + "..." if len(bootstrap_output) > 2000 else bootstrap_output)
+        
+        system_prompt = build_prompt(dataset_description, bootstrap_output)
         conversation = [{"role": "user", "content": system_prompt}]
         
         for turn in range(MAX_TURNS):
@@ -150,7 +179,7 @@ with JupyterKernel(workdir=workdir) as kernel:
                 feedback = "\n\n".join(results)
             
             # Add nudge to continue
-            feedback += "\n\nList your {question}...{/question} tags, then <code> to continue or write DONE."
+            feedback += "\n\nShare your interpretation, add {question}[DIFFICULTY]...{/question} tags, then <code> to continue. Write DONE when you have 8+ questions."
             
             conversation.append({"role": "user", "content": feedback})
         else:
