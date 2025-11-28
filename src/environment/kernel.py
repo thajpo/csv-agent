@@ -48,7 +48,7 @@ class JupyterKernel:
         kernel.shutdown()
     """
     
-    def __init__(self, timeout: float = 10.0):
+    def __init__(self, timeout: float = 10.0, workdir: Optional[str] = None):
         """
         Start a new Python kernel.
         
@@ -59,7 +59,7 @@ class JupyterKernel:
         
         # --- Step 1: Create and start the kernel manager ---
         # This spawns a new Python process that will run our code
-        self.km = KernelManager(kernel_name='python3')
+        self.km = KernelManager(kernel_name='python3', cwd=workdir)
         self.km.start_kernel()
         
         # --- Step 2: Get a client to talk to the kernel ---
@@ -74,98 +74,72 @@ class JupyterKernel:
         atexit.register(self.shutdown)
     
     def execute(self, code: str) -> ExecutionResult:
-        """
-        Execute code in the kernel and return the result.
-        
-        Args:
-            code: Python code to execute
-            
-        Returns:
-            ExecutionResult with stdout, stderr, result, and error info
-        """
+        """Execute code in the kernel and return the result."""
         import time
         start = time.perf_counter()
         
-        # --- Step 3: Send the code to the kernel ---
-        # This returns a message ID we use to match responses
         msg_id = self.kc.execute(code)
+        outputs = self._collect_outputs(msg_id)
         
-        # Collect outputs
-        stdout_parts = []
-        stderr_parts = []
-        result = None
-        error_type = None
-        error_message = None
-        traceback = []
+        elapsed = int((time.perf_counter() - start) * 1000)
         
-        # --- Step 4: Read messages until execution completes ---
-        # The kernel sends multiple messages:
-        #   - "stream" for print() output
-        #   - "execute_result" for the repr of last expression  
-        #   - "error" if an exception occurred
-        #   - "status" with state="idle" when done
+        if outputs is None:
+            return ExecutionResult(
+                success=False,
+                error_type="TimeoutError",
+                error_message=f"Execution timed out after {self.timeout}s",
+                execution_time_ms=elapsed,
+            )
+        
+        return ExecutionResult(
+            success=(outputs['error_type'] is None),
+            stdout=''.join(outputs['stdout']),
+            stderr=''.join(outputs['stderr']),
+            result=outputs['result'],
+            error_type=outputs['error_type'],
+            error_message=outputs['error_message'],
+            traceback=outputs['traceback'],
+            execution_time_ms=elapsed,
+        )
+    
+    def _collect_outputs(self, msg_id: str) -> Optional[dict]:
+        """
+        Read messages from kernel until execution completes.
+        Returns None on timeout, otherwise dict of collected outputs.
+        """
+        outputs = {
+            'stdout': [],
+            'stderr': [],
+            'result': None,
+            'error_type': None,
+            'error_message': None,
+            'traceback': [],
+        }
+        
         while True:
             try:
-                # Get next message from the IOPub channel (where outputs go)
                 msg = self.kc.get_iopub_msg(timeout=self.timeout)
             except Empty:
-                # Timeout - kernel took too long
-                elapsed = int((time.perf_counter() - start) * 1000)
-                return ExecutionResult(
-                    success=False,
-                    error_type="TimeoutError",
-                    error_message=f"Execution timed out after {self.timeout}s",
-                    execution_time_ms=elapsed,
-                )
+                return None
             
-            # Only process messages for our execution (not other background stuff)
             if msg['parent_header'].get('msg_id') != msg_id:
                 continue
             
             msg_type = msg['header']['msg_type']
             content = msg['content']
             
-            # --- Handle different message types ---
-            
             if msg_type == 'stream':
-                # Output from print() or similar
-                # content = {"name": "stdout"|"stderr", "text": "..."}
-                if content['name'] == 'stdout':
-                    stdout_parts.append(content['text'])
-                else:
-                    stderr_parts.append(content['text'])
-            
+                outputs[content['name']].append(content['text'])
             elif msg_type == 'execute_result':
-                # The repr of the last expression (like typing "x" in REPL)
-                # content = {"data": {"text/plain": "2"}, ...}
-                result = content['data'].get('text/plain', '')
-            
+                outputs['result'] = content['data'].get('text/plain', '')
             elif msg_type == 'error':
-                # An exception occurred
-                # content = {"ename": "ValueError", "evalue": "...", "traceback": [...]}
-                error_type = content['ename']
-                error_message = content['evalue']
-                traceback = content['traceback']
-            
-            elif msg_type == 'status':
-                # Kernel state changed
-                # content = {"execution_state": "busy"|"idle"}
-                if content['execution_state'] == 'idle':
-                    # Execution finished, we can stop listening
-                    break
+                outputs['error_type'] = content['ename']
+                outputs['error_message'] = content['evalue']
+                outputs['traceback'] = content['traceback']
+            elif msg_type == 'status' and content['execution_state'] == 'idle':
+                break
         
-        elapsed = int((time.perf_counter() - start) * 1000)
-        
-        return ExecutionResult(
-            success=(error_type is None),
-            stdout=''.join(stdout_parts),
-            stderr=''.join(stderr_parts),
-            result=result,
-            error_type=error_type,
-            error_message=error_message,
-            traceback=traceback,
-            execution_time_ms=elapsed,
-        )
+        return outputs
     
     def reset(self):
         """
@@ -178,10 +152,21 @@ class JupyterKernel:
     
     def shutdown(self):
         """Stop the kernel process."""
-        if hasattr(self, 'kc'):
+        if getattr(self, '_shutdown', False):
+            return  # Already shut down
+        self._shutdown = True
+        
+        try:
+            atexit.unregister(self.shutdown)
+        except Exception:
+            pass
+        
+        if hasattr(self, 'kc') and self.kc is not None:
             self.kc.stop_channels()
-        if hasattr(self, 'km'):
+            del self.kc
+        if hasattr(self, 'km') and self.km is not None:
             self.km.shutdown_kernel(now=True)
+            del self.km
     
     def __enter__(self):
         return self
