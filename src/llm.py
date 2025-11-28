@@ -1,22 +1,73 @@
 """
-Qwen3-3B wrapper for fast local inference on ROCm.
+LLM wrappers for local inference and API-based inference.
 
 Usage:
+    # Local model (loads into GPU memory)
     from src.llm import LLM
-    
     llm = LLM()
     response = llm("What is 2+2?")
+    
+    # OpenRouter (set OPENROUTER_API_KEY env var)
+    from src.llm import APILLM
+    llm = APILLM()  # defaults to qwen/qwen3-32b
+    llm = APILLM(model="anthropic/claude-sonnet-4")
+    
+    # Local server (vLLM, Ollama)
+    llm = APILLM(base_url="http://localhost:8000/v1", model="Qwen/Qwen3-32B", api_key="none")
 """
 
 import os
-
-os.environ.setdefault(
-    "PYTORCH_ALLOC_CONF",  # was PYTORCH_HIP_ALLOC_CONF (deprecated)
-    "garbage_collection_threshold:0.8,max_split_size_mb:128",
-)
+import httpx
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+
+class APILLM:
+    """LLM client for OpenAI-compatible APIs (OpenRouter, vLLM, Ollama, etc.)."""
+    
+    def __init__(
+        self,
+        base_url: str = "https://openrouter.ai/api/v1",
+        model: str = "x-ai/grok-4.1-fast:free",
+        api_key: str | None = None,  # Falls back to OPENROUTER_API_KEY env var
+        timeout: float = 120.0,
+    ):
+        if api_key is None:
+            api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.api_key = api_key
+        self.client = httpx.Client(timeout=timeout)
+    
+    def __call__(
+        self,
+        prompt: str | list[dict],
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> str:
+        # Accept either a string or a list of messages
+        if isinstance(prompt, str):
+            messages = [{"role": "user", "content": prompt}]
+        else:
+            messages = prompt
+        
+        response = self.client.post(
+            f"{self.base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={
+                "model": self.model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            },
+        )
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
+    
+    def __del__(self):
+        if hasattr(self, "client"):
+            self.client.close()
 
 
 class LLM:

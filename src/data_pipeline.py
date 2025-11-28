@@ -1,7 +1,7 @@
 import tempfile, shutil, re
 import torch
 from src.environment.kernel import JupyterKernel, ExecutionResult
-from src.llm import LLM
+from src.llm import LLM, APILLM
 
 MAX_OUTPUT_CHARS = 10000
 MAX_TURNS = 10
@@ -37,7 +37,9 @@ def format_result(result: ExecutionResult) -> str:
     
     return "\n".join(parts) if parts else "[no output]"
 
-SYSTEM_PROMPT = """You have a Python notebook. Run code with <code> tags:
+def build_prompt(dataset_description: str) -> str:
+    """Build system prompt with dataset context."""
+    return f"""You have a Python notebook. Run code with <code> tags:
 
 <code>
 import pandas as pd
@@ -47,40 +49,71 @@ print(df.head())
 
 STATE PERSISTS between turns.
 
-TASK: Explore data.csv and craft exam-style questions that REQUIRE computation.
+DATASET CONTEXT:
+{dataset_description}
 
-FORMATTING:
+TASK: Explore data.csv and craft exam-style questions that REQUIRE computation. Use your domain knowledge above to ask meaningful questions.
+
+FORMATTING RULES:
 - Wrap runnable Python in <code> ... </code>.
-- Wrap each question as {question}Question text → answer type{/question}. Use concise answer types (number, percentage, category name, yes/no, count, etc.).
-- When you have 3+ strong questions, write DONE on its own line.
+- Wrap each question as {{question}}Question text → answer type{{/question}}. Use tight answer types (number, percentage, category name, yes/no, count, etc.).
+- When you have 6+ strong, non-duplicate questions overall, write DONE on its own line and stop.
 
-TURN-BY-TURN PROTOCOL (follow in order):
-1) Explore before asking: run code to inspect shape, columns, missingness, distributions, and relationships. Start by loading the CSV and printing columns/summary.
-2) Write 1-3 bullets under "What I saw:" summarizing NEW findings this turn. Do not skip this note.
-3) Propose your best 3-5 non-redundant questions based on those findings. Prefer variety and depth.
-4) Add a code cell that advances exploration (e.g., compute stats that answer or inspire the next questions).
+TURN TEMPLATE (must follow in this order every turn):
+What I saw:
+- 1–3 concise bullets of NEW observations from code you ran this turn (shape, types, missingness, distributions, notable values, relationships). Do NOT omit this section.
+Questions:
+- 3–5 varied, non-redundant questions that require computation and reference the observations above.
+Next code:
+<code>
+# runnable Python that advances exploration (cleaning, stats, comparisons)
+</code>
 
-QUESTION QUALITY BAR:
-- Must be answerable from the data via computation; no vague or subjective prompts.
-- Cover multiple columns over time; mix aggregates (mean/median/std/range), comparisons (by treatment/tree/stage), missingness, extremes/outliers, and relationships (ratios, differences between internode stages, correlations with TL).
-- Avoid repeating prior questions and avoid trivial restatements. Do not fixate on a single column (e.g., TL); include INTERNODE_* and other fields.
-- If a column seems empty/constant, ask a verification question about it. If unsure what to ask, run a quick probe to surface anomalies first.
+MANDATORY BEHAVIOR:
+- If you ever miss the template or a section, start the next reply with "RETRY" and then follow the template correctly.
+- Always run code each turn. If a code cell errors, fix it next turn (e.g., convert INTERNODE columns from "?" strings to numeric).
+- Track what you already asked; do NOT repeat or lightly restate prior questions.
+- Cover multiple columns over time: TL, IN, TR, TREE, BR, and several INTERNODE_* columns. Include differences/ratios between internodes, missingness checks, extremes, and group comparisons.
+- Prefer computations that test understanding (means/medians/std/ranges, top/bottom groups, deltas between stages, correlations after cleaning).
 
-EXAMPLE PATTERNS (illustrative—do NOT reuse verbatim):
-{question}Which treatment has the widest TL range? → category name{/question}
-{question}What percent of rows have any INTERNODE_* missing? → percentage{/question}
-{question}Which tree shows the largest drop between INTERNODE_3 and INTERNODE_4 means? → category name{/question}
+HELPFUL STARTING CODE (you may adapt):
+# Clean INTERNODE_* columns: turn '?' to NaN and cast numeric
+int_cols = [c for c in df.columns if c.startswith("INTERNODE_")]
+df[int_cols] = df[int_cols].replace("?", pd.NA)
+df[int_cols] = df[int_cols].apply(pd.to_numeric, errors="coerce")
+
+EXAMPLE PATTERNS (do NOT reuse verbatim):
+{{question}}Which treatment has the widest TL range? → category name{{/question}}
+{{question}}What percent of rows have any INTERNODE_* missing? → percentage{{/question}}
+{{question}}Which tree shows the largest drop between INTERNODE_3 and INTERNODE_4 means? → category name{{/question}}
 
 Start now."""
 
-workdir = tempfile.mkdtemp()
+# --- Configuration ---
 csv_path = "data.csv"
+
+# Dataset description (manual for now, could come from Kaggle API later)
+dataset_description = """
+Tree branch growth measurements from an agricultural experiment.
+- TR: Treatment (control, methanol_control, PP_333_4g/L, PP_333_20g/L, EL_500_4g/L, EL_500_20g/L)
+- TREE: Tree identifier (e.g., G28, M33)
+- BR: Branch label (A-J)
+- TL: Total branch length (cm)
+- IN: Number of internodes
+- INTERNODE_1 to INTERNODE_29: Length of each internode (cm), '?' = missing
+
+Goal: Understand how treatments affect branch growth patterns.
+""".strip()
+
+# --- Run exploration ---
+workdir = tempfile.mkdtemp()
 shutil.copy(csv_path, workdir)
 
 with JupyterKernel(workdir=workdir) as kernel:
-    llm = LLM()
+    llm = APILLM()
     try:
-        conversation = [{"role": "user", "content": SYSTEM_PROMPT}]
+        system_prompt = build_prompt(dataset_description)
+        conversation = [{"role": "user", "content": system_prompt}]
         
         for turn in range(MAX_TURNS):
             print(f"\n{'='*60}\nTURN {turn + 1}\n{'='*60}")
