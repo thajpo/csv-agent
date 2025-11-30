@@ -1,24 +1,26 @@
-# Ongoing
+What is the goal of this project?
 
-## Where we are
-- Bootstrap EDA + teacher exploration loop work.
-- Docs aligned to multi-hook design.
-- Oracle and tools: not yet implemented.
+Well, I spent a lot of time trying to get LLMs to help me spec things out. It was helpful to understand what direction to move in. It was not helpful in when it comes to "how do I actually make this agent harness". I think solving this question on my own, or making a good attempt with minimal LLM usage is very important as a *learning experience*
 
-## V1 scope
-- 2-4 hooks per episode, DAG with explicit deps
-- Tools: `group_stat`, `correlation`, `count_filter`, `model_eval`, `python_code`
-- `python_code` operates on hook results only, not df
-- Oracle = ground truth, ~5% float tolerance, partial credit per hook
+1. Load csv
+2. Expose tools to teacher (how?)
+    what tools to give it?
+3. Have teacher come up with questions and answer pairs 
+4. Give the question to the teacher again, and see if it can solve the question
+5. If it does solve the question, then we save that data (not clear what this data *is*)
 
-## Deferred
-- Hidden eval hooks, corruption variants
-- Behavioral regularizers, coverage metrics
-- Tool evolution pipeline
 
-## Next
-1. `HookSpec`, `OracleResult`, `Episode` dataclasses
-2. Built-in tools (group_stat, correlation, count_filter, model_eval w/ seeds)
-3. `run_hooks` with topo sort + validation
-4. Teacher prompt update + JSON parsing
-5. Hand-author a few episodes to sanity-check oracle
+So we have python tools. This means that we cannot allow the LLM to import anything.
+The LLM is not allowed to use python.
+I think the way is that we have the LLM make <code> block calls, but we intercept before passing into the interpreter.
+
+What else is confusing
+
+Well, how do we define the different datatypes and classes. I think this will reveal itself as I code this up.
+
+I am also confused on what tools we want to expose. We already have the pandas tool file. I might just keep that
+
+I am very confused on the hook and contracts we use to store 'states' for the problem solution.
+
+There are many ways to cook an egg... should we be so strict in the hook outputs? Maybe
+
