@@ -28,10 +28,27 @@ TOOL_SPECS = {
         "params": {
             "group_col": "str (required)",
             "target_col": "str (required)",
-            "agg": "str: mean/sum/median/std/min/max/count (default: 'mean')",
+            "agg": "str: mean/sum/median/std/min/max/count/nunique (default: 'mean')",
             "filter_expr": "str: pandas query expression (default: '')",
         },
         "example": {"tool": "group_stat", "group_col": "region", "target_col": "sales", "agg": "sum"},
+    },
+    "group_extremum": {
+        "desc": "Find the group(s) with the max or min aggregated value",
+        "params": {
+            "group_col": "str (required)",
+            "target_col": "str (required)",
+            "agg": "str: mean/sum/median/std/min/max/count/nunique (default: 'mean')",
+            "extremum": "str: 'max' or 'min' (default: 'max')",
+            "filter_expr": "str: pandas query expression (default: '')",
+        },
+        "example": {
+            "tool": "group_extremum",
+            "group_col": "region",
+            "target_col": "sales",
+            "agg": "mean",
+            "extremum": "max",
+        },
     },
     "correlation": {
         "desc": "Correlation between two numeric columns",
@@ -122,6 +139,15 @@ def run_tool(tool: str, df: pd.DataFrame, params: dict) -> str:
                     params["group_col"],
                     params["target_col"],
                     params.get("agg", "mean"),
+                    params.get("filter_expr", ""),
+                )
+            case "group_extremum":
+                return group_extremum(
+                    df,
+                    params["group_col"],
+                    params["target_col"],
+                    params.get("agg", "mean"),
+                    params.get("extremum", "max"),
                     params.get("filter_expr", ""),
                 )
             case "correlation":
@@ -232,6 +258,30 @@ def group_stat(
     if filter_expr:
         df = df.query(filter_expr)
     return df.groupby(group_col)[target_col].agg(agg).to_string()
+
+
+def group_extremum(
+    df: pd.DataFrame,
+    group_col: str,
+    target_col: str,
+    agg: str = "mean",
+    extremum: str = "max",
+    filter_expr: str = "",
+) -> str:
+    """Find the group(s) with the maximum or minimum aggregated value."""
+    if filter_expr:
+        df = df.query(filter_expr)
+    grouped = df.groupby(group_col)[target_col].agg(agg)
+    if grouped.empty:
+        return "No data after filtering"
+    extremum = extremum.lower()
+    if extremum not in {"max", "min"}:
+        return "Invalid extremum. Use 'max' or 'min'."
+    extreme_value = grouped.max() if extremum == "max" else grouped.min()
+    winners = grouped[grouped == extreme_value]
+    groups = ", ".join(str(idx) for idx in winners.index)
+    label = "Max" if extremum == "max" else "Min"
+    return f"{label} {agg} {target_col} by {group_col}: {groups} = {extreme_value}"
 
 
 def correlation(

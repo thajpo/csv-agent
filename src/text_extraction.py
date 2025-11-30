@@ -25,33 +25,59 @@ def extract_json_episodes(text: str) -> list[dict] | None:
         if episodes:
             return episodes
     
-    # Try 2: Find raw JSON array starting with [
-    start = text.find('[')
-    if start != -1:
-        # Try to find matching ]
-        bracket_count = 0
-        end = start
-        for i, char in enumerate(text[start:], start):
-            if char == '[':
-                bracket_count += 1
-            elif char == ']':
-                bracket_count -= 1
-                if bracket_count == 0:
-                    end = i + 1
-                    break
-        
-        candidate = text[start:end]
-        episodes = _try_parse_array(candidate)
-        if episodes:
-            return episodes
-        
-        # Try 3: Array was truncated - extract individual objects
+    # Try 2: Find raw JSON array starting with [ { (avoid earlier [ in examples)
+    array_starts = [m.start() for m in re.finditer(r'\[\s*\n?\s*\{', text)]
+    for start in reversed(array_starts):
+        candidate = _extract_balanced_brackets(text, start)
+        if candidate:
+            episodes = _try_parse_array(candidate)
+            if episodes:
+                return episodes
+        # Try 3: Array was truncated - extract individual objects from this point
         episodes = _extract_partial_episodes(text[start:])
         if episodes:
             return episodes
     
     return None
 
+def extract_questions(text: str) -> list[str]:
+    """Extract all questions between {question} and {/question} tags."""
+    pattern = r'\{question\}(.*?)\{/question\}'
+    return [q.strip() for q in re.findall(pattern, text, re.DOTALL)]
+
+
+def extract_json_array(text: str) -> list[dict] | None:
+    """
+    Extract any JSON array from text.
+    Returns list of dicts if found, None otherwise.
+    """
+    # Try ```json blocks first (most reliable)
+    json_pattern = r'```json\s*([\s\S]*?)\s*```'
+    matches = re.findall(json_pattern, text)
+    
+    for match in matches:
+        try:
+            data = json.loads(match.strip())
+            if isinstance(data, list):
+                return data
+        except json.JSONDecodeError:
+            pass
+    
+    # Try raw array - look for array start pattern (handles nested [ in earlier text)
+    # Search for [ followed by newline and { (typical JSON array of objects)
+    array_starts = [m.start() for m in re.finditer(r'\[\s*\n?\s*\{', text)]
+    
+    for start in reversed(array_starts):
+        candidate = _extract_balanced_brackets(text, start)
+        if candidate:
+            try:
+                data = json.loads(candidate)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+            except json.JSONDecodeError:
+                pass
+    
+    return None
 
 def _is_valid_episode(obj) -> bool:
     """Check if object looks like a valid episode."""
@@ -136,6 +162,43 @@ def _extract_balanced_braces(text: str, start: int) -> str | None:
         elif char == '}':
             brace_count -= 1
             if brace_count == 0:
+                return text[start:i + 1]
+    
+    return None  # Unbalanced
+
+
+def _extract_balanced_brackets(text: str, start: int) -> str | None:
+    """Extract a balanced [...] substring starting at position start."""
+    if start >= len(text) or text[start] != '[':
+        return None
+    
+    bracket_count = 0
+    in_string = False
+    escape = False
+    
+    for i in range(start, len(text)):
+        char = text[i]
+        
+        if escape:
+            escape = False
+            continue
+        
+        if char == '\\':
+            escape = True
+            continue
+        
+        if char == '"':
+            in_string = not in_string
+            continue
+        
+        if in_string:
+            continue
+        
+        if char == '[':
+            bracket_count += 1
+        elif char == ']':
+            bracket_count -= 1
+            if bracket_count == 0:
                 return text[start:i + 1]
     
     return None  # Unbalanced

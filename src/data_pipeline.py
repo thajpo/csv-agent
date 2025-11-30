@@ -9,21 +9,11 @@ from src.kernel import JupyterKernel, ExecutionResult
 from src.llm import APILLM
 from src.tools import parse_tool_call, run_tool
 from src.prompts import BOOTSTRAP_CODE, build_prompt, DEFAULT_DATASET_DESCRIPTION
+from src.text_extraction import extract_code_blocks, extract_questions
 
-MAX_OUTPUT_CHARS = 10000
 MAX_TURNS = 10
 
 
-def extract_code_blocks(text: str) -> list[str]:
-    """Extract all code between <code> and </code> tags."""
-    pattern = r'<code>(.*?)</code>'
-    return re.findall(pattern, text, re.DOTALL)
-
-
-def extract_questions(text: str) -> list[str]:
-    """Extract all questions between {question} and {/question} tags."""
-    pattern = r'\{question\}(.*?)\{/question\}'
-    return [q.strip() for q in re.findall(pattern, text, re.DOTALL)]
 
 
 def execute_tool_call(code: str, df: pd.DataFrame) -> str:
@@ -49,20 +39,14 @@ def execute_tool_call(code: str, df: pd.DataFrame) -> str:
 
 
 def format_result(result: ExecutionResult) -> str:
-    """Format execution result for the LLM, truncating if needed."""
+    """Format execution result for the LLM."""
     parts = []
     
     if result.stdout:
-        out = result.stdout
-        if len(out) > MAX_OUTPUT_CHARS:
-            out = out[:MAX_OUTPUT_CHARS] + f"\n... (truncated, {len(result.stdout)} chars total)"
-        parts.append(f"[stdout]\n{out}")
+        parts.append(f"[stdout]\n{result.stdout}")
     
     if result.result:
-        out = result.result
-        if len(out) > MAX_OUTPUT_CHARS:
-            out = out[:MAX_OUTPUT_CHARS] + f"\n... (truncated, {len(result.result)} chars total)"
-        parts.append(f"[result]\n{out}")
+        parts.append(f"[result]\n{result.result}")
     
     if not result.success:
         parts.append(f"[error: {result.error_type}]\n{result.error_message}")
@@ -90,7 +74,7 @@ with JupyterKernel(workdir=workdir) as kernel:
         print("="*60)
         bootstrap_result = kernel.execute(BOOTSTRAP_CODE)
         bootstrap_output = bootstrap_result.stdout or "[no output]"
-        print(bootstrap_output[:2000] + "..." if len(bootstrap_output) > 2000 else bootstrap_output)
+        print(bootstrap_output)
         
         system_prompt = build_prompt(dataset_description, bootstrap_output)
         conversation = [{"role": "user", "content": system_prompt}]
@@ -128,9 +112,6 @@ with JupyterKernel(workdir=workdir) as kernel:
                 
                 feedback = "\n\n".join(results)
             
-            # Truncate feedback if too long
-            if len(feedback) > MAX_OUTPUT_CHARS:
-                feedback = feedback[:MAX_OUTPUT_CHARS] + "\n... (truncated)"
             
             # Add nudge to continue
             feedback += "\n\nShare your interpretation, add {question}[DIFFICULTY]...{/question} tags, then <code> to continue. Write DONE when you have 8+ questions."
