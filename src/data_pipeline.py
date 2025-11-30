@@ -5,7 +5,7 @@ import tempfile
 import pandas as pd
 import torch
 
-from src.environment.kernel import JupyterKernel, ExecutionResult
+from src.kernel import JupyterKernel, ExecutionResult
 from src.llm import APILLM
 from src.tools import parse_tool_call, run_tool
 from src.prompts import BOOTSTRAP_CODE, build_prompt, DEFAULT_DATASET_DESCRIPTION

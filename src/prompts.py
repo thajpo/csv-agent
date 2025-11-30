@@ -5,100 +5,80 @@ from src.tools import format_tool_docs
 # Initial exploration code - runs automatically before Turn 1 so the model sees real data
 BOOTSTRAP_CODE = """
 import pandas as pd
-import numpy as np
+from src.tools import inspect, describe, value_counts
 
-# Load and get first impressions
 df = pd.read_csv("data.csv")
-print("=== SHAPE ===")
-print(f"Rows: {len(df)}, Columns: {len(df.columns)}")
-print(f"Columns: {list(df.columns)}")
 
-print("\\n=== FIRST 5 ROWS ===")
-print(df.head().to_string())
+for label, call in [
+    ("SHAPE", lambda: inspect(df, "shape")),
+    ("HEAD", lambda: inspect(df, "head", 5)),
+    ("DTYPES", lambda: inspect(df, "dtypes")),
+    ("NUMERIC SUMMARY", lambda: describe(df, "number")),
+    ("MISSING", lambda: inspect(df, "missing")),
+]:
+    print(f"=== {label} ===\\n{call()}\\n")
 
-print("\\n=== DATA TYPES ===")
-print(df.dtypes.to_string())
-
-print("\\n=== NUMERIC SUMMARY ===")
-print(df.describe().to_string())
-
-print("\\n=== CATEGORICAL COLUMNS ===")
+print("=== CATEGORICAL VALUE COUNTS ===")
 for col in df.select_dtypes(include=['object']).columns:
-    print(f"{col}: {df[col].nunique()} unique → {df[col].value_counts().head(3).to_dict()}")
-
-print("\\n=== MISSING VALUES ===")
-missing = df.isnull().sum()
-if missing.sum() > 0:
-    print(missing[missing > 0].to_string())
-else:
-    print("No null values (but check for placeholder strings like '?' or 'NA')")
+    print(f"\\n{col}:\\n{value_counts(df, col, 5)}")
 """.strip()
 
 
 # JSON schema for episodes - shown to the model
 EPISODE_SCHEMA = """
 {
-  "question_text": "string - a multi-step exam question requiring reasoning (NOT a simple lookup)",
+  "question_text": "string - multi-step exam question requiring reasoning (NOT a simple lookup)",
   "difficulty": "MEDIUM | HARD | VERY_HARD",
   "hooks": [
     {
-      "id": "string - unique identifier like 'h1', 'filter_control', 'compute_ratio', etc.",
-      "tool": "group_stat | correlation | count_filter | model_eval | python_code",
+      "id": "string - unique, lowercase with underscores only (e.g. 'ctrl_mean_tl', 'compare_ratio')",
+      "tool": "group_stat | correlation | count_filter | python_code",
       "params": {
-        "// For group_stat": "filter_expr?, target_col, group_col, group_val, agg (mean|median|sum|count|std)",
-        "// For correlation": "filter_expr?, col_a, col_b, method? (pearson|spearman)",
-        "// For count_filter": "filter_expr",
-        "// For model_eval": "filter_expr?, target_col, feature_cols[], model, metric, seed",
-        "// For python_code": "code (string), depends_on (list of hook ids) - USE THIS TO CHAIN RESULTS"
+        "// group_stat": "filter_expr?, target_col, group_col, group_val, agg (mean|median|sum|count|std|min|max)",
+        "// correlation": "filter_expr?, col_a, col_b, method? (pearson|spearman)",
+        "// count_filter": "filter_expr",
+        "// python_code": "code, depends_on[] - MUST match hook's depends_on exactly"
       },
-      "depends_on": ["list of hook ids this depends on - BUILD A REAL DAG"]
+      "depends_on": ["hook ids this depends on - forms acyclic DAG"]
     }
   ],
-  "// hooks requirement": "MEDIUM: 3-4 hooks, HARD: 4-6 hooks, VERY_HARD: 5-10 hooks",
-  "teacher_answers": {
-    "hook_id": "value - your computed answer for this hook (number, string, bool, list)"
-  },
-  "solution_trace": "string - step-by-step explanation of the reasoning chain"
+  "teacher_answers": {"hook_id": "scalar value (number|string|bool) - see INVARIANTS"},
+  "solution_trace": "step-by-step explanation"
 }
+
+INVARIANTS (your output MUST satisfy these):
+- Every hook.id is unique and appears exactly once as a key in teacher_answers
+- For group_stat: teacher_answers[id] = the 'stat' value (number)
+- For correlation: teacher_answers[id] = the 'r' value (number)
+- For count_filter: teacher_answers[id] = the 'count' value (number)
+- For python_code: teacher_answers[id] = the returned scalar; params.depends_on MUST equal hook's depends_on
+- All depends_on refs must point to earlier hooks (acyclic)
+- Only use columns from INITIAL EXPLORATION - do not invent column names
+- MEDIUM: 3-4 hooks, HARD: 4-6 hooks, VERY_HARD: 5-10 hooks (max 10)
 """.strip()
 
 
 # Hook tool documentation for the final output
 HOOK_TOOLS_DOC = """
-HOOK TOOLS (for building multi-step reasoning chains):
+HOOK TOOLS (for episodes only - not exploration):
 
-**group_stat**: Compute aggregated statistic for a group
-  - params: filter_expr (optional), target_col, group_col, group_val, agg (mean|median|sum|count|std)
-  - returns: {stat: number, n: count}
-  - Example: {"tool": "group_stat", "params": {"filter_expr": "TR == 'control'", "target_col": "TL", "group_col": "TREE", "group_val": "G28", "agg": "mean"}}
+**group_stat** → returns {{stat, n}} → teacher_answers gets 'stat'
+  params: filter_expr?, target_col, group_col, group_val, agg (mean|median|sum|count|std|min|max)
 
-**correlation**: Pearson/Spearman correlation between two columns
-  - params: filter_expr (optional), col_a, col_b, method (pearson|spearman, default: pearson)
-  - returns: {r: correlation, p: p-value, n: count}
-  - Example: {"tool": "correlation", "params": {"col_a": "TL", "col_b": "IN", "method": "pearson"}}
+**correlation** → returns {{r, p, n}} → teacher_answers gets 'r'
+  params: filter_expr?, col_a, col_b, method? (pearson|spearman)
 
-**count_filter**: Count rows matching a filter expression
-  - params: filter_expr
-  - returns: {count: number}
-  - Example: {"tool": "count_filter", "params": {"filter_expr": "TL > 100 and TR == 'control'"}}
+**count_filter** → returns {{count}} → teacher_answers gets 'count'
+  params: filter_expr
 
-**model_eval**: Train/test a model with fixed seed
-  - params: filter_expr (optional), target_col, feature_cols[], model (linear_regression), metric (mse|mae|r2|accuracy), seed
-  - returns: {metric: value, n_train: count, n_test: count}
-  - Example: {"tool": "model_eval", "params": {"target_col": "TL", "feature_cols": ["IN"], "model": "linear_regression", "metric": "r2", "seed": 42}}
-
-**python_code**: THE KEY TOOL FOR CHAINING - Compose over prior hook results
-  - params: code (string), depends_on (list of hook ids)
-  - The code receives a `results` dict with {{hook_id: result_dict}} from depends_on
-  - Must return a single value (number, string, bool, list, dict)
-  - USE THIS TO: compare values, compute ratios, find max/min, derive metrics
-  - Examples:
-    - Difference: {{"code": "results['h1']['stat'] - results['h2']['stat']", "depends_on": ["h1", "h2"]}}
-    - Ratio: {{"code": "results['h1']['stat'] / results['h2']['stat']", "depends_on": ["h1", "h2"]}}
-    - Percentage: {{"code": "100 * results['h1']['count'] / results['h2']['count']", "depends_on": ["h1", "h2"]}}
-    - Comparison: {{"code": "'treatment' if results['h1']['stat'] > results['h2']['stat'] else 'control'", "depends_on": ["h1", "h2"]}}
-    - Max of multiple: {{"code": "max([results['h1']['stat'], results['h2']['stat'], results['h3']['stat']])", "depends_on": ["h1", "h2", "h3"]}}
-    - CV (std/mean): {{"code": "results['std_hook']['stat'] / results['mean_hook']['stat']", "depends_on": ["std_hook", "mean_hook"]}}
+**python_code** → returns scalar → teacher_answers gets that scalar
+  params: code, depends_on[] (MUST match hook's depends_on exactly)
+  `results` dict has {{hook_id: full_result_dict}} from depends_on hooks
+  Examples:
+    {{"code": "results['h1']['stat'] - results['h2']['stat']", "depends_on": ["h1", "h2"]}}
+    {{"code": "results['h1']['stat'] / results['h2']['stat']", "depends_on": ["h1", "h2"]}}
+    {{"code": "'A' if results['h1']['stat'] > results['h2']['stat'] else 'B'", "depends_on": ["h1", "h2"]}}
+    {{"code": "round(100 * results['h1']['count'] / results['h2']['count'], 2)", "depends_on": ["h1", "h2"]}}
 """.strip()
 
 
@@ -118,13 +98,18 @@ INITIAL EXPLORATION:
 
 {tool_docs}
 
-HOW TO EXPLORE:
-Call exploration tools by placing JSON in <code>...</code> tags. One tool call per block.
-Examples:
-<code>{{"tool": "inspect", "aspect": "head", "n": 10}}</code>
-<code>{{"tool": "value_counts", "col": "TR"}}</code>
-<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean"}}</code>
-<code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN"}}</code>
+EXPLORATION TOOLS (use these now via <code> blocks, one per block):
+<code>{{"tool": "inspect", "aspect": "head|tail|shape|dtypes|columns|missing", "n": 10}}</code>
+<code>{{"tool": "describe", "include": "number|object|all"}}</code>
+<code>{{"tool": "value_counts", "col": "TR", "top_n": 20}}</code>
+<code>{{"tool": "unique", "col": "TREE", "top_n": 50}}</code>
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean|sum|median|std|min|max|count", "filter_expr": "IN > 5"}}</code>
+<code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "method": "pearson|spearman|kendall"}}</code>
+<code>{{"tool": "count_filter", "filter_expr": "TL > 50 and TR == 'control'"}}</code>
+<code>{{"tool": "sort_values", "col": "TL", "ascending": false, "top_n": 10}}</code>
+<code>{{"tool": "quantile", "col": "TL", "q": [0.1, 0.25, 0.5, 0.75, 0.9]}}</code>
+<code>{{"tool": "crosstab", "col_a": "TR", "col_b": "TREE", "normalize": "index|columns|all|"}}</code>
+Note: python_code is for EPISODE HOOKS only, not exploration.
 
 YOUR TASK:
 1. **Explore** the dataset deeply—find patterns, anomalies, relationships, and edge cases
@@ -207,37 +192,20 @@ Notice the DAG structure:
 
 This is ONE treatment. A full VERY_HARD question would compute this for all 6 treatments (more hooks) and find the max. The key is that each hook builds on prior results—no hook stands alone as a simple lookup.
 
-REQUIREMENTS FOR GOOD QUESTIONS:
-- MEDIUM questions need 3-4 hooks minimum
-- HARD questions need 4-6 hooks minimum  
-- VERY_HARD questions need 5-10 hooks minimum
-- Hooks MUST build on each other via depends_on—form a real DAG, not parallel independent lookups
-- You MUST compute and provide teacher_answers for EVERY hook
-- Use python_code hooks liberally to combine, compare, and derive from prior results
-- Answers must be specific (exact numbers, not ranges or approximations)
-- Questions should sound like exam questions, not "what is the value of X"
-
 TURN STRUCTURE (during exploration):
-1. **Interpretation**: What patterns or anomalies do you see? (1-2 sentences)
-2. **Brainstorm**: List 5-10 potential question ideas—be creative, think about what would challenge a student
-3. **Refine**: Star (★) the most promising ideas that require real reasoning chains
-4. **Next exploration**: <code> blocks to dig deeper into promising directions
+1. **Interpret**: What patterns/anomalies do you see? (1-2 sentences)
+2. **Brainstorm**: 5-10 question ideas that need multi-step reasoning
+3. **Explore**: <code> blocks to dig deeper
 
-FINAL OUTPUT (when ready):
-When you have explored enough, write DONE on its own line, then output your final 10 episodes as a JSON array:
-
+FINAL OUTPUT:
+When ready, output exactly this:
+1. A line containing only: DONE
+2. A JSON array of exactly 10 episodes (no other text):
 ```json
-[
-  {{episode 1}},
-  {{episode 2}},
-  ...
-  {{episode 10}}
-]
+[{{"question_text": "...", "difficulty": "...", "hooks": [...], "teacher_answers": {{...}}, "solution_trace": "..."}}, ...]
 ```
 
-Each episode must include question_text, difficulty, hooks (3-10 based on difficulty), teacher_answers (one per hook), and solution_trace.
-
-Begin by sharing your interpretation, brainstorm broadly, then explore. Signal DONE when ready to output final episodes."""
+Begin exploring. Signal DONE when ready."""
 
 
 # Dataset description (manual for now, could come from Kaggle API later)

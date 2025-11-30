@@ -163,7 +163,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx", specifier = ">=0.28.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "ipykernel", specifier = ">=7.1.0" },
     { name = "jupyter-client", specifier = ">=8.6.3" },
     { name = "numpy", specifier = ">=2.3.5" },

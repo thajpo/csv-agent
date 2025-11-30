@@ -24,3 +24,9 @@ I am very confused on the hook and contracts we use to store 'states' for the pr
 
 There are many ways to cook an egg... should we be so strict in the hook outputs? Maybe
 
+
+Okay
+
+It is a new day
+
+
