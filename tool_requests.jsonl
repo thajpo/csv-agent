@@ -1,0 +1,1 @@
+{"dataset_id": "data", "generation_timestamp": "2025-11-30T19:08:25.371934", "teacher_model": "grok-4.1-fast", "n_turns": 5, "mode": "tool-feedback", "TREE": "O28", "TR": "PP_333_4g/L", "TL": 176, "zscore": 3.2}

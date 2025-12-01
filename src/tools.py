@@ -24,31 +24,27 @@ TOOL_SPECS = {
         "example": {"tool": "unique", "col": "status"},
     },
     "group_stat": {
-        "desc": "Aggregate a column grouped by another column",
+        "desc": "Aggregate a column grouped by another. Add group_val for ONE group's scalar (atomic for hooks).",
         "params": {
-            "group_col": "str (required)",
+            "group_col": "str (required) - column to group by",
             "target_col": "str (required)",
             "agg": "str: mean/sum/median/std/min/max/count/nunique (default: 'mean')",
             "filter_expr": "str: pandas query expression (default: '')",
+            "group_val": "str: specific group value for atomic scalar output (optional)",
         },
-        "example": {"tool": "group_stat", "group_col": "region", "target_col": "sales", "agg": "sum"},
+        "example": {"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean", "group_val": "control"},
     },
     "group_extremum": {
-        "desc": "Find the group(s) with the max or min aggregated value",
+        "desc": "Find which group has max/min aggregated value. Returns group name OR value (atomic).",
         "params": {
             "group_col": "str (required)",
             "target_col": "str (required)",
             "agg": "str: mean/sum/median/std/min/max/count/nunique (default: 'mean')",
             "extremum": "str: 'max' or 'min' (default: 'max')",
+            "return_what": "str: 'group' or 'value' (default: 'group')",
             "filter_expr": "str: pandas query expression (default: '')",
         },
-        "example": {
-            "tool": "group_extremum",
-            "group_col": "region",
-            "target_col": "sales",
-            "agg": "mean",
-            "extremum": "max",
-        },
+        "example": {"tool": "group_extremum", "group_col": "TR", "target_col": "TL", "agg": "mean", "extremum": "max", "return_what": "group"},
     },
     "correlation": {
         "desc": "Correlation between two numeric columns",
@@ -75,9 +71,13 @@ TOOL_SPECS = {
         "example": {"tool": "sort_values", "col": "score", "ascending": False, "top_n": 10},
     },
     "quantile": {
-        "desc": "Calculate percentiles for a column",
-        "params": {"col": "str (required)", "q": "list[float] (default: [0.1, 0.25, 0.5, 0.75, 0.9])"},
-        "example": {"tool": "quantile", "col": "income"},
+        "desc": "Calculate percentile(s) for a column. Single q = atomic scalar output.",
+        "params": {
+            "col": "str (required)",
+            "q": "float or list[float]: single value for atomic output (default: [0.25, 0.5, 0.75])",
+            "filter_expr": "str: pandas query expression (default: '')",
+        },
+        "example": {"tool": "quantile", "col": "TL", "q": 0.9},
     },
     "crosstab": {
         "desc": "Cross-tabulation of two categorical columns",
@@ -87,6 +87,17 @@ TOOL_SPECS = {
             "normalize": "str: 'index', 'columns', 'all', or '' (default: '')",
         },
         "example": {"tool": "crosstab", "col_a": "gender", "col_b": "purchased", "normalize": "index"},
+    },
+    "derive_stat": {
+        "desc": "Compute derived metric (e.g. TL/IN), aggregate by group. Add group_val for atomic scalar.",
+        "params": {
+            "formula": "str (required) - expression using column names (e.g., 'TL / IN')",
+            "group_col": "str (required) - column to group by",
+            "agg": "str: mean/sum/median/std/min/max/count (default: 'mean')",
+            "filter_expr": "str: pandas query expression (default: '')",
+            "group_val": "str: specific group value for atomic scalar output (optional)",
+        },
+        "example": {"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean", "group_val": "control"},
     },
 }
 
@@ -140,6 +151,7 @@ def run_tool(tool: str, df: pd.DataFrame, params: dict) -> str:
                     params["target_col"],
                     params.get("agg", "mean"),
                     params.get("filter_expr", ""),
+                    params.get("group_val"),
                 )
             case "group_extremum":
                 return group_extremum(
@@ -148,6 +160,7 @@ def run_tool(tool: str, df: pd.DataFrame, params: dict) -> str:
                     params["target_col"],
                     params.get("agg", "mean"),
                     params.get("extremum", "max"),
+                    params.get("return_what", "group"),
                     params.get("filter_expr", ""),
                 )
             case "correlation":
@@ -168,13 +181,22 @@ def run_tool(tool: str, df: pd.DataFrame, params: dict) -> str:
                     params.get("top_n", 20),
                 )
             case "quantile":
-                return quantile(df, params["col"], params.get("q"))
+                return quantile(df, params["col"], params.get("q"), params.get("filter_expr", ""))
             case "crosstab":
                 return crosstab(
                     df,
                     params["col_a"],
                     params["col_b"],
                     params.get("normalize", ""),
+                )
+            case "derive_stat":
+                return derive_stat(
+                    df,
+                    params["formula"],
+                    params["group_col"],
+                    params.get("agg", "mean"),
+                    params.get("filter_expr", ""),
+                    params.get("group_val"),
                 )
             case _:
                 return f"Unknown tool: {tool}"
@@ -193,6 +215,18 @@ def format_tool_docs() -> str:
         lines.append(f"  Example: {json.dumps(spec['example'])}")
         lines.append("")
     return "\n".join(lines)
+
+
+# ============================================================================
+# Helper functions
+# ============================================================================
+
+def _coerce_numeric(series: pd.Series, na_values: list[str] = ["?", "", "NA", "N/A"]) -> pd.Series:
+    """Coerce object series to numeric, treating specified values as NaN."""
+    if series.dtype == "object":
+        cleaned = series.replace(na_values, pd.NA)
+        return pd.to_numeric(cleaned, errors="coerce")
+    return series
 
 
 # ============================================================================
@@ -253,11 +287,32 @@ def group_stat(
     target_col: str,
     agg: str = "mean",
     filter_expr: str = "",
+    group_val: str | None = None,
 ) -> str:
-    """Calculate aggregated statistics grouped by a column."""
+    """Calculate aggregated statistic grouped by a column. Auto-coerces '?' to NaN.
+    
+    If group_val is provided, returns atomic scalar for that group only.
+    Otherwise returns all groups (for exploration).
+    """
     if filter_expr:
         df = df.query(filter_expr)
-    return df.groupby(group_col)[target_col].agg(agg).to_string()
+    
+    # Auto-coerce target column if object dtype
+    df = df.copy()
+    df[target_col] = _coerce_numeric(df[target_col])
+    
+    result = df.groupby(group_col)[target_col].agg(agg)
+    
+    # Atomic mode: return scalar for specific group
+    if group_val is not None:
+        if group_val not in result.index:
+            return f"Group '{group_val}' not found in {group_col}"
+        val = result.loc[group_val]
+        n = df[df[group_col] == group_val][target_col].count()
+        return f"{val:.4f} (n={n})"
+    
+    # Exploration mode: return all groups
+    return result.to_string()
 
 
 def group_extremum(
@@ -266,22 +321,43 @@ def group_extremum(
     target_col: str,
     agg: str = "mean",
     extremum: str = "max",
+    return_what: str = "group",
     filter_expr: str = "",
 ) -> str:
-    """Find the group(s) with the maximum or minimum aggregated value."""
+    """Find which group has max/min aggregated value. Auto-coerces '?' to NaN.
+    
+    return_what='group' → returns group name (atomic string)
+    return_what='value' → returns the extreme value (atomic number)
+    """
     if filter_expr:
         df = df.query(filter_expr)
+    
+    # Auto-coerce target column if object dtype
+    df = df.copy()
+    df[target_col] = _coerce_numeric(df[target_col])
+    
     grouped = df.groupby(group_col)[target_col].agg(agg)
     if grouped.empty:
         return "No data after filtering"
+    
     extremum = extremum.lower()
     if extremum not in {"max", "min"}:
         return "Invalid extremum. Use 'max' or 'min'."
-    extreme_value = grouped.max() if extremum == "max" else grouped.min()
-    winners = grouped[grouped == extreme_value]
-    groups = ", ".join(str(idx) for idx in winners.index)
-    label = "Max" if extremum == "max" else "Min"
-    return f"{label} {agg} {target_col} by {group_col}: {groups} = {extreme_value}"
+    
+    if extremum == "max":
+        idx = grouped.idxmax()
+        val = grouped.max()
+    else:
+        idx = grouped.idxmin()
+        val = grouped.min()
+    
+    n = df[df[group_col] == idx][target_col].count()
+    
+    # Atomic output based on return_what
+    if return_what == "value":
+        return f"{val:.4f} (n={n})"
+    else:  # return_what == "group"
+        return f"{idx} ({agg}={val:.4f}, n={n})"
 
 
 def correlation(
@@ -321,11 +397,28 @@ def sort_values(
     return df.sort_values(col, ascending=ascending).head(top_n).to_string()
 
 
-def quantile(df: pd.DataFrame, col: str, q: list[float] | None = None) -> str:
-    """Calculate quantiles/percentiles for a column."""
+def quantile(df: pd.DataFrame, col: str, q: float | list[float] | None = None, filter_expr: str = "") -> str:
+    """Calculate quantile(s) for a column.
+    
+    If q is a single float, returns atomic scalar.
+    If q is a list, returns multiple quantiles (for exploration).
+    """
+    if filter_expr:
+        df = df.query(filter_expr)
+    
     if q is None:
-        q = [0.1, 0.25, 0.5, 0.75, 0.9]
-    result = df[col].quantile(q)
+        q = [0.25, 0.5, 0.75]
+    
+    # Auto-coerce if needed
+    series = _coerce_numeric(df[col])
+    
+    # Atomic mode: single quantile
+    if isinstance(q, (int, float)):
+        val = series.quantile(q)
+        return f"{val:.4f} (q={q})"
+    
+    # Exploration mode: multiple quantiles
+    result = series.quantile(q)
     return result.to_string()
 
 
@@ -336,3 +429,49 @@ def crosstab(df: pd.DataFrame, col_a: str, col_b: str, normalize: str = "") -> s
     if normalize:
         ct = ct.round(3)
     return ct.to_string()
+
+
+def derive_stat(
+    df: pd.DataFrame,
+    formula: str,
+    group_col: str,
+    agg: str = "mean",
+    filter_expr: str = "",
+    group_val: str | None = None,
+) -> str:
+    """Compute derived metric from formula, aggregate by group.
+    
+    If group_val is provided, returns atomic scalar for that group only.
+    Otherwise returns all groups (for exploration).
+    """
+    if filter_expr:
+        df = df.query(filter_expr)
+    
+    df = df.copy()
+    
+    # Auto-coerce columns mentioned in formula that are object dtype
+    for col in df.columns:
+        if col in formula and df[col].dtype == "object":
+            df[col] = _coerce_numeric(df[col])
+    
+    # Evaluate the formula safely using pd.eval
+    try:
+        derived = df.eval(formula)
+    except Exception as e:
+        return f"Error evaluating formula '{formula}': {e}"
+    
+    df["_derived"] = derived
+    
+    # Aggregate
+    result = df.groupby(group_col)["_derived"].agg(agg)
+    
+    # Atomic mode: return scalar for specific group
+    if group_val is not None:
+        if group_val not in result.index:
+            return f"Group '{group_val}' not found in {group_col}"
+        val = result.loc[group_val]
+        n = df[df[group_col] == group_val]["_derived"].count()
+        return f"{val:.4f} (n={n})"
+    
+    # Exploration mode: return all groups
+    return f"Formula: {formula}\n\n{result.to_string()}"

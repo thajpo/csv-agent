@@ -103,14 +103,17 @@ EXPLORATION TOOLS (use these now via <code> blocks, one per block):
 <code>{{"tool": "describe", "include": "number|object|all"}}</code>
 <code>{{"tool": "value_counts", "col": "TR", "top_n": 20}}</code>
 <code>{{"tool": "unique", "col": "TREE", "top_n": 50}}</code>
-<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean|sum|median|std|min|max|count|nunique", "filter_expr": "IN > 5"}}</code>
-<code>{{"tool": "group_extremum", "group_col": "TR", "target_col": "TL", "agg": "mean|sum|median|std|min|max|count|nunique", "extremum": "max|min", "filter_expr": ""}}</code>
-<code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "method": "pearson|spearman|kendall"}}</code>
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean"}}</code>  // all groups
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean", "group_val": "control"}}</code>  // ONE group (atomic)
+<code>{{"tool": "group_extremum", "group_col": "TR", "target_col": "TL", "agg": "mean", "extremum": "max", "return_what": "group|value"}}</code>
+<code>{{"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean"}}</code>  // all groups
+<code>{{"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean", "group_val": "control"}}</code>  // ONE group (atomic)
+<code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "method": "pearson|spearman|kendall", "filter_expr": ""}}</code>
 <code>{{"tool": "count_filter", "filter_expr": "TL > 50 and TR == 'control'"}}</code>
 <code>{{"tool": "sort_values", "col": "TL", "ascending": false, "top_n": 10}}</code>
-<code>{{"tool": "quantile", "col": "TL", "q": [0.1, 0.25, 0.5, 0.75, 0.9]}}</code>
+<code>{{"tool": "quantile", "col": "TL", "q": 0.9}}</code>  // single quantile (atomic)
 <code>{{"tool": "crosstab", "col_a": "TR", "col_b": "TREE", "normalize": "index|columns|all|"}}</code>
-Note: python_code is for EPISODE HOOKS only, not exploration.
+Note: Add group_val or single q for atomic scalar output. '?' auto-coerced to NaN.
 
 YOUR TASK:
 1. **Explore** the dataset deeply—find patterns, anomalies, relationships, and edge cases
@@ -241,13 +244,17 @@ EXPLORATION TOOLS (use these now via <code> blocks, one per block):
 <code>{{"tool": "describe", "include": "number|object|all"}}</code>
 <code>{{"tool": "value_counts", "col": "TR", "top_n": 20}}</code>
 <code>{{"tool": "unique", "col": "TREE", "top_n": 50}}</code>
-<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean|sum|median|std|min|max|count|nunique", "filter_expr": "IN > 5"}}</code>
-<code>{{"tool": "group_extremum", "group_col": "TR", "target_col": "TL", "agg": "mean|sum|median|std|min|max|count|nunique", "extremum": "max|min", "filter_expr": ""}}</code>
-<code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "method": "pearson|spearman|kendall"}}</code>
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean"}}</code>  // all groups
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean", "group_val": "control"}}</code>  // ONE group (atomic)
+<code>{{"tool": "group_extremum", "group_col": "TR", "target_col": "TL", "agg": "mean", "extremum": "max", "return_what": "group|value"}}</code>
+<code>{{"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean"}}</code>  // all groups
+<code>{{"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean", "group_val": "control"}}</code>  // ONE group (atomic)
+<code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "method": "pearson|spearman|kendall", "filter_expr": ""}}</code>
 <code>{{"tool": "count_filter", "filter_expr": "TL > 50 and TR == 'control'"}}</code>
 <code>{{"tool": "sort_values", "col": "TL", "ascending": false, "top_n": 10}}</code>
-<code>{{"tool": "quantile", "col": "TL", "q": [0.1, 0.25, 0.5, 0.75, 0.9]}}</code>
+<code>{{"tool": "quantile", "col": "TL", "q": 0.9}}</code>  // single quantile (atomic)
 <code>{{"tool": "crosstab", "col_a": "TR", "col_b": "TREE", "normalize": "index|columns|all|"}}</code>
+Note: Add group_val or single q for atomic scalar output. '?' auto-coerced to NaN.
 
 YOUR TASK:
 Explore this dataset as if preparing a detailed analysis. As you work, pay attention to:
