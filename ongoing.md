@@ -1,3 +1,29 @@
+# 12/2/25
+I think the best thing I can do is navigate the codebase, and report my observations here.
+- work on context compression
+    - summaries of specific tool calls
+        - need to look at how tools work
+
+## how do tools work
+
+
+# 12/1/25
+- revise the tools: 
+    - are they single function
+    - are we missing any necessary tools (good to run the 'get tool' prompt for different datasets)
+- improve the prompt structure
+    - currently we do questions + answers in the same prompt. this gives hallucination
+    - we should do exploration + questions 
+    - then we should run best of n on the questions, and save the common DAG
+- spend more time thinking about DAG and edge cases
+- think about the proper model output
+- what is the final data structure for the training data?
+    - should this be seperate for SFT and RL?
+- ..
+
+Tomorrow: expand on these questions. Pick one, work on it.
+
+# old
 What is the goal of this project?
 
 Well, I spent a lot of time trying to get LLMs to help me spec things out. It was helpful to understand what direction to move in. It was not helpful in when it comes to "how do I actually make this agent harness". I think solving this question on my own, or making a good attempt with minimal LLM usage is very important as a *learning experience*

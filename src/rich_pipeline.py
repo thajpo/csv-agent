@@ -26,8 +26,8 @@ from src.llm import APILLM
 from src.tools import parse_tool_call, run_tool
 from src.prompts import BOOTSTRAP_CODE, build_prompt, build_tool_feedback_prompt, DEFAULT_DATASET_DESCRIPTION
 from src.text_extraction import extract_code_blocks, extract_json_episodes, extract_json_array
-from src import terminal_display as ui
 from rich.console import Console
+from rich.panel import Panel
 
 console = Console()
 
@@ -52,7 +52,7 @@ def save_episodes(episodes: list[dict], output_path: str, metadata: dict):
             full_episode = {**metadata, **ep}
             f.write(json.dumps(full_episode) + "\n")
     
-    ui.saved(str(path), len(episodes))
+    console.print(f"[green]✓[/green] Saved {len(episodes)} → [bold]{str(path)}[/bold]")
 
 
 def run_pipeline(
@@ -64,10 +64,10 @@ def run_pipeline(
 ):
     """Run the full exploration pipeline with rich output."""
     
-    ui.header(csv_path)
-    ui.loading(csv_path)
+    console.print(f"\n[bold blue]CSV Agent[/bold blue] → {csv_path}\n")
+    console.print(f"[dim]Loading {csv_path}...[/dim]", end=" ")
     df = pd.read_csv(csv_path)
-    ui.loaded(len(df), len(df.columns))
+    console.print(f"[green]✓[/green] {len(df):,} × {len(df.columns)}")
     
     # Setup temp workdir
     workdir = tempfile.mkdtemp()
@@ -91,10 +91,9 @@ def run_pipeline(
         
         try:
             # Bootstrap exploration
-            ui.bootstrap_start()
             bootstrap_result = kernel.execute(BOOTSTRAP_CODE)
             bootstrap_output = bootstrap_result.stdout or "[no output]"
-            ui.bootstrap_output(bootstrap_output)
+            console.print(Panel(bootstrap_output, title="[cyan]Bootstrap[/cyan]", border_style="dim"))
             
             # Build prompt and start conversation
             system_prompt = prompt_builder(dataset_description, bootstrap_output)
@@ -102,17 +101,17 @@ def run_pipeline(
             
             for turn in range(1, max_turns + 1):
                 n_turns = turn
-                ui.turn_start(turn, max_turns)
+                console.rule(f"[bold]Turn {turn}/{max_turns}[/bold]", style="blue")
                 
-                with ui.thinking():
+                with console.status("[magenta]Thinking...[/magenta]", spinner="dots"):
                     response = llm(conversation)
                 
-                ui.assistant(response, turn)
+                console.print(Panel(response, title="[magenta]Assistant[/magenta]", border_style="magenta"))
                 conversation.append({"role": "assistant", "content": response})
                 
                 # Check for done signal
                 if re.search(r'^DONE\b', response, re.MULTILINE):
-                    ui.done_signal()
+                    console.print("\n[bold green]✓ DONE[/bold green]")
                     if mode == "tool-feedback":
                         results_data = extract_json_array(response)
                         if results_data:
@@ -123,28 +122,34 @@ def run_pipeline(
                                 why = rec.get("why", "?")[:60]
                                 console.print(f"  [dim]{i}.[/dim] [{priority}] [bold]{name}[/bold]: {why}")
                         else:
-                            ui.parse_failed(response)
+                            console.print("[red]✗ Failed to parse episodes[/red]")
                     else:
                         results_data = extract_json_episodes(response)
                         if results_data:
-                            ui.episodes_summary(results_data)
+                            console.print(f"\n[green]✓ {len(results_data)} episodes[/green]")
                             for i, ep in enumerate(results_data, 1):
-                                ui.episode(ep, i)
+                                if isinstance(ep, dict):
+                                    diff = ep.get("difficulty", "?")
+                                    q = ep.get("question_text", "?")
+                                    n_hooks = len(ep.get("hooks", []))
+                                    console.print(f"  [dim]{i}.[/dim] [{diff}] ({n_hooks}h) {q}")
                         else:
-                            ui.parse_failed(response)
+                            console.print("[red]✗ Failed to parse episodes[/red]")
                     break
                 
                 # Execute tool calls
                 code_blocks = extract_code_blocks(response)
                 
                 if not code_blocks:
-                    ui.no_tool_call()
+                    console.print("[yellow]⚠ No tool call[/yellow]")
                     feedback = "No tool call found. Use <code>{\"tool\": \"...\", ...}</code> to explore the data."
                 else:
                     tool_results = []
                     for i, code in enumerate(code_blocks, 1):
                         tool_name, output, success = execute_tool_call(code.strip(), df)
-                        ui.tool_result(code, tool_name, output, success, i)
+                        style = "green" if success else "red"
+                        console.print(f"[{style}]{'✓' if success else '✗'}[/{style}] [yellow]{tool_name}[/yellow]")
+                        console.print(f"[dim]{output}[/dim]")
                         tool_results.append(f"[Call {i}]\n[{tool_name}]\n{output}")
                     
                     feedback = "\n\n".join(tool_results)
@@ -154,14 +159,14 @@ def run_pipeline(
             
             else:
                 # Reached max turns without DONE
-                ui.max_turns_reached(max_turns)
+                console.print(f"[yellow]Max turns ({max_turns})[/yellow]")
                 
                 conversation.append({"role": "user", "content": final_msg})
                 
-                with ui.generating_final():
+                with console.status("[magenta]Generating...[/magenta]", spinner="dots"):
                     response = llm(conversation)
                 
-                ui.assistant(response, max_turns + 1)
+                console.print(Panel(response, title="[magenta]Assistant[/magenta]", border_style="magenta"))
                 if mode == "tool-feedback":
                     results_data = extract_json_array(response)
                 else:
@@ -171,11 +176,15 @@ def run_pipeline(
                     if mode == "tool-feedback":
                         console.print(f"\n[green]✓ {len(results_data)} tool recommendations[/green]")
                     else:
-                        ui.episodes_summary(results_data)
+                        console.print(f"\n[green]✓ {len(results_data)} episodes[/green]")
                         for i, ep in enumerate(results_data, 1):
-                            ui.episode(ep, i)
+                            if isinstance(ep, dict):
+                                diff = ep.get("difficulty", "?")
+                                q = ep.get("question_text", "?")
+                                n_hooks = len(ep.get("hooks", []))
+                                console.print(f"  [dim]{i}.[/dim] [{diff}] ({n_hooks}h) {q}")
                 else:
-                    ui.parse_failed(response)
+                    console.print("[red]✗ Failed to parse episodes[/red]")
         
         finally:
             del llm
@@ -193,9 +202,9 @@ def run_pipeline(
         with open(output_path, "w") as f:
             for item in results_data:
                 f.write(json.dumps({**metadata, **item}) + "\n")
-        ui.saved(output_path, len(results_data))
+        console.print(f"[green]✓[/green] Saved {len(results_data)} → [bold]{output_path}[/bold]")
     
-    ui.cleanup()
+    console.print("[dim]Done.[/dim]")
     return results_data
 
 
@@ -220,9 +229,9 @@ def main():
             mode=mode,
         )
     except KeyboardInterrupt:
-        ui.interrupted()
+        console.print("[yellow]Interrupted.[/yellow]")
     except Exception:
-        ui.exception()
+        console.print_exception()
 
 
 if __name__ == "__main__":

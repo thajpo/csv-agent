@@ -31,54 +31,63 @@ EPISODE_SCHEMA = """
   "difficulty": "MEDIUM | HARD | VERY_HARD",
   "hooks": [
     {
-      "id": "string - unique, lowercase with underscores only (e.g. 'ctrl_mean_tl', 'compare_ratio')",
-      "tool": "group_stat | correlation | count_filter | python_code",
+      "id": "string - unique, lowercase with underscores only (e.g. 'ctrl_mean_tl', 'compare_ratio', etc.",
+      "tool": "group_stat | correlation | count_filter | model_eval | python_code",
       "params": {
-        "// group_stat": "filter_expr?, target_col, group_col, group_val, agg (mean|median|sum|count|std|min|max|nunique)",
-        "// correlation": "filter_expr?, col_a, col_b, method? (pearson|spearman)",
-        "// count_filter": "filter_expr",
-        "// python_code": "code, depends_on[] - MUST match hook's depends_on exactly"
+        "// For group_stat": "filter_expr?, target_col, group_col, group_val, agg (mean|median|sum|count|std)",
+        "// For correlation": "filter_expr?, col_a, col_b, method? (pearson|spearman)",
+        "// For count_filter": "filter_expr",
+        "// For model_eval": "filter_expr?, target_col, feature_cols[], model, metric, seed",
+        "// For python_code": "code (string), depends_on (list of hook ids) - USE THIS TO CHAIN RESULTS"
       },
-      "depends_on": ["hook ids this depends on - forms acyclic DAG"]
+      "depends_on": ["list of hook ids this depends on - BUILD A REAL DAG"]
     }
   ],
-  "teacher_answers": {"hook_id": "scalar value (number|string|bool) - see INVARIANTS"},
-  "solution_trace": "step-by-step explanation"
+  "// hooks requirement": "MEDIUM: 3-4 hooks, HARD: 4-6 hooks, VERY_HARD: 5-10 hooks",
+  "teacher_answers": {
+    "hook_id": "value - your computed answer for this hook (number, string, bool, list)"
+  },
+  "solution_trace": "string - step-by-step explanation of the reasoning chain"
 }
-
-INVARIANTS (your output MUST satisfy these):
-- Every hook.id is unique and appears exactly once as a key in teacher_answers
-- For group_stat: teacher_answers[id] = the 'stat' value (number)
-- For correlation: teacher_answers[id] = the 'r' value (number)
-- For count_filter: teacher_answers[id] = the 'count' value (number)
-- For python_code: teacher_answers[id] = the returned scalar; params.depends_on MUST equal hook's depends_on
-- All depends_on refs must point to earlier hooks (acyclic)
-- Only use columns from INITIAL EXPLORATION - do not invent column names
-- Minimum 2 hooks (must be multi-step), no maximum
 """.strip()
 
 
 # Hook tool documentation for the final output
 HOOK_TOOLS_DOC = """
-HOOK TOOLS (for episodes only - not exploration):
+HOOK TOOLS (for building multi-step reasoning chains):
 
-**group_stat** → returns {{stat, n}} → teacher_answers gets 'stat'
-  params: filter_expr?, target_col, group_col, group_val, agg (mean|median|sum|count|std|min|max|nunique)
+**group_stat**: Compute aggregated statistic for a group
+  - params: filter_expr (optional), target_col, group_col, group_val, agg (mean|median|sum|count|std)
+  - returns: {stat: number, n: count}
+  - Example: {"tool": "group_stat", "params": {"filter_expr": "TR == 'control'", "target_col": "TL", "group_col": "TREE", "group_val": "G28", "agg": "mean"}}
 
-**correlation** → returns {{r, p, n}} → teacher_answers gets 'r'
-  params: filter_expr?, col_a, col_b, method? (pearson|spearman)
+**correlation**: Pearson/Spearman correlation between two columns
+  - params: filter_expr (optional), col_a, col_b, method (pearson|spearman, default: pearson)
+  - returns: {r: correlation, p: p-value, n: count}
+  - Example: {"tool": "correlation", "params": {"col_a": "TL", "col_b": "IN", "method": "pearson"}}
 
-**count_filter** → returns {{count}} → teacher_answers gets 'count'
-  params: filter_expr
+**count_filter**: Count rows matching a filter expression
+  - params: filter_expr
+  - returns: {count: number}
+  - Example: {"tool": "count_filter", "params": {"filter_expr": "TL > 100 and TR == 'control'"}}
 
-**python_code** → returns scalar → teacher_answers gets that scalar
-  params: code, depends_on[] (MUST match hook's depends_on exactly)
-  `results` dict has {{hook_id: full_result_dict}} from depends_on hooks
-  Examples:
-    {{"code": "results['h1']['stat'] - results['h2']['stat']", "depends_on": ["h1", "h2"]}}
-    {{"code": "results['h1']['stat'] / results['h2']['stat']", "depends_on": ["h1", "h2"]}}
-    {{"code": "'A' if results['h1']['stat'] > results['h2']['stat'] else 'B'", "depends_on": ["h1", "h2"]}}
-    {{"code": "round(100 * results['h1']['count'] / results['h2']['count'], 2)", "depends_on": ["h1", "h2"]}}
+**model_eval**: Train/test a model with fixed seed
+  - params: filter_expr (optional), target_col, feature_cols[], model (linear_regression), metric (mse|mae|r2|accuracy), seed
+  - returns: {metric: value, n_train: count, n_test: count}
+  - Example: {"tool": "model_eval", "params": {"target_col": "TL", "feature_cols": ["IN"], "model": "linear_regression", "metric": "r2", "seed": 42}}
+
+**python_code**: THE KEY TOOL FOR CHAINING - Compose over prior hook results
+  - params: code (string), depends_on (list of hook ids)
+  - The code receives a `results` dict with {{hook_id: result_dict}} from depends_on
+  - Must return a single value (number, string, bool, list, dict)
+  - USE THIS TO: compare values, compute ratios, find max/min, derive metrics
+  - Examples:
+    - Difference: {{"code": "results['h1']['stat'] - results['h2']['stat']", "depends_on": ["h1", "h2"]}}
+    - Ratio: {{"code": "results['h1']['stat'] / results['h2']['stat']", "depends_on": ["h1", "h2"]}}
+    - Percentage: {{"code": "100 * results['h1']['count'] / results['h2']['count']", "depends_on": ["h1", "h2"]}}
+    - Comparison: {{"code": "'treatment' if results['h1']['stat'] > results['h2']['stat'] else 'control'", "depends_on": ["h1", "h2"]}}
+    - Max of multiple: {{"code": "max([results['h1']['stat'], results['h2']['stat'], results['h3']['stat']])", "depends_on": ["h1", "h2", "h3"]}}
+    - CV (std/mean): {{"code": "results['std_hook']['stat'] / results['mean_hook']['stat']", "depends_on": ["std_hook", "mean_hook"]}}
 """.strip()
 
 
@@ -98,28 +107,24 @@ INITIAL EXPLORATION:
 
 {tool_docs}
 
-EXPLORATION TOOLS (use these now via <code> blocks, one per block):
+HOW TO EXPLORE:
+Call tools by placing JSON in <code>...</code> tags. One tool call per block.
 <code>{{"tool": "inspect", "aspect": "head|tail|shape|dtypes|columns|missing", "n": 10}}</code>
 <code>{{"tool": "describe", "include": "number|object|all"}}</code>
 <code>{{"tool": "value_counts", "col": "TR", "top_n": 20}}</code>
 <code>{{"tool": "unique", "col": "TREE", "top_n": 50}}</code>
-<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean"}}</code>  // all groups
-<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean", "group_val": "control"}}</code>  // ONE group (atomic)
-<code>{{"tool": "group_extremum", "group_col": "TR", "target_col": "TL", "agg": "mean", "extremum": "max", "return_what": "group|value"}}</code>
-<code>{{"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean"}}</code>  // all groups
-<code>{{"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean", "group_val": "control"}}</code>  // ONE group (atomic)
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean|sum|median|std|min|max|count", "filter_expr": "IN > 5"}}</code>
 <code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "method": "pearson|spearman|kendall", "filter_expr": ""}}</code>
 <code>{{"tool": "count_filter", "filter_expr": "TL > 50 and TR == 'control'"}}</code>
 <code>{{"tool": "sort_values", "col": "TL", "ascending": false, "top_n": 10}}</code>
-<code>{{"tool": "quantile", "col": "TL", "q": 0.9}}</code>  // single quantile (atomic)
+<code>{{"tool": "quantile", "col": "TL", "q": [0.1, 0.25, 0.5, 0.75, 0.9]}}</code>
 <code>{{"tool": "crosstab", "col_a": "TR", "col_b": "TREE", "normalize": "index|columns|all|"}}</code>
-Note: Add group_val or single q for atomic scalar output. '?' auto-coerced to NaN.
 
 YOUR TASK:
 1. **Explore** the dataset deeply—find patterns, anomalies, relationships, and edge cases
 2. **Brainstorm broadly**—propose MANY candidate questions (aim for 15-20+ ideas), then refine
 3. **Select the best 10** that require genuine multi-step reasoning chains
-4. **Solve** each by defining hooks that build on each other (use as many as needed)
+4. **Solve** each by defining 3-10 hooks that build on each other
 
 ═══════════════════════════════════════════════════════════════════════════════
 WHAT MAKES A GOOD EXAM QUESTION (CRITICAL)
@@ -145,10 +150,10 @@ GOOD (multi-step reasoning chains—THIS IS WHAT WE WANT):
 - "Which tree (TREE) shows the most consistent response to PP_333_20g/L treatment, measured by having the lowest coefficient of variation (std/mean) in TL? Report the tree ID and its CV."
   → Group by tree within treatment, compute both std and mean, derive CV, find min
 
-DIFFICULTY LEVELS (based on reasoning complexity):
-- MEDIUM: Multi-step but linear chain. Filter→aggregate→compare.
-- HARD: Branching logic, derived metrics, or conditional reasoning.
-- VERY_HARD: Complex chains with multiple derivations, comparisons across groups, or iterative computations.
+DIFFICULTY LEVELS (based on reasoning chain length):
+- MEDIUM (3-4 hooks): Multi-step but linear. Filter→aggregate→compare. Example: "Compare mean TL between the two most common IN values"
+- HARD (4-6 hooks): Branching logic or derived metrics. Example: "Find treatment with highest TL variance, then compare its correlation TL~IN to the treatment with lowest variance"
+- VERY_HARD (5-10 hooks): Complex chains with multiple derivations. Example: "Identify outlier branches (TL > 2 std above treatment mean) in each treatment, compute what % of their internode measurements are missing ('?'), compare this % between treatments"
 
 {HOOK_TOOLS_DOC}
 
@@ -196,107 +201,37 @@ Notice the DAG structure:
 
 This is ONE treatment. A full VERY_HARD question would compute this for all 6 treatments (more hooks) and find the max. The key is that each hook builds on prior results—no hook stands alone as a simple lookup.
 
+REQUIREMENTS FOR GOOD QUESTIONS:
+- MEDIUM questions need 3-4 hooks minimum
+- HARD questions need 4-6 hooks minimum  
+- VERY_HARD questions need 5-10 hooks minimum
+- Hooks MUST build on each other via depends_on—form a real DAG, not parallel independent lookups
+- You MUST compute and provide teacher_answers for EVERY hook
+- Use python_code hooks liberally to combine, compare, and derive from prior results
+- Answers must be specific (exact numbers, not ranges or approximations)
+- Questions should sound like exam questions, not "what is the value of X"
+
 TURN STRUCTURE (during exploration):
-Each turn, THINK OUT LOUD before running tools:
+1. **Interpretation**: What patterns or anomalies do you see? (1-2 sentences)
+2. **Brainstorm**: List 5-10 potential question ideas—be creative, think about what would challenge a student
+3. **Refine**: Star (★) the most promising ideas that require real reasoning chains
+4. **Next exploration**: <code> blocks to dig deeper into promising directions
 
-1. **What I see**: Describe what's interesting in the data or last result. Why does it matter?
-2. **Question ideas**: Jot down 2-3 potential exam questions this suggests.
-3. **Next step**: What do you want to explore next and why?
-4. **Tool calls**: Then run <code> blocks.
+FINAL OUTPUT (when ready):
+When you have explored enough, write DONE on its own line, then output your final 10 episodes as a JSON array:
 
-Example turn:
-"The control group has much higher variance in TL (std=15.2) than PP_333 treatments (std=4.1). 
-This suggests the treatment stabilizes growth. Question ideas: (1) Which treatment reduces TL 
-variance most? (2) Is low variance correlated with fewer internodes? Let me check the 
-internode distribution across treatments..."
-
-Do NOT just emit code—explain your reasoning first.
-
-FINAL OUTPUT:
-When ready, output exactly this:
-1. A line containing only: DONE
-2. A JSON array of exactly 10 episodes (no other text):
-```json
-[{{"question_text": "...", "difficulty": "...", "hooks": [...], "teacher_answers": {{...}}, "solution_trace": "..."}}, ...]
-```
-
-Begin exploring. Think out loud as you go. Signal DONE when ready."""
-
-
-def build_tool_feedback_prompt(dataset_description: str, bootstrap_output: str) -> str:
-    """Build prompt for tool improvement feedback session."""
-    tool_docs = format_tool_docs()
-    
-    return f"""You are a senior data scientist evaluating a data exploration toolkit. Your goal is to explore this dataset thoroughly and identify **what tools are missing or could be improved**.
-
-DATASET CONTEXT:
-{dataset_description}
-
-INITIAL EXPLORATION:
-```
-{bootstrap_output}
-```
-
-{tool_docs}
-
-EXPLORATION TOOLS (use these now via <code> blocks, one per block):
-<code>{{"tool": "inspect", "aspect": "head|tail|shape|dtypes|columns|missing", "n": 10}}</code>
-<code>{{"tool": "describe", "include": "number|object|all"}}</code>
-<code>{{"tool": "value_counts", "col": "TR", "top_n": 20}}</code>
-<code>{{"tool": "unique", "col": "TREE", "top_n": 50}}</code>
-<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean"}}</code>  // all groups
-<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean", "group_val": "control"}}</code>  // ONE group (atomic)
-<code>{{"tool": "group_extremum", "group_col": "TR", "target_col": "TL", "agg": "mean", "extremum": "max", "return_what": "group|value"}}</code>
-<code>{{"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean"}}</code>  // all groups
-<code>{{"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean", "group_val": "control"}}</code>  // ONE group (atomic)
-<code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "method": "pearson|spearman|kendall", "filter_expr": ""}}</code>
-<code>{{"tool": "count_filter", "filter_expr": "TL > 50 and TR == 'control'"}}</code>
-<code>{{"tool": "sort_values", "col": "TL", "ascending": false, "top_n": 10}}</code>
-<code>{{"tool": "quantile", "col": "TL", "q": 0.9}}</code>  // single quantile (atomic)
-<code>{{"tool": "crosstab", "col_a": "TR", "col_b": "TREE", "normalize": "index|columns|all|"}}</code>
-Note: Add group_val or single q for atomic scalar output. '?' auto-coerced to NaN.
-
-YOUR TASK:
-Explore this dataset as if preparing a detailed analysis. As you work, pay attention to:
-1. **What questions you want to answer** but struggle to express with current tools
-2. **What operations require multiple awkward steps** that could be one tool
-3. **What information you wish the tools returned** (format, additional stats, etc.)
-4. **What common patterns** you find yourself repeating
-
-TURN STRUCTURE:
-Each turn, do the following:
-
-1. **Explore**: Run 2-5 tool calls to investigate something
-2. **Reflect**: What did you learn? What did you want to do but couldn't?
-3. **Tool Wish**: If you hit friction, describe the tool you wish existed:
-   
-   {{TOOL_WISH}}
-   name: <tool_name>
-   why: <what you were trying to do>
-   params: <what parameters it would take>
-   returns: <what it would return>
-   example: <example call and result>
-   {{/TOOL_WISH}}
-
-Keep exploring until you've thoroughly examined the dataset (at least 5-6 turns). Focus on the kinds of multi-step analytical questions a data scientist would ask.
-
-FINAL OUTPUT:
-When done exploring, write DONE and then summarize your top tool recommendations as a JSON array:
 ```json
 [
-  {{
-    "name": "tool_name",
-    "priority": "HIGH|MEDIUM|LOW",
-    "why": "what problem it solves",
-    "params": {{"param": "description"}},
-    "returns": "what it returns",
-    "example_call": {{}},
-    "example_result": {{}}
-  }}
+  {{episode 1}},
+  {{episode 2}},
+  ...
+  {{episode 10}}
 ]
 ```
 
-Begin exploring. Think out loud about what you're trying to accomplish and where the tools fall short."""
+Each episode must include question_text, difficulty, hooks (3-10 based on difficulty), teacher_answers (one per hook), and solution_trace.
+
+Begin by sharing your interpretation, brainstorm broadly, then explore. Signal DONE when ready to output final episodes."""
 
 
 # Dataset description (manual for now, could come from Kaggle API later)

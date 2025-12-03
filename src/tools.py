@@ -2,104 +2,350 @@ import json
 import pandas as pd
 
 # Available tools and their specs for prompt generation
+# summarize: True = output may be large, should be summarized for context
+#            False = output is atomic/small, keep as-is
 TOOL_SPECS = {
     "inspect": {
-        "desc": "View dataframe structure (head, tail, shape, dtypes, columns, missing)",
-        "params": {"aspect": "str (required)", "n": "int (default: 5)"},
-        "example": {"tool": "inspect", "aspect": "head", "n": 10},
+        "name": "inspect",
+        "type": "function",
+        "description": "View dataframe structure (head, tail, shape, dtypes, columns, missing)",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "aspect": {
+                    "type": "string",
+                    "description": "The aspect of the dataframe to inspect",
+                    "enum": ["head", "tail", "shape", "dtypes", "columns", "missing"]
+                },
+                "n": {
+                    "type": "integer",
+                    "description": "The number of rows to inspect",
+                    "default": 5
+                }
+            },
+            "required": ["aspect"],
+            "additionalProperties": False
+        },
+        "summarize": True
     },
     "describe": {
-        "desc": "Statistical summary of columns",
-        "params": {"include": "str: 'number', 'object', or 'all' (default: 'number')"},
-        "example": {"tool": "describe", "include": "number"},
+        "name": "describe",
+        "type": "function",
+        "description": "Statistical summary of columns",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "include": {
+                    "type": "string",
+                    "description": "Type of columns to include in summary",
+                    "enum": ["number", "object", "all"],
+                    "default": "number"
+                }
+            },
+            "required": [],
+            "additionalProperties": False
+        },
+        "summarize": True
     },
     "value_counts": {
-        "desc": "Frequency counts for a column",
-        "params": {"col": "str (required)", "top_n": "int (default: 20)"},
-        "example": {"tool": "value_counts", "col": "category"},
+        "name": "value_counts",
+        "type": "function",
+        "description": "Frequency counts for a column",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "col": {
+                    "type": "string",
+                    "description": "Column name to count values for"
+                },
+                "top_n": {
+                    "type": "integer",
+                    "description": "Number of top values to return",
+                    "default": 20
+                }
+            },
+            "required": ["col"],
+            "additionalProperties": False
+        },
+        "summarize": True
     },
     "unique": {
-        "desc": "List unique values in a column",
-        "params": {"col": "str (required)", "top_n": "int (default: 50)"},
-        "example": {"tool": "unique", "col": "status"},
+        "name": "unique",
+        "type": "function",
+        "description": "List unique values in a column",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "col": {
+                    "type": "string",
+                    "description": "Column name to get unique values from"
+                },
+                "top_n": {
+                    "type": "integer",
+                    "description": "Maximum number of unique values to return",
+                    "default": 50
+                }
+            },
+            "required": ["col"],
+            "additionalProperties": False
+        },
+        "summarize": True
     },
     "group_stat": {
-        "desc": "Aggregate a column grouped by another. Add group_val for ONE group's scalar (atomic for hooks).",
-        "params": {
-            "group_col": "str (required) - column to group by",
-            "target_col": "str (required)",
-            "agg": "str: mean/sum/median/std/min/max/count/nunique (default: 'mean')",
-            "filter_expr": "str: pandas query expression (default: '')",
-            "group_val": "str: specific group value for atomic scalar output (optional)",
+        "name": "group_stat",
+        "type": "function",
+        "description": "Aggregate a column grouped by another. Add group_val for ONE group's scalar (atomic for hooks).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "group_col": {
+                    "type": "string",
+                    "description": "Column to group by"
+                },
+                "target_col": {
+                    "type": "string",
+                    "description": "Column to aggregate"
+                },
+                "agg": {
+                    "type": "string",
+                    "description": "Aggregation function",
+                    "enum": ["mean", "sum", "median", "std", "min", "max", "count", "nunique"],
+                    "default": "mean"
+                },
+                "filter_expr": {
+                    "type": "string",
+                    "description": "Pandas query expression to filter rows",
+                    "default": ""
+                },
+                "group_val": {
+                    "type": "string",
+                    "description": "Specific group value for atomic scalar output (optional)"
+                }
+            },
+            "required": ["group_col", "target_col"],
+            "additionalProperties": False
         },
-        "example": {"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean", "group_val": "control"},
+        "summarize": False
     },
     "group_extremum": {
-        "desc": "Find which group has max/min aggregated value. Returns group name OR value (atomic).",
-        "params": {
-            "group_col": "str (required)",
-            "target_col": "str (required)",
-            "agg": "str: mean/sum/median/std/min/max/count/nunique (default: 'mean')",
-            "extremum": "str: 'max' or 'min' (default: 'max')",
-            "return_what": "str: 'group' or 'value' (default: 'group')",
-            "filter_expr": "str: pandas query expression (default: '')",
+        "name": "group_extremum",
+        "type": "function",
+        "description": "Find which group has max/min aggregated value. Returns group name OR value (atomic).",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "group_col": {
+                    "type": "string",
+                    "description": "Column to group by"
+                },
+                "target_col": {
+                    "type": "string",
+                    "description": "Column to aggregate"
+                },
+                "agg": {
+                    "type": "string",
+                    "description": "Aggregation function",
+                    "enum": ["mean", "sum", "median", "std", "min", "max", "count", "nunique"],
+                    "default": "mean"
+                },
+                "extremum": {
+                    "type": "string",
+                    "description": "Find maximum or minimum",
+                    "enum": ["max", "min"],
+                    "default": "max"
+                },
+                "return_what": {
+                    "type": "string",
+                    "description": "Return group name or value",
+                    "enum": ["group", "value"],
+                    "default": "group"
+                },
+                "filter_expr": {
+                    "type": "string",
+                    "description": "Pandas query expression to filter rows",
+                    "default": ""
+                }
+            },
+            "required": ["group_col", "target_col"],
+            "additionalProperties": False
         },
-        "example": {"tool": "group_extremum", "group_col": "TR", "target_col": "TL", "agg": "mean", "extremum": "max", "return_what": "group"},
+        "summarize": False
     },
     "correlation": {
-        "desc": "Correlation between two numeric columns",
-        "params": {
-            "col_a": "str (required)",
-            "col_b": "str (required)",
-            "method": "str: pearson/spearman/kendall (default: 'pearson')",
-            "filter_expr": "str (default: '')",
+        "name": "correlation",
+        "type": "function",
+        "description": "Correlation between two numeric columns",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "col_a": {
+                    "type": "string",
+                    "description": "First column name"
+                },
+                "col_b": {
+                    "type": "string",
+                    "description": "Second column name"
+                },
+                "method": {
+                    "type": "string",
+                    "description": "Correlation method",
+                    "enum": ["pearson", "spearman", "kendall"],
+                    "default": "pearson"
+                },
+                "filter_expr": {
+                    "type": "string",
+                    "description": "Pandas query expression to filter rows",
+                    "default": ""
+                }
+            },
+            "required": ["col_a", "col_b"],
+            "additionalProperties": False
         },
-        "example": {"tool": "correlation", "col_a": "price", "col_b": "quantity"},
+        "summarize": False
     },
     "count_filter": {
-        "desc": "Count rows matching a condition",
-        "params": {"filter_expr": "str: pandas query expression (default: '' = all rows)"},
-        "example": {"tool": "count_filter", "filter_expr": "age > 30 and status == 'active'"},
+        "name": "count_filter",
+        "type": "function",
+        "description": "Count rows matching a condition",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "filter_expr": {
+                    "type": "string",
+                    "description": "Pandas query expression to filter rows (empty string = all rows)",
+                    "default": ""
+                }
+            },
+            "required": [],
+            "additionalProperties": False
+        },
+        "summarize": False
     },
     "sort_values": {
-        "desc": "Sort by a column and show top rows",
-        "params": {
-            "col": "str (required)",
-            "ascending": "bool (default: true)",
-            "top_n": "int (default: 20)",
+        "name": "sort_values",
+        "type": "function",
+        "description": "Sort by a column and show top rows",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "col": {
+                    "type": "string",
+                    "description": "Column to sort by"
+                },
+                "ascending": {
+                    "type": "boolean",
+                    "description": "Sort in ascending order",
+                    "default": True
+                },
+                "top_n": {
+                    "type": "integer",
+                    "description": "Number of top rows to return",
+                    "default": 20
+                }
+            },
+            "required": ["col"],
+            "additionalProperties": False
         },
-        "example": {"tool": "sort_values", "col": "score", "ascending": False, "top_n": 10},
+        "summarize": True
     },
     "quantile": {
-        "desc": "Calculate percentile(s) for a column. Single q = atomic scalar output.",
-        "params": {
-            "col": "str (required)",
-            "q": "float or list[float]: single value for atomic output (default: [0.25, 0.5, 0.75])",
-            "filter_expr": "str: pandas query expression (default: '')",
+        "name": "quantile",
+        "type": "function",
+        "description": "Calculate percentile(s) for a column. Single q = atomic scalar output.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "col": {
+                    "type": "string",
+                    "description": "Column name"
+                },
+                "q": {
+                    "oneOf": [
+                        {"type": "number", "description": "Single quantile value (atomic output)"},
+                        {"type": "array", "items": {"type": "number"}, "description": "List of quantiles"}
+                    ],
+                    "description": "Quantile value(s) to calculate"
+                },
+                "filter_expr": {
+                    "type": "string",
+                    "description": "Pandas query expression to filter rows",
+                    "default": ""
+                }
+            },
+            "required": ["col", "q"],
+            "additionalProperties": False
         },
-        "example": {"tool": "quantile", "col": "TL", "q": 0.9},
+        "summarize": False
     },
     "crosstab": {
-        "desc": "Cross-tabulation of two categorical columns",
-        "params": {
-            "col_a": "str (required)",
-            "col_b": "str (required)",
-            "normalize": "str: 'index', 'columns', 'all', or '' (default: '')",
+        "name": "crosstab",
+        "type": "function",
+        "description": "Cross-tabulation of two categorical columns",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "col_a": {
+                    "type": "string",
+                    "description": "First column name"
+                },
+                "col_b": {
+                    "type": "string",
+                    "description": "Second column name"
+                },
+                "normalize": {
+                    "type": "string",
+                    "description": "Normalization mode",
+                    "enum": ["index", "columns", "all", ""],
+                    "default": ""
+                }
+            },
+            "required": ["col_a", "col_b"],
+            "additionalProperties": False
         },
-        "example": {"tool": "crosstab", "col_a": "gender", "col_b": "purchased", "normalize": "index"},
+        "summarize": True
     },
     "derive_stat": {
-        "desc": "Compute derived metric (e.g. TL/IN), aggregate by group. Add group_val for atomic scalar.",
-        "params": {
-            "formula": "str (required) - expression using column names (e.g., 'TL / IN')",
-            "group_col": "str (required) - column to group by",
-            "agg": "str: mean/sum/median/std/min/max/count (default: 'mean')",
-            "filter_expr": "str: pandas query expression (default: '')",
-            "group_val": "str: specific group value for atomic scalar output (optional)",
+        "name": "derive_stat",
+        "type": "function",
+        "description": "Compute derived metric (e.g. TL/IN), aggregate by group. Add group_val for atomic scalar.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "formula": {
+                    "type": "string",
+                    "description": "Expression using column names (e.g., 'TL / IN')"
+                },
+                "group_col": {
+                    "type": "string",
+                    "description": "Column to group by"
+                },
+                "agg": {
+                    "type": "string",
+                    "description": "Aggregation function",
+                    "enum": ["mean", "sum", "median", "std", "min", "max", "count"],
+                    "default": "mean"
+                },
+                "filter_expr": {
+                    "type": "string",
+                    "description": "Pandas query expression to filter rows",
+                    "default": ""
+                },
+                "group_val": {
+                    "type": "string",
+                    "description": "Specific group value for atomic scalar output (optional)"
+                }
+            },
+            "required": ["formula", "group_col"],
+            "additionalProperties": False
         },
-        "example": {"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean", "group_val": "control"},
-    },
+        "summarize": False
+    }
 }
+
+
+def should_summarize(tool_name: str) -> bool:
+    """Check if a tool's output should be summarized."""
+    return TOOL_SPECS.get(tool_name, {}).get("summarize", False)
 
 
 def parse_tool_call(code: str) -> tuple[str, dict] | str:
