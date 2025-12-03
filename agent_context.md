@@ -25,27 +25,47 @@ Training → SFT warm-start → on-policy GRPO with hook-level rewards
 
 ## V1 Scope
 
-### Tools (atomic, scalar output)
+### Tools (defined in TOOL_SPECS - see src/tools.py)
+
+**Exploration tools** (may produce large output, summarized for context):
+| Tool | Purpose | Summarize |
+|------|---------|-----------|
+| `inspect` | View df structure (head/tail/shape/dtypes/columns/missing/info) | Yes |
+| `describe` | Statistical summary for numeric/object/all columns | Yes |
+| `value_counts` | Frequency counts for a column | Yes |
+| `unique` | List unique values in a column | Yes |
+| `sort_values` | Sort by column and show top rows | Yes |
+| `crosstab` | Cross-tabulation of two categorical columns | Yes |
+
+**Data query tools** (produce scalar/small output, query dataframe):
 | Tool | Params | Returns |
 |------|--------|---------|
-| `group_stat` | group_col, target_col, agg, filter_expr | single scalar |
-| `group_extremum` | group_col, target_col, agg, extremum | group name + value |
-| `correlation` | col_a, col_b, method, filter_expr | r value |
-| `count_filter` | filter_expr | count |
-| `derive_stat` | formula, group_col, agg | derived scalar |
+| `group_stat` | group_col, target_col, agg, filter_expr?, group_val | scalar (with group_val) |
+| `group_extremum` | group_col, target_col, agg, extremum, return_what | group name or value |
+| `correlation` | col_a, col_b, method?, filter_expr? | r value with interpretation |
+| `count_filter` | filter_expr? | count + percentage |
+| `quantile` | col, q, filter_expr? | scalar (single q) or series |
+| `derive_stat` | formula, group_col, agg, filter_expr?, group_val | derived scalar |
 
-**Removed**: `python_code` hooks (unpredictable, escape hatch from verifiable environment)
+**Hook-chaining tools** (operate on previous hook results, enable multi-step reasoning):
+| Tool | Params | Purpose |
+|------|--------|---------|
+| `combine` | expr, vars (map var→hook_id) | Arithmetic + boolean on hook results (ratios, %, a > b) |
+| `lookup` | group_hook, group_col, target_col, agg | Chain group_extremum → group_stat dynamically |
+| `aggregate_hooks` | hooks (list), agg | Reduce multiple hooks (min/max/mean/sum/range) |
 
-**Design rules**:
-- One tool = one scalar output
-- No multi-agg (keep tools dumb for verifiability)
-- Auto-coerce '?' to NaN
-- Deterministic, stateless
+**Design rules** (from TOOL_SPECS):
+- `TOOL_SPECS` in `tools.py` is the source of truth for tool definitions
+- Each spec includes `summarize: bool` for context compression  
+- Hook-chaining tools have `chain: True` flag
+- Auto-coerce '?' to NaN for numeric operations
+- Tools are stateless and deterministic
 
 ### Episodes
-- 2-4 hooks per episode
-- DAG with explicit `depends_on`
+- MEDIUM: 3-4 hooks, HARD: 4-6 hooks, VERY_HARD: 5-10 hooks
+- DAG with explicit `depends_on` (required for hook-chaining tools)
 - Each hook produces one verifiable value
+- Hook-chaining tools enable true multi-step reasoning chains
 - Reward = average per-hook correctness
 
 ## Data Generation Strategy
@@ -66,9 +86,9 @@ For each question:
 - Cross-hook consistency
 
 ### Difficulty Curriculum
-- MEDIUM: 2-3 hooks, linear chain
-- HARD: 3-4 hooks, some branching
-- VERY_HARD: 4+ hooks, complex DAG
+- MEDIUM: 3-4 hooks, linear chain  
+- HARD: 4-6 hooks, some branching, uses combine/compare
+- VERY_HARD: 5-10 hooks, complex DAG with lookup/aggregate_hooks
 
 Start training on MEDIUM, gradually add harder tasks.
 

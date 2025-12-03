@@ -23,6 +23,13 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
+def has_gpu() -> bool:
+    """Check if CUDA or ROCm GPU is available."""
+    has_cuda = torch.cuda.is_available()
+    has_rocm = hasattr(torch.version, "hip") and torch.version.hip is not None
+    return has_cuda or has_rocm
+
+
 class APILLM:
     """LLM client for OpenAI-compatible APIs (OpenRouter, vLLM, Ollama, etc.)."""
     
@@ -43,7 +50,7 @@ class APILLM:
     def __call__(
         self,
         prompt: str | list[dict],
-        max_tokens: int = 2048,
+        max_tokens: int = 8192,
         temperature: float = 0.7,
     ) -> str:
         # Accept either a string or a list of messages
@@ -78,12 +85,7 @@ class LLM:
         torch_dtype: torch.dtype = torch.bfloat16,
         attn_implementation: str = "sdpa",
     ):
-        # Detect available GPU backend (CUDA or ROCm)
-        # ROCm also uses "cuda" as device name, but we check torch.version.hip
-        has_cuda = torch.cuda.is_available()
-        has_rocm = hasattr(torch.version, "hip") and torch.version.hip is not None
-        
-        if not (has_cuda or has_rocm):
+        if not has_gpu():
             raise RuntimeError("No CUDA/ROCm device available")
         
         # Auto-detect device if not specified (ROCm also uses "cuda" device name)

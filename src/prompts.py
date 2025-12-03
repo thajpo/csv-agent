@@ -1,93 +1,146 @@
 """Prompts and templates used throughout the data pipeline."""
 
-from src.tools import format_tool_docs
-
-# Initial exploration code - runs automatically before Turn 1 so the model sees real data
-BOOTSTRAP_CODE = """
 import pandas as pd
-from src.tools import inspect, describe, value_counts
+from src.tools import format_tool_docs, inspect, describe, value_counts
 
-df = pd.read_csv("data.csv")
 
-for label, call in [
-    ("SHAPE", lambda: inspect(df, "shape")),
-    ("HEAD", lambda: inspect(df, "head", 5)),
-    ("DTYPES", lambda: inspect(df, "dtypes")),
-    ("NUMERIC SUMMARY", lambda: describe(df, "number")),
-    ("MISSING", lambda: inspect(df, "missing")),
-]:
-    print(f"=== {label} ===\\n{call()}\\n")
-
-print("=== CATEGORICAL VALUE COUNTS ===")
-for col in df.select_dtypes(include=['object']).columns:
-    print(f"\\n{col}:\\n{value_counts(df, col, 5)}")
-""".strip()
+def generate_bootstrap_output(csv_path: str = "data.csv") -> str:
+    """
+    Generate bootstrap exploration output for initial data inspection.
+    
+    Returns formatted string showing shape, head, dtypes, summary, missing values,
+    and categorical value counts.
+    """
+    df = pd.read_csv(csv_path)
+    lines = []
+    
+    for label, call in [
+        ("SHAPE", lambda: inspect(df, "shape")),
+        ("HEAD", lambda: inspect(df, "head", 5)),
+        ("DTYPES", lambda: inspect(df, "dtypes")),
+        ("NUMERIC SUMMARY", lambda: describe(df, "number")),
+        ("MISSING", lambda: inspect(df, "missing")),
+    ]:
+        lines.append(f"=== {label} ===\n{call()}\n")
+    
+    lines.append("=== CATEGORICAL VALUE COUNTS ===")
+    for col in df.select_dtypes(include=['object']).columns:
+        lines.append(f"\n{col}:\n{value_counts(df, col, 5)}")
+    
+    return "\n".join(lines)
 
 
 # JSON schema for episodes - shown to the model
+# Tools: data query tools + hook-chaining tools
 EPISODE_SCHEMA = """
 {
   "question_text": "string - multi-step exam question requiring reasoning (NOT a simple lookup)",
   "difficulty": "MEDIUM | HARD | VERY_HARD",
   "hooks": [
     {
-      "id": "string - unique, lowercase with underscores only (e.g. 'ctrl_mean_tl', 'compare_ratio', etc.",
-      "tool": "group_stat | correlation | count_filter | model_eval | python_code",
+      "id": "string - unique, lowercase with underscores (e.g. 'ctrl_mean', 'cv_ratio')",
+      "tool": "DATA: group_stat|group_extremum|correlation|count_filter|quantile|derive_stat  CHAIN: combine|lookup|aggregate_hooks",
       "params": {
-        "// For group_stat": "filter_expr?, target_col, group_col, group_val, agg (mean|median|sum|count|std)",
-        "// For correlation": "filter_expr?, col_a, col_b, method? (pearson|spearman)",
-        "// For count_filter": "filter_expr",
-        "// For model_eval": "filter_expr?, target_col, feature_cols[], model, metric, seed",
-        "// For python_code": "code (string), depends_on (list of hook ids) - USE THIS TO CHAIN RESULTS"
+        "// DATA TOOLS query the dataframe": "",
+        "// group_stat": "group_col, target_col, agg?, filter_expr?, group_val",
+        "// group_extremum": "group_col, target_col, agg?, extremum?, return_what?, filter_expr?",
+        "// correlation": "col_a, col_b, method?, filter_expr?",
+        "// count_filter": "filter_expr?",
+        "// quantile": "col, q, filter_expr?",
+        "// derive_stat": "formula, group_col, agg?, filter_expr?, group_val",
+        "// CHAIN TOOLS operate on prior hook results": "",
+        "// combine": "expr (arithmetic or boolean), vars (map var→hook_id)",
+        "// lookup": "group_hook, group_col, target_col, agg?",
+        "// aggregate_hooks": "hooks (list), agg (min|max|mean|sum|range)"
       },
-      "depends_on": ["list of hook ids this depends on - BUILD A REAL DAG"]
+      "depends_on": ["required for chain tools - list hook ids this depends on"]
     }
   ],
   "// hooks requirement": "MEDIUM: 3-4 hooks, HARD: 4-6 hooks, VERY_HARD: 5-10 hooks",
   "teacher_answers": {
-    "hook_id": "value - your computed answer for this hook (number, string, bool, list)"
+    "hook_id": "value - computed answer (number or string)"
   },
-  "solution_trace": "string - step-by-step explanation of the reasoning chain"
+  "solution_trace": "string - step-by-step explanation"
 }
 """.strip()
 
 
-# Hook tool documentation for the final output
+# Hook tool documentation for episodes (subset of TOOL_SPECS that produce scalar outputs)
 HOOK_TOOLS_DOC = """
 HOOK TOOLS (for building multi-step reasoning chains):
 
-**group_stat**: Compute aggregated statistic for a group
-  - params: filter_expr (optional), target_col, group_col, group_val, agg (mean|median|sum|count|std)
-  - returns: {stat: number, n: count}
-  - Example: {"tool": "group_stat", "params": {"filter_expr": "TR == 'control'", "target_col": "TL", "group_col": "TREE", "group_val": "G28", "agg": "mean"}}
+═══ DATA QUERY TOOLS (operate on dataframe) ═══
 
-**correlation**: Pearson/Spearman correlation between two columns
-  - params: filter_expr (optional), col_a, col_b, method (pearson|spearman, default: pearson)
-  - returns: {r: correlation, p: p-value, n: count}
-  - Example: {"tool": "correlation", "params": {"col_a": "TL", "col_b": "IN", "method": "pearson"}}
+**group_stat**: Aggregate a column grouped by another (e.g., mean salary by department)
+  - params: group_col*, target_col?, agg (mean|sum|median|std|min|max|count|nunique|condition_rate|missing_rate), filter_expr?, group_val*, condition?
+  - group_val is REQUIRED for scalar output (returns "value (n=count)" or "% (...)")
+  - condition_rate: provide condition (e.g., "TL > 50") to get % within group
+  - missing_rate: target_col is the column to check missingness on
+  - Example: {{"tool": "group_stat", "params": {{"group_col": "TR", "target_col": "TL", "agg": "mean", "group_val": "control"}}}}
+  - Example (condition rate): {{"tool": "group_stat", "params": {{"group_col": "TR", "agg": "condition_rate", "condition": "TL > 50", "group_val": "control"}}}}
+  - Example (missing rate): {{"tool": "group_stat", "params": {{"group_col": "TR", "target_col": "INTERNODE_5", "agg": "missing_rate", "group_val": "control"}}}}
 
-**count_filter**: Count rows matching a filter expression
-  - params: filter_expr
-  - returns: {count: number}
-  - Example: {"tool": "count_filter", "params": {"filter_expr": "TL > 100 and TR == 'control'"}}
+**multi_group_stat**: Aggregate multiple targets with multiple aggs by group
+  - params: group_col*, target_cols* (list), aggs* (list), filter_expr?, top_n_cols?
+  - returns: compact table with columns like target_agg, one row per group
+  - Example: {{"tool": "multi_group_stat", "params": {{"group_col": "TR", "target_cols": ["TL", "IN"], "aggs": ["mean", "std"]}}}}
 
-**model_eval**: Train/test a model with fixed seed
-  - params: filter_expr (optional), target_col, feature_cols[], model (linear_regression), metric (mse|mae|r2|accuracy), seed
-  - returns: {metric: value, n_train: count, n_test: count}
-  - Example: {"tool": "model_eval", "params": {"target_col": "TL", "feature_cols": ["IN"], "model": "linear_regression", "metric": "r2", "seed": 42}}
+**group_extremum**: Find which group has highest/lowest aggregated value
+  - params: group_col*, target_col*, agg?, extremum (max|min), return_what (group|value), filter_expr?
+  - return_what='group' → group name, return_what='value' → the extreme value
+  - Example: {{"tool": "group_extremum", "params": {{"group_col": "TR", "target_col": "TL", "extremum": "max", "return_what": "group"}}}}
 
-**python_code**: THE KEY TOOL FOR CHAINING - Compose over prior hook results
-  - params: code (string), depends_on (list of hook ids)
-  - The code receives a `results` dict with {{hook_id: result_dict}} from depends_on
-  - Must return a single value (number, string, bool, list, dict)
-  - USE THIS TO: compare values, compute ratios, find max/min, derive metrics
-  - Examples:
-    - Difference: {{"code": "results['h1']['stat'] - results['h2']['stat']", "depends_on": ["h1", "h2"]}}
-    - Ratio: {{"code": "results['h1']['stat'] / results['h2']['stat']", "depends_on": ["h1", "h2"]}}
-    - Percentage: {{"code": "100 * results['h1']['count'] / results['h2']['count']", "depends_on": ["h1", "h2"]}}
-    - Comparison: {{"code": "'treatment' if results['h1']['stat'] > results['h2']['stat'] else 'control'", "depends_on": ["h1", "h2"]}}
-    - Max of multiple: {{"code": "max([results['h1']['stat'], results['h2']['stat'], results['h3']['stat']])", "depends_on": ["h1", "h2", "h3"]}}
-    - CV (std/mean): {{"code": "results['std_hook']['stat'] / results['mean_hook']['stat']", "depends_on": ["std_hook", "mean_hook"]}}
+**correlation**: Correlation coefficient between two numeric columns
+  - params: col_a*, col_b*, method (pearson|spearman|kendall), filter_expr?
+  - returns: "r_value (strength direction correlation)"
+  - Example: {{"tool": "correlation", "params": {{"col_a": "TL", "col_b": "IN"}}}}
+
+**count_filter**: Count rows matching a condition
+  - params: filter_expr?
+  - returns: "count rows (pct% of total)"
+  - Example: {{"tool": "count_filter", "params": {{"filter_expr": "TL > 50 and TR == 'control'"}}}}
+
+**filter_stat**: Aggregate a numeric column with optional filtering (no grouping)
+  - params: target_col?, agg (mean|sum|median|std|min|max|count|nunique), filter_expr?
+  - agg='count' returns count + percent of total
+  - Example: {{"tool": "filter_stat", "params": {{"target_col": "TL", "agg": "mean", "filter_expr": "TR == 'control'"}}}}
+  - Example (count): {{"tool": "filter_stat", "params": {{"agg": "count", "filter_expr": "TL > 50 and TR == 'control'"}}}}
+
+**quantile**: Calculate percentile for a column
+  - params: col*, q (single float 0-1 for scalar), filter_expr?
+  - Example: {{"tool": "quantile", "params": {{"col": "TL", "q": 0.9}}}}
+
+**group_value_counts**: Top-N value counts per group for a categorical column
+  - params: group_col*, target_col*, top_n?, normalize?
+  - returns: stacked table with group, value, count, pct (if normalize)
+  - Example: {{"tool": "group_value_counts", "params": {{"group_col": "TR", "target_col": "IN", "top_n": 5}}}}
+
+**derive_stat**: Compute derived metric from formula, aggregate by group
+  - params: formula*, group_col*, agg?, filter_expr?, group_val*
+  - formula uses column names (e.g., "TL / IN", "price * quantity")
+  - Example: {{"tool": "derive_stat", "params": {{"formula": "TL / IN", "group_col": "TR", "agg": "mean", "group_val": "control"}}}}
+
+═══ HOOK-CHAINING TOOLS (operate on previous hook results) ═══
+
+**combine**: Arithmetic or boolean expressions on hook results
+  - params: expr* (expression), vars* (map variable names → hook IDs)
+  - Arithmetic: ratios, differences, percentages → returns number
+  - Boolean: comparisons (>, <, ==, >=, <=) → returns "true"/"false"
+  - Example: {{"tool": "combine", "params": {{"expr": "s / m", "vars": {{"s": "ctrl_std", "m": "ctrl_mean"}}}}}}
+  - Example: {{"tool": "combine", "params": {{"expr": "(a - b) / b * 100", "vars": {{"a": "treat_val", "b": "ctrl_val"}}}}}}
+  - Example: {{"tool": "combine", "params": {{"expr": "a > b", "vars": {{"a": "ctrl_cv", "b": "treat_cv"}}}}}}
+
+**lookup**: Chain a group result into another query
+  - params: group_hook* (hook that returned a group), group_col*, target_col*, agg?
+  - Use for: "find best treatment, then get its correlation with X"
+  - Example: {{"tool": "lookup", "params": {{"group_hook": "best_tr", "group_col": "TR", "target_col": "IN", "agg": "std"}}}}
+
+**aggregate_hooks**: Reduce multiple hooks to one value
+  - params: hooks* (list of hook IDs), agg* (min|max|mean|sum|range)
+  - Use for: "which of these 6 treatment means is highest?"
+  - Example: {{"tool": "aggregate_hooks", "params": {{"hooks": ["cv_1", "cv_2", "cv_3"], "agg": "max"}}}}
+
+All tools are atomic, deterministic, and verifiable.
 """.strip()
 
 
@@ -114,10 +167,15 @@ Call tools by placing JSON in <code>...</code> tags. One tool call per block.
 <code>{{"tool": "value_counts", "col": "TR", "top_n": 20}}</code>
 <code>{{"tool": "unique", "col": "TREE", "top_n": 50}}</code>
 <code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean|sum|median|std|min|max|count", "filter_expr": "IN > 5"}}</code>
+<code>{{"tool": "multi_group_stat", "group_col": "TR", "target_cols": ["TL", "IN"], "aggs": ["mean", "std"]}}</code>
+<code>{{"tool": "filter_stat", "target_col": "TL", "agg": "mean|median|std|min|max|count", "filter_expr": "TR == 'control' and IN > 5"}}</code>
 <code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "method": "pearson|spearman|kendall", "filter_expr": ""}}</code>
 <code>{{"tool": "count_filter", "filter_expr": "TL > 50 and TR == 'control'"}}</code>
+<code>{{"tool": "group_stat", "group_col": "TR", "agg": "condition_rate", "condition": "TL > 50", "group_val": "control"}}</code>
 <code>{{"tool": "sort_values", "col": "TL", "ascending": false, "top_n": 10}}</code>
 <code>{{"tool": "quantile", "col": "TL", "q": [0.1, 0.25, 0.5, 0.75, 0.9]}}</code>
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "INTERNODE_5", "agg": "missing_rate", "group_val": "control"}}</code>
+<code>{{"tool": "group_value_counts", "group_col": "TR", "target_col": "IN", "top_n": 5}}</code>
 <code>{{"tool": "crosstab", "col_a": "TR", "col_b": "TREE", "normalize": "index|columns|all|"}}</code>
 
 YOUR TASK:
@@ -163,43 +221,57 @@ EPISODE SCHEMA:
 ```
 
 ═══════════════════════════════════════════════════════════════════════════════
-WORKED EXAMPLE: VERY_HARD EPISODE (7 hooks, proper DAG)
+WORKED EXAMPLE: VERY_HARD EPISODE (10 hooks with proper chaining)
 ═══════════════════════════════════════════════════════════════════════════════
 
-Question: "Which treatment shows the largest 'growth efficiency gap'? Define growth efficiency as TL/IN (total length per internode). Compare the mean efficiency of 'long' branches (IN >= 10) vs 'short' branches (IN < 5) within each treatment. Report which treatment has the largest gap and what that gap is."
+Question: "Compare growth consistency (coefficient of variation = std/mean of TL) between the control group and the treatment with the highest mean TL. Which has lower CV (more consistent growth), and by what percentage is it lower?"
 
 ```json
 {{
-  "question_text": "Which treatment shows the largest 'growth efficiency gap'? Define growth efficiency as TL/IN (total length per internode). Compare the mean efficiency of long branches (IN >= 10) vs short branches (IN < 5) within each treatment. Report which treatment has the largest gap and what that gap value is.",
+  "question_text": "Compare growth consistency (CV = std/mean of TL) between control and the treatment with highest mean TL. Which has lower CV (more consistent), and by what percentage is it lower?",
   "difficulty": "VERY_HARD",
   "hooks": [
-    {{"id": "ctrl_long_tl", "tool": "group_stat", "params": {{"filter_expr": "TR == 'control' and IN >= 10", "target_col": "TL", "group_col": "TR", "group_val": "control", "agg": "mean"}}, "depends_on": []}},
-    {{"id": "ctrl_long_in", "tool": "group_stat", "params": {{"filter_expr": "TR == 'control' and IN >= 10", "target_col": "IN", "group_col": "TR", "group_val": "control", "agg": "mean"}}, "depends_on": []}},
-    {{"id": "ctrl_short_tl", "tool": "group_stat", "params": {{"filter_expr": "TR == 'control' and IN < 5", "target_col": "TL", "group_col": "TR", "group_val": "control", "agg": "mean"}}, "depends_on": []}},
-    {{"id": "ctrl_short_in", "tool": "group_stat", "params": {{"filter_expr": "TR == 'control' and IN < 5", "target_col": "IN", "group_col": "TR", "group_val": "control", "agg": "mean"}}, "depends_on": []}},
-    {{"id": "ctrl_long_eff", "tool": "python_code", "params": {{"code": "results['ctrl_long_tl']['stat'] / results['ctrl_long_in']['stat']", "depends_on": ["ctrl_long_tl", "ctrl_long_in"]}}, "depends_on": ["ctrl_long_tl", "ctrl_long_in"]}},
-    {{"id": "ctrl_short_eff", "tool": "python_code", "params": {{"code": "results['ctrl_short_tl']['stat'] / results['ctrl_short_in']['stat']", "depends_on": ["ctrl_short_tl", "ctrl_short_in"]}}, "depends_on": ["ctrl_short_tl", "ctrl_short_in"]}},
-    {{"id": "ctrl_gap", "tool": "python_code", "params": {{"code": "round(results['ctrl_long_eff'] - results['ctrl_short_eff'], 3)", "depends_on": ["ctrl_long_eff", "ctrl_short_eff"]}}, "depends_on": ["ctrl_long_eff", "ctrl_short_eff"]}}
+    {{"id": "ctrl_std", "tool": "group_stat", "params": {{"group_col": "TR", "target_col": "TL", "agg": "std", "group_val": "control"}}, "depends_on": []}},
+    {{"id": "ctrl_mean", "tool": "group_stat", "params": {{"group_col": "TR", "target_col": "TL", "agg": "mean", "group_val": "control"}}, "depends_on": []}},
+    {{"id": "ctrl_cv", "tool": "combine", "params": {{"expr": "s / m", "vars": {{"s": "ctrl_std", "m": "ctrl_mean"}}}}, "depends_on": ["ctrl_std", "ctrl_mean"]}},
+    {{"id": "best_tr", "tool": "group_extremum", "params": {{"group_col": "TR", "target_col": "TL", "agg": "mean", "extremum": "max", "return_what": "group"}}, "depends_on": []}},
+    {{"id": "best_std", "tool": "lookup", "params": {{"group_hook": "best_tr", "group_col": "TR", "target_col": "TL", "agg": "std"}}, "depends_on": ["best_tr"]}},
+    {{"id": "best_mean", "tool": "lookup", "params": {{"group_hook": "best_tr", "group_col": "TR", "target_col": "TL", "agg": "mean"}}, "depends_on": ["best_tr"]}},
+    {{"id": "best_cv", "tool": "combine", "params": {{"expr": "s / m", "vars": {{"s": "best_std", "m": "best_mean"}}}}, "depends_on": ["best_std", "best_mean"]}},
+    {{"id": "lower_cv", "tool": "aggregate_hooks", "params": {{"hooks": ["ctrl_cv", "best_cv"], "agg": "min"}}, "depends_on": ["ctrl_cv", "best_cv"]}},
+    {{"id": "cv_diff", "tool": "combine", "params": {{"expr": "a - b", "vars": {{"a": "ctrl_cv", "b": "best_cv"}}}}, "depends_on": ["ctrl_cv", "best_cv"]}},
+    {{"id": "pct_lower", "tool": "combine", "params": {{"expr": "(high - low) / high * 100", "vars": {{"high": "ctrl_cv", "low": "best_cv"}}}}, "depends_on": ["ctrl_cv", "best_cv"]}}
   ],
   "teacher_answers": {{
-    "ctrl_long_tl": 61.64,
-    "ctrl_long_in": 14.17,
-    "ctrl_short_tl": 4.82,
-    "ctrl_short_in": 2.73,
-    "ctrl_long_eff": 4.35,
-    "ctrl_short_eff": 1.77,
-    "ctrl_gap": 2.58
+    "ctrl_std": "18.4500 (n=45)",
+    "ctrl_mean": "45.2300 (n=45)",
+    "ctrl_cv": "0.4079",
+    "best_tr": "control (mean=45.2300, n=45)",
+    "best_std": "18.4500 (n=45)",
+    "best_mean": "45.2300 (n=45)",
+    "best_cv": "0.4079",
+    "lower_cv": "0.4079 (from ctrl_cv)",
+    "cv_diff": "0.0000",
+    "pct_lower": "0.0000"
   }},
-  "solution_trace": "1) Get mean TL and IN for long branches (IN>=10) in control. 2) Get mean TL and IN for short branches (IN<5) in control. 3) Compute efficiency (TL/IN) for each group. 4) Compute gap = long_eff - short_eff. Note: Full question would repeat for all treatments and find max gap."
+  "solution_trace": "1-2) Get std and mean for control. 3) Compute control CV = std/mean. 4) Find treatment with highest mean TL. 5-6) Look up std and mean for that treatment. 7) Compute its CV. 8) Find which CV is lower using aggregate_hooks. 9-10) Compute difference and percentage. Note: In this case control IS the best treatment, so CVs are equal."
 }}
 ```
 
-Notice the DAG structure:
-- h1,h2 → h5 (long efficiency depends on long TL and IN)
-- h3,h4 → h6 (short efficiency depends on short TL and IN)  
-- h5,h6 → h7 (gap depends on both efficiencies)
+DAG structure (hooks build on each other):
+```
+ctrl_std ──┬──→ ctrl_cv ──┬──→ lower_cv
+ctrl_mean ─┘              ├──→ cv_diff
+                          └──→ pct_lower
+best_tr ──┬──→ best_std ──┬──→ best_cv ──┘
+          └──→ best_mean ─┘
+```
 
-This is ONE treatment. A full VERY_HARD question would compute this for all 6 treatments (more hooks) and find the max. The key is that each hook builds on prior results—no hook stands alone as a simple lookup.
+Key patterns demonstrated:
+- **combine**: Arithmetic + boolean on hook results (CV = std/mean, comparisons, percentages)
+- **lookup**: Dynamically query stats for the group returned by group_extremum
+- **aggregate_hooks**: Find min/max across multiple hooks (reports which hook won)
+- Proper depends_on forming a real DAG, not parallel independent lookups
 
 REQUIREMENTS FOR GOOD QUESTIONS:
 - MEDIUM questions need 3-4 hooks minimum
@@ -207,7 +279,7 @@ REQUIREMENTS FOR GOOD QUESTIONS:
 - VERY_HARD questions need 5-10 hooks minimum
 - Hooks MUST build on each other via depends_on—form a real DAG, not parallel independent lookups
 - You MUST compute and provide teacher_answers for EVERY hook
-- Use python_code hooks liberally to combine, compare, and derive from prior results
+- Use hook-chaining tools (combine, lookup, aggregate_hooks) to build on prior results
 - Answers must be specific (exact numbers, not ranges or approximations)
 - Questions should sound like exam questions, not "what is the value of X"
 
@@ -232,6 +304,55 @@ When you have explored enough, write DONE on its own line, then output your fina
 Each episode must include question_text, difficulty, hooks (3-10 based on difficulty), teacher_answers (one per hook), and solution_trace.
 
 Begin by sharing your interpretation, brainstorm broadly, then explore. Signal DONE when ready to output final episodes."""
+
+
+def build_tool_feedback_prompt(dataset_description: str, bootstrap_output: str) -> str:
+    """Build prompt for tool feedback mode - identify missing/friction tools."""
+    tool_docs = format_tool_docs()
+    
+    return f"""You are a senior data scientist evaluating a tool library for data analysis. Your goal is to identify gaps and friction points.
+
+DATASET CONTEXT:
+{dataset_description}
+
+INITIAL EXPLORATION:
+```
+{bootstrap_output}
+```
+
+{tool_docs}
+
+HOW TO EXPLORE:
+Call tools by placing JSON in <code>...</code> tags. One tool call per block.
+
+YOUR TASK:
+1. **Explore** the dataset using the available tools
+2. **Note friction**: When you wish you had a different tool, or find the current tools awkward, mark it with <TOOL_WISH> tags:
+   <TOOL_WISH>I wish I could compute rolling averages across internodes</TOOL_WISH>
+3. **Document patterns**: What operations do you find yourself repeating? What would make analysis faster?
+
+After exploring, write DONE and output a JSON array of tool recommendations.
+
+CRITICAL: Output VALID JSON only. Do NOT use placeholders like `{{...}}` or `...` - use real example values.
+
+```json
+[
+  {{
+    "name": "suggested_tool_name",
+    "priority": "high|medium|low",
+    "why": "explanation of the gap this fills",
+    "example_call": {{"tool": "example_tool", "params": {{"col": "TL", "group_col": "TR"}}}},
+    "returns": "description of expected output"
+  }}
+]
+```
+
+Focus on tools that would:
+- Reduce multi-step workflows to single calls
+- Handle common data patterns more naturally
+- Provide atomic, verifiable outputs (scalar or structured)
+
+Begin exploring and note any friction you encounter."""
 
 
 # Dataset description (manual for now, could come from Kaggle API later)

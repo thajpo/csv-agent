@@ -13,18 +13,15 @@ Usage:
 import argparse
 import json
 import re
-import shutil
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 import torch
 
-from src.kernel import JupyterKernel
 from src.llm import APILLM
 from src.tools import parse_tool_call, run_tool
-from src.prompts import BOOTSTRAP_CODE, build_prompt, build_tool_feedback_prompt, DEFAULT_DATASET_DESCRIPTION
+from src.prompts import generate_bootstrap_output, build_prompt, build_tool_feedback_prompt, DEFAULT_DATASET_DESCRIPTION
 from src.text_extraction import extract_code_blocks, extract_json_episodes, extract_json_array
 from rich.console import Console
 from rich.panel import Panel
@@ -69,37 +66,31 @@ def run_pipeline(
     df = pd.read_csv(csv_path)
     console.print(f"[green]✓[/green] {len(df):,} × {len(df.columns)}")
     
-    # Setup temp workdir
-    workdir = tempfile.mkdtemp()
-    shutil.copy(csv_path, workdir)
-    
     results_data = []
     n_turns = 0
     
     # Mode-specific configuration
     if mode == "tool-feedback":
         prompt_builder = build_tool_feedback_prompt
-        continue_msg = "\n\nContinue exploring. Note any tool friction with {TOOL_WISH} tags. When done, write DONE and output your tool recommendations as JSON."
+        continue_msg = "\n\nContinue exploring. Note any tool friction with <TOOL_WISH>...</TOOL_WISH> tags. When done, write DONE and output your tool recommendations as JSON."
         final_msg = "You've reached the turn limit. Please output your tool recommendations now as a JSON array. Write DONE then the JSON."
     else:
         prompt_builder = build_prompt
         continue_msg = "\n\nContinue exploring. Note candidate questions as you go. When ready, write DONE and output your final 10 episodes as JSON."
         final_msg = "You've reached the turn limit. Please output your final 10 episodes now as a JSON array. Write DONE then the JSON."
     
-    with JupyterKernel(workdir=workdir) as kernel:
-        llm = APILLM()
+    llm = APILLM()
+    
+    try:
+        # Bootstrap exploration - generate output directly
+        bootstrap_output = generate_bootstrap_output(csv_path)
+        console.print(Panel(bootstrap_output, title="[cyan]Bootstrap[/cyan]", border_style="dim"))
         
-        try:
-            # Bootstrap exploration
-            bootstrap_result = kernel.execute(BOOTSTRAP_CODE)
-            bootstrap_output = bootstrap_result.stdout or "[no output]"
-            console.print(Panel(bootstrap_output, title="[cyan]Bootstrap[/cyan]", border_style="dim"))
-            
-            # Build prompt and start conversation
-            system_prompt = prompt_builder(dataset_description, bootstrap_output)
-            conversation = [{"role": "user", "content": system_prompt}]
-            
-            for turn in range(1, max_turns + 1):
+        # Build prompt and start conversation
+        system_prompt = prompt_builder(dataset_description, bootstrap_output)
+        conversation = [{"role": "user", "content": system_prompt}]
+        
+        for turn in range(1, max_turns + 1):
                 n_turns = turn
                 console.rule(f"[bold]Turn {turn}/{max_turns}[/bold]", style="blue")
                 
@@ -114,15 +105,15 @@ def run_pipeline(
                     console.print("\n[bold green]✓ DONE[/bold green]")
                     if mode == "tool-feedback":
                         results_data = extract_json_array(response)
-                        if results_data:
-                            console.print(f"\n[green]✓ {len(results_data)} tool recommendations[/green]")
-                            for i, rec in enumerate(results_data, 1):
-                                name = rec.get("name", "?")
-                                priority = rec.get("priority", "?")
-                                why = rec.get("why", "?")[:60]
-                                console.print(f"  [dim]{i}.[/dim] [{priority}] [bold]{name}[/bold]: {why}")
-                        else:
-                            console.print("[red]✗ Failed to parse episodes[/red]")
+                    if results_data:
+                        console.print(f"\n[green]✓ {len(results_data)} tool recommendations[/green]")
+                        for i, rec in enumerate(results_data, 1):
+                            name = rec.get("name", "?")
+                            priority = rec.get("priority", "?")
+                            why = rec.get("why", "?")[:60]
+                            console.print(f"  [dim]{i}.[/dim] [{priority}] [bold]{name}[/bold]: {why}")
+                    else:
+                        console.print("[red]✗ Failed to parse tool recommendations (check for invalid JSON like {...} placeholders)[/red]")
                     else:
                         results_data = extract_json_episodes(response)
                         if results_data:
@@ -156,39 +147,39 @@ def run_pipeline(
                 
                 feedback += continue_msg
                 conversation.append({"role": "user", "content": feedback})
-            
-            else:
-                # Reached max turns without DONE
-                console.print(f"[yellow]Max turns ({max_turns})[/yellow]")
-                
-                conversation.append({"role": "user", "content": final_msg})
-                
-                with console.status("[magenta]Generating...[/magenta]", spinner="dots"):
-                    response = llm(conversation)
-                
-                console.print(Panel(response, title="[magenta]Assistant[/magenta]", border_style="magenta"))
-                if mode == "tool-feedback":
-                    results_data = extract_json_array(response)
-                else:
-                    results_data = extract_json_episodes(response)
-                
-                if results_data:
-                    if mode == "tool-feedback":
-                        console.print(f"\n[green]✓ {len(results_data)} tool recommendations[/green]")
-                    else:
-                        console.print(f"\n[green]✓ {len(results_data)} episodes[/green]")
-                        for i, ep in enumerate(results_data, 1):
-                            if isinstance(ep, dict):
-                                diff = ep.get("difficulty", "?")
-                                q = ep.get("question_text", "?")
-                                n_hooks = len(ep.get("hooks", []))
-                                console.print(f"  [dim]{i}.[/dim] [{diff}] ({n_hooks}h) {q}")
-                else:
-                    console.print("[red]✗ Failed to parse episodes[/red]")
         
-        finally:
-            del llm
-            torch.cuda.empty_cache()
+        else:
+            # Reached max turns without DONE
+            console.print(f"[yellow]Max turns ({max_turns})[/yellow]")
+            
+            conversation.append({"role": "user", "content": final_msg})
+            
+            with console.status("[magenta]Generating...[/magenta]", spinner="dots"):
+                response = llm(conversation)
+            
+            console.print(Panel(response, title="[magenta]Assistant[/magenta]", border_style="magenta"))
+            if mode == "tool-feedback":
+                results_data = extract_json_array(response)
+            else:
+                results_data = extract_json_episodes(response)
+            
+            if results_data:
+                if mode == "tool-feedback":
+                    console.print(f"\n[green]✓ {len(results_data)} tool recommendations[/green]")
+                else:
+                    console.print(f"\n[green]✓ {len(results_data)} episodes[/green]")
+                    for i, ep in enumerate(results_data, 1):
+                        if isinstance(ep, dict):
+                            diff = ep.get("difficulty", "?")
+                            q = ep.get("question_text", "?")
+                            n_hooks = len(ep.get("hooks", []))
+                            console.print(f"  [dim]{i}.[/dim] [{diff}] ({n_hooks}h) {q}")
+            else:
+                console.print("[red]✗ Failed to parse episodes[/red]")
+    
+    finally:
+        del llm
+        torch.cuda.empty_cache()
     
     # Save if output path provided
     if output_path and results_data:

@@ -94,7 +94,7 @@ TOOL_SPECS = {
     "group_stat": {
         "name": "group_stat",
         "type": "function",
-        "description": "Aggregate a column grouped by another (e.g., mean salary by department). Returns all groups unless group_val is specified for a single group's scalar. Auto-coerces '?' to NaN.",
+        "description": "Aggregate a column grouped by another (e.g., mean salary by department). Supports rates via agg=condition_rate|missing_rate. Returns all groups unless group_val is specified for a single group's scalar. Auto-coerces '?' to NaN.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -104,12 +104,12 @@ TOOL_SPECS = {
                 },
                 "target_col": {
                     "type": "string",
-                    "description": "Numeric column to aggregate (e.g., 'salary', 'price')"
+                    "description": "Numeric column to aggregate (e.g., 'salary', 'price') or column to check for missing_rate"
                 },
                 "agg": {
                     "type": "string",
                     "description": "Aggregation function",
-                    "enum": ["mean", "sum", "median", "std", "min", "max", "count", "nunique"],
+                    "enum": ["mean", "sum", "median", "std", "min", "max", "count", "nunique", "condition_rate", "missing_rate"],
                     "default": "mean"
                 },
                 "filter_expr": {
@@ -120,12 +120,53 @@ TOOL_SPECS = {
                 "group_val": {
                     "type": "string",
                     "description": "Return scalar for this specific group only (optional)"
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "Condition expression for agg='condition_rate' (e.g., \"TL > 50\")"
                 }
             },
-            "required": ["group_col", "target_col"],
+            "required": ["group_col"],
             "additionalProperties": False
         },
         "summarize": False
+    },
+    "multi_group_stat": {
+        "name": "multi_group_stat",
+        "type": "function",
+        "description": "Aggregate multiple target columns with multiple aggs by group. Returns a compact table (one row per group, wide columns like col_agg). Auto-coerces '?' to NaN for numeric aggs.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "group_col": {
+                    "type": "string",
+                    "description": "Column to group by"
+                },
+                "target_cols": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of target columns to aggregate"
+                },
+                "aggs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of aggregations (mean|sum|median|std|min|max|count|nunique)"
+                },
+                "filter_expr": {
+                    "type": "string",
+                    "description": "Optional pandas query to filter rows before grouping",
+                    "default": ""
+                },
+                "top_n_cols": {
+                    "type": "integer",
+                    "description": "Optional limit on number of aggregated columns returned",
+                    "default": 50
+                }
+            },
+            "required": ["group_col", "target_cols", "aggs"],
+            "additionalProperties": False
+        },
+        "summarize": True
     },
     "group_extremum": {
         "name": "group_extremum",
@@ -221,6 +262,34 @@ TOOL_SPECS = {
         },
         "summarize": False
     },
+    "filter_stat": {
+        "name": "filter_stat",
+        "type": "function",
+        "description": "Aggregate a numeric column after applying an optional filter (no grouping). Always returns a single scalar with count.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "target_col": {
+                    "type": "string",
+                    "description": "Numeric column to aggregate (e.g., 'salary', 'price')"
+                },
+                "agg": {
+                    "type": "string",
+                    "description": "Aggregation function",
+                    "enum": ["mean", "sum", "median", "std", "min", "max", "count", "nunique"],
+                    "default": "mean"
+                },
+                "filter_expr": {
+                    "type": "string",
+                    "description": "Pandas query expression to filter rows before aggregating",
+                    "default": ""
+                }
+            },
+            "required": [],
+            "additionalProperties": False
+        },
+        "summarize": False
+    },
     "sort_values": {
         "name": "sort_values",
         "type": "function",
@@ -305,6 +374,87 @@ TOOL_SPECS = {
         },
         "summarize": True
     },
+    "group_value_counts": {
+        "name": "group_value_counts",
+        "type": "function",
+        "description": "Top-N value counts per group for a categorical target. Returns stacked table: group | value | count | pct.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "group_col": {
+                    "type": "string",
+                    "description": "Column to group by (e.g., 'TR')"
+                },
+                "target_col": {
+                    "type": "string",
+                    "description": "Categorical column to count values of (e.g., 'IN')"
+                },
+                "top_n": {
+                    "type": "integer",
+                    "description": "Top N values per group",
+                    "default": 5
+                },
+                "normalize": {
+                    "type": "boolean",
+                    "description": "If true, include percentage of group total",
+                    "default": True
+                }
+            },
+            "required": ["group_col", "target_col"],
+            "additionalProperties": False
+        },
+        "summarize": True
+    },
+    "missing_rate": {
+        "name": "missing_rate",
+        "type": "function",
+        "description": "Compute missingness for a column (optionally within a group). Returns percent missing and count.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "col": {
+                    "type": "string",
+                    "description": "Column to check for missing values"
+                },
+                "group_col": {
+                    "type": "string",
+                    "description": "Optional column to group by before computing missingness"
+                },
+                "group_val": {
+                    "type": "string",
+                    "description": "Return scalar for this specific group (required if group_col provided)"
+                }
+            },
+            "required": ["col"],
+            "additionalProperties": False
+        },
+        "summarize": False
+    },
+    "group_condition_rate": {
+        "name": "group_condition_rate",
+        "type": "function",
+        "description": "Within a group, compute the percentage of rows satisfying a condition. Requires group_val to keep output atomic.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "group_col": {
+                    "type": "string",
+                    "description": "Column to group by (e.g., 'department')"
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "Pandas query expression for rows counted as true (e.g., \"TL > 50\")"
+                },
+                "group_val": {
+                    "type": "string",
+                    "description": "Return scalar for this specific group only"
+                }
+            },
+            "required": ["group_col", "condition", "group_val"],
+            "additionalProperties": False
+        },
+        "summarize": False
+    },
     "derive_stat": {
         "name": "derive_stat",
         "type": "function",
@@ -340,8 +490,95 @@ TOOL_SPECS = {
             "additionalProperties": False
         },
         "summarize": False
+    },
+    # ========================================================================
+    # Hook-chaining tools: operate on previous hook results, not raw dataframe
+    # ========================================================================
+    "combine": {
+        "name": "combine",
+        "type": "function",
+        "description": "Compute arithmetic or boolean expressions on previous hook results. Use for ratios, differences, percentages, comparisons. Returns number or 'true'/'false'.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "expr": {
+                    "type": "string",
+                    "description": "Expression using variable names (e.g., 'a / b', '(a - b) / b * 100', 'a > b', 'a == b')"
+                },
+                "vars": {
+                    "type": "object",
+                    "description": "Mapping of variable names to hook IDs (e.g., {'a': 'hook1', 'b': 'hook2'})",
+                    "additionalProperties": {"type": "string"}
+                }
+            },
+            "required": ["expr", "vars"],
+            "additionalProperties": False
+        },
+        "summarize": False,
+        "chain": True  # Marks this as a hook-chaining tool
+    },
+    "lookup": {
+        "name": "lookup",
+        "type": "function",
+        "description": "Use a hook's group result to query another stat. Chains group_extremum → group_stat dynamically without hardcoding group names.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "group_hook": {
+                    "type": "string",
+                    "description": "Hook ID that returned a group name (e.g., from group_extremum)"
+                },
+                "group_col": {
+                    "type": "string",
+                    "description": "Column the group belongs to"
+                },
+                "target_col": {
+                    "type": "string",
+                    "description": "Column to aggregate for the looked-up group"
+                },
+                "agg": {
+                    "type": "string",
+                    "description": "Aggregation function",
+                    "enum": ["mean", "sum", "median", "std", "min", "max", "count", "nunique"],
+                    "default": "mean"
+                }
+            },
+            "required": ["group_hook", "group_col", "target_col"],
+            "additionalProperties": False
+        },
+        "summarize": False,
+        "chain": True
+    },
+    "aggregate_hooks": {
+        "name": "aggregate_hooks",
+        "type": "function",
+        "description": "Compute min/max/mean/sum/range across multiple hook values. Useful for finding extremes or averages across a set of computed values.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "hooks": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of hook IDs to aggregate"
+                },
+                "agg": {
+                    "type": "string",
+                    "description": "Aggregation function",
+                    "enum": ["min", "max", "mean", "sum", "range"]
+                }
+            },
+            "required": ["hooks", "agg"],
+            "additionalProperties": False
+        },
+        "summarize": False,
+        "chain": True
     }
 }
+
+
+def is_chain_tool(tool_name: str) -> bool:
+    """Check if a tool operates on hook results rather than the dataframe."""
+    return TOOL_SPECS.get(tool_name, {}).get("chain", False)
 
 
 def should_summarize(tool_name: str) -> bool:
@@ -395,10 +632,20 @@ def run_tool(tool: str, df: pd.DataFrame, params: dict) -> str:
                 return group_stat(
                     df,
                     params["group_col"],
-                    params["target_col"],
+                    params.get("target_col"),
                     params.get("agg", "mean"),
                     params.get("filter_expr", ""),
                     params.get("group_val"),
+                    params.get("condition"),
+                )
+            case "multi_group_stat":
+                return multi_group_stat(
+                    df,
+                    params["group_col"],
+                    params["target_cols"],
+                    params["aggs"],
+                    params.get("filter_expr", ""),
+                    params.get("top_n_cols", 50),
                 )
             case "group_extremum":
                 return group_extremum(
@@ -420,6 +667,13 @@ def run_tool(tool: str, df: pd.DataFrame, params: dict) -> str:
                 )
             case "count_filter":
                 return count_filter(df, params.get("filter_expr", ""))
+            case "filter_stat":
+                return filter_stat(
+                    df,
+                    params["target_col"],
+                    params.get("agg", "mean"),
+                    params.get("filter_expr", ""),
+                )
             case "sort_values":
                 return sort_values(
                     df,
@@ -435,6 +689,28 @@ def run_tool(tool: str, df: pd.DataFrame, params: dict) -> str:
                     params["col_a"],
                     params["col_b"],
                     params.get("normalize", ""),
+                )
+            case "group_value_counts":
+                return group_value_counts(
+                    df,
+                    params["group_col"],
+                    params["target_col"],
+                    params.get("top_n", 5),
+                    params.get("normalize", True),
+                )
+            case "missing_rate":
+                return missing_rate(
+                    df,
+                    params["col"],
+                    params.get("group_col"),
+                    params.get("group_val"),
+                )
+            case "group_condition_rate":
+                return group_condition_rate(
+                    df,
+                    params["group_col"],
+                    params["condition"],
+                    params["group_val"],
                 )
             case "derive_stat":
                 return derive_stat(
@@ -483,6 +759,15 @@ def _coerce_numeric(series: pd.Series, na_values: list[str] = ["?", "", "NA", "N
         cleaned = series.replace(na_values, pd.NA)
         return pd.to_numeric(cleaned, errors="coerce")
     return series
+
+
+def _coerce_numeric_columns(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    """Return a copy of df with specified columns coerced to numeric."""
+    df = df.copy()
+    for col in cols:
+        if col in df.columns:
+            df[col] = _coerce_numeric(df[col])
+    return df
 
 
 # ============================================================================
@@ -543,18 +828,61 @@ def unique(df: pd.DataFrame, col: str, top_n: int = 50) -> str:
 def group_stat(
     df: pd.DataFrame,
     group_col: str,
-    target_col: str,
+    target_col: str | None,
     agg: str = "mean",
     filter_expr: str = "",
     group_val: str | None = None,
+    condition: str | None = None,
 ) -> str:
     """Calculate aggregated statistic grouped by a column. Auto-coerces '?' to NaN.
+    
+    Supports rates:
+      - agg='condition_rate' with condition expression
+      - agg='missing_rate' on target_col
     
     If group_val is provided, returns atomic scalar for that group only.
     Otherwise returns all groups (for exploration).
     """
     if filter_expr:
         df = df.query(filter_expr)
+    
+    # Rates branch
+    if agg == "condition_rate":
+        if condition is None or condition == "":
+            return "condition is required for agg='condition_rate'"
+        totals = df.groupby(group_col).size()
+        satisfied = df.query(condition).groupby(group_col).size()
+        rates = (satisfied / totals * 100).fillna(0)
+        if group_val is not None:
+            if group_val not in totals.index:
+                return f"Group '{group_val}' not found in {group_col}"
+            pct = rates.get(group_val, 0)
+            count = satisfied.get(group_val, 0)
+            total = totals.get(group_val, 0)
+            return f"{pct:.2f}% ({count} of {total})"
+        return rates.to_string()
+    
+    if agg == "missing_rate":
+        if target_col is None:
+            return "target_col is required for agg='missing_rate'"
+        # Normalize missing markers
+        df = df.copy()
+        df[target_col] = df[target_col].replace(["?", "", "NA", "N/A"], pd.NA)
+        totals = df.groupby(group_col).size()
+        missing = df[target_col].isna().groupby(df[group_col]).sum()
+        rates = (missing / totals * 100).fillna(0)
+        if group_val is not None:
+            if group_val not in totals.index:
+                return f"Group '{group_val}' not found in {group_col}"
+            pct = rates.get(group_val, 0)
+            miss_ct = missing.get(group_val, 0)
+            total = totals.get(group_val, 0)
+            return f"{pct:.2f}% missing ({miss_ct} of {total})"
+        return rates.to_string()
+    
+    # Standard aggregations
+    if target_col is None:
+        return "target_col is required for this aggregation"
     
     # Auto-coerce target column if object dtype
     df = df.copy()
@@ -629,6 +957,7 @@ def correlation(
     """Calculate correlation coefficient between two columns."""
     if filter_expr:
         df = df.query(filter_expr)
+    df = _coerce_numeric_columns(df, [col_a, col_b])
     corr = df[col_a].corr(df[col_b], method=method)
     strength = "strong" if abs(corr) > 0.7 else "moderate" if abs(corr) > 0.4 else "weak"
     direction = "positive" if corr > 0 else "negative"
@@ -637,13 +966,27 @@ def correlation(
 
 def count_filter(df: pd.DataFrame, filter_expr: str = "") -> str:
     """Count rows matching a filter expression."""
-    total = len(df)
+    return filter_stat(df, target_col=None, agg="count", filter_expr=filter_expr)
+
+
+def filter_stat(df: pd.DataFrame, target_col: str | None, agg: str = "mean", filter_expr: str = "") -> str:
+    """Aggregate a numeric column with optional filtering (no grouping)."""
+    total_rows = len(df)
     if filter_expr:
-        filtered = df.query(filter_expr)
-        count = len(filtered)
-        pct = (count / total) * 100 if total > 0 else 0
-        return f"{count} rows ({pct:.1f}% of {total} total)"
-    return f"{total} rows total"
+        df = df.query(filter_expr)
+    if df.empty:
+        return "No data after filtering"
+    if agg == "count":
+        count = len(df)
+        pct = (count / total_rows * 100) if total_rows > 0 else 0
+        return f"{count} rows ({pct:.1f}% of {total_rows} total)"
+    if target_col is None:
+        return "target_col is required for this aggregation"
+    df = _coerce_numeric_columns(df, [target_col])
+    series = df[target_col]
+    result = series.agg(agg)
+    n = series.count()
+    return f"{result:.4f} (n={n})"
 
 
 def sort_values(
@@ -690,6 +1033,96 @@ def crosstab(df: pd.DataFrame, col_a: str, col_b: str, normalize: str = "") -> s
     return ct.to_string()
 
 
+def missing_rate(df: pd.DataFrame, col: str, group_col: str | None = None, group_val: str | None = None) -> str:
+    """Compute missingness percent for a column, optionally within a group."""
+    if group_col:
+        if group_val is None:
+            return "group_val required when group_col is provided"
+        df = df[df[group_col] == group_val]
+    total = len(df)
+    if total == 0:
+        return "No data after filtering"
+    missing = df[col].replace(["?", "", "NA", "N/A"], pd.NA).isna().sum()
+    pct = (missing / total) * 100
+    return f"{pct:.2f}% missing ({missing} of {total})"
+
+
+def group_condition_rate(df: pd.DataFrame, group_col: str, condition: str, group_val: str) -> str:
+    """Within a group, compute % of rows satisfying condition."""
+    subset = df[df[group_col] == group_val]
+    total = len(subset)
+    if total == 0:
+        return f"Group '{group_val}' not found in {group_col}"
+    satisfied = subset.query(condition)
+    count = len(satisfied)
+    pct = (count / total) * 100
+    return f"{pct:.2f}% ({count} of {total})"
+
+
+def multi_group_stat(
+    df: pd.DataFrame,
+    group_col: str,
+    target_cols: list[str],
+    aggs: list[str],
+    filter_expr: str = "",
+    top_n_cols: int = 50,
+) -> str:
+    """Aggregate multiple targets/aggregations by group; return compact table."""
+    if filter_expr:
+        df = df.query(filter_expr)
+    if df.empty:
+        return "No data after filtering"
+    
+    df = df.copy()
+    # Coerce numeric-like targets
+    for col in target_cols:
+        df[col] = _coerce_numeric(df[col])
+    
+    grouped = df.groupby(group_col)[target_cols].agg(aggs)
+    # Flatten MultiIndex columns
+    grouped.columns = [f"{col}_{agg}" for col, agg in grouped.columns]
+    
+    # Limit column count to keep output compact
+    if len(grouped.columns) > top_n_cols:
+        grouped = grouped[grouped.columns[:top_n_cols]]
+    
+    return grouped.reset_index().to_string(index=False)
+
+
+def group_value_counts(
+    df: pd.DataFrame,
+    group_col: str,
+    target_col: str,
+    top_n: int = 5,
+    normalize: bool = True,
+) -> str:
+    """Top-N value counts per group for a categorical column."""
+    results = []
+    for group, sub in df.groupby(group_col):
+        vc = sub[target_col].value_counts().head(top_n)
+        total = len(sub)
+        for value, count in vc.items():
+            pct = (count / total * 100) if normalize and total > 0 else None
+            if normalize:
+                results.append((group, value, count, f"{pct:.1f}%"))
+            else:
+                results.append((group, value, count, ""))
+    if not results:
+        return "No data after filtering"
+    
+    # Build a small table
+    header = ["group", "value", "count"] + (["pct"] if normalize else [])
+    lines = [" | ".join(header)]
+    for row in results:
+        if normalize:
+            g, v, c, pct = row
+            lines.append(f"{g} | {v} | {c} | {pct}")
+        else:
+            g, v, c, _ = row
+            lines.append(f"{g} | {v} | {c}")
+    return "\n".join(lines)
+
+
 def derive_stat(
     df: pd.DataFrame,
     formula: str,
@@ -734,3 +1167,209 @@ def derive_stat(
     
     # Exploration mode: return all groups
     return f"Formula: {formula}\n\n{result.to_string()}"
+
+
+# ============================================================================
+# Hook-chaining tool implementations
+# These operate on previous hook results, not the raw dataframe
+# ============================================================================
+
+def _parse_hook_value(output: str) -> float:
+    """
+    Parse numeric value from hook output string.
+    Handles formats like:
+      - "45.2300 (n=45)"
+      - "control (mean=45.23, n=45)"
+      - "0.8234 (strong positive correlation)"
+      - "123 rows (45.2% of 273 total)"
+      - plain numbers
+    """
+    import re
+    
+    # Try plain float first
+    try:
+        return float(output.strip())
+    except ValueError:
+        pass
+    
+    # Pattern: number at start followed by space/paren
+    match = re.match(r'^(-?\d+\.?\d*)', output.strip())
+    if match:
+        return float(match.group(1))
+    
+    # Pattern: "group (mean=X, ...)" - extract first number after =
+    match = re.search(r'=(-?\d+\.?\d*)', output)
+    if match:
+        return float(match.group(1))
+    
+    raise ValueError(f"Cannot parse numeric value from: {output}")
+
+
+def _parse_hook_group(output: str) -> str:
+    """
+    Parse group name from hook output string.
+    Handles format: "group_name (mean=X, n=Y)"
+    """
+    import re
+    match = re.match(r'^([^\(]+)', output.strip())
+    if match:
+        return match.group(1).strip()
+    return output.strip()
+
+
+def combine(hook_results: dict[str, str], expr: str, vars: dict[str, str]) -> str:
+    """
+    Compute arithmetic or boolean expression on hook results.
+    
+    Args:
+        hook_results: Dict mapping hook_id -> output string
+        expr: Expression using variable names (arithmetic or comparison)
+        vars: Dict mapping variable names -> hook IDs
+    
+    Returns:
+        Computed result as string (number or "true"/"false")
+    """
+    # Build namespace with parsed values
+    namespace = {}
+    for var_name, hook_id in vars.items():
+        if hook_id not in hook_results:
+            return f"Hook '{hook_id}' not found in results"
+        try:
+            namespace[var_name] = _parse_hook_value(hook_results[hook_id])
+        except ValueError as e:
+            return f"Error parsing hook '{hook_id}': {e}"
+    
+    # Evaluate expression safely
+    try:
+        # Use restricted eval - no builtins, only our namespace
+        result = eval(expr, {"__builtins__": {}}, namespace)
+        
+        # Handle boolean results
+        if isinstance(result, bool):
+            return "true" if result else "false"
+        
+        # Handle numeric results
+        return f"{result:.4f}"
+    except Exception as e:
+        return f"Error evaluating '{expr}': {e}"
+
+
+def lookup(
+    df: pd.DataFrame,
+    hook_results: dict[str, str],
+    group_hook: str,
+    group_col: str,
+    target_col: str,
+    agg: str = "mean",
+) -> str:
+    """
+    Use a hook's group result to query another stat.
+    
+    Args:
+        df: The dataframe
+        hook_results: Dict mapping hook_id -> output string
+        group_hook: Hook ID that returned a group name
+        group_col: Column the group belongs to
+        target_col: Column to aggregate
+        agg: Aggregation function
+    
+    Returns:
+        Aggregated stat for the looked-up group
+    """
+    if group_hook not in hook_results:
+        return f"Hook '{group_hook}' not found in results"
+    
+    try:
+        group_name = _parse_hook_group(hook_results[group_hook])
+    except Exception as e:
+        return f"Error parsing group from hook '{group_hook}': {e}"
+    
+    # Use group_stat logic
+    return group_stat(df, group_col, target_col, agg, filter_expr="", group_val=group_name)
+
+
+def aggregate_hooks(hook_results: dict[str, str], hooks: list[str], agg: str) -> str:
+    """
+    Aggregate values across multiple hooks.
+    
+    Args:
+        hook_results: Dict mapping hook_id -> output string
+        hooks: List of hook IDs to aggregate
+        agg: Aggregation (min, max, mean, sum, range)
+    
+    Returns:
+        Aggregated result
+    """
+    values = []
+    for hook_id in hooks:
+        if hook_id not in hook_results:
+            return f"Hook '{hook_id}' not found in results"
+        try:
+            values.append(_parse_hook_value(hook_results[hook_id]))
+        except ValueError as e:
+            return f"Error parsing hook '{hook_id}': {e}"
+    
+    if not values:
+        return "No values to aggregate"
+    
+    match agg:
+        case "min":
+            result = min(values)
+            idx = hooks[values.index(result)]
+            return f"{result:.4f} (from {idx})"
+        case "max":
+            result = max(values)
+            idx = hooks[values.index(result)]
+            return f"{result:.4f} (from {idx})"
+        case "mean":
+            result = sum(values) / len(values)
+            return f"{result:.4f} (n={len(values)})"
+        case "sum":
+            result = sum(values)
+            return f"{result:.4f} (n={len(values)})"
+        case "range":
+            result = max(values) - min(values)
+            return f"{result:.4f} (max={max(values):.4f}, min={min(values):.4f})"
+        case _:
+            return f"Unknown aggregation: {agg}"
+
+
+def run_chain_tool(
+    tool: str,
+    df: pd.DataFrame,
+    hook_results: dict[str, str],
+    params: dict,
+) -> str:
+    """
+    Run a hook-chaining tool.
+    
+    Args:
+        tool: Tool name
+        df: Dataframe (only needed for 'lookup')
+        hook_results: Dict mapping hook_id -> output string
+        params: Tool parameters
+    
+    Returns:
+        Tool output string
+    """
+    try:
+        match tool:
+            case "combine":
+                return combine(hook_results, params["expr"], params["vars"])
+            case "lookup":
+                return lookup(
+                    df,
+                    hook_results,
+                    params["group_hook"],
+                    params["group_col"],
+                    params["target_col"],
+                    params.get("agg", "mean"),
+                )
+            case "aggregate_hooks":
+                return aggregate_hooks(hook_results, params["hooks"], params["agg"])
+            case _:
+                return f"Unknown chain tool: {tool}"
+    except KeyError as e:
+        return f"Missing required parameter: {e}"
+    except Exception as e:
+        return f"Error running {tool}: {type(e).__name__}: {e}"
