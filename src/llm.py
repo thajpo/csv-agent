@@ -74,12 +74,21 @@ class LLM:
     def __init__(
         self,
         model_name: str = "Qwen/Qwen3-4B",  # 3B not released yet, 4B is closest
-        device: str = "cuda",
+        device: str | None = None,
         torch_dtype: torch.dtype = torch.bfloat16,
         attn_implementation: str = "sdpa",
     ):
-        if not torch.cuda.is_available():
+        # Detect available GPU backend (CUDA or ROCm)
+        # ROCm also uses "cuda" as device name, but we check torch.version.hip
+        has_cuda = torch.cuda.is_available()
+        has_rocm = hasattr(torch.version, "hip") and torch.version.hip is not None
+        
+        if not (has_cuda or has_rocm):
             raise RuntimeError("No CUDA/ROCm device available")
+        
+        # Auto-detect device if not specified (ROCm also uses "cuda" device name)
+        if device is None:
+            device = "cuda"
         
         self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)

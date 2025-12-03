@@ -50,7 +50,7 @@ Training → SFT warm-start → on-policy GRPO with hook-level rewards
 
 ## Data Generation Strategy
 
-### Best-of-N Filtering (critical)
+### Best-of-N Filtering
 For each question:
 1. Sample N teacher traces (N=4-8)
 2. Execute all, verify hooks

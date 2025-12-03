@@ -8,14 +8,14 @@ TOOL_SPECS = {
     "inspect": {
         "name": "inspect",
         "type": "function",
-        "description": "View dataframe structure (head, tail, shape, dtypes, columns, missing)",
+        "description": "View dataframe structure. Use 'columns' first to see available columns, 'shape' for row/col counts, 'head'/'tail' for sample rows, 'dtypes' for column types, 'missing' for null counts, 'info' for memory/dtype summary.",
         "parameters": {
             "type": "object",
             "properties": {
                 "aspect": {
                     "type": "string",
                     "description": "The aspect of the dataframe to inspect",
-                    "enum": ["head", "tail", "shape", "dtypes", "columns", "missing"]
+                    "enum": ["head", "tail", "shape", "dtypes", "columns", "missing", "info"]
                 },
                 "n": {
                     "type": "integer",
@@ -31,7 +31,7 @@ TOOL_SPECS = {
     "describe": {
         "name": "describe",
         "type": "function",
-        "description": "Statistical summary of columns",
+        "description": "Statistical summary (count, mean, std, min, 25%, 50%, 75%, max) for numeric columns. Use include='object' for categorical stats (count, unique, top, freq), or 'all' for both.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -50,7 +50,7 @@ TOOL_SPECS = {
     "value_counts": {
         "name": "value_counts",
         "type": "function",
-        "description": "Frequency counts for a column",
+        "description": "Frequency counts for a column. Shows how many times each value appears, sorted by frequency (most common first). Good for understanding categorical distributions.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -72,7 +72,7 @@ TOOL_SPECS = {
     "unique": {
         "name": "unique",
         "type": "function",
-        "description": "List unique values in a column",
+        "description": "List unique values in a column (unsorted, first-seen order). Use value_counts instead if you need frequencies. Good for seeing what distinct values exist.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -94,17 +94,17 @@ TOOL_SPECS = {
     "group_stat": {
         "name": "group_stat",
         "type": "function",
-        "description": "Aggregate a column grouped by another. Add group_val for ONE group's scalar (atomic for hooks).",
+        "description": "Aggregate a column grouped by another (e.g., mean salary by department). Returns all groups unless group_val is specified for a single group's scalar. Auto-coerces '?' to NaN.",
         "parameters": {
             "type": "object",
             "properties": {
                 "group_col": {
                     "type": "string",
-                    "description": "Column to group by"
+                    "description": "Column to group by (e.g., 'department', 'category')"
                 },
                 "target_col": {
                     "type": "string",
-                    "description": "Column to aggregate"
+                    "description": "Numeric column to aggregate (e.g., 'salary', 'price')"
                 },
                 "agg": {
                     "type": "string",
@@ -114,12 +114,12 @@ TOOL_SPECS = {
                 },
                 "filter_expr": {
                     "type": "string",
-                    "description": "Pandas query expression to filter rows",
+                    "description": "Pandas query expression to filter rows before grouping (e.g., \"age > 30\")",
                     "default": ""
                 },
                 "group_val": {
                     "type": "string",
-                    "description": "Specific group value for atomic scalar output (optional)"
+                    "description": "Return scalar for this specific group only (optional)"
                 }
             },
             "required": ["group_col", "target_col"],
@@ -130,39 +130,39 @@ TOOL_SPECS = {
     "group_extremum": {
         "name": "group_extremum",
         "type": "function",
-        "description": "Find which group has max/min aggregated value. Returns group name OR value (atomic).",
+        "description": "Find which group has the highest/lowest aggregated value (e.g., 'which department has highest mean salary?'). Returns group name by default, or the value with return_what='value'.",
         "parameters": {
             "type": "object",
             "properties": {
                 "group_col": {
                     "type": "string",
-                    "description": "Column to group by"
+                    "description": "Column to group by (e.g., 'department')"
                 },
                 "target_col": {
                     "type": "string",
-                    "description": "Column to aggregate"
+                    "description": "Numeric column to aggregate (e.g., 'salary')"
                 },
                 "agg": {
                     "type": "string",
-                    "description": "Aggregation function",
+                    "description": "Aggregation function to apply before finding extremum",
                     "enum": ["mean", "sum", "median", "std", "min", "max", "count", "nunique"],
                     "default": "mean"
                 },
                 "extremum": {
                     "type": "string",
-                    "description": "Find maximum or minimum",
+                    "description": "Find the group with maximum or minimum aggregated value",
                     "enum": ["max", "min"],
                     "default": "max"
                 },
                 "return_what": {
                     "type": "string",
-                    "description": "Return group name or value",
+                    "description": "Return the group name or the aggregated value",
                     "enum": ["group", "value"],
                     "default": "group"
                 },
                 "filter_expr": {
                     "type": "string",
-                    "description": "Pandas query expression to filter rows",
+                    "description": "Pandas query expression to filter rows before grouping",
                     "default": ""
                 }
             },
@@ -174,21 +174,21 @@ TOOL_SPECS = {
     "correlation": {
         "name": "correlation",
         "type": "function",
-        "description": "Correlation between two numeric columns",
+        "description": "Correlation coefficient between two numeric columns. Returns value from -1 (inverse) to +1 (direct), with interpretation (weak/moderate/strong). Use spearman for non-linear relationships.",
         "parameters": {
             "type": "object",
             "properties": {
                 "col_a": {
                     "type": "string",
-                    "description": "First column name"
+                    "description": "First numeric column"
                 },
                 "col_b": {
                     "type": "string",
-                    "description": "Second column name"
+                    "description": "Second numeric column"
                 },
                 "method": {
                     "type": "string",
-                    "description": "Correlation method",
+                    "description": "pearson (linear), spearman (monotonic/ranked), kendall (ordinal)",
                     "enum": ["pearson", "spearman", "kendall"],
                     "default": "pearson"
                 },
@@ -206,13 +206,13 @@ TOOL_SPECS = {
     "count_filter": {
         "name": "count_filter",
         "type": "function",
-        "description": "Count rows matching a condition",
+        "description": "Count rows matching a condition. Returns count and percentage of total. Empty filter_expr returns total row count.",
         "parameters": {
             "type": "object",
             "properties": {
                 "filter_expr": {
                     "type": "string",
-                    "description": "Pandas query expression to filter rows (empty string = all rows)",
+                    "description": "Pandas query expression (e.g., \"age > 30\", \"status == 'active'\", \"price.between(10, 100)\")",
                     "default": ""
                 }
             },
@@ -251,20 +251,21 @@ TOOL_SPECS = {
     "quantile": {
         "name": "quantile",
         "type": "function",
-        "description": "Calculate percentile(s) for a column. Single q = atomic scalar output.",
+        "description": "Calculate percentile(s) for a column. Use q=0.5 for median, q=0.9 for 90th percentile, etc. Single q returns scalar; list returns multiple.",
         "parameters": {
             "type": "object",
             "properties": {
                 "col": {
                     "type": "string",
-                    "description": "Column name"
+                    "description": "Numeric column name"
                 },
                 "q": {
                     "oneOf": [
-                        {"type": "number", "description": "Single quantile value (atomic output)"},
+                        {"type": "number", "description": "Single quantile 0-1 (e.g., 0.5 for median)"},
                         {"type": "array", "items": {"type": "number"}, "description": "List of quantiles"}
                     ],
-                    "description": "Quantile value(s) to calculate"
+                    "description": "Quantile value(s) between 0 and 1",
+                    "default": [0.25, 0.5, 0.75]
                 },
                 "filter_expr": {
                     "type": "string",
@@ -272,7 +273,7 @@ TOOL_SPECS = {
                     "default": ""
                 }
             },
-            "required": ["col", "q"],
+            "required": ["col"],
             "additionalProperties": False
         },
         "summarize": False
@@ -280,21 +281,21 @@ TOOL_SPECS = {
     "crosstab": {
         "name": "crosstab",
         "type": "function",
-        "description": "Cross-tabulation of two categorical columns",
+        "description": "Cross-tabulation (contingency table) of two categorical columns. Shows counts at each intersection. Use normalize for proportions.",
         "parameters": {
             "type": "object",
             "properties": {
                 "col_a": {
                     "type": "string",
-                    "description": "First column name"
+                    "description": "Row categories (first column)"
                 },
                 "col_b": {
                     "type": "string",
-                    "description": "Second column name"
+                    "description": "Column categories (second column)"
                 },
                 "normalize": {
                     "type": "string",
-                    "description": "Normalization mode",
+                    "description": "'' for counts, 'index' for row %, 'columns' for col %, 'all' for total %",
                     "enum": ["index", "columns", "all", ""],
                     "default": ""
                 }
@@ -307,32 +308,32 @@ TOOL_SPECS = {
     "derive_stat": {
         "name": "derive_stat",
         "type": "function",
-        "description": "Compute derived metric (e.g. TL/IN), aggregate by group. Add group_val for atomic scalar.",
+        "description": "Compute a derived metric from a formula (e.g., 'revenue / cost', 'A + B * 2'), then aggregate by group. Useful for ratios, differences, or computed columns.",
         "parameters": {
             "type": "object",
             "properties": {
                 "formula": {
                     "type": "string",
-                    "description": "Expression using column names (e.g., 'TL / IN')"
+                    "description": "Python expression using column names (e.g., 'revenue / cost', 'price * quantity')"
                 },
                 "group_col": {
                     "type": "string",
-                    "description": "Column to group by"
+                    "description": "Column to group by for aggregation"
                 },
                 "agg": {
                     "type": "string",
-                    "description": "Aggregation function",
+                    "description": "Aggregation function to apply to computed values",
                     "enum": ["mean", "sum", "median", "std", "min", "max", "count"],
                     "default": "mean"
                 },
                 "filter_expr": {
                     "type": "string",
-                    "description": "Pandas query expression to filter rows",
+                    "description": "Pandas query expression to filter rows before computation",
                     "default": ""
                 },
                 "group_val": {
                     "type": "string",
-                    "description": "Specific group value for atomic scalar output (optional)"
+                    "description": "Return scalar for this specific group only (optional)"
                 }
             },
             "required": ["formula", "group_col"],
@@ -456,9 +457,18 @@ def format_tool_docs() -> str:
     """Generate tool documentation for the system prompt."""
     lines = ["AVAILABLE TOOLS:", ""]
     for name, spec in TOOL_SPECS.items():
-        lines.append(f"**{name}**: {spec['desc']}")
-        lines.append(f"  Parameters: {spec['params']}")
-        lines.append(f"  Example: {json.dumps(spec['example'])}")
+        lines.append(f"**{name}**: {spec['description']}")
+        # Format parameters
+        params = spec.get("parameters", {}).get("properties", {})
+        required = spec.get("parameters", {}).get("required", [])
+        param_strs = []
+        for pname, pinfo in params.items():
+            req = "*" if pname in required else ""
+            ptype = pinfo.get("type", pinfo.get("oneOf", [{}])[0].get("type", "any"))
+            default = f" (default: {pinfo['default']})" if "default" in pinfo else ""
+            param_strs.append(f"{pname}{req}: {ptype}{default}")
+        if param_strs:
+            lines.append(f"  Parameters: {', '.join(param_strs)}")
         lines.append("")
     return "\n".join(lines)
 
@@ -506,9 +516,12 @@ def inspect(df: pd.DataFrame, aspect: str, n: int = 5) -> str:
 
 def describe(df: pd.DataFrame, include: str = "number") -> str:
     """Statistical summary of the dataframe."""
-    include_map = {"number": "number", "object": "object", "all": "all"}
-    inc = include_map.get(include, "number")
-    return df.describe(include=inc if inc != "number" else None).to_string()
+    if include == "number":
+        return df.describe().to_string()  # pandas default: numeric only
+    elif include == "object":
+        return df.describe(include="object").to_string()
+    else:  # "all"
+        return df.describe(include="all").to_string()
 
 
 def value_counts(df: pd.DataFrame, col: str, top_n: int = 20) -> str:
@@ -586,11 +599,11 @@ def group_extremum(
     if grouped.empty:
         return "No data after filtering"
     
-    extremum = extremum.lower()
-    if extremum not in {"max", "min"}:
+    ext = extremum.lower()
+    if ext not in {"max", "min"}:
         return "Invalid extremum. Use 'max' or 'min'."
     
-    if extremum == "max":
+    if ext == "max":
         idx = grouped.idxmax()
         val = grouped.max()
     else:

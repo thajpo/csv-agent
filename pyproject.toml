@@ -10,7 +10,11 @@ dependencies = [
     "jupyter-client>=8.6.3",
     "numpy>=2.3.5",
     "pandas>=2.3.3",
+    "pytest>=9.0.1",
     "rich>=14.2.0",
     "scikit-learn>=1.7.2",
     "transformers>=4.48.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

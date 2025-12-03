@@ -5,6 +5,7 @@ I think the best thing I can do is navigate the codebase, and report my observat
         - need to look at how tools work
 
 ## how do tools work
+we use the openai tool calling api
 
 
 # 12/1/25
