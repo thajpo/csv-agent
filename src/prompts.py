@@ -64,6 +64,16 @@ EPISODE_SCHEMA = """
 }
 """.strip()
 
+QUESTION_PLAN_SCHEMA = """
+{
+  "question_text": "string - multi-step exam question requiring reasoning (NOT a simple lookup)",
+  "difficulty": "MEDIUM | HARD | VERY_HARD",
+  "reasoning_path": "string - numbered steps describing how to solve using available tools; no code or hooks",
+  "key_columns": ["string", "string"],
+  "expected_steps": 4
+}
+""".strip()
+
 
 # Hook tool documentation for episodes (subset of TOOL_SPECS that produce scalar outputs)
 HOOK_TOOLS_DOC = """
@@ -160,8 +170,20 @@ INITIAL EXPLORATION:
 
 {tool_docs}
 
-HOW TO EXPLORE:
-Call tools by placing JSON in <code>...</code> tags. One tool call per block.
+HOW TO EXPLORE (CRITICAL - READ CAREFULLY):
+This is an **iterative process**. You will have multiple turns. In each turn:
+1. **Call multiple tools in parallel** - Use multiple <code>...</code> blocks to explore different aspects simultaneously
+2. **WAIT** for all tool results to be returned to you
+3. Use those actual results to inform your next exploration steps
+4. **DO NOT** predict what tools will return - you will see the real outputs
+
+**Efficient exploration strategy**: Make 3-8 tool calls per turn to explore broadly. For example:
+- Call tools for different treatments in parallel
+- Query multiple columns simultaneously
+- Explore different relationships at once
+- Get overview stats and detailed breakdowns together
+
+Call tools by placing JSON in <code>...</code> tags. You can have multiple <code> blocks in one turn - they will all execute and return results together.
 <code>{{"tool": "inspect", "aspect": "head|tail|shape|dtypes|columns|missing", "n": 10}}</code>
 <code>{{"tool": "describe", "include": "number|object|all"}}</code>
 <code>{{"tool": "value_counts", "col": "TR", "top_n": 20}}</code>
@@ -178,11 +200,22 @@ Call tools by placing JSON in <code>...</code> tags. One tool call per block.
 <code>{{"tool": "group_value_counts", "group_col": "TR", "target_col": "IN", "top_n": 5}}</code>
 <code>{{"tool": "crosstab", "col_a": "TR", "col_b": "TREE", "normalize": "index|columns|all|"}}</code>
 
-YOUR TASK:
-1. **Explore** the dataset deeply—find patterns, anomalies, relationships, and edge cases
-2. **Brainstorm broadly**—propose MANY candidate questions (aim for 15-20+ ideas), then refine
-3. **Select the best 10** that require genuine multi-step reasoning chains
-4. **Solve** each by defining 3-10 hooks that build on each other
+**Example of parallel exploration** (make multiple calls in one turn):
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean"}}</code>
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "std"}}</code>
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "IN", "agg": "mean"}}</code>
+<code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "filter_expr": "TR == 'control'"}}</code>
+<code>{{"tool": "correlation", "col_a": "TL", "col_b": "IN", "filter_expr": "TR == 'PP_333_20g/L'"}}</code>
+
+All 5 tools above execute in parallel, giving you a comprehensive view in one turn.
+
+YOUR TASK (MULTI-TURN PROCESS):
+**Turn 1-3**: Explore the dataset deeply—call tools, observe results, find patterns
+**Turn 4-6**: Brainstorm candidate questions based on what you've actually discovered
+**Turn 7-9**: Refine questions, test feasibility with tools, verify your hook chains work
+**Final turn**: Only after multiple rounds of exploration, output your final 10 episodes
+
+**DO NOT** output episodes in your first turn. You must explore first and see actual tool results.
 
 ═══════════════════════════════════════════════════════════════════════════════
 WHAT MAKES A GOOD EXAM QUESTION (CRITICAL)
@@ -283,14 +316,24 @@ REQUIREMENTS FOR GOOD QUESTIONS:
 - Answers must be specific (exact numbers, not ranges or approximations)
 - Questions should sound like exam questions, not "what is the value of X"
 
-TURN STRUCTURE (during exploration):
-1. **Interpretation**: What patterns or anomalies do you see? (1-2 sentences)
-2. **Brainstorm**: List 5-10 potential question ideas—be creative, think about what would challenge a student
-3. **Refine**: Star (★) the most promising ideas that require real reasoning chains
-4. **Next exploration**: <code> blocks to dig deeper into promising directions
+TURN STRUCTURE (during exploration - THIS IS ITERATIVE):
+Each turn follows this pattern:
+1. **Call multiple tools in parallel**: Use 3-8 <code> blocks to explore different aspects simultaneously
+   - Example: Query stats for all treatments at once, check correlations for multiple pairs, get value counts for several columns
+   - This allows efficient broad exploration rather than one narrow query at a time
+2. **Wait for results**: The system will execute all your tools and return actual outputs
+3. **Interpret results**: What do the numbers tell you? What patterns emerge across the parallel queries?
+4. **Plan next steps**: Based on what you learned, what should you explore next in parallel?
 
-FINAL OUTPUT (when ready):
-When you have explored enough, write DONE on its own line, then output your final 10 episodes as a JSON array:
+**IMPORTANT**: You will receive tool results between turns. Use those actual values to inform your exploration. Do NOT make up or predict tool outputs.
+
+**Early turns (1-3)**: Make parallel queries to understand data structure, distributions, relationships across multiple dimensions
+**Middle turns (4-6)**: Start brainstorming questions based on patterns you've discovered, test multiple hypotheses in parallel
+**Later turns (7-9)**: Refine questions, test hook chains, verify feasibility with parallel tool calls
+**Final turn**: Only after thorough exploration, output episodes
+
+FINAL OUTPUT (only after multiple exploration turns):
+When you have explored enough (typically 5-8 turns), write DONE on its own line, then output your final 10 episodes as a JSON array:
 
 ```json
 [
@@ -304,6 +347,198 @@ When you have explored enough, write DONE on its own line, then output your fina
 Each episode must include question_text, difficulty, hooks (3-10 based on difficulty), teacher_answers (one per hook), and solution_trace.
 
 Begin by sharing your interpretation, brainstorm broadly, then explore. Signal DONE when ready to output final episodes."""
+
+
+def build_question_generation_prompt(
+    dataset_description: str,
+    bootstrap_output: str,
+    target_questions: int = 10,
+) -> str:
+    """Build prompt for exploration-only phase that outputs question plans + reasoning paths."""
+    tool_docs = format_tool_docs()
+    
+    return f"""You are a senior data scientist designing exam questions for a two-phase pipeline.
+
+This is PHASE 1: You propose question blueprints only. No hooks, no computed answers.
+Each blueprint pairs a question with a reasoning path—the step-by-step strategy to solve it.
+
+DATASET CONTEXT:
+{dataset_description}
+
+INITIAL EXPLORATION:
+```
+{bootstrap_output}
+```
+
+{tool_docs}
+
+═══════════════════════════════════════════════════════════════════════════════
+EXPLORATION RULES (READ CAREFULLY)
+═══════════════════════════════════════════════════════════════════════════════
+
+You MUST explore for at least 3 turns before outputting questions.
+DONE emitted before turn 3 will be REJECTED.
+
+Each turn has TWO parts:
+
+PART 1 - REASONING (required):
+Briefly explain what you want to learn and why. What patterns are you looking for?
+What hypothesis are you testing? This grounds your exploration.
+
+PART 2 - TOOL CALLS:
+Call 3-8 tools that address your stated goal.
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean"}}</code>
+
+Then STOP. Your turn ends after tool calls.
+
+Example turn:
+```
+I want to understand how treatments affect branch length variability, not just means.
+High variability might indicate inconsistent treatment response.
+
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean"}}</code>
+<code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "std"}}</code>
+```
+
+CRITICAL: After emitting <code> blocks, STOP IMMEDIATELY.
+Do not interpret results you haven't seen. Do not output DONE in the same turn as tool calls.
+
+TOOL SYNTAX NOTES:
+- filter_expr uses Python boolean syntax, NOT SQL:
+  ✓ CORRECT: "TL >= 5 and TL <= 20" or "IN >= 10" or "TR == 'control' and TL > 50"
+  ✗ WRONG: "TL BETWEEN 5 AND 20" (SQL syntax - will fail)
+- Use Python operators: and, or, ==, !=, >=, <=, >, <
+- String comparisons: TR == 'control' (use single quotes around strings)
+- derive_stat formula uses actual column names (e.g., "TL / IN"), not aggregate names like "std" or "mean"
+
+ERROR HANDLING:
+If a tool call fails, acknowledge the error in your next turn's PART 1 reasoning.
+Explain what went wrong and how you're adjusting your approach.
+Do not repeat the same failed syntax.
+
+═══════════════════════════════════════════════════════════════════════════════
+WHAT MAKES A GOOD QUESTION
+═══════════════════════════════════════════════════════════════════════════════
+
+Each question must have ONE CONCRETE, VERIFIABLE ANSWER.
+The answer should be a specific value: a number, a treatment name, a percentage, or a single comparison result.
+Avoid "and" clauses that require separate answers—each question should produce ONE result.
+
+COMPARISON METRICS (be explicit):
+When comparing values, you MUST specify the metric explicitly:
+- ✓ "What is the RATIO of X to Y?"
+- ✓ "What is the PERCENTAGE DIFFERENCE between X and Y?"
+- ✓ "What is the ABSOLUTE DIFFERENCE between X and Y?"
+- ✗ "What is X compared to Y?" (too vague - doesn't specify ratio/difference/percentage)
+- ✗ "How does X compare to Y?" (too vague)
+
+If your question asks for a comparison, state the exact metric in the question text.
+
+BAD (vague, multi-part, no single answer):
+- "Investigate the relationship between TL and IN across treatments and discuss how correlation varies."
+- "Analyze how treatment effects differ between early and late internode development."
+- "What is the 90th percentile of TL across all treatments, AND how many treatments have max IN ≥ this percentile?"
+  (This asks for TWO separate answers: a percentile value AND a count - split into two questions)
+- "What is the ratio of mean TL to mean IN for methanol_control compared to PP_333_20g/L, AND which treatment has higher average internode length?"
+  (This asks for two separate answers: a ratio AND a comparison - split into two questions)
+- "For branches with TL > 20 cm, what is the mean INTERNODE_1 length compared to branches with TL < 5 cm?"
+  (Vague: "compared to" doesn't specify the metric - use "ratio", "difference", or "percentage difference")
+
+GOOD (specific, produces ONE concrete answer):
+- "Which treatment has the lowest coefficient of variation (std/mean) for TL, and what is that CV value?"
+  → Answer: "PP_333_4g/L, CV = 0.32" (one treatment + one number)
+- "For branches with IN ≥ 10, which treatment shows the largest ratio of mean INTERNODE_5 to mean INTERNODE_1?"
+  → Answer: "EL_500_20g/L, ratio = 1.45" (one treatment + one ratio)
+- "What is the percentage difference in mean TL between control and PP_333_20g/L?"
+  → Answer: "Control is 289% higher than PP_333_20g/L" (one comparison result)
+- "What is the ratio of mean INTERNODE_1 for branches with TL > 20 cm to mean INTERNODE_1 for branches with TL < 5 cm?"
+  → Answer: "Ratio = 2.01" (explicit metric: "ratio")
+- "What is the absolute difference in mean INTERNODE_1 between branches with TL > 20 cm and branches with TL < 5 cm?"
+  → Answer: "Difference = 0.38 cm" (explicit metric: "absolute difference")
+
+DIFFICULTY (MUST match expected_steps):
+- MEDIUM: 3-4 steps. Filter → aggregate → compare.
+- HARD: 4-6 steps. Multiple aggregations, derived metrics, or conditional logic.
+- VERY_HARD: 6-10 steps. Complex chains with ratios, nested comparisons, or multi-group analysis.
+
+CRITICAL: difficulty and expected_steps MUST align:
+- If expected_steps = 3-4 → difficulty = MEDIUM
+- If expected_steps = 4-6 → difficulty = HARD
+- If expected_steps = 6-10 → difficulty = VERY_HARD
+
+WRONG: difficulty = VERY_HARD but expected_steps = 3 (should be MEDIUM)
+WRONG: difficulty = HARD but expected_steps = 3 (should be MEDIUM)
+
+═══════════════════════════════════════════════════════════════════════════════
+REASONING PATH FORMAT
+═══════════════════════════════════════════════════════════════════════════════
+
+The reasoning_path describes HOW to solve the question in numbered steps.
+Use natural language. Do NOT include tool names or code.
+
+Example:
+```
+"reasoning_path": "1) For each treatment, compute mean and std of TL. 2) Derive CV = std/mean for each treatment. 3) Identify the treatment with minimum CV. 4) Report that treatment and its CV value."
+```
+
+Each step should be:
+- Concrete (what computation, what columns, what filter)
+- Sequential (later steps build on earlier ones)
+- Verifiable (produces an intermediate or final value)
+
+═══════════════════════════════════════════════════════════════════════════════
+OUTPUT SCHEMA
+═══════════════════════════════════════════════════════════════════════════════
+
+Output a JSON array with {target_questions} objects:
+```json
+{QUESTION_PLAN_SCHEMA}
+```
+
+WORKED EXAMPLE:
+```json
+{{
+  "question_text": "Which treatment produces the most consistent branch lengths (lowest CV of TL), and by what percentage is its CV lower than control's CV?",
+  "difficulty": "HARD",
+  "reasoning_path": "1) For each treatment, compute mean TL and std TL. 2) Derive CV = std/mean for each. 3) Find treatment with minimum CV. 4) Compute control's CV. 5) Calculate percentage difference: (control_CV - min_CV) / control_CV * 100.",
+  "key_columns": ["TR", "TL"],
+  "expected_steps": 5
+}}
+```
+
+═══════════════════════════════════════════════════════════════════════════════
+TURN STRUCTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+Turn 1-2: Broad exploration. Map distributions, relationships, treatment effects.
+          State what you're looking for. Call tools. Stop.
+Turn 3-4: Interpret prior results. What patterns emerged? What's surprising?
+          If any tool calls failed, acknowledge errors and adjust syntax.
+          State follow-up questions. Call tools. Stop.
+Turn 5+:  Synthesize findings. Draft question ideas based on discovered patterns.
+          Verify feasibility with targeted tool calls. Stop.
+Final:    Write DONE on its own line, then output the JSON array.
+          (No tool calls in this turn.)
+
+BEFORE OUTPUTTING QUESTIONS - VALIDATION CHECKLIST:
+For each question, verify:
+1. ✓ Single answer: Does it produce ONE result? (No "and" clauses asking for separate answers)
+2. ✓ Explicit comparisons: If comparing, does it specify "ratio", "difference", or "percentage difference"?
+3. ✓ Difficulty match: Does difficulty match expected_steps?
+   - expected_steps 3-4 → MEDIUM
+   - expected_steps 4-6 → HARD
+   - expected_steps 6-10 → VERY_HARD
+4. ✓ Concrete answer: Can the answer be a specific number, treatment name, or single comparison result?
+5. ✓ Grounded: Does the question reflect patterns you actually discovered in the data?
+
+Your questions will be evaluated on:
+- Grounding: Do questions reflect patterns you actually found in the data?
+- Specificity: Does each question have ONE concrete, verifiable answer?
+- Reasoning clarity: Can someone follow the numbered steps to reproduce the answer?
+- Format compliance: Single answer, explicit metrics, difficulty matches steps
+
+Begin by stating what you want to learn about this dataset, then call tools.
+Do NOT output DONE until you have completed at least 3 turns with tool results."""
 
 
 def build_tool_feedback_prompt(dataset_description: str, bootstrap_output: str) -> str:

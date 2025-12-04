@@ -2,9 +2,12 @@
 Rich terminal entrypoint for the CSV exploration agent.
 
 Usage:
-    python -m src.rich_pipeline
+    python -m src.rich_pipeline --mode explore --output questions.jsonl
+    python -m src.rich_pipeline --mode episodes --output episodes.jsonl
+    python -m src.rich_pipeline --mode tool-feedback --output tool_requests.jsonl
+    
     python -m src.rich_pipeline --csv data.csv --max-turns 10
-    python -m src.rich_pipeline --output episodes.jsonl
+    python -m src.rich_pipeline --output questions.jsonl --target-questions 12
     
     # Tool feedback mode - identify missing tools
     python -m src.rich_pipeline --tool-feedback --output tool_requests.jsonl
@@ -21,8 +24,19 @@ import torch
 
 from src.llm import APILLM
 from src.tools import parse_tool_call, run_tool
-from src.prompts import generate_bootstrap_output, build_prompt, build_tool_feedback_prompt, DEFAULT_DATASET_DESCRIPTION
-from src.text_extraction import extract_code_blocks, extract_json_episodes, extract_json_array
+from src.prompts import (
+    DEFAULT_DATASET_DESCRIPTION,
+    build_prompt,
+    build_question_generation_prompt,
+    build_tool_feedback_prompt,
+    generate_bootstrap_output,
+)
+from src.text_extraction import (
+    extract_code_blocks,
+    extract_json_array,
+    extract_json_episodes,
+    extract_question_plans,
+)
 from rich.console import Console
 from rich.panel import Panel
 
@@ -57,11 +71,13 @@ def run_pipeline(
     dataset_description: str = DEFAULT_DATASET_DESCRIPTION,
     max_turns: int = 10,
     output_path: str | None = None,
-    mode: str = "episodes",  # "episodes" or "tool-feedback"
+    target_questions: int = 10,
+    mode: str = "explore",  # "explore" (question plans), "episodes", or "tool-feedback"
 ):
     """Run the full exploration pipeline with rich output."""
     
-    console.print(f"\n[bold blue]CSV Agent[/bold blue] → {csv_path}\n")
+    mode = mode.lower()
+    console.print(f"\n[bold blue]CSV Agent[/bold blue] → {csv_path} [dim]({mode})[/dim]\n")
     console.print(f"[dim]Loading {csv_path}...[/dim]", end=" ")
     df = pd.read_csv(csv_path)
     console.print(f"[green]✓[/green] {len(df):,} × {len(df.columns)}")
@@ -69,15 +85,58 @@ def run_pipeline(
     results_data = []
     n_turns = 0
     
-    # Mode-specific configuration
+    if mode not in {"explore", "episodes", "tool-feedback"}:
+        raise ValueError(f"Unsupported mode '{mode}' (expected explore, episodes, or tool-feedback)")
+    
     if mode == "tool-feedback":
         prompt_builder = build_tool_feedback_prompt
+        extractor = extract_json_array
+        success_label = "tool recommendations"
+        parse_error_msg = "[red]✗ Failed to parse tool recommendations (check for invalid JSON like {...} placeholders)[/red]"
         continue_msg = "\n\nContinue exploring. Note any tool friction with <TOOL_WISH>...</TOOL_WISH> tags. When done, write DONE and output your tool recommendations as JSON."
         final_msg = "You've reached the turn limit. Please output your tool recommendations now as a JSON array. Write DONE then the JSON."
+    elif mode == "explore":
+        prompt_builder = lambda desc, bootstrap: build_question_generation_prompt(desc, bootstrap, target_questions)
+        extractor = extract_question_plans
+        success_label = "question plans"
+        parse_error_msg = "[red]✗ Failed to parse question plans (expect JSON array with question_text + reasoning_path)[/red]"
+        continue_msg = f"\n\nAbove are the actual tool results from your calls. Use these real values to inform your next steps. Continue exploring and refining multi-step exam questions—aim for {target_questions} strong blueprints. Do NOT output hooks or teacher answers. When ready, write DONE and output the question plans as JSON."
+        final_msg = f"You've reached the turn limit. Please output your {target_questions} question plans now as a JSON array (fields: question_text, difficulty, reasoning_path, key_columns, expected_steps). Write DONE then the JSON."
     else:
         prompt_builder = build_prompt
-        continue_msg = "\n\nContinue exploring. Note candidate questions as you go. When ready, write DONE and output your final 10 episodes as JSON."
+        extractor = extract_json_episodes
+        success_label = "episodes"
+        parse_error_msg = "[red]✗ Failed to parse episodes[/red]"
+        continue_msg = "\n\nAbove are the actual tool results from your calls. Use these real values to inform your next exploration steps. Continue exploring the dataset - make 3-8 parallel tool calls per turn to explore broadly (different treatments, columns, relationships simultaneously). Observe patterns, brainstorm questions. Do NOT output episodes yet - you need multiple turns of exploration first. When you have thoroughly explored (typically 5-8 turns), then write DONE and output your final 10 episodes as JSON."
         final_msg = "You've reached the turn limit. Please output your final 10 episodes now as a JSON array. Write DONE then the JSON."
+    
+    def summarize_results(data: list[dict] | None):
+        """Pretty-print parsed results depending on mode."""
+        if not data:
+            console.print(parse_error_msg)
+            return
+        
+        console.print(f"\n[green]✓ {len(data)} {success_label}[/green]")
+        
+        if mode == "tool-feedback":
+            for i, rec in enumerate(data, 1):
+                name = rec.get("name", "?")
+                priority = rec.get("priority", "?")
+                why = rec.get("why", "?")[:60]
+                console.print(f"  [dim]{i}.[/dim] [{priority}] [bold]{name}[/bold]: {why}")
+        elif mode == "explore":
+            for i, plan in enumerate(data, 1):
+                diff = plan.get("difficulty", "?")
+                steps = plan.get("expected_steps", "?")
+                q = plan.get("question_text", "?")
+                console.print(f"  [dim]{i}.[/dim] [{diff}|steps={steps}] {q}")
+        else:
+            for i, ep in enumerate(data, 1):
+                if isinstance(ep, dict):
+                    diff = ep.get("difficulty", "?")
+                    q = ep.get("question_text", "?")
+                    n_hooks = len(ep.get("hooks", []))
+                    console.print(f"  [dim]{i}.[/dim] [{diff}] ({n_hooks}h) {q}")
     
     llm = APILLM()
     
@@ -97,39 +156,28 @@ def run_pipeline(
                 with console.status("[magenta]Thinking...[/magenta]", spinner="dots"):
                     response = llm(conversation)
                 
+                # Check for tool calls FIRST - if present, truncate response after them
+                code_blocks = extract_code_blocks(response)
+                
+                if code_blocks:
+                    # Find the last </code> tag and truncate everything after it
+                    last_code_end = response.rfind('</code>')
+                    if last_code_end != -1:
+                        truncated = response[:last_code_end + len('</code>')]
+                        if len(truncated) < len(response):
+                            response = truncated
+                            console.print("[dim](truncated after tool calls)[/dim]")
+                
                 console.print(Panel(response, title="[magenta]Assistant[/magenta]", border_style="magenta"))
                 conversation.append({"role": "assistant", "content": response})
                 
-                # Check for done signal
-                if re.search(r'^DONE\b', response, re.MULTILINE):
+                # Check for done signal (only valid if NO tool calls in response)
+                if re.search(r'^DONE\b', response, re.MULTILINE) and not code_blocks:
                     console.print("\n[bold green]✓ DONE[/bold green]")
-                    if mode == "tool-feedback":
-                        results_data = extract_json_array(response)
-                    if results_data:
-                        console.print(f"\n[green]✓ {len(results_data)} tool recommendations[/green]")
-                        for i, rec in enumerate(results_data, 1):
-                            name = rec.get("name", "?")
-                            priority = rec.get("priority", "?")
-                            why = rec.get("why", "?")[:60]
-                            console.print(f"  [dim]{i}.[/dim] [{priority}] [bold]{name}[/bold]: {why}")
-                    else:
-                        console.print("[red]✗ Failed to parse tool recommendations (check for invalid JSON like {...} placeholders)[/red]")
-                    else:
-                        results_data = extract_json_episodes(response)
-                        if results_data:
-                            console.print(f"\n[green]✓ {len(results_data)} episodes[/green]")
-                            for i, ep in enumerate(results_data, 1):
-                                if isinstance(ep, dict):
-                                    diff = ep.get("difficulty", "?")
-                                    q = ep.get("question_text", "?")
-                                    n_hooks = len(ep.get("hooks", []))
-                                    console.print(f"  [dim]{i}.[/dim] [{diff}] ({n_hooks}h) {q}")
-                        else:
-                            console.print("[red]✗ Failed to parse episodes[/red]")
+                    # Re-extract from original response in case DONE was after truncation
+                    results_data = extractor(response)
+                    summarize_results(results_data)
                     break
-                
-                # Execute tool calls
-                code_blocks = extract_code_blocks(response)
                 
                 if not code_blocks:
                     console.print("[yellow]⚠ No tool call[/yellow]")
@@ -158,24 +206,8 @@ def run_pipeline(
                 response = llm(conversation)
             
             console.print(Panel(response, title="[magenta]Assistant[/magenta]", border_style="magenta"))
-            if mode == "tool-feedback":
-                results_data = extract_json_array(response)
-            else:
-                results_data = extract_json_episodes(response)
-            
-            if results_data:
-                if mode == "tool-feedback":
-                    console.print(f"\n[green]✓ {len(results_data)} tool recommendations[/green]")
-                else:
-                    console.print(f"\n[green]✓ {len(results_data)} episodes[/green]")
-                    for i, ep in enumerate(results_data, 1):
-                        if isinstance(ep, dict):
-                            diff = ep.get("difficulty", "?")
-                            q = ep.get("question_text", "?")
-                            n_hooks = len(ep.get("hooks", []))
-                            console.print(f"  [dim]{i}.[/dim] [{diff}] ({n_hooks}h) {q}")
-            else:
-                console.print("[red]✗ Failed to parse episodes[/red]")
+            results_data = extractor(response)
+            summarize_results(results_data)
     
     finally:
         del llm
@@ -190,6 +222,8 @@ def run_pipeline(
             "n_turns": n_turns,
             "mode": mode,
         }
+        if mode == "explore":
+            metadata["target_questions"] = target_questions
         with open(output_path, "w") as f:
             for item in results_data:
                 f.write(json.dumps({**metadata, **item}) + "\n")
@@ -205,11 +239,13 @@ def main():
     parser.add_argument("--max-turns", type=int, default=10, help="Maximum conversation turns")
     parser.add_argument("--description", default=None, help="Dataset description (uses default if not provided)")
     parser.add_argument("--output", "-o", default=None, help="Output path for JSONL")
-    parser.add_argument("--tool-feedback", action="store_true", help="Run in tool feedback mode to identify missing tools")
+    parser.add_argument("--mode", choices=["explore", "episodes", "tool-feedback"], default="explore", help="Pipeline mode: explore=question plans, episodes=full hook episodes, tool-feedback=tool gap analysis")
+    parser.add_argument("--target-questions", type=int, default=10, help="Number of question blueprints to generate in explore mode")
+    parser.add_argument("--tool-feedback", action="store_true", help="Run in tool feedback mode to identify missing tools (alias for --mode tool-feedback)")
     args = parser.parse_args()
     
     description = args.description or DEFAULT_DATASET_DESCRIPTION
-    mode = "tool-feedback" if args.tool_feedback else "episodes"
+    mode = "tool-feedback" if args.tool_feedback else args.mode
     
     try:
         run_pipeline(
@@ -218,6 +254,7 @@ def main():
             max_turns=args.max_turns,
             output_path=args.output,
             mode=mode,
+            target_questions=args.target_questions,
         )
     except KeyboardInterrupt:
         console.print("[yellow]Interrupted.[/yellow]")

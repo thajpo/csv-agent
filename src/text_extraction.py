@@ -16,29 +16,16 @@ def extract_json_episodes(text: str) -> list[dict] | None:
     Handles: ```json blocks, raw arrays, and truncated output.
     Returns only valid episode dicts (must have 'question_text' key).
     """
-    # Try 1: Find ```json ... ``` block
-    json_pattern = r'```json\s*([\s\S]*?)\s*```'
-    matches = re.findall(json_pattern, text)
-    
-    for match in matches:
-        episodes = _try_parse_array(match.strip())
-        if episodes:
-            return episodes
-    
-    # Try 2: Find raw JSON array starting with [ { (avoid earlier [ in examples)
-    array_starts = [m.start() for m in re.finditer(r'\[\s*\n?\s*\{', text)]
-    for start in reversed(array_starts):
-        candidate = _extract_balanced_brackets(text, start)
-        if candidate:
-            episodes = _try_parse_array(candidate)
-            if episodes:
-                return episodes
-        # Try 3: Array was truncated - extract individual objects from this point
-        episodes = _extract_partial_episodes(text[start:])
-        if episodes:
-            return episodes
-    
-    return None
+    return _extract_structured_array(text, _is_valid_episode)
+
+
+def extract_question_plans(text: str) -> list[dict] | None:
+    """
+    Extract question blueprints (question_text + reasoning_path) from model output.
+    Accepts ```json blocks, raw arrays, or truncated arrays.
+    """
+    return _extract_structured_array(text, _is_valid_question_plan)
+
 
 def extract_questions(text: str) -> list[str]:
     """Extract all questions between {question} and {/question} tags."""
@@ -88,16 +75,48 @@ def _is_valid_episode(obj) -> bool:
     )
 
 
-def _try_parse_array(text: str) -> list[dict] | None:
-    """Try to parse text as a JSON array of episodes."""
+def _is_valid_question_plan(obj) -> bool:
+    """Check if object looks like a valid question plan."""
+    return (
+        isinstance(obj, dict)
+        and 'question_text' in obj
+        and 'reasoning_path' in obj
+    )
+
+
+def _try_parse_array(text: str, validator) -> list[dict] | None:
+    """Try to parse text as a JSON array of objects that pass validator."""
     try:
         data = json.loads(text)
         if isinstance(data, list) and len(data) > 0:
-            # Filter to only valid episodes
-            episodes = [ep for ep in data if _is_valid_episode(ep)]
-            return episodes if episodes else None
+            objects = [obj for obj in data if validator(obj)]
+            return objects if objects else None
     except json.JSONDecodeError:
         pass
+    return None
+
+
+def _extract_structured_array(text: str, validator) -> list[dict] | None:
+    """Shared extractor for validated JSON arrays (with truncated handling)."""
+    json_pattern = r'```json\s*([\s\S]*?)\s*```'
+    matches = re.findall(json_pattern, text)
+    
+    for match in matches:
+        objects = _try_parse_array(match.strip(), validator)
+        if objects:
+            return objects
+    
+    array_starts = [m.start() for m in re.finditer(r'\[\s*\n?\s*\{', text)]
+    for start in reversed(array_starts):
+        candidate = _extract_balanced_brackets(text, start)
+        if candidate:
+            objects = _try_parse_array(candidate, validator)
+            if objects:
+                return objects
+        objects = _extract_partial_objects(text[start:], validator)
+        if objects:
+            return objects
+    
     return None
 
 
@@ -106,28 +125,7 @@ def _extract_partial_episodes(text: str) -> list[dict] | None:
     Extract individual episode objects from potentially truncated JSON.
     Finds complete {...} objects that look like valid episodes.
     """
-    episodes = []
-    
-    # Find balanced braces starting with {"
-    i = 0
-    while i < len(text):
-        if text[i] == '{':
-            # Try to extract a balanced object
-            obj_str = _extract_balanced_braces(text, i)
-            if obj_str:
-                try:
-                    obj = json.loads(obj_str)
-                    if _is_valid_episode(obj):
-                        episodes.append(obj)
-                except json.JSONDecodeError:
-                    pass
-                i += len(obj_str)
-            else:
-                i += 1
-        else:
-            i += 1
-    
-    return episodes if episodes else None
+    return _extract_partial_objects(text, _is_valid_episode)
 
 
 def _extract_balanced_braces(text: str, start: int) -> str | None:
@@ -202,3 +200,27 @@ def _extract_balanced_brackets(text: str, start: int) -> str | None:
                 return text[start:i + 1]
     
     return None  # Unbalanced
+
+
+def _extract_partial_objects(text: str, validator) -> list[dict] | None:
+    """Extract balanced JSON objects from text that satisfy validator."""
+    objects = []
+    i = 0
+    
+    while i < len(text):
+        if text[i] == '{':
+            obj_str = _extract_balanced_braces(text, i)
+            if obj_str:
+                try:
+                    obj = json.loads(obj_str)
+                    if validator(obj):
+                        objects.append(obj)
+                except json.JSONDecodeError:
+                    pass
+                i += len(obj_str)
+            else:
+                i += 1
+        else:
+            i += 1
+    
+    return objects if objects else None

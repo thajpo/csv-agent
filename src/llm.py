@@ -36,7 +36,7 @@ class APILLM:
     def __init__(
         self,
         base_url: str = "https://openrouter.ai/api/v1",
-        model: str = "x-ai/grok-4.1-fast:free",
+        model: str = "deepseek/deepseek-v3.2-exp",  # or try "google/gemini-2.0-flash-exp:free"
         api_key: str | None = None,  # Falls back to OPENROUTER_API_KEY env var
         timeout: float = 120.0,
     ):
