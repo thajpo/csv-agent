@@ -1,3 +1,35 @@
+# 12/6/25
+I have been relying on not writing things down. it does not work
+
+Talking to LLMs has a limited scope
+
+My current project needs to be split up into these two projects:
+1. Question generation from CSVs
+2. Answering questions about CSVs
+
+But, since I already have tools, I'll also be using the question generation as training data, with my tools.
+
+
+So, how can I make good progress?
+
+My goal is to make an agent that navigates a CSV, and can answer multi-step questions about it
+
+I first need a dataset of:
+- question
+- hint
+- dag (loose verification)
+- answer(s) (tight verification)
+- conversation 
+
+The conversation is used for SFT, the hooks are used for RL
+
+I need this structure on huggingface.
+
+We have made question generation a seperate step from answering
+
+The question generation will still be under the same environmental constraints. The only difference will be the prompt
+
+
 # 12/5/25
 - Reoganizing focus
 The pipeline currently has a couple of operating modes:

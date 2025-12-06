@@ -1,0 +1,31 @@
+# CSV Exploration Agent Configuration
+
+# Path to CSV file
+csv: "data.csv"
+
+# Maximum conversation turns
+max_turns: 10
+
+# Dataset description (leave null to use default)
+description: null
+
+# Output path for JSONL (null = no output file)
+output: null
+
+# Pipeline mode: explore, episodes, or tool-feedback
+# - explore: Generate question plans/blueprints
+# - episodes: Generate full hook episodes
+# - tool-feedback: Tool gap analysis
+mode: "explore"
+
+# Number of question blueprints to generate in explore mode
+target_questions: 10
+
+# Teacher model identifier for metadata
+teacher_model: "grok-4.1-fast"
+
+# Sampling arguments for the model
+sampling_args:
+  temperature: 0.7
+  max_tokens: 1000
+

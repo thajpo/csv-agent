@@ -2,7 +2,61 @@
 
 import pandas as pd
 from src.tools import format_tool_docs, inspect, describe, value_counts
+from dataclasses import dataclass
+from typing import Callable
 
+@dataclass
+class ModeConfig:
+    """Mode-specific configuration for the pipeline."""
+    system_prompt: str
+    extractor: Callable[[str], list[dict] | None]
+    success_label: str
+    parse_error_msg: str
+    continue_msg: str
+    final_msg: str
+
+
+def get_mode_config(
+    mode: str,
+    dataset_description: str,
+    bootstrap_output: str,
+    target_questions: int,
+) -> ModeConfig:
+    """Build mode-specific config. Call this once at pipeline start."""
+    
+    if mode == "explore":
+        return ModeConfig(
+            system_prompt=build_question_generation_prompt(dataset_description, bootstrap_output, target_questions),
+            extractor=extract_question_plans,
+            success_label="question plans",
+            parse_error_msg="[red]✗ Failed to parse question plans[/red]",
+            continue_msg="\n\nContinue exploring the dataset. When done, write DONE and output your question plans as JSON.",
+            final_msg="You've reached the turn limit. Please output your question plans now as a JSON array. Write DONE then the JSON.",
+        )
+    
+    elif mode == "episodes":
+        return ModeConfig(
+            system_prompt=build_prompt(dataset_description, bootstrap_output),
+            extractor=extract_json_episodes,
+            success_label="episodes",
+            parse_error_msg="[red]✗ Failed to parse episodes[/red]",
+            continue_msg="\n\nAbove are the actual tool results from your calls. Use these real values to inform your next exploration steps. Continue exploring the dataset - make 3-8 parallel tool calls per turn to explore broadly (different treatments, columns, relationships simultaneously). Observe patterns, brainstorm questions. Do NOT output episodes yet - you need multiple turns of exploration first. When you have thoroughly explored (typically 5-8 turns), then write DONE and output your final 10 episodes as JSON.",
+            final_msg="You've reached the turn limit. Please output your final 10 episodes now as a JSON array. Write DONE then the JSON.",
+        )
+    
+    elif mode == "tool-feedback":
+        return ModeConfig(
+            system_prompt=build_tool_feedback_prompt(dataset_description, bootstrap_output),
+            extractor=extract_json_array,
+            success_label="tool recommendations",
+            parse_error_msg="[red]✗ Failed to parse tool recommendations (check for invalid JSON like {...} placeholders)[/red]",
+            continue_msg="\n\nContinue exploring. Note any tool friction with <TOOL_WISH>...</TOOL_WISH> tags. When done, write DONE and output your tool recommendations as JSON.",
+            final_msg="You've reached the turn limit. Please output your tool recommendations now as a JSON array. Write DONE then the JSON.",
+        )
+    
+    else:
+        valid_modes = "explore, episodes, tool-feedback"
+        raise ValueError(f"Unknown mode '{mode}' (expected one of: {valid_modes})")
 
 def generate_bootstrap_output(csv_path: str = "data.csv") -> str:
     """

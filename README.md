@@ -1,9 +1,9 @@
-# csv-agent-q
+# csv-agent-qa
 
 > Replace the placeholders below, then remove this callout.
 
 ### Overview
-- **Environment ID**: `csv-agent-q`
+- **Environment ID**: `csv-agent-qa`
 - **Short description**: <one-sentence description>
 - **Tags**: <comma-separated tags>
 
@@ -21,13 +21,13 @@
 Run an evaluation with default settings:
 
 ```bash
-uv run vf-eval csv-agent-q
+uv run vf-eval csv-agent-qa
 ```
 
 Configure model and sampling:
 
 ```bash
-uv run vf-eval csv-agent-q   -m gpt-4.1-mini   -n 20 -r 3 -t 1024 -T 0.7   -a '{"key": "value"}'  # env-specific args as JSON
+uv run vf-eval csv-agent-qa   -m gpt-4.1-mini   -n 20 -r 3 -t 1024 -T 0.7   -a '{"key": "value"}'  # env-specific args as JSON
 ```
 
 Notes:

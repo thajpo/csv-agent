@@ -40,6 +40,7 @@ class APILLM:
         model: str = "meta-llama/llama-3.2-3b-instruct:free",
         api_key: str | None = None,  # Falls back to OPENROUTER_API_KEY env var
         timeout: float = 120.0,
+        sampling_args: dict = {},
     ):
         if api_key is None:
             api_key = os.environ.get("OPENROUTER_API_KEY", "")
@@ -47,12 +48,11 @@ class APILLM:
         self.model = model
         self.api_key = api_key
         self.client = httpx.Client(timeout=timeout)
+        self.sampling_args = sampling_args
     
     def __call__(
         self,
         prompt: str | list[dict],
-        max_tokens: int = 8192,
-        temperature: float = 0.7,
     ) -> str:
         # Accept either a string or a list of messages
         if isinstance(prompt, str):
@@ -66,8 +66,16 @@ class APILLM:
             json={
                 "model": self.model,
                 "messages": messages,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
+                "max_tokens": self.sampling_args.get("max_tokens", 8192),
+                "temperature": self.sampling_args.get("temperature", 0.7),
+                "top_p": self.sampling_args.get("top_p", 1.0),
+                "n": self.sampling_args.get("n", 1),
+                "stream": self.sampling_args.get("stream", False),
+                "logprobs": self.sampling_args.get("logprobs", None),
+                "echo": self.sampling_args.get("echo", False),
+                "stop": self.sampling_args.get("stop", None),
+                "presence_penalty": self.sampling_args.get("presence_penalty", 0.0),
+                "frequency_penalty": self.sampling_args.get("frequency_penalty", 0.0),
             },
         )
         response.raise_for_status()
