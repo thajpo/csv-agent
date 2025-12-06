@@ -24,7 +24,7 @@ from typing import Callable
 import pandas as pd
 import torch
 
-from src.llm import APILLM
+from src.model import APILLM
 from src.tools import parse_tool_call, run_tool
 from src.prompts import (
     DEFAULT_DATASET_DESCRIPTION,
@@ -139,17 +139,6 @@ def summarize_results(data: list[dict] | None, pipeline_mode: str, parse_error_m
                 n_hooks = len(ep.get("hooks", []))
                 console.print(f"  [dim]{i}.[/dim] [{diff}] ({n_hooks}h) {q}")
 
-class Environment:
-    def __init__(self, csv_path: str = "data.csv"):
-        self.df = pd.read_csv(csv_path)
-        self.pipeline_mode = "explore"
-        self.teacher_model = "grok-4.1-fast"
-        self.max_turns = 10
-        self.target_questions = 10
-        self.output_path = None
-        self.dataset_description = DEFAULT_DATASET_DESCRIPTION
-
-    
 
 def run_pipeline(
     csv_path: str = "data.csv",
