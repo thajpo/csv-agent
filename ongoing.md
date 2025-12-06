@@ -1,3 +1,57 @@
+# 12/5/25
+- Reoganizing focus
+The pipeline currently has a couple of operating modes:
+1. dataset exploration and question generation with solution trace (in text)
+2. tool use exploration
+3. (planned) question solving with hint
+4. (planned) best of n queston solving with no hint
+
+We also need to integrate setps 3 and 4.
+Before doing this, we need to make the output of step 1 most useful to the LLM
+
+I'm also fighting context issues
+
+For the teacher, providing the full summary of all tools in the sysprompt is useful
+
+The student will have this information in its weights, so it will not need to be specified in the future
+
+I also am thinking about compresssion
+
+## More clearly
+GRPO -> Step 4
+SFT -> Step 1,3,4
+
+Important tasks
+- Make the output of step 1 clear for the development of step 3
+- Make step 3 output a full hook trace with the provided hint
+- Make step 4 use a best-of-n solution per problem from step 1
+- Make a comparison verifier between steps 3 and 4 to determine which traces from step 4 are good training data
+- Add compacting of context (?) - maybe
+- Add smarter truncation of tool calls
+    I think that we can have the model say what it is looking for in a tool call, and summarize the result of the tool call clearly. In this way, we dont have context explode, and the model learns to summarize what it finds as it goes. This is totally unverifiable, and ... 
+
+So.. what *features* do we want?
+We need smart context management
+This should be as dumb as possible. We truncate outputs. 
+
+
+## Datasets
+Everything should be a .jsonl
+We need to make both SFT and RL in the same pass
+
+SFT is just tokens. The more tokens the better
+RL is focused on verifiable hooks. We need to ensure that the produced hooks make sense etc.
+
+For question generation, this is useful for SFT
+
+Ultimately, we need to add context comprssion (per tool call) before even saving data
+
+
+
+# 12/4/25
+- We need to trim down the prompts (not yet)
+- 
+
 # 12/2/25
 I think the best thing I can do is navigate the codebase, and report my observations here.
 - work on context compression

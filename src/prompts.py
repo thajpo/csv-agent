@@ -400,6 +400,14 @@ High variability might indicate inconsistent treatment response.
 <code>{{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "std"}}</code>
 ```
 
+Example for computing CV (coefficient of variation):
+```
+I need to compute CV = std/mean for each treatment to measure growth consistency.
+
+<code>{{"tool": "multi_group_stat", "group_col": "TR", "target_cols": ["TL"], "aggs": ["mean", "std"]}}</code>
+```
+(Then compute CV = std/mean from the returned table in your next turn)
+
 CRITICAL: After emitting <code> blocks, STOP IMMEDIATELY.
 Do not interpret results you haven't seen. Do not output DONE in the same turn as tool calls.
 
@@ -410,6 +418,12 @@ TOOL SYNTAX NOTES:
 - Use Python operators: and, or, ==, !=, >=, <=, >, <
 - String comparisons: TR == 'control' (use single quotes around strings)
 - derive_stat formula uses actual column names (e.g., "TL / IN"), not aggregate names like "std" or "mean"
+
+COMPUTING DERIVED STATISTICS:
+- Coefficient of Variation (CV = std/mean): Use multi_group_stat to get both mean and std, then compute CV manually from the results:
+  ✓ CORRECT: multi_group_stat with aggs=["mean", "std"], then CV = std/mean from the output
+  ✗ WRONG: derive_stat with formula="std / mean" (std and mean are not column names)
+- Other ratios (e.g., TL/IN): Use derive_stat with column names: derive_stat(formula="TL / IN", ...)
 
 ERROR HANDLING:
 If a tool call fails, acknowledge the error in your next turn's PART 1 reasoning.
