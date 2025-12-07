@@ -28,6 +28,9 @@ def parse_args(config: dict) -> argparse.Namespace:
     parser.add_argument("--target-questions", type=int, default=config.get("target_questions", 10), help="Number of question blueprints to generate in explore mode")
     parser.add_argument("--tool-feedback", action="store_true", help="Run in tool feedback mode to identify missing tools (alias for --mode tool-feedback)")
     parser.add_argument("--teacher-model", default=config.get("teacher_model", "grok-4.1-fast"), help="Teacher model identifier for metadata")
+    # Context management args
+    parser.add_argument("--max-active-turns", type=int, default=config.get("max_active_turns", 5), help="Maximum number of active turns to keep in context (older turns are archived)")
+    parser.add_argument("--max-context-tokens", type=int, default=config.get("max_context_tokens", 80000), help="Maximum context tokens before purging oldest turns")
     return parser.parse_args()
 
 def main():
@@ -66,6 +69,8 @@ def main():
             max_turns=args.max_turns,
             pipeline_mode=pipeline_mode,
             target_questions=args.target_questions,
+            max_active_turns=args.max_active_turns,
+            max_context_tokens=args.max_context_tokens,
         )
         
         # The rollout config is used to define environment interaction with the agent
