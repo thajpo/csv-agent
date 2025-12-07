@@ -12,11 +12,11 @@ description: null
 # Output path for JSONL (null = no output file)
 output: null
 
-# Pipeline mode: explore, episodes, or tool-feedback
-# - explore: Generate question plans/blueprints
-# - episodes: Generate full hook episodes
+# Pipeline mode: question-gen, question-answer, or tool-feedback
+# - question-gen: Generate question plans/blueprints
+# - question-answer: Generate full hook episodes
 # - tool-feedback: Tool gap analysis
-mode: "explore"
+mode: "question-gen"
 
 # Number of question blueprints to generate in explore mode
 target_questions: 10

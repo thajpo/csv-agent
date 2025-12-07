@@ -16,7 +16,7 @@ from src.types import EnvironmentConfig
 @dataclass
 class RolloutConfig:
     """Mock rollout config for testing."""
-    mode: str = "explore"
+    mode: str = "question-gen"
     system_prompt: str = "Test system prompt"
     continue_msg: str = ""
     final_msg: str = ""

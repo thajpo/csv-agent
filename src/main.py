@@ -28,7 +28,7 @@ def parse_args(config: dict) -> argparse.Namespace:
     parser.add_argument("--max-turns", type=int, default=config.get("max_turns", 10), help="Maximum conversation turns")
     parser.add_argument("--description", default=config.get("description"), help="Dataset description (uses default if not provided)")
     parser.add_argument("--output", "-o", default=config.get("output"), help="Output path for JSONL")
-    parser.add_argument("--mode", choices=["question-gen", "answer", "tool-feedback"], default=config.get("mode", "question-gen"), help="Pipeline mode: question-gen=question plans, answer=full hook episodes, tool-feedback=tool gap analysis")
+    parser.add_argument("--mode", choices=["question-gen", "question-answer", "tool-feedback"], default=config.get("mode", "question-gen"), help="Pipeline mode: question-gen=question plans, question-answer=full hook episodes, tool-feedback=tool gap analysis")
     parser.add_argument("--target-questions", type=int, default=config.get("target_questions", 10), help="Number of question blueprints to generate in explore mode")
     parser.add_argument("--tool-feedback", action="store_true", help="Run in tool feedback mode to identify missing tools (alias for --mode tool-feedback)")
     parser.add_argument("--teacher-model", default=config.get("teacher_model", "grok-4.1-fast"), help="Teacher model identifier for metadata")
@@ -57,8 +57,8 @@ def main():
 
     if pipeline_mode == "question-gen" or pipeline_mode == "tool-feedback":
         target_questions = ""
-    elif pipeline_mode == "answer":
-        pass # TODO: Implement answer mode
+    elif pipeline_mode == "question-answer":
+        pass # TODO: Implement question-answer mode
     else:
         raise ValueError(f"Invalid pipeline mode: {pipeline_mode}")
     

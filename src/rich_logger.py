@@ -147,13 +147,13 @@ class RichHandler(logging.Handler):
         pipeline_mode = getattr(self.rollout_config, "mode", "").lower()
         
         # Derive success label and error message from mode
-        if pipeline_mode == "explore":
+        if pipeline_mode == "question-gen":
             success_label = "question plans"
             parse_error_msg = "[red]✗ Failed to parse question plans[/red]"
         elif pipeline_mode == "tool-feedback":
             success_label = "tool recommendations"
             parse_error_msg = "[red]✗ Failed to parse tool recommendations (check for invalid JSON like {...} placeholders)[/red]"
-        else:  # episodes mode
+        else:  # question-answer mode
             success_label = "episodes"
             parse_error_msg = "[red]✗ Failed to parse episodes[/red]"
         
@@ -169,13 +169,13 @@ class RichHandler(logging.Handler):
                 priority = rec.get("priority", "?")
                 why = rec.get("why", "?")[:60]
                 self.console.print(f"  [dim]{i}.[/dim] [{priority}] [bold]{name}[/bold]: {why}")
-        elif pipeline_mode == "explore":
+        elif pipeline_mode == "question-gen":
             for i, plan in enumerate(data, 1):
                 diff = plan.get("difficulty", "?")
                 steps = plan.get("expected_steps", "?")
                 q = plan.get("question_text", "?")
                 self.console.print(f"  [dim]{i}.[/dim] [{diff}|steps={steps}] {q}")
-        else:  # episodes mode
+        else:  # question-answer mode
             for i, ep in enumerate(data, 1):
                 if isinstance(ep, dict):
                     diff = ep.get("difficulty", "?")

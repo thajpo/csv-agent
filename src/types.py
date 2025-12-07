@@ -69,7 +69,7 @@ class EnvironmentConfig(BaseModel):
     """Configuration for the Environment."""
     csv_path: str = "data.csv"
     model: str = "grok-4.1-fast"
-    pipeline_mode: str = "explore"  # "explore", "episodes", or "tool-feedback"
+    pipeline_mode: str = "question-gen"  # "question-gen", "question-answer", or "tool-feedback"
     max_turns: int = 10
     target_questions: int = 10
 

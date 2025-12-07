@@ -8,7 +8,7 @@ TOOL_SPECS = {
     "inspect": {
         "name": "inspect",
         "type": "function",
-        "description": "View dataframe structure. Use 'columns' first to see available columns, 'shape' for row/col counts, 'head'/'tail' for sample rows, 'dtypes' for column types, 'missing' for null counts, 'info' for memory/dtype summary.",
+        "description": "View dataframe structure. | Use 'columns' first to see available columns, 'shape' for row/col counts, 'head'/'tail' for sample rows, 'dtypes' for column types, 'missing' for null counts, 'info' for memory/dtype summary.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -31,7 +31,7 @@ TOOL_SPECS = {
     "describe": {
         "name": "describe",
         "type": "function",
-        "description": "Statistical summary (count, mean, std, min, 25%, 50%, 75%, max) for numeric columns. Use include='object' for categorical stats (count, unique, top, freq), or 'all' for both.",
+        "description": "Statistical summary (count, mean, std, min, 25%, 50%, 75%, max) for numeric columns. | Use include='object' for categorical stats (count, unique, top, freq), or 'all' for both.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -50,7 +50,7 @@ TOOL_SPECS = {
     "value_counts": {
         "name": "value_counts",
         "type": "function",
-        "description": "Frequency counts for a column. Shows how many times each value appears, sorted by frequency (most common first). Good for understanding categorical distributions.",
+        "description": "Frequency counts for a column. | Shows how many times each value appears, sorted by frequency (most common first). Good for understanding categorical distributions.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -72,7 +72,7 @@ TOOL_SPECS = {
     "unique": {
         "name": "unique",
         "type": "function",
-        "description": "List unique values in a column (unsorted, first-seen order). Use value_counts instead if you need frequencies. Good for seeing what distinct values exist.",
+        "description": "List unique values in a column (unsorted, first-seen order). | Use value_counts instead if you need frequencies. Good for seeing what distinct values exist.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -94,7 +94,7 @@ TOOL_SPECS = {
     "group_stat": {
         "name": "group_stat",
         "type": "function",
-        "description": "Aggregate a column grouped by another (e.g., mean salary by department). Supports rates via agg=condition_rate|missing_rate. Returns all groups unless group_val is specified for a single group's scalar. Auto-coerces '?' to NaN.",
+        "description": "Aggregate a column grouped by another (e.g., mean salary by department). | Supports rates via agg=condition_rate|missing_rate. Returns all groups unless group_val is specified for a single group's scalar. Auto-coerces '?' to NaN.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -129,12 +129,16 @@ TOOL_SPECS = {
             "required": ["group_col"],
             "additionalProperties": False
         },
-        "summarize": False
+        "summarize": False,
+        "examples": [
+            '{"tool": "group_stat", "group_col": "TR", "target_col": "TL", "agg": "mean", "group_val": "control"}',
+            '{"tool": "group_stat", "group_col": "TR", "agg": "condition_rate", "condition": "TL > 50", "group_val": "control"}',
+        ]
     },
     "multi_group_stat": {
         "name": "multi_group_stat",
         "type": "function",
-        "description": "Aggregate multiple target columns with multiple aggs by group. Returns a compact table (one row per group, wide columns like col_agg). Auto-coerces '?' to NaN for numeric aggs.",
+        "description": "Aggregate multiple target columns with multiple aggs by group. | Returns a compact table (one row per group, wide columns like col_agg). Auto-coerces '?' to NaN for numeric aggs.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -171,7 +175,7 @@ TOOL_SPECS = {
     "group_extremum": {
         "name": "group_extremum",
         "type": "function",
-        "description": "Find which group has the highest/lowest aggregated value (e.g., 'which department has highest mean salary?'). Returns group name by default, or the value with return_what='value'.",
+        "description": "Find which group has the highest/lowest aggregated value (e.g., 'which department has highest mean salary?'). | Returns group name by default, or the value with return_what='value'.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -210,12 +214,15 @@ TOOL_SPECS = {
             "required": ["group_col", "target_col"],
             "additionalProperties": False
         },
-        "summarize": False
+        "summarize": False,
+        "examples": [
+            '{"tool": "group_extremum", "group_col": "TR", "target_col": "TL", "extremum": "max", "return_what": "group"}',
+        ]
     },
     "correlation": {
         "name": "correlation",
         "type": "function",
-        "description": "Correlation coefficient between two numeric columns. Returns value from -1 (inverse) to +1 (direct), with interpretation (weak/moderate/strong). Use spearman for non-linear relationships.",
+        "description": "Correlation coefficient between two numeric columns. | Returns value from -1 (inverse) to +1 (direct), with interpretation (weak/moderate/strong). Use spearman for non-linear relationships.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -242,7 +249,11 @@ TOOL_SPECS = {
             "required": ["col_a", "col_b"],
             "additionalProperties": False
         },
-        "summarize": False
+        "summarize": False,
+        "examples": [
+            '{"tool": "correlation", "col_a": "TL", "col_b": "IN"}',
+            '{"tool": "correlation", "col_a": "TL", "col_b": "IN", "method": "spearman", "filter_expr": "TR == \'control\'"}',
+        ]
     },
     "count_filter": {
         "name": "count_filter",
@@ -260,12 +271,16 @@ TOOL_SPECS = {
             "required": [],
             "additionalProperties": False
         },
-        "summarize": False
+        "summarize": False,
+        "examples": [
+            '{"tool": "count_filter", "filter_expr": "TL > 50 and TR == \'control\'"}',
+            '{"tool": "count_filter"}',
+        ]
     },
     "filter_stat": {
         "name": "filter_stat",
         "type": "function",
-        "description": "Aggregate a numeric column after applying an optional filter (no grouping). Always returns a single scalar with count.",
+        "description": "Aggregate a numeric column after applying an optional filter (no grouping). | Always returns a single scalar with count.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -288,7 +303,11 @@ TOOL_SPECS = {
             "required": [],
             "additionalProperties": False
         },
-        "summarize": False
+        "summarize": False,
+        "examples": [
+            '{"tool": "filter_stat", "target_col": "TL", "agg": "mean", "filter_expr": "TR == \'control\'"}',
+            '{"tool": "filter_stat", "agg": "count", "filter_expr": "TL > 50 and TR == \'control\'"}',
+        ]
     },
     "sort_values": {
         "name": "sort_values",
@@ -320,7 +339,7 @@ TOOL_SPECS = {
     "quantile": {
         "name": "quantile",
         "type": "function",
-        "description": "Calculate percentile(s) for a column. Use q=0.5 for median, q=0.9 for 90th percentile, etc. Single q returns scalar; list returns multiple.",
+        "description": "Calculate percentile(s) for a column. | Use q=0.5 for median, q=0.9 for 90th percentile, etc. Single q returns scalar; list returns multiple.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -345,7 +364,11 @@ TOOL_SPECS = {
             "required": ["col"],
             "additionalProperties": False
         },
-        "summarize": False
+        "summarize": False,
+        "examples": [
+            '{"tool": "quantile", "col": "TL", "q": 0.9}',
+            '{"tool": "quantile", "col": "TL", "q": 0.5, "filter_expr": "TR == \'control\'"}',
+        ]
     },
     "crosstab": {
         "name": "crosstab",
@@ -377,7 +400,7 @@ TOOL_SPECS = {
     "group_value_counts": {
         "name": "group_value_counts",
         "type": "function",
-        "description": "Top-N value counts per group for a categorical target. Returns stacked table: group | value | count | pct.",
+        "description": "Top-N value counts per group for a categorical target. | Returns stacked table: group | value | count | pct.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -408,7 +431,7 @@ TOOL_SPECS = {
     "missing_rate": {
         "name": "missing_rate",
         "type": "function",
-        "description": "Compute missingness for a column (optionally within a group). Returns percent missing and count.",
+        "description": "Compute missingness for a column (optionally within a group). | Returns percent missing and count.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -428,12 +451,16 @@ TOOL_SPECS = {
             "required": ["col"],
             "additionalProperties": False
         },
-        "summarize": False
+        "summarize": False,
+        "examples": [
+            '{"tool": "missing_rate", "col": "INTERNODE_5"}',
+            '{"tool": "missing_rate", "col": "INTERNODE_5", "group_col": "TR", "group_val": "control"}',
+        ]
     },
     "group_condition_rate": {
         "name": "group_condition_rate",
         "type": "function",
-        "description": "Within a group, compute the percentage of rows satisfying a condition. Requires group_val to keep output atomic.",
+        "description": "Within a group, compute the percentage of rows satisfying a condition. | Requires group_val to keep output atomic.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -453,12 +480,15 @@ TOOL_SPECS = {
             "required": ["group_col", "condition", "group_val"],
             "additionalProperties": False
         },
-        "summarize": False
+        "summarize": False,
+        "examples": [
+            '{"tool": "group_condition_rate", "group_col": "TR", "condition": "TL > 50", "group_val": "control"}',
+        ]
     },
     "derive_stat": {
         "name": "derive_stat",
         "type": "function",
-        "description": "Compute a derived metric from a formula (e.g., 'revenue / cost', 'A + B * 2'), then aggregate by group. Useful for ratios, differences, or computed columns.",
+        "description": "Compute a derived metric from a formula (e.g., 'revenue / cost', 'A + B * 2'), then aggregate by group. | Useful for ratios, differences, or computed columns.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -489,7 +519,11 @@ TOOL_SPECS = {
             "required": ["formula", "group_col"],
             "additionalProperties": False
         },
-        "summarize": False
+        "summarize": False,
+        "examples": [
+            '{"tool": "derive_stat", "formula": "TL / IN", "group_col": "TR", "agg": "mean", "group_val": "control"}',
+            '{"tool": "derive_stat", "formula": "INTERNODE_1 + INTERNODE_2", "group_col": "TR", "agg": "mean"}',
+        ]
     },
     # ========================================================================
     # Hook-chaining tools: operate on previous hook results, not raw dataframe
@@ -497,7 +531,7 @@ TOOL_SPECS = {
     "combine": {
         "name": "combine",
         "type": "function",
-        "description": "Compute arithmetic or boolean expressions on previous hook results. Use for ratios, differences, percentages, comparisons. Returns number or 'true'/'false'.",
+        "description": "Compute arithmetic or boolean expressions on previous hook results. | Use for ratios, differences, percentages, comparisons. Returns number or 'true'/'false'.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -515,12 +549,17 @@ TOOL_SPECS = {
             "additionalProperties": False
         },
         "summarize": False,
-        "chain": True  # Marks this as a hook-chaining tool
+        "chain": True,
+        "examples": [
+            '{"tool": "combine", "expr": "s / m", "vars": {"s": "ctrl_std", "m": "ctrl_mean"}}',
+            '{"tool": "combine", "expr": "(a - b) / b * 100", "vars": {"a": "treat_val", "b": "ctrl_val"}}',
+            '{"tool": "combine", "expr": "a > b", "vars": {"a": "ctrl_cv", "b": "treat_cv"}}',
+        ]
     },
     "lookup": {
         "name": "lookup",
         "type": "function",
-        "description": "Use a hook's group result to query another stat. Chains group_extremum → group_stat dynamically without hardcoding group names.",
+        "description": "Use a hook's group result to query another stat. | Chains group_extremum → group_stat dynamically without hardcoding group names.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -547,12 +586,15 @@ TOOL_SPECS = {
             "additionalProperties": False
         },
         "summarize": False,
-        "chain": True
+        "chain": True,
+        "examples": [
+            '{"tool": "lookup", "group_hook": "best_tr", "group_col": "TR", "target_col": "IN", "agg": "std"}',
+        ]
     },
     "aggregate_hooks": {
         "name": "aggregate_hooks",
         "type": "function",
-        "description": "Compute min/max/mean/sum/range across multiple hook values. Useful for finding extremes or averages across a set of computed values.",
+        "description": "Compute min/max/mean/sum/range across multiple hook values. | Useful for finding extremes or averages across a set of computed values.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -571,7 +613,11 @@ TOOL_SPECS = {
             "additionalProperties": False
         },
         "summarize": False,
-        "chain": True
+        "chain": True,
+        "examples": [
+            '{"tool": "aggregate_hooks", "hooks": ["cv_1", "cv_2", "cv_3"], "agg": "max"}',
+            '{"tool": "aggregate_hooks", "hooks": ["mean_1", "mean_2", "mean_3"], "agg": "min"}',
+        ]
     }
 }
 
@@ -729,23 +775,92 @@ def run_tool(tool: str, df: pd.DataFrame, params: dict) -> str:
         return f"Error running {tool}: {type(e).__name__}: {e}"
 
 
-def format_tool_docs() -> str:
-    """Generate tool documentation for the system prompt."""
+def format_tool_docs(verbosity: str = "full", filter_tools: set[str] | None = None) -> str:
+    """
+    Generate tool documentation for the system prompt.
+
+    Args:
+        verbosity: "full" for detailed docs (question-gen),
+                   "compact" for minimal (question-answer),
+                   "minimal" for function signatures only (student RL training)
+        filter_tools: Optional set of tool names to include (for lazy loading)
+
+    Tool descriptions should use " | " to separate key info from details:
+    - Before " | " = shown in compact mode
+    - After " | " = only shown in full mode
+    """
+    # Complex tools that need examples in minimal mode
+    COMPLEX_TOOLS = {"combine", "lookup", "aggregate_hooks", "group_extremum",
+                     "filter_stat", "derive_stat", "multi_group_stat"}
+
     lines = ["AVAILABLE TOOLS:", ""]
+
     for name, spec in TOOL_SPECS.items():
-        lines.append(f"**{name}**: {spec['description']}")
-        # Format parameters
+        # Skip tools not in filter if provided
+        if filter_tools is not None and name not in filter_tools:
+            continue
+
         params = spec.get("parameters", {}).get("properties", {})
         required = spec.get("parameters", {}).get("required", [])
-        param_strs = []
-        for pname, pinfo in params.items():
-            req = "*" if pname in required else ""
-            ptype = pinfo.get("type", pinfo.get("oneOf", [{}])[0].get("type", "any"))
-            default = f" (default: {pinfo['default']})" if "default" in pinfo else ""
-            param_strs.append(f"{pname}{req}: {ptype}{default}")
-        if param_strs:
-            lines.append(f"  Parameters: {', '.join(param_strs)}")
-        lines.append("")
+
+        if verbosity == "minimal":
+            # Function signature format: tool_name(param1, param2, param3=default) → output
+            param_list = []
+            for pname, pinfo in params.items():
+                if pname in required:
+                    param_list.append(pname)
+                else:
+                    default = pinfo.get("default", "None")
+                    if isinstance(default, str):
+                        default = f'"{default}"'
+                    param_list.append(f"{pname}={default}")
+
+            signature = f"{name}({', '.join(param_list)})"
+
+            # Determine output type hint
+            summarize = spec.get("summarize", False)
+            output_hint = " → table" if summarize else " → scalar"
+
+            lines.append(signature + output_hint)
+
+            # Add example for complex tools
+            if name in COMPLEX_TOOLS and spec.get("examples"):
+                # Show first example only
+                ex = spec["examples"][0]
+                lines.append(f"  Example: {ex}")
+
+            lines.append("")
+
+        elif verbosity == "compact":
+            # Split description by " | " separator if it exists
+            desc = spec['description']
+            if " | " in desc:
+                key_desc, _ = desc.split(" | ", 1)
+                desc = key_desc
+
+            lines.append(f"**{name}**: {desc}")
+
+            # Only show required params
+            if required:
+                param_list = [f"{p}*" for p in required]
+                lines.append(f"  Required: {', '.join(param_list)}")
+            lines.append("")
+
+        else:  # full
+            desc = spec['description']
+            lines.append(f"**{name}**: {desc}")
+
+            # Full params with types and defaults
+            param_strs = []
+            for pname, pinfo in params.items():
+                req = "*" if pname in required else ""
+                ptype = pinfo.get("type", pinfo.get("oneOf", [{}])[0].get("type", "any"))
+                default = f" (default: {pinfo['default']})" if "default" in pinfo else ""
+                param_strs.append(f"{pname}{req}: {ptype}{default}")
+            if param_strs:
+                lines.append(f"  Parameters: {', '.join(param_strs)}")
+            lines.append("")
+
     return "\n".join(lines)
 
 
