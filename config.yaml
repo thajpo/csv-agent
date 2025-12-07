@@ -29,3 +29,7 @@ sampling_args:
   temperature: 0.7
   max_tokens: 1000
 
+# Conversation context management
+max_active_turns: 5
+max_context_tokens: 80000
+

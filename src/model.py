@@ -40,7 +40,7 @@ class APILLM:
         model: str = "meta-llama/llama-3.2-3b-instruct:free",
         api_key: str | None = None,  # Falls back to OPENROUTER_API_KEY env var
         timeout: float = 120.0,
-        sampling_args: dict = {},
+        sampling_args: dict | None = None,
     ):
         if api_key is None:
             api_key = os.environ.get("OPENROUTER_API_KEY", "")
@@ -48,7 +48,7 @@ class APILLM:
         self.model = model
         self.api_key = api_key
         self.client = httpx.Client(timeout=timeout)
-        self.sampling_args = sampling_args
+        self.sampling_args = sampling_args or {}
     
     def __call__(
         self,

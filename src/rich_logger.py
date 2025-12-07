@@ -144,13 +144,24 @@ class RichHandler(logging.Handler):
         Args:
             data: List of parsed results (episodes, question plans, or tool recommendations)
         """
+        pipeline_mode = getattr(self.rollout_config, "mode", "").lower()
+        
+        # Derive success label and error message from mode
+        if pipeline_mode == "explore":
+            success_label = "question plans"
+            parse_error_msg = "[red]✗ Failed to parse question plans[/red]"
+        elif pipeline_mode == "tool-feedback":
+            success_label = "tool recommendations"
+            parse_error_msg = "[red]✗ Failed to parse tool recommendations (check for invalid JSON like {...} placeholders)[/red]"
+        else:  # episodes mode
+            success_label = "episodes"
+            parse_error_msg = "[red]✗ Failed to parse episodes[/red]"
+        
         if not data:
-            self.console.print(self.rollout_config.parse_error_msg)
+            self.console.print(parse_error_msg)
             return
 
-        self.console.print(f"\n[green]✓ {len(data)} {self.rollout_config.success_label}[/green]")
-
-        pipeline_mode = getattr(self.rollout_config, "mode", "").lower()
+        self.console.print(f"\n[green]✓ {len(data)} {success_label}[/green]")
 
         if pipeline_mode == "tool-feedback":
             for i, rec in enumerate(data, 1):

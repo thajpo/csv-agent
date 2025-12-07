@@ -8,8 +8,7 @@ from dataclasses import dataclass
 class RolloutConfig:
     """Configuration for a rollout (system prompt, intermediate messages)."""
     system_prompt: str
-    success_label: str
-    parse_error_msg: str
+    mode: str  # Pipeline mode: "explore", "episodes", or "tool-feedback"
     continue_msg: str
     final_msg: str
 
@@ -22,20 +21,18 @@ def build_rollout_config(
 ) -> RolloutConfig:
     """Build rollout config for the given pipeline mode."""
     
-    if mode == "explore":
+    if mode == "question-gen" or mode == "explore":
         return RolloutConfig(
             system_prompt=build_question_generation_prompt(dataset_description, data_overview, target_questions),
-            success_label="question plans",
-            parse_error_msg="[red]✗ Failed to parse question plans[/red]",
+            mode="explore",  # Use internal name for rich_logger
             continue_msg="\n\nContinue exploring the dataset. When done, write DONE and output your question plans as JSON.",
             final_msg="You've reached the turn limit. Please output your question plans now as a JSON array. Write DONE then the JSON.",
         )
     
-    elif mode == "episodes":
+    elif mode == "answer" or mode == "episodes":
         return RolloutConfig(
-            system_prompt=build_prompt(dataset_description, data_overview),
-            success_label="episodes",
-            parse_error_msg="[red]✗ Failed to parse episodes[/red]",
+            system_prompt=build_episodes_prompt(dataset_description, data_overview),
+            mode="episodes",  # Use internal name for rich_logger
             continue_msg="\n\nAbove are the actual tool results from your calls. Use these real values to inform your next exploration steps. Continue exploring the dataset - make 3-8 parallel tool calls per turn to explore broadly (different treatments, columns, relationships simultaneously). Observe patterns, brainstorm questions. Do NOT output episodes yet - you need multiple turns of exploration first. When you have thoroughly explored (typically 5-8 turns), then write DONE and output your final 10 episodes as JSON.",
             final_msg="You've reached the turn limit. Please output your final 10 episodes now as a JSON array. Write DONE then the JSON.",
         )
@@ -43,14 +40,13 @@ def build_rollout_config(
     elif mode == "tool-feedback":
         return RolloutConfig(
             system_prompt=build_tool_feedback_prompt(dataset_description, data_overview),
-            success_label="tool recommendations",
-            parse_error_msg="[red]✗ Failed to parse tool recommendations (check for invalid JSON like {...} placeholders)[/red]",
+            mode=mode,
             continue_msg="\n\nContinue exploring. Note any tool friction with <TOOL_WISH>...</TOOL_WISH> tags. When done, write DONE and output your tool recommendations as JSON.",
             final_msg="You've reached the turn limit. Please output your tool recommendations now as a JSON array. Write DONE then the JSON.",
         )
     
     else:
-        valid_modes = "explore, episodes, tool-feedback"
+        valid_modes = "question-gen/explore, answer/episodes, tool-feedback"
         raise ValueError(f"Unknown mode '{mode}' (expected one of: {valid_modes})")
 
 def generate_data_overview(csv_path: str = "data.csv") -> str:
@@ -203,8 +199,8 @@ All tools are atomic, deterministic, and verifiable.
 """.strip()
 
 
-def build_prompt(dataset_description: str, data_overview: str) -> str:
-    """Build system prompt with dataset context and initial exploration results."""
+def build_episodes_prompt(dataset_description: str, data_overview: str) -> str:
+    """Build system prompt for episode generation mode with dataset context and initial exploration results."""
     tool_docs = format_tool_docs()
     
     return f"""You are a senior data scientist designing a **final exam** for an advanced data analysis course. Your questions must require multi-step reasoning chains—not simple lookups.

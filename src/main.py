@@ -9,7 +9,11 @@ from src.types import EnvironmentConfig
 from src.prompts import DEFAULT_DATASET_DESCRIPTION, build_rollout_config
 from src.prompts import generate_data_overview
 
-def load_config(config_path: str = "config.yaml") -> dict:
+# Constants
+PARSER_DESCRIPTION = "CSV Exploration Agent with Rich Terminal UI"
+DEFAULT_CONFIG_PATH = "config.yaml"
+
+def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
     """Load configuration from YAML file."""
     config_file = Path(config_path)
     if config_file.exists():
@@ -18,8 +22,8 @@ def load_config(config_path: str = "config.yaml") -> dict:
     return {}
 
 def parse_args(config: dict) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="CSV Exploration Agent with Rich Terminal UI")
-    parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
+    parser = argparse.ArgumentParser(description=PARSER_DESCRIPTION)
+    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="Path to config YAML file")
     parser.add_argument("--csv", default=config.get("csv", "data.csv"), help="Path to CSV file")
     parser.add_argument("--max-turns", type=int, default=config.get("max_turns", 10), help="Maximum conversation turns")
     parser.add_argument("--description", default=config.get("description"), help="Dataset description (uses default if not provided)")
@@ -59,7 +63,7 @@ def main():
         raise ValueError(f"Invalid pipeline mode: {pipeline_mode}")
     
     # Get sampling args from config
-    sampling_args = config.sampling_args
+    sampling_args = config.get("sampling_args", {})
     
     try:
         # Environment parameters

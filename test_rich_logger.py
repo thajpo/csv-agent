@@ -17,8 +17,9 @@ from src.types import EnvironmentConfig
 class RolloutConfig:
     """Mock rollout config for testing."""
     mode: str = "explore"
-    success_label: str = "test results"
-    parse_error_msg: str = "[red]Parse error[/red]"
+    system_prompt: str = "Test system prompt"
+    continue_msg: str = ""
+    final_msg: str = ""
 
 
 def test_silent_execution():

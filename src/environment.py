@@ -17,7 +17,8 @@ from src.model import APILLM
 from src.rich_logger import LogContext
 from src.prompts import generate_data_overview, RolloutConfig
 from src.tools import parse_tool_call, run_tool
-from src.types import EnvironmentConfig, StateConfig, Turn, ToolCall, ConversationManager
+from src.types import EnvironmentConfig, StateConfig
+from src.conversation import Turn, ToolCall, ConversationManager
 
 
 class Environment:
@@ -33,7 +34,7 @@ class Environment:
         self,
         csv_path: str = "data.csv",
         config: EnvironmentConfig = EnvironmentConfig(),
-        sampling_args: dict = {},
+        sampling_args: dict | None = None,
         rollout_config: RolloutConfig = RolloutConfig(),
         logger: logging.Logger | None = None,
     ):
@@ -49,7 +50,7 @@ class Environment:
         self.csv_path = csv_path
         self.config = config
         self.rollout_config = rollout_config
-        self.model = APILLM(model=config.model, sampling_args=sampling_args)
+        self.model = APILLM(model=config.model, sampling_args=sampling_args or {})
         self.logger = logger
         self.df = None  # Will be loaded on first rollout
 
@@ -67,7 +68,7 @@ class Environment:
                     },
                 )
 
-    def init_state(self, input):
+    def init_state(self):
         if self.logger:
             self.logger.info("episode_start", extra={"csv_path": self.csv_path})
 
@@ -83,7 +84,7 @@ class Environment:
         )
 
         return StateConfig(
-            input=input,
+            input=data_overview,
             conversation_manager=conversation_manager,
             n_turns=self.config.max_turns,
             is_completed=False,
@@ -121,7 +122,8 @@ class Environment:
                 try:
                     data = json.loads(code.strip())
                     params = {k: v for k, v in data.items() if k != "tool"}
-                except:
+                except (json.JSONDecodeError, AttributeError, ValueError):
+                    # Failed to parse params, continue with empty dict
                     pass
 
             tool_call = ToolCall(
