@@ -21,16 +21,16 @@ class RichHandler(logging.Handler):
     with Rich formatting (colors, panels, rules, etc.).
     """
 
-    def __init__(self, mode_config):
+    def __init__(self, rollout_config):
         """
         Initialize RichHandler.
 
         Args:
-            mode_config: ModeConfig object with mode-specific configuration
+            rollout_config: RolloutConfig with rollout-specific configuration
         """
         super().__init__()
         self.console = Console()
-        self.mode_config = mode_config
+        self.rollout_config = rollout_config
         self._status = None  # For tracking spinner state
 
     def emit(self, record: logging.LogRecord):
@@ -145,12 +145,12 @@ class RichHandler(logging.Handler):
             data: List of parsed results (episodes, question plans, or tool recommendations)
         """
         if not data:
-            self.console.print(self.mode_config.parse_error_msg)
+            self.console.print(self.rollout_config.parse_error_msg)
             return
 
-        self.console.print(f"\n[green]✓ {len(data)} {self.mode_config.success_label}[/green]")
+        self.console.print(f"\n[green]✓ {len(data)} {self.rollout_config.success_label}[/green]")
 
-        pipeline_mode = getattr(self.mode_config, "mode", "").lower()
+        pipeline_mode = getattr(self.rollout_config, "mode", "").lower()
 
         if pipeline_mode == "tool-feedback":
             for i, rec in enumerate(data, 1):
@@ -210,7 +210,7 @@ class LogContext:
         return False  # Don't suppress exceptions
 
 
-def setup_rich_logger(mode_config) -> logging.Logger:
+def setup_rich_logger(rollout_config) -> logging.Logger:
     """
     Create a logger configured with RichHandler.
 
@@ -218,13 +218,13 @@ def setup_rich_logger(mode_config) -> logging.Logger:
     in the CLI/pipeline.
 
     Args:
-        mode_config: ModeConfig object with mode-specific configuration
+        rollout_config: RolloutConfig with rollout-specific configuration
 
     Returns:
         Configured logger with RichHandler attached
 
     Usage:
-        logger = setup_rich_logger(mode_config)
+        logger = setup_rich_logger(rollout_config)
         env = Environment(..., logger=logger)
         env.rollout()  # Outputs to Rich console
     """
@@ -235,7 +235,7 @@ def setup_rich_logger(mode_config) -> logging.Logger:
     logger.handlers.clear()
 
     # Add RichHandler
-    logger.addHandler(RichHandler(mode_config))
+    logger.addHandler(RichHandler(rollout_config))
 
     # Prevent propagation to root logger
     logger.propagate = False

@@ -14,7 +14,7 @@ import pandas as pd
 
 from src.model import APILLM
 from src.rich_logger import LogContext
-from src.prompts import generate_bootstrap_output
+from src.prompts import generate_data_overview
 from src.text_extraction import extract_code_blocks
 from src.tools import parse_tool_call, run_tool
 from src.types import EnvironmentConfig, StateConfig
@@ -70,13 +70,13 @@ class Environment:
             self.logger.info("episode_start", extra={"csv_path": self.csv_path})
 
         self._load_csv()
-        bootstrap_output = generate_bootstrap_output(self.csv_path)
+        data_overview = generate_data_overview(self.csv_path)
         sys_prompt = self.build_system_prompt()
 
         return StateConfig(
             input=input,
             conversation=[{"role": "system", "content": sys_prompt}],
-            results_data=[bootstrap_output],
+            results_data=[data_overview],
             n_turns=self.config.max_turns,
             is_completed=False,
             current_turn=0,

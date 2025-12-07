@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import Callable
 
 @dataclass
-class ModeConfig:
-    """Mode-specific configuration for the pipeline."""
+class RolloutConfig:
+    """Configuration for a rollout (system prompt, extractor, messages)."""
     system_prompt: str
     extractor: Callable[[str], list[dict] | None]
     success_label: str
@@ -16,17 +16,17 @@ class ModeConfig:
     final_msg: str
 
 
-def get_mode_config(
+def build_rollout_config(
     mode: str,
     dataset_description: str,
-    bootstrap_output: str,
+    data_overview: str,
     target_questions: int,
-) -> ModeConfig:
-    """Build mode-specific config. Call this once at pipeline start."""
+) -> RolloutConfig:
+    """Build rollout config for the given pipeline mode."""
     
     if mode == "explore":
-        return ModeConfig(
-            system_prompt=build_question_generation_prompt(dataset_description, bootstrap_output, target_questions),
+        return RolloutConfig(
+            system_prompt=build_question_generation_prompt(dataset_description, data_overview, target_questions),
             extractor=extract_question_plans,
             success_label="question plans",
             parse_error_msg="[red]✗ Failed to parse question plans[/red]",
@@ -35,8 +35,8 @@ def get_mode_config(
         )
     
     elif mode == "episodes":
-        return ModeConfig(
-            system_prompt=build_prompt(dataset_description, bootstrap_output),
+        return RolloutConfig(
+            system_prompt=build_prompt(dataset_description, data_overview),
             extractor=extract_json_episodes,
             success_label="episodes",
             parse_error_msg="[red]✗ Failed to parse episodes[/red]",
@@ -45,8 +45,8 @@ def get_mode_config(
         )
     
     elif mode == "tool-feedback":
-        return ModeConfig(
-            system_prompt=build_tool_feedback_prompt(dataset_description, bootstrap_output),
+        return RolloutConfig(
+            system_prompt=build_tool_feedback_prompt(dataset_description, data_overview),
             extractor=extract_json_array,
             success_label="tool recommendations",
             parse_error_msg="[red]✗ Failed to parse tool recommendations (check for invalid JSON like {...} placeholders)[/red]",
@@ -58,7 +58,7 @@ def get_mode_config(
         valid_modes = "explore, episodes, tool-feedback"
         raise ValueError(f"Unknown mode '{mode}' (expected one of: {valid_modes})")
 
-def generate_bootstrap_output(csv_path: str = "data.csv") -> str:
+def generate_data_overview(csv_path: str = "data.csv") -> str:
     """
     Generate bootstrap exploration output for initial data inspection.
     
@@ -208,7 +208,7 @@ All tools are atomic, deterministic, and verifiable.
 """.strip()
 
 
-def build_prompt(dataset_description: str, bootstrap_output: str) -> str:
+def build_prompt(dataset_description: str, data_overview: str) -> str:
     """Build system prompt with dataset context and initial exploration results."""
     tool_docs = format_tool_docs()
     
@@ -219,7 +219,7 @@ DATASET CONTEXT:
 
 INITIAL EXPLORATION:
 ```
-{bootstrap_output}
+{data_overview}
 ```
 
 {tool_docs}
@@ -405,7 +405,7 @@ Begin by sharing your interpretation, brainstorm broadly, then explore. Signal D
 
 def build_question_generation_prompt(
     dataset_description: str,
-    bootstrap_output: str,
+    data_overview: str,
     target_questions: int = 10,
 ) -> str:
     """Build prompt for exploration-only phase that outputs question plans + reasoning paths."""
@@ -421,7 +421,7 @@ DATASET CONTEXT:
 
 INITIAL EXPLORATION:
 ```
-{bootstrap_output}
+{data_overview}
 ```
 
 {tool_docs}
@@ -609,7 +609,7 @@ Begin by stating what you want to learn about this dataset, then call tools.
 Do NOT output DONE until you have completed at least 3 turns with tool results."""
 
 
-def build_tool_feedback_prompt(dataset_description: str, bootstrap_output: str) -> str:
+def build_tool_feedback_prompt(dataset_description: str, data_overview: str) -> str:
     """Build prompt for tool feedback mode - identify missing/friction tools."""
     tool_docs = format_tool_docs()
     
@@ -620,7 +620,7 @@ DATASET CONTEXT:
 
 INITIAL EXPLORATION:
 ```
-{bootstrap_output}
+{data_overview}
 ```
 
 {tool_docs}

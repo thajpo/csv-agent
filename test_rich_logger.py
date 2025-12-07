@@ -12,10 +12,10 @@ from src.rich_logger import setup_rich_logger
 from src.types import EnvironmentConfig
 
 
-# Mock ModeConfig for testing
+# Mock RolloutConfig for testing
 @dataclass
-class ModeConfig:
-    """Mock mode config for testing."""
+class RolloutConfig:
+    """Mock rollout config for testing."""
     mode: str = "explore"
     success_label: str = "test results"
     parse_error_msg: str = "[red]Parse error[/red]"
@@ -41,8 +41,8 @@ def test_rich_output():
     """Test with RichHandler."""
     print("\n=== TEST 2: Rich Output ===")
 
-    mode_config = ModeConfig()
-    logger = setup_rich_logger(mode_config)
+    rollout_config = RolloutConfig()
+    logger = setup_rich_logger(rollout_config)
 
     env = Environment(
         csv_path="data.csv",
@@ -111,8 +111,8 @@ def test_manual_logging():
     """Test manual logger calls to verify RichHandler formatting."""
     print("\n=== TEST 5: Manual Logger Calls ===")
 
-    mode_config = ModeConfig()
-    logger = setup_rich_logger(mode_config)
+    rollout_config = RolloutConfig()
+    logger = setup_rich_logger(rollout_config)
 
     # Manually trigger log events to see RichHandler formatting
     logger.info("episode_start", extra={"csv_path": "test.csv"})
