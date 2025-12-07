@@ -59,6 +59,7 @@ def main():
     sampling_args = config.sampling_args
     
     try:
+        # Environment parameters
         env_config = EnvironmentConfig(
             csv_path=args.csv,
             model=args.teacher_model,
@@ -66,16 +67,20 @@ def main():
             pipeline_mode=pipeline_mode,
             target_questions=args.target_questions,
         )
+        
+        # The rollout config is used to define environment interaction with the agent
         rollout_config = build_rollout_config(
             mode=pipeline_mode,
             dataset_description=description,
             data_overview=data_overview,
             target_questions=target_questions,
         )
+
         env = Environment(
             csv_path=args.csv,
             config=env_config,
             sampling_args=sampling_args,
+            rollout_config=rollout_config,
             logger=setup_rich_logger(rollout_config),
         )
         env.rollout(input=rollout_config.system_prompt)
