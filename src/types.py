@@ -6,14 +6,11 @@ the CSV agent codebase.
 """
 
 from pydantic import BaseModel
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from datetime import datetime
 from hashlib import sha256
 import pickle
 import pandas as pd
-
-if TYPE_CHECKING:
-    from src.conversation import ConversationManager
 
 
 # ============= Artifact Hashing =============
@@ -177,7 +174,10 @@ class EnvironmentConfig(BaseModel):
 class StateConfig(BaseModel):
     """State configuration for an episode."""
     input: str
-    conversation_manager: "ConversationManager"
+    conversation_manager: Any  # ConversationManager - avoiding circular import
     n_turns: int
     is_completed: bool
     current_turn: int
+
+    class Config:
+        arbitrary_types_allowed = True

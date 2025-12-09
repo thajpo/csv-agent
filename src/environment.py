@@ -32,9 +32,9 @@ class Environment:
     def __init__(
         self,
         csv_path: str = "data.csv",
-        config: EnvironmentConfig = EnvironmentConfig(),
+        config: EnvironmentConfig | None = None,
         sampling_args: dict | None = None,
-        rollout_config: RolloutConfig = RolloutConfig(),
+        rollout_config: RolloutConfig | None = None,
         kernel: JupyterKernel | None = None,
         logger: logging.Logger | None = None,
     ):
@@ -50,9 +50,9 @@ class Environment:
             logger: Optional logger for output (None = silent execution)
         """
         self.csv_path = csv_path
-        self.config = config
+        self.config = config or EnvironmentConfig()
         self.rollout_config = rollout_config
-        self.model = APILLM(model=config.model, sampling_args=sampling_args or {})
+        self.model = APILLM(model=self.config.model, sampling_args=sampling_args or {})
         self.kernel = kernel or JupyterKernel(timeout=120.0, csv_path=csv_path)
         self.logger = logger
         self.df = None  # Will be loaded on first rollout
