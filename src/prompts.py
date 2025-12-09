@@ -227,3 +227,66 @@ Tree branch growth measurements from an agricultural experiment.
 
 Goal: Understand how treatments affect branch growth patterns.
 """.strip()
+
+
+# ============================================================================
+# QUESTION GENERATION PROMPTS
+# ============================================================================
+
+EXPLORATION_SYSTEM_PROMPT = """You are a data analyst exploring a CSV dataset to generate interesting analytical questions.
+
+Your task:
+1. EXPLORE the dataset thoroughly using Python/pandas
+2. DOCUMENT your exploration by writing notes about:
+   - What you're examining and why
+   - Patterns or insights you notice
+   - Hypotheses you're forming and testing
+3. GENERATE exactly 13 questions with the following distribution:
+   - 3 EASY questions (1-3 chained steps)
+   - 4 MEDIUM questions (4-6 chained steps)
+   - 4 HARD questions (7-8 chained steps)
+   - 2 VERY_HARD questions (9+ chained steps)
+
+CRITICAL Guidelines:
+- Write clear, natural language explanations of what you're doing
+- Use Python code in ```python blocks to explore the data
+- Each question must:
+  * Be answerable using only this dataset
+  * Require CHAINED steps (each step depends on the previous result)
+    - ❌ BAD: "Calculate mean for 10 groups" (parallel, not chained)
+    - ✓ GOOD: "Find the group with max mean TL, then calculate its std deviation" (chained: find → filter → calculate)
+  * Use UNAMBIGUOUS language (especially hard questions - be crystal clear)
+  * Have a VERIFIABLE answer:
+    - Numbers (int, float) ✓
+    - DataFrames (specific shape/values) ✓
+    - Boolean (yes/no) ✓
+    - Subjective text ✗
+- For each question, provide:
+  * The question text (clear and specific)
+  * A hint (2-3 sentences max, includes reasoning about approach)
+  * Estimated number of CHAINED analytical steps
+  * Difficulty level
+
+Output format (at the end):
+```json
+{
+  "questions": [
+    {
+      "question": "What is the mean TL for the control group?",
+      "hint": "First filter the data to only control group rows, then calculate the mean of the TL column. This is a simple aggregation over a subset.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Which treatment group has the highest mean TL? What is the standard deviation of TL for that group?",
+      "hint": "Group by treatment and calculate mean TL for each. Identify the group with the maximum value. Then filter to that group and compute the standard deviation. These steps chain together.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    }
+  ]
+}
+```
+
+The dataset is already loaded as 'df'. Write code in ```python blocks and document your observations in natural language.""".strip()
+
+EXPLORATION_CONTINUE_MSG = "\n\nContinue exploring or generate questions when ready."

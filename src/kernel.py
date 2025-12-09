@@ -167,22 +167,23 @@ class JupyterKernel:
         - Imports pandas and numpy
         """
         builtin_code = f"""
-import pandas as pd
-import numpy as np
+        import pandas as pd
+        import numpy as np
 
-__SUBMITTED_ANSWER__ = None
+        __SUBMITTED_ANSWER__ = None
 
-def submit(answer):
-    '''Submit your final answer.'''
-    global __SUBMITTED_ANSWER__
-    __SUBMITTED_ANSWER__ = answer
-    print(f"✓ Submitted: {{answer}}")
-    return answer
+        def submit(answer):
+            '''Submit your final answer.'''
+            global __SUBMITTED_ANSWER__
+            __SUBMITTED_ANSWER__ = answer
+            print(f"✓ Submitted: {{answer}}")
+            return answer
 
-# Load dataset
-df = pd.read_csv({csv_path!r})
-print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
-"""
+        # Load dataset
+        df = pd.read_csv({csv_path!r})
+        print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
+        """
+
         result = self.execute(builtin_code.strip())
         if not result.success:
             raise RuntimeError(f"Failed to setup kernel builtins: {result.error_message}")
@@ -196,16 +197,16 @@ print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
         """
         # Use %who_ls to get variable names, then extract each
         result = self.execute("""
-import pickle
-import base64
+        import pickle
+        import base64
 
-# Get all non-private variables
-_vars = {k: v for k, v in globals().items() if not k.startswith('_')}
+        # Get all non-private variables
+        _vars = {k: v for k, v in globals().items() if not k.startswith('_')}
 
-# Serialize to base64 to avoid repr issues
-_serialized = base64.b64encode(pickle.dumps(_vars)).decode('ascii')
-_serialized
-""")
+        # Serialize to base64 to avoid repr issues
+        _serialized = base64.b64encode(pickle.dumps(_vars)).decode('ascii')
+        _serialized
+        """)
 
         if not result.success or not result.result:
             return {}

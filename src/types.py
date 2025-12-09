@@ -120,6 +120,43 @@ class Episode(BaseModel):
         arbitrary_types_allowed = True
 
 
+# ============= Question Generation Types =============
+
+class ExplorationTurn(BaseModel):
+    """Single turn in dataset exploration conversation."""
+    turn_number: int
+    reasoning: str                              # Model's written notes (what/why/hypotheses)
+    code_cells: list[str]                       # Python code executed
+    execution_results: list[Any]                # CodeCellResult objects (avoiding circular import)
+    timestamp: datetime
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class ExplorationTrace(BaseModel):
+    """Complete exploration session for question generation."""
+    csv_path: str
+    turns: list[ExplorationTurn]
+    questions_generated: list[dict]             # Final questions
+    total_turns: int
+    timestamp: datetime = datetime.now()
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+class GeneratedQuestion(BaseModel):
+    """LLM-generated question with metadata."""
+    question: str
+    hint: str                                   # Max 2-3 sentences
+    n_steps: int                                # Estimated step count
+    difficulty: str                             # EASY, MEDIUM, HARD, VERY_HARD
+
+    # Optional metadata for tracking
+    exploration_turn: int | None = None         # Which turn inspired this question
+
+
 # ============= Legacy Types (kept for compatibility, may be removed later) =============
 
 class HookParams(BaseModel):
