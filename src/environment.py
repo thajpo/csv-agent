@@ -53,7 +53,7 @@ class Environment:
         self.config = config
         self.rollout_config = rollout_config
         self.model = APILLM(model=config.model, sampling_args=sampling_args or {})
-        self.kernel = kernel or JupyterKernel(timeout=120.0)
+        self.kernel = kernel or JupyterKernel(timeout=120.0, csv_path=csv_path)
         self.logger = logger
         self.df = None  # Will be loaded on first rollout
 
@@ -112,8 +112,8 @@ class Environment:
         # Execute in kernel
         result = self.kernel.execute(code)
 
-        # Check for submitted answer (will be implemented in Phase 3)
-        submitted_answer = None  # TODO: Get from kernel.get_locals()
+        # Check for submitted answer
+        submitted_answer = self.kernel.get_final_answer()
 
         return CodeCellResult(
             code=code,

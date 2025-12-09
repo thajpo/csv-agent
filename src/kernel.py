@@ -48,28 +48,35 @@ class JupyterKernel:
         kernel.shutdown()
     """
     
-    def __init__(self, timeout: float = 10.0, workdir: Optional[str] = None):
+    def __init__(self, timeout: float = 10.0, workdir: Optional[str] = None, csv_path: Optional[str] = None):
         """
         Start a new Python kernel.
-        
+
         Args:
             timeout: Max seconds to wait for code execution (default 10s)
+            workdir: Working directory for the kernel (default None)
+            csv_path: Path to CSV file to load automatically (default None)
         """
         self.timeout = timeout
-        
+        self.csv_path = csv_path
+
         # --- Step 1: Create and start the kernel manager ---
         # This spawns a new Python process that will run our code
         self.km = KernelManager(kernel_name='python3', cwd=workdir)
         self.km.start_kernel()
-        
+
         # --- Step 2: Get a client to talk to the kernel ---
         # The client sends messages (code) and receives responses
         self.kc = self.km.client()
         self.kc.start_channels()
-        
+
         # Wait for kernel to be ready (sends a "kernel_info_request")
         self.kc.wait_for_ready(timeout=30)
-        
+
+        # --- Step 3: Setup built-in functions and load CSV ---
+        if csv_path:
+            self.setup_kernel_builtins(csv_path)
+
         # Register cleanup on program exit
         atexit.register(self.shutdown)
     
@@ -149,7 +156,111 @@ class JupyterKernel:
         self.kc.execute("%reset -f")
         # Wait for it to complete
         self.kc.get_shell_msg(timeout=5)
-    
+
+    def setup_kernel_builtins(self, csv_path: str):
+        """
+        Inject helper functions and load CSV into kernel namespace.
+
+        This sets up:
+        - submit() function for submitting final answers
+        - Loads the CSV file as 'df'
+        - Imports pandas and numpy
+        """
+        builtin_code = f"""
+import pandas as pd
+import numpy as np
+
+__SUBMITTED_ANSWER__ = None
+
+def submit(answer):
+    '''Submit your final answer.'''
+    global __SUBMITTED_ANSWER__
+    __SUBMITTED_ANSWER__ = answer
+    print(f"✓ Submitted: {{answer}}")
+    return answer
+
+# Load dataset
+df = pd.read_csv({csv_path!r})
+print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
+"""
+        result = self.execute(builtin_code.strip())
+        if not result.success:
+            raise RuntimeError(f"Failed to setup kernel builtins: {result.error_message}")
+
+    def get_locals(self) -> dict:
+        """
+        Get all local variables from the kernel namespace.
+
+        Returns:
+            Dict of variable names to their values
+        """
+        # Use %who_ls to get variable names, then extract each
+        result = self.execute("""
+import pickle
+import base64
+
+# Get all non-private variables
+_vars = {k: v for k, v in globals().items() if not k.startswith('_')}
+
+# Serialize to base64 to avoid repr issues
+_serialized = base64.b64encode(pickle.dumps(_vars)).decode('ascii')
+_serialized
+""")
+
+        if not result.success or not result.result:
+            return {}
+
+        # Decode the result
+        import base64
+        import pickle
+        try:
+            serialized = result.result.strip().strip("'\"")
+            return pickle.loads(base64.b64decode(serialized))
+        except Exception:
+            return {}
+
+    def snapshot_artifacts(self) -> dict:
+        """
+        Capture all DataFrames and scalars in namespace as Artifacts.
+
+        Returns:
+            Dict of {variable_name: Artifact}
+        """
+        from src.types import Artifact, hash_artifact
+        import pandas as pd
+
+        locals_dict = self.get_locals()
+        artifacts = {}
+
+        for name, obj in locals_dict.items():
+            if name.startswith('_'):
+                continue  # Skip private vars
+
+            if isinstance(obj, pd.DataFrame):
+                artifacts[name] = Artifact(
+                    name=name,
+                    hash=hash_artifact(obj),
+                    type='DataFrame'
+                )
+            elif isinstance(obj, (int, float, str, bool, type(None))):
+                artifacts[name] = Artifact(
+                    name=name,
+                    hash=hash_artifact(obj),
+                    type='scalar'
+                )
+
+        return artifacts
+
+    def get_final_answer(self):
+        """
+        Retrieve value passed to submit().
+
+        Returns:
+            The value passed to submit(), or None if not called
+        """
+        locals_dict = self.get_locals()
+        return locals_dict.get('__SUBMITTED_ANSWER__', None)
+
     def shutdown(self):
         """Stop the kernel process."""
         if getattr(self, '_shutdown', False):
