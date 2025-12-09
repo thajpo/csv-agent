@@ -1,22 +1,12 @@
 """
 Conversation management for CSV agent.
 
-This module contains classes for managing conversation state, turns, and tool calls
+This module contains classes for managing conversation state and turns
 with automatic context management (purging) to stay within token limits.
 """
 
 from pydantic import BaseModel
 from datetime import datetime
-
-
-class ToolCall(BaseModel):
-    """Structured representation of a tool call."""
-    tool_name: str
-    params: dict
-    raw_code: str
-    result: str
-    success: bool
-    timestamp: datetime = datetime.now()
 
 
 class Turn(BaseModel):
@@ -27,9 +17,6 @@ class Turn(BaseModel):
     # Model interaction
     model_response: str
     truncated_response: str
-
-    # Structured tool data
-    tool_calls: list[ToolCall] = []
 
     # Metadata (extensible)
     reasoning: str | None = None
