@@ -28,9 +28,10 @@ def parse_args(config: dict) -> argparse.Namespace:
     parser.add_argument("--max-turns", type=int, default=config.get("max_turns", 10), help="Maximum conversation turns")
     parser.add_argument("--description", default=config.get("description"), help="Dataset description (uses default if not provided)")
     parser.add_argument("--output", "-o", default=config.get("output"), help="Output path for JSONL")
-    parser.add_argument("--mode", choices=["question-gen", "question-answer", "tool-feedback"], default=config.get("mode", "question-gen"), help="Pipeline mode: question-gen=question plans, question-answer=full hook episodes, tool-feedback=tool gap analysis")
+    parser.add_argument("--mode", choices=["teacher-tutor", "teacher-consistency", "student"], default=config.get("mode", "teacher-tutor"), help="Pipeline mode: teacher-tutor=solve with hints, teacher-consistency=solve without hints, student=RL training")
     parser.add_argument("--target-questions", type=int, default=config.get("target_questions", 10), help="Number of question blueprints to generate in explore mode")
-    parser.add_argument("--tool-feedback", action="store_true", help="Run in tool feedback mode to identify missing tools (alias for --mode tool-feedback)")
+    parser.add_argument("--question", default=config.get("question", "What is the mean TL (total length) for the control group?"), help="Question for the teacher/student to solve")
+    parser.add_argument("--hint", default=config.get("hint", "Filter the data to the control group first, then calculate the mean."), help="Hint for teacher-tutor mode")
     parser.add_argument("--teacher-model", default=config.get("teacher_model", "grok-4.1-fast"), help="Teacher model identifier for metadata")
     # Context management args
     parser.add_argument("--max-active-turns", type=int, default=config.get("max_active_turns", 5), help="Maximum number of active turns to keep in context (older turns are archived)")
@@ -50,21 +51,12 @@ def main():
     args = parse_args(config)
     
     description = args.description or DEFAULT_DATASET_DESCRIPTION
-
     pipeline_mode = args.mode
-
     data_overview = generate_data_overview(args.csv)
 
-    if pipeline_mode == "question-gen" or pipeline_mode == "tool-feedback":
-        target_questions = ""
-    elif pipeline_mode == "question-answer":
-        pass # TODO: Implement question-answer mode
-    else:
-        raise ValueError(f"Invalid pipeline mode: {pipeline_mode}")
-    
     # Get sampling args from config
     sampling_args = config.get("sampling_args", {})
-    
+
     try:
         # Environment parameters
         env_config = EnvironmentConfig(
@@ -76,13 +68,15 @@ def main():
             max_active_turns=args.max_active_turns,
             max_context_tokens=args.max_context_tokens,
         )
-        
+
         # The rollout config is used to define environment interaction with the agent
         rollout_config = build_rollout_config(
             mode=pipeline_mode,
             dataset_description=description,
             data_overview=data_overview,
-            target_questions=target_questions,
+            question_text=args.question,
+            hint=args.hint if pipeline_mode == "teacher-tutor" else "",
+            target_questions=args.target_questions,
         )
 
         env = Environment(
@@ -92,7 +86,9 @@ def main():
             rollout_config=rollout_config,
             logger=setup_rich_logger(rollout_config),
         )
-        env.rollout(input=rollout_config.system_prompt)
+
+        # Run the episode
+        final_state = env.rollout()
 
     except Exception as e:
         print(e)

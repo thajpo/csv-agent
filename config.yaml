@@ -12,13 +12,19 @@ description: null
 # Output path for JSONL (null = no output file)
 output: null
 
-# Pipeline mode: question-gen, question-answer, or tool-feedback
-# - question-gen: Generate question plans/blueprints
-# - question-answer: Generate full hook episodes
-# - tool-feedback: Tool gap analysis
-mode: "question-gen"
+# Pipeline mode: teacher-tutor, teacher-consistency, or student
+# - teacher-tutor: Solve with hints (verbose, educational)
+# - teacher-consistency: Solve without hints (efficient)
+# - student: RL training mode
+mode: "teacher-tutor"
 
-# Number of question blueprints to generate in explore mode
+# Question for teacher/student to solve
+question: "What is the mean TL (total length) for the control group?"
+
+# Hint for teacher-tutor mode
+hint: "Filter the data to the control group first, then calculate the mean."
+
+# Number of question blueprints to generate (legacy, may be removed)
 target_questions: 10
 
 # Teacher model identifier for metadata
