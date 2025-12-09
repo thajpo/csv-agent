@@ -1,0 +1,62 @@
+[
+  {
+    "question": "Compare the mean TL between control and EL_500_4g/L. Which is higher?",
+    "hint": "Group by TR, calculate mean TL for control and EL_500_4g/L, then compare.",
+    "difficulty": "MEDIUM",
+    "type": "comparison"
+  },
+  {
+    "question": "For rows where TL > 1, what is the mean IN?",
+    "hint": "Filter rows where TL > 1, then calculate the aggregation.",
+    "difficulty": "MEDIUM",
+    "type": "filtering"
+  },
+  {
+    "question": "What is the difference in mean IN between EL_500_20g/L and PP_333_20g/L?",
+    "hint": "Calculate mean IN for both EL_500_20g/L and PP_333_20g/L, then compute the difference or percentage.",
+    "difficulty": "HARD",
+    "type": "multi_step"
+  },
+  {
+    "question": "Which TR has the lowest mean TL?",
+    "hint": "Group by TR, calculate the aggregation on TL, then find the max/min group.",
+    "difficulty": "MEDIUM",
+    "type": "comparison"
+  },
+  {
+    "question": "Which TR has the highest mean TL?",
+    "hint": "Group by TR, calculate the aggregation on TL, then find the max/min group.",
+    "difficulty": "MEDIUM",
+    "type": "comparison"
+  },
+  {
+    "question": "What is the mean TL for the EL_500_4g/L group?",
+    "hint": "Filter to EL_500_4g/L, then use .mean() on the TL column.",
+    "difficulty": "EASY",
+    "type": "simple_aggregation"
+  },
+  {
+    "question": "What is the mean IN for the control group?",
+    "hint": "Filter to control, then use .mean() on the IN column.",
+    "difficulty": "EASY",
+    "type": "simple_aggregation"
+  },
+  {
+    "question": "Find the TR with the highest mean IN, then calculate its standard deviation.",
+    "hint": "First find the group with highest mean IN, then calculate its std deviation.",
+    "difficulty": "HARD",
+    "type": "multi_step"
+  },
+  {
+    "question": "How many PP_333_20g/L rows have TL above 1?",
+    "hint": "Filter rows where TL > 1, then calculate the aggregation.",
+    "difficulty": "MEDIUM",
+    "type": "filtering"
+  },
+  {
+    "question": "What is the maximum TL in the methanol_control group?",
+    "hint": "Filter to methanol_control, then use .max() on the TL column.",
+    "difficulty": "EASY",
+    "type": "simple_aggregation"
+  }
+]

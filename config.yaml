@@ -28,7 +28,7 @@ hint: "Filter the data to the control group first, then calculate the mean."
 target_questions: 10
 
 # Teacher model identifier for metadata
-teacher_model: "grok-4.1-fast"
+teacher_model: "openai/gpt-oss-120b"
 
 # Sampling arguments for the model
 sampling_args:
