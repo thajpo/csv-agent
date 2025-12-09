@@ -3,6 +3,11 @@ I had claude do a major refactor, after realizing that the tool-based approach w
 
 I now need to parse through the new logic. I guided claude through the changes, but there are new features that I need to look at more deeply.
 
+To make changes, I need to identify current features and see what is missing.
+I think the question generation pipeline is a clear starting point.
+
+After that, it is probably using verifiers inplace of the current environment.
+
 # 12/6/25
 I have been relying on not writing things down. it does not work
 
