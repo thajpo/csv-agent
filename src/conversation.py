@@ -7,6 +7,19 @@ with automatic context management (purging) to stay within token limits.
 
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Any
+
+
+class CodeCellResult(BaseModel):
+    """Result of executing one code cell."""
+    code: str
+    success: bool
+    stdout: str
+    stderr: str
+    submitted_answer: Any | None = None
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class Turn(BaseModel):
@@ -18,11 +31,18 @@ class Turn(BaseModel):
     model_response: str
     truncated_response: str
 
+    # Code execution (for Jupyter-style execution)
+    code_cells: list[str] = []
+    execution_results: list[CodeCellResult] = []
+
     # Metadata (extensible)
     reasoning: str | None = None
     done_signal: bool = False
     feedback_message: str = ""
     estimated_tokens: int | None = None
+
+    class Config:
+        arbitrary_types_allowed = True
 
     def to_messages(self) -> list[dict]:
         """Convert turn to OpenAI message format."""

@@ -12,6 +12,78 @@ from dataclasses import dataclass
 
 
 # ============================================================================
+# TEACHER PROMPTS - Free-form Python code generation
+# ============================================================================
+
+TEACHER_TUTOR_MODE_PROMPT = """You are a data analysis tutor solving pandas problems step-by-step.
+
+DATASET:
+{dataset_description}
+
+DATA OVERVIEW:
+```
+{data_overview}
+```
+
+QUESTION:
+{question_text}
+
+HINT:
+{hint}
+
+RULES:
+1. Write verbose, educational Python code
+2. Use meaningful intermediate variable names (df_filtered, df_grouped, etc.)
+3. Avoid complex one-liners - break down into steps
+4. Print intermediate results to verify your work
+5. Call submit(final_answer) when done
+
+Your code will execute in a stateful Jupyter kernel. You can:
+- Inspect data: df.head(), df.info(), df.describe()
+- Debug errors: try different approaches across turns
+- Print intermediate results: print(df_filtered.shape)
+- Build incrementally: define variables across multiple cells
+
+Write ONE code cell per turn in ```python blocks. End with submit(final_answer) when you have the answer.
+""".strip()
+
+TEACHER_CONSISTENCY_PROMPT = """You are a data analyst solving pandas problems efficiently.
+
+DATASET:
+{dataset_description}
+
+DATA OVERVIEW:
+```
+{data_overview}
+```
+
+QUESTION:
+{question_text}
+
+Your code will execute in a stateful Jupyter kernel. The dataframe 'df' is already loaded.
+
+Write Python code in ```python blocks to solve this question. Call submit(final_answer) when done.
+""".strip()
+
+STUDENT_PROMPT = """Solve this data analysis question using Python and pandas.
+
+DATASET:
+{dataset_description}
+
+DATA OVERVIEW:
+```
+{data_overview}
+```
+
+QUESTION:
+{question_text}
+
+The dataframe 'df' is already loaded. Write Python code in ```python blocks.
+Call submit(final_answer) when you have the answer.
+""".strip()
+
+
+# ============================================================================
 # ROLLOUT CONFIG - For multi-turn execution
 # ============================================================================
 
@@ -28,20 +100,60 @@ def build_rollout_config(
     mode: str,
     dataset_description: str,
     data_overview: str,
+    question_text: str = "",
+    hint: str = "",
     target_questions: int = 10,
 ) -> RolloutConfig:
     """
     Build rollout config for the given pipeline mode.
 
-    TODO: Will be implemented in Phase 2 with new prompt templates.
+    Args:
+        mode: Pipeline mode (teacher-tutor, teacher-consistency, student, etc.)
+        dataset_description: Description of the dataset
+        data_overview: Pre-computed data exploration
+        question_text: The question to solve (for teacher/student modes)
+        hint: Optional hint for teacher tutor mode
+        target_questions: Number of questions to generate (for question-gen mode)
     """
-    # Stub for now
-    return RolloutConfig(
-        system_prompt=f"Dataset: {dataset_description}\n\n{data_overview}\n\nTODO: Implement prompts in Phase 2",
-        mode=mode,
-        continue_msg="\n\nContinue.",
-        final_msg="Complete your work.",
-    )
+    if mode == "teacher-tutor":
+        return RolloutConfig(
+            system_prompt=TEACHER_TUTOR_MODE_PROMPT.format(
+                dataset_description=dataset_description,
+                data_overview=data_overview,
+                question_text=question_text,
+                hint=hint
+            ),
+            mode=mode,
+            continue_msg="\n\nExecution result above. Continue if needed, or call submit() if done.",
+            final_msg="Turn limit reached. Please call submit() with your final answer.",
+        )
+
+    elif mode == "teacher-consistency":
+        return RolloutConfig(
+            system_prompt=TEACHER_CONSISTENCY_PROMPT.format(
+                dataset_description=dataset_description,
+                data_overview=data_overview,
+                question_text=question_text
+            ),
+            mode=mode,
+            continue_msg="\n\nExecution result above. Continue if needed, or call submit() if done.",
+            final_msg="Turn limit reached. Please call submit() with your final answer.",
+        )
+
+    elif mode == "student":
+        return RolloutConfig(
+            system_prompt=STUDENT_PROMPT.format(
+                dataset_description=dataset_description,
+                data_overview=data_overview,
+                question_text=question_text
+            ),
+            mode=mode,
+            continue_msg="\n\nExecution result above. Continue if needed, or call submit() if done.",
+            final_msg="Turn limit reached. Please call submit() with your final answer.",
+        )
+
+    else:
+        raise ValueError(f"Unknown mode '{mode}' (expected: teacher-tutor, teacher-consistency, student)")
 
 
 # ============================================================================

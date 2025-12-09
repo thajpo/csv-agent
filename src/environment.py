@@ -6,7 +6,6 @@ for CSV exploration and question generation. It uses Python's logging
 module for output, keeping the environment logic separate from presentation.
 """
 
-import json
 import logging
 import re
 from datetime import datetime
@@ -17,7 +16,8 @@ from src.model import APILLM
 from src.rich_logger import LogContext
 from src.prompts import generate_data_overview, RolloutConfig
 from src.types import EnvironmentConfig, StateConfig
-from src.conversation import Turn, ConversationManager
+from src.conversation import Turn, CodeCellResult, ConversationManager
+from src.kernel import JupyterKernel
 
 
 class Environment:
@@ -35,6 +35,7 @@ class Environment:
         config: EnvironmentConfig = EnvironmentConfig(),
         sampling_args: dict | None = None,
         rollout_config: RolloutConfig = RolloutConfig(),
+        kernel: JupyterKernel | None = None,
         logger: logging.Logger | None = None,
     ):
         """
@@ -44,12 +45,15 @@ class Environment:
             csv_path: Path to CSV file
             config: Environment configuration
             sampling_args: Sampling arguments for the model
+            rollout_config: Rollout configuration (system prompt, messages)
+            kernel: Jupyter kernel for code execution (None = create new one)
             logger: Optional logger for output (None = silent execution)
         """
         self.csv_path = csv_path
         self.config = config
         self.rollout_config = rollout_config
         self.model = APILLM(model=config.model, sampling_args=sampling_args or {})
+        self.kernel = kernel or JupyterKernel(timeout=120.0)
         self.logger = logger
         self.df = None  # Will be loaded on first rollout
 
@@ -93,6 +97,31 @@ class Environment:
     def build_system_prompt(self) -> str:
         """Build system prompt from rollout config."""
         return self.rollout_config.system_prompt
+
+    def extract_python_cells(self, response: str) -> list[str]:
+        """Extract ```python...``` code blocks from response."""
+        pattern = r'```python\n(.*?)```'
+        return re.findall(pattern, response, re.DOTALL)
+
+    def execute_code_cell(self, code: str) -> CodeCellResult:
+        """
+        Execute code in kernel and return execution result.
+
+        Returns CodeCellResult with success, stdout, stderr, and submitted_answer.
+        """
+        # Execute in kernel
+        result = self.kernel.execute(code)
+
+        # Check for submitted answer (will be implemented in Phase 3)
+        submitted_answer = None  # TODO: Get from kernel.get_locals()
+
+        return CodeCellResult(
+            code=code,
+            success=result.success,
+            stdout=result.stdout,
+            stderr=result.stderr if not result.success else "",
+            submitted_answer=submitted_answer
+        )
 
     def handle_max_turns_reached(self, state: StateConfig) -> None:
         """Handle reaching max turns: prompt for final output and get response."""
@@ -142,29 +171,82 @@ class Environment:
 
     def process_turn(self, state: StateConfig, response: str) -> None:
         """
-        Process a single turn: extract code, execute, build feedback, check completion.
+        Process a single turn: extract code cells, execute, build feedback, check completion.
 
         Modifies state in-place.
-
-        TODO: Will be rewritten in Phase 2 to extract and execute Python cells.
         """
-        # Stub for now - will be implemented in Phase 2
+        # 1. Extract Python cells from response
+        code_cells = self.extract_python_cells(response)
+
+        # 2. Execute all cells
+        execution_results = []
+        submitted_answer = None
+
+        if code_cells:
+            for cell_code in code_cells:
+                result = self.execute_code_cell(cell_code)
+                execution_results.append(result)
+
+                # Log execution
+                if self.logger:
+                    self.logger.info("code_executed", extra={
+                        "success": result.success,
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                    })
+
+                # Check for submission
+                if result.submitted_answer is not None:
+                    submitted_answer = result.submitted_answer
+                    break  # Stop on submit()
+
+        # 3. Build feedback from execution results
+        if code_cells:
+            feedback_parts = []
+            for i, result in enumerate(execution_results, 1):
+                if result.success:
+                    feedback_parts.append(f"✓ Cell {i} executed successfully")
+                    if result.stdout.strip():
+                        feedback_parts.append(f"Output:\n{result.stdout}")
+                else:
+                    feedback_parts.append(f"✗ Cell {i} failed")
+                    feedback_parts.append(f"Error:\n{result.stderr}")
+
+            feedback = "\n\n".join(feedback_parts)
+            feedback += self.rollout_config.continue_msg
+        else:
+            feedback = "No code blocks found. Write Python code in ```python blocks."
+            if self.logger:
+                self.logger.info("no_code_blocks")
+
+        # 4. Check for completion (submit() was called)
+        done_signal = (submitted_answer is not None)
+
+        # 5. Create Turn object
         turn = Turn(
             turn_number=state.current_turn,
             timestamp=datetime.now(),
             model_response=response,
             truncated_response=response,
-            done_signal=False,
-            feedback_message="TODO: Implement code cell execution",
+            code_cells=code_cells,
+            execution_results=execution_results,
+            done_signal=done_signal,
+            feedback_message=feedback,
             reasoning=None,
         )
 
+        # 6. Add turn to conversation manager (auto-purges if needed)
         state.conversation_manager.add_turn(turn)
-        state.is_completed = True  # For now, complete after one turn
 
-    def rollout(self, input: str) -> StateConfig:
+        # 7. Check completion
+        if done_signal:
+            state.is_completed = True
+            if self.logger:
+                self.logger.info("episode_complete", extra={"results": submitted_answer})
+
+    def rollout(self) -> StateConfig:
         """Execute a multi-turn rollout episode."""
-        state = self.init_state(input)
+        state = self.init_state()
 
         while not state.is_completed:
             self.logger.info("turn_start", extra={
