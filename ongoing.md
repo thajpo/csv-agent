@@ -1,3 +1,8 @@
+# 12/8/25
+I had claude do a major refactor, after realizing that the tool-based approach was slowing me down, and probably not effective.
+
+I now need to parse through the new logic. I guided claude through the changes, but there are new features that I need to look at more deeply.
+
 # 12/6/25
 I have been relying on not writing things down. it does not work
 
