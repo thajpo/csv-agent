@@ -1,74 +1,80 @@
 [
   {
-    "question": "What is the overall mean of the `TL` column?",
-    "hint": "Simply call `.mean()` on the `TL` series. No filtering required.",
+    "question": "What is the overall mean of the TL column?",
+    "hint": "Use the DataFrame's `mean()` method on the TL column. This is a single aggregation step.",
     "n_steps": 1,
     "difficulty": "EASY"
   },
   {
-    "question": "How many rows belong to the `control` treatment (`TR == 'control'`)?",
-    "hint": "Filter the dataframe where `TR` equals `'control'` and then use `.shape[0]` to count rows.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the median `TL` for rows where `BR` is `'A'`?",
-    "hint": "Select rows with `BR == 'A'` and compute the median of `TL`.",
+    "question": "Which treatment group (TR) has the smallest median TL, and what is that median value?",
+    "hint": "Group by TR, compute the median TL for each group, then locate the group with the minimum median. Return both the group name and its median.",
     "n_steps": 3,
     "difficulty": "EASY"
   },
   {
-    "question": "Which treatment (`TR`) yields the highest mean `TL`, and what is the standard deviation of `TL` for that treatment?",
-    "hint": "Group by `TR` \u2192 compute mean `TL` \u2192 locate the max \u2192 filter to that group \u2192 compute `.std()` on `TL`.",
+    "question": "How many rows have TL equal to zero?",
+    "hint": "Filter the DataFrame where TL == 0 and count the resulting rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "For the treatment group with the highest mean TL, calculate the standard deviation of TL within that group.",
+    "hint": "First compute mean TL per treatment, identify the treatment with the maximum mean, then filter to that treatment and compute TL's standard deviation.",
     "n_steps": 4,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "For each `TREE`, calculate the average of `INTERNODE_1`. Which `TREE` has the greatest average, and what is its corresponding average `TL`?",
-    "hint": "Group by `TREE` \u2192 mean of `INTERNODE_1`; identify the max; filter rows of that `TREE`; compute mean `TL`.",
+    "question": "What is the Pearson correlation between INTERNODE_1 and TL, after dropping rows where INTERNODE_1 is missing?",
+    "hint": "Select rows where INTERNODE_1 is not NaN, then use `.corr()` between the two columns.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Identify the TREE\u2011TR combination with the highest average TL, then report the count of observations for that combination.",
+    "hint": "Group by both TREE and TR, compute mean TL, locate the max, then filter the original DataFrame to that combo and count rows.",
     "n_steps": 5,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "Compute the total `N` for each `TR` level. Among the treatments whose total `N` exceeds 400, find the one with the lowest mean `INTERNODE_5`. What is that mean?",
-    "hint": "Aggregate sum `N` per `TR`; filter `TR`s with sum\u202f>\u202f400; for those, compute mean `INTERNODE_5`; pick the minimum and report the mean value.",
+    "question": "Compute the median TL for each BR (branch) within the 'control' treatment, then find which branch has the largest difference between its median TL and the overall median TL of the control group.",
+    "hint": "Filter to TR == 'control', compute overall median TL, then group by BR to get branch medians, calculate absolute differences, and pick the max.",
     "n_steps": 6,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "Identify the `BR` category with the highest average `INTERNODE_7`. Then, for rows belonging to that `BR`, calculate the 90th percentile of `TL`.",
-    "hint": "Group by `BR` \u2192 mean of `INTERNODE_7`; locate the max; filter to that `BR`; use `.quantile(0.9)` on `TL`.",
+    "question": "For each treatment group, calculate the proportion of rows where INTERNODE_2 is greater than 2.0, then determine which treatment has the lowest such proportion.",
+    "hint": "Within each TR, count rows with INTERNODE_2 > 2.0, divide by total rows in that treatment, and compare proportions.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Create a new column called `TL_per_IN` equal to TL divided by IN. Then, for each TREE, find the maximum `TL_per_IN` value and report the TREE identifier that achieves the overall highest `TL_per_IN` across all trees.",
+    "hint": "Add the derived column, group by TREE to get max per tree, then locate the global maximum and its TREE label.",
     "n_steps": 7,
     "difficulty": "HARD"
   },
   {
-    "question": "Take all rows where `INTERNODE_2`\u202f>\u202f5. Within this subset, which `TR` has the highest median `TL`? After identifying that treatment, compute the variance of `INTERNODE_3` for the same rows.",
-    "hint": "Filter `INTERNODE_2 > 5`; group by `TR` \u2192 median `TL`; pick the treatment with max median; filter again to that treatment; calculate `.var()` of `INTERNODE_3`.",
+    "question": "Determine the internode (among INTERNODE_1 to INTERNODE_5) that has the strongest positive correlation with TL. After identifying it, compute the average TL for rows where that internode's value exceeds its overall median.",
+    "hint": "Calculate correlations for each of the first five internodes, pick the one with highest correlation, find its median, filter rows above that median, then average TL.",
     "n_steps": 8,
     "difficulty": "HARD"
   },
   {
-    "question": "Create a new column `internode_sum` (sum of all INTERNODE columns per row, ignoring NaNs). Which `TREE` yields the highest average `internode_sum`? For that `TREE`, report the mean `TL` and the count of rows where `internode_sum` exceeds 20.",
-    "hint": "Add `internode_sum` via `df[internode_cols].sum(axis=1, skipna=True)`. Group by `TREE` \u2192 mean `internode_sum`; pick the top `TREE`. Filter rows of that `TREE` to compute mean `TL` and count rows with `internode_sum > 20`.",
+    "question": "Using only rows where TL > 0, fit a simple linear regression predicting TL from IN (treat IN as the independent variable). Report the slope coefficient rounded to three decimal places.",
+    "hint": "Filter TL > 0, then use `np.polyfit` or `stats.linregress` on IN vs TL to obtain the slope.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "For each treatment, compute the Gini impurity of the TL distribution (treat TL values as a categorical variable by binning into the histogram bins defined earlier). Then, identify the treatment with the lowest Gini impurity.",
+    "hint": "Bin TL using the same edges as the histogram, calculate the proportion of rows in each bin per treatment, compute Gini = 1 - \u03a3(p_i^2), and compare across treatments.",
     "n_steps": 9,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Rank all `TR` levels by the average of `INTERNODE_8`. Take the top two treatments from this ranking. For each of those two treatments, compute the ratio (mean `TL`\u202f/\u202fmean `INTERNODE_9`). Which treatment has the larger ratio and what is its value?",
-    "hint": "Group by `TR` \u2192 mean `INTERNODE_8`; sort descending; select top two `TR`s. For each, compute mean `TL` and mean `INTERNODE_9`, then divide. Compare the two ratios.",
-    "n_steps": 10,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Using the column `internode_per_N` (internode sum divided by `N`), find the 5 rows with the largest values. For those rows, list the distinct `TR` values present and compute the overall standard deviation of `TL` across the five rows.",
-    "hint": "Sort the dataframe by `internode_per_N` descending, take the head(5). Extract unique `TR` values from those rows, and compute `.std()` of `TL` for the same subset.",
-    "n_steps": 11,
     "difficulty": "VERY_HARD"
   },
   {
-    "question": "Determine the `TREE` that maximizes the product of (average `INTERNODE_6`) \u00d7 (average `TL`). After locating that `TREE`, calculate the 25th percentile of `INTERNODE_12` for all rows belonging to the same `TREE`.",
-    "hint": "Group by `TREE` \u2192 compute mean `INTERNODE_6` and mean `TL`; multiply the two means to get a score; pick the `TREE` with the highest score. Then filter to that `TREE` and compute `.quantile(0.25)` of `INTERNODE_12`.",
-    "n_steps": 12,
+    "question": "Build a decision\u2011tree\u2011like rule: first select rows where IN \u2265 5, then within that subset choose the treatment with the highest mean TL, and finally report the median TL for that treatment among rows where INTERNODE_3 is not missing.",
+    "hint": "Step\u202f1 filter IN \u2265 5, step\u202f2 compute mean TL per treatment and pick the max, step\u202f3 further filter to rows with non\u2011NaN INTERNODE_3 and compute median TL.",
+    "n_steps": 9,
     "difficulty": "VERY_HARD"
   }
 ]

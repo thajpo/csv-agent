@@ -27,7 +27,7 @@ from src.kernel import JupyterKernel
 from src.model import APILLM
 from src.conversation import ConversationManager, Turn, CodeCellResult
 from src.types import ExplorationTurn, ExplorationTrace
-from src.prompts import EXPLORATION_SYSTEM_PROMPT, EXPLORATION_CONTINUE_MSG
+from src.prompts import EXPLORATION_SYSTEM_PROMPT, EXPLORATION_CONTINUE_MSG, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
 # Create rich console
 console = Console()
@@ -139,7 +139,7 @@ def explore_and_generate_questions(
     model: str = "meta-llama/llama-3.2-3b-instruct:free",
     max_turns: int = 20,
     temperature: float = 0.7,
-    max_tokens: int = 2000,
+    max_tokens: int = 6000,  # Increased default to allow full question generation
     output_dir: str = "."
 ) -> tuple[list[dict], ExplorationTrace]:
     """
@@ -184,11 +184,32 @@ def explore_and_generate_questions(
         response = llm(messages)
 
         # Display LLM response in a panel
-        console.print(Panel(
-            Markdown(response),
-            title="[bold yellow]LLM Response[/bold yellow]",
-            border_style="yellow"
-        ))
+        # If response looks like JSON, use syntax highlighting instead of markdown
+        if response.strip().startswith('{') and '"questions"' in response:
+            try:
+                # Try to parse and pretty-print JSON
+                parsed_json = json.loads(response.strip())
+                formatted_json = json.dumps(parsed_json, indent=2)
+                syntax = Syntax(formatted_json, "json", theme="monokai", line_numbers=False)
+                console.print(Panel(
+                    syntax,
+                    title="[bold yellow]LLM Response (JSON)[/bold yellow]",
+                    border_style="yellow"
+                ))
+            except json.JSONDecodeError:
+                # If JSON parsing fails, fall back to markdown
+                console.print(Panel(
+                    Markdown(response),
+                    title="[bold yellow]LLM Response[/bold yellow]",
+                    border_style="yellow"
+                ))
+        else:
+            # Regular markdown for non-JSON responses
+            console.print(Panel(
+                Markdown(response),
+                title="[bold yellow]LLM Response[/bold yellow]",
+                border_style="yellow"
+            ))
 
         # Extract code cells
         code_cells = extract_python_cells(response)
@@ -241,15 +262,26 @@ def explore_and_generate_questions(
         )
         exploration_turns.append(turn)
 
-        # Check if model generated questions
-        questions_generated = try_parse_questions(response)
-        if questions_generated:
-            console.print(f"\n[bold green]✓ Success! Model generated {len(questions_generated)} questions![/bold green]")
-            break
+        # Check if model signaled completion with <DONE>
+        if "<DONE>" in response or "</DONE>" in response:
+            # Enforce minimum exploration turns
+            if turn_num < MIN_EXPLORATION_TURNS:
+                console.print(f"\n[bold yellow]⚠ Model tried to finish too early (turn {turn_num + 1}/{MIN_EXPLORATION_TURNS} minimum)[/bold yellow]")
+                console.print(f"[yellow]Rejecting early completion - continuing exploration[/yellow]")
+                # Don't parse questions, force more exploration
+            else:
+                console.print(f"\n[bold green]✓ Model signaled completion with <DONE>[/bold green]")
+                questions_generated = try_parse_questions(response)
+                if questions_generated:
+                    console.print(f"[bold green]✓ Successfully extracted {len(questions_generated)} questions![/bold green]")
+                    break
+                else:
+                    console.print(f"[bold red]✗ Found <DONE> but couldn't parse questions from response[/bold red]")
+                    # Continue to allow retry
 
-        # Build feedback
+        # Build feedback with turn-aware message
         feedback = build_execution_feedback(execution_results)
-        feedback += EXPLORATION_CONTINUE_MSG
+        feedback += get_exploration_continue_msg(turn_num, MIN_EXPLORATION_TURNS)
 
         # Add turn to conversation
         conversation_turn = Turn(

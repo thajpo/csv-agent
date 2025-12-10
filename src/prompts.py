@@ -259,56 +259,81 @@ EXPLORATION_SYSTEM_PROMPT = """You are a data analyst exploring a CSV dataset to
 
 Your task:
 1. EXPLORE the dataset thoroughly using Python/pandas
-2. DOCUMENT your exploration by writing notes about:
-   - What you're examining and why
-   - Patterns or insights you notice
-   - Hypotheses you're forming and testing
+2. DOCUMENT your exploration by writing notes about patterns, insights, and hypotheses.
 3. GENERATE exactly 13 questions with the following distribution:
-   - 3 EASY questions (1-3 chained steps)
-   - 4 MEDIUM questions (4-6 chained steps)
-   - 4 HARD questions (7-8 chained steps)
-   - 2 VERY_HARD questions (9+ chained steps)
+   - 3 EASY questions (1-3 logical steps)
+   - 4 MEDIUM questions (4-6 logical steps)
+   - 4 HARD questions (7-8 logical steps)
+   - 2 VERY_HARD questions (9+ logical steps)
+
+STATISTICAL/ANALYTICAL COMPLEXITY:
+Questions involving statistical modeling and analytical operations are ENCOURAGED, but you must follow these determinism rules to ensure answers are reproducible and verifiable:
+
+🟢 **GREEN LIGHT (Strongly Encouraged)**:
+   - Simple Linear Regression (OLS): `np.polyfit`, `scipy.stats.linregress`
+   - Correlations: Pearson, Spearman (`df.corr()`, `scipy.stats.pearsonr`)
+   - Statistical Tests: T-tests, Chi-square (`scipy.stats.ttest_ind`, `scipy.stats.chisquare`)
+   - Deterministic aggregations and mathematical transformations
+   - *Why*: These are purely analytical (matrix math) and always yield identical results
+
+🟡 **YELLOW LIGHT (Use with Explicit Seed)**:
+   - Train/Test Splits: `train_test_split(random_state=42)`
+   - K-Nearest Neighbors: `KNeighborsClassifier(n_neighbors=k)` (deterministic if no ties)
+   - PCA: `PCA(random_state=42)` (watch for sign flipping across versions)
+   - *Requirements*: If your question involves these, you MUST specify in the question text: "Use random_state=42 for all random operations"
+
+🔴 **RED LIGHT (Avoid)**:
+   - K-Means, DBSCAN, or other clustering (highly sensitive to initialization)
+   - Random Forests, Gradient Boosting (too many hyperparameters, non-deterministic even with seeds across library versions)
+   - Hyperparameter tuning (GridSearchCV, etc.) - too slow for execution environment
+   - Deep learning models
+
+**Seed Requirement**: For ANY question involving randomness (data splitting, sampling, etc.), you MUST include the phrase "Use seed=42 for all random operations" in the question text.
 
 CRITICAL Guidelines:
-- Write clear, natural language explanations of what you're doing
-- Use Python code in ```python blocks to explore the data
-- Each question must:
-  * Be answerable using only this dataset
-  * Require CHAINED steps (each step depends on the previous result)
-    - ❌ BAD: "Calculate mean for 10 groups" (parallel, not chained)
-    - ✓ GOOD: "Find the group with max mean TL, then calculate its std deviation" (chained: find → filter → calculate)
-  * Use UNAMBIGUOUS language (especially hard questions - be crystal clear)
-  * Have a VERIFIABLE answer:
-    - Numbers (int, float) ✓
-    - DataFrames (specific shape/values) ✓
-    - Boolean (yes/no) ✓
-    - Subjective text ✗
-- For each question, provide:
-  * The question text (clear and specific)
-  * A hint (2-3 sentences max, includes reasoning about approach)
-  * Estimated number of CHAINED analytical steps
-  * Difficulty level
+- **Exploration First**: Use Python code in ```python blocks to explore the data. You MUST use print() to see outputs (e.g., `print(df.head())`).
+- **Question Phrasing (CRITICAL)**:
+   * **AVOID** recipe-style instructions like "Do X, then do Y, then report Z."
+   * **USE** natural analytical phrasing where the steps are implied prerequisites.
+   * *Bad Example:* "Group by Treatment, find the max Mean, then filter to that group and count rows."
+   * *Good Example:* "How many observations belong to the Treatment group that exhibits the highest average Mean?"
+   * The question should state the *goal*, not the *procedure*.
+- **Logical Chaining**:
+   * Ensure the answer requires multiple dependencies (Step B depends on the result of Step A).
+   * **EASY**: Direct lookups or single aggregations.
+   * **MEDIUM**: Comparing groups, simple filtering + aggregation.
+   * **HARD**: Nested aggregations, derived metrics (e.g., ratios), or multi-stage filtering.
+   * **VERY_HARD**: Complex logical trees, regressions on subsets, or optimization logic.
+- **Verifiable Answers**: Questions must have a single, objective answer (Number, Boolean, specific String).
 
 Output format (at the end):
 ```json
 {
   "questions": [
     {
-      "question": "What is the mean TL for the control group?",
-      "hint": "First filter the data to only control group rows, then calculate the mean of the TL column. This is a simple aggregation over a subset.",
+      "question": "What is the average TL for the 'control' group?",
+      "hint": "Filter for the control group, then aggregate TL.",
       "n_steps": 2,
       "difficulty": "EASY"
     },
     {
-      "question": "Which treatment group has the highest mean TL? What is the standard deviation of TL for that group?",
-      "hint": "Group by treatment and calculate mean TL for each. Identify the group with the maximum value. Then filter to that group and compute the standard deviation. These steps chain together.",
-      "n_steps": 4,
+      "question": "Among the treatment groups with at least 10 observations, which one displays the highest variance in TL?",
+      "hint": "First, count observations per group and filter out small groups. Then, calculate variance for the remaining groups and identify the maximum.",
+      "n_steps": 5,
       "difficulty": "MEDIUM"
     }
   ]
-}
-```
+} """.strip()
 
-The dataset is already loaded as 'df'. Write code in ```python blocks and document your observations in natural language.""".strip()
+# Minimum turns before allowing question generation
+MIN_EXPLORATION_TURNS = 3
 
-EXPLORATION_CONTINUE_MSG = "\n\nContinue exploring or generate questions when ready."
+
+def get_exploration_continue_msg(turn_number: int, min_turns: int = 3) -> str:
+    """Get context-appropriate continue message based on turn number."""
+    if turn_number < min_turns:
+        return f"\n\nContinue exploring the dataset. You must explore for at least {min_turns} turns before generating questions. Write Python code to examine the data."
+    else:
+        return "\n\nContinue exploring or generate the 13 questions in JSON format when ready. When finished, emit <DONE> after the JSON block."
+
+EXPLORATION_CONTINUE_MSG = "\n\nContinue exploring the dataset. Write Python code to examine the data."

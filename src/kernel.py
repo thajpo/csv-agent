@@ -79,12 +79,124 @@ class JupyterKernel:
 
         # Register cleanup on program exit
         atexit.register(self.shutdown)
-    
-    def execute(self, code: str) -> ExecutionResult:
-        """Execute code in the kernel and return the result."""
+
+    def _validate_imports(self, code: str) -> tuple[bool, str]:
+        """
+        Validate that code contains no import statements.
+
+        All required libraries are pre-imported, so import statements are unnecessary
+        and should be blocked to guide the LLM toward cleaner code.
+
+        Returns:
+            (True, "") if code is safe to execute
+            (False, "error message") if code contains any imports
+        """
+        import ast
+
+        ALLOWED_LIBS = {'pandas', 'pd', 'numpy', 'np', 'scipy', 'sklearn', 'statsmodels', 'sm'}
+
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            # Let execution handle syntax errors (will provide better error messages)
+            return (True, "")
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                # Block ALL imports (even allowed ones - they're pre-imported)
+                for alias in node.names:
+                    base_module = alias.name.split('.')[0]
+
+                    # Provide different message for allowed vs disallowed libraries
+                    if base_module in ALLOWED_LIBS:
+                        error_msg = f"""Import statement not needed: '{alias.name}' is already pre-imported.
+
+The following libraries are pre-imported and available for use:
+  - pandas (as pd)
+  - numpy (as np)
+  - scipy (including scipy.stats)
+  - sklearn (scikit-learn)
+  - statsmodels (including statsmodels.api as sm)
+
+Example: Use 'df.head()' directly instead of 'import pandas as pd; df.head()'"""
+                    else:
+                        error_msg = f"""Import not allowed: '{alias.name}'.
+
+Available libraries (pre-imported, use directly without import):
+  - pandas (as pd)
+  - numpy (as np)
+  - scipy (including scipy.stats)
+  - sklearn (scikit-learn)
+  - statsmodels (including statsmodels.api as sm)
+
+Example: Use df.describe() directly instead of 'import pandas as pd'"""
+                    return (False, error_msg)
+
+            elif isinstance(node, ast.ImportFrom):
+                # Block ALL "from X import Y" statements
+                if node.module is None:
+                    # Relative imports
+                    error_msg = """Relative imports are not allowed.
+
+Available libraries (pre-imported, use directly without import):
+  - pandas (as pd)
+  - numpy (as np)
+  - scipy (including scipy.stats)
+  - sklearn (scikit-learn)
+  - statsmodels (including statsmodels.api as sm)"""
+                    return (False, error_msg)
+
+                base_module = node.module.split('.')[0]
+
+                # Provide different message for allowed vs disallowed libraries
+                if base_module in ALLOWED_LIBS:
+                    error_msg = f"""Import statement not needed: '{node.module}' is already pre-imported.
+
+The following libraries are pre-imported and available for use:
+  - pandas (as pd)
+  - numpy (as np)
+  - scipy (including scipy.stats)
+  - sklearn (scikit-learn)
+  - statsmodels (including statsmodels.api as sm)
+
+Example: Use 'sklearn.linear_model.LinearRegression()' directly instead of 'from sklearn.linear_model import LinearRegression'"""
+                else:
+                    error_msg = f"""Import not allowed: 'from {node.module} import ...'.
+
+Available libraries (pre-imported, use directly without import):
+  - pandas (as pd)
+  - numpy (as np)
+  - scipy (including scipy.stats)
+  - sklearn (scikit-learn)
+  - statsmodels (including statsmodels.api as sm)
+
+Example: Use df.describe() directly instead of 'import pandas as pd'"""
+                return (False, error_msg)
+
+        return (True, "")
+
+    def execute(self, code: str, skip_validation: bool = False) -> ExecutionResult:
+        """
+        Execute code in the kernel and return the result.
+
+        Args:
+            code: Python code to execute
+            skip_validation: If True, skip import validation (for internal setup)
+        """
         import time
         start = time.perf_counter()
-        
+
+        # Validate imports before execution (unless skipped for internal setup)
+        if not skip_validation:
+            is_valid, error_msg = self._validate_imports(code)
+            if not is_valid:
+                return ExecutionResult(
+                    success=False,
+                    error_type="ImportError",
+                    error_message=error_msg,
+                    execution_time_ms=0,
+                )
+
         msg_id = self.kc.execute(code)
         outputs = self._collect_outputs(msg_id)
         
@@ -166,8 +278,14 @@ class JupyterKernel:
         - Loads the CSV file as 'df'
         - Imports pandas and numpy
         """
-        builtin_code = f"""import pandas as pd
+        builtin_code = f"""# Import allowed libraries (in dependency order)
 import numpy as np
+import pandas as pd
+import scipy
+import scipy.stats
+import sklearn
+import statsmodels
+import statsmodels.api as sm
 
 __SUBMITTED_ANSWER__ = None
 
@@ -182,7 +300,8 @@ def submit(answer):
 df = pd.read_csv({csv_path!r})
 print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
 """
-        result = self.execute(builtin_code.strip())
+        # Skip validation for setup code (it contains necessary imports)
+        result = self.execute(builtin_code.strip(), skip_validation=True)
         if not result.success:
             raise RuntimeError(f"Failed to setup kernel builtins: {result.error_message}")
 
