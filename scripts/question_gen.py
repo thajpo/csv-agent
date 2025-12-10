@@ -18,11 +18,19 @@ import yaml
 from pathlib import Path
 from datetime import datetime
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.markdown import Markdown
+
 from src.kernel import JupyterKernel
 from src.model import APILLM
 from src.conversation import ConversationManager, Turn, CodeCellResult
 from src.types import ExplorationTurn, ExplorationTrace
 from src.prompts import EXPLORATION_SYSTEM_PROMPT, EXPLORATION_CONTINUE_MSG
+
+# Create rich console
+console = Console()
 
 
 def load_config(config_path: str) -> dict:
@@ -148,9 +156,9 @@ def explore_and_generate_questions(
     Returns:
         (questions, exploration_trace)
     """
-    print(f"\n[Question Generation] Starting exploration of {csv_path}")
-    print(f"[Model] {model}")
-    print(f"[Max turns] {max_turns}\n")
+    console.print(f"\n[bold green]Question Generation[/bold green] Starting exploration of {csv_path}")
+    console.print(f"[bold blue]Model:[/bold blue] {model}")
+    console.print(f"[bold blue]Max turns:[/bold blue] {max_turns}\n")
 
     # 1. Setup
     kernel = JupyterKernel(timeout=120, csv_path=csv_path)
@@ -166,26 +174,35 @@ def explore_and_generate_questions(
     questions_generated = None
 
     for turn_num in range(max_turns):
-        print(f"\n{'='*60}")
-        print(f"TURN {turn_num + 1}/{max_turns}")
-        print(f"{'='*60}\n")
+        console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
+        console.print(f"[bold cyan]TURN {turn_num + 1}/{max_turns}[/bold cyan]")
+        console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
 
         # Get model response
         messages = conversation.to_openai_messages()
-        print("[LLM] Generating response...")
+        console.print("[yellow]Generating LLM response...[/yellow]")
         response = llm(messages)
 
-        print(f"\n[Response Preview]\n{response[:500]}{'...' if len(response) > 500 else ''}\n")
+        # Display LLM response in a panel
+        console.print(Panel(
+            Markdown(response),
+            title="[bold yellow]LLM Response[/bold yellow]",
+            border_style="yellow"
+        ))
 
         # Extract code cells
         code_cells = extract_python_cells(response)
-        print(f"[Code Cells] Found {len(code_cells)} code block(s)")
+        console.print(f"\n[bold blue]Found {len(code_cells)} code block(s)[/bold blue]")
 
         # Execute code
         execution_results = []
         for i, code in enumerate(code_cells, 1):
-            print(f"\n[Executing Cell {i}]")
-            print(f"```python\n{code}\n```")
+            console.print(f"\n[bold magenta]Executing Cell {i}[/bold magenta]")
+
+            # Display code with syntax highlighting
+            syntax = Syntax(code, "python", theme="monokai", line_numbers=True)
+            console.print(Panel(syntax, title=f"[bold magenta]Code Cell {i}[/bold magenta]", border_style="magenta"))
+
             result = kernel.execute(code)
             execution_results.append(CodeCellResult(
                 code=code,
@@ -195,11 +212,24 @@ def explore_and_generate_questions(
             ))
 
             if result.success:
-                print(f"✓ Success")
+                console.print("[bold green]✓ Execution Successful[/bold green]")
                 if result.stdout.strip():
-                    print(f"Output:\n{result.stdout[:200]}{'...' if len(result.stdout) > 200 else ''}")
+                    # Show actual output in a clearly marked panel
+                    console.print(Panel(
+                        result.stdout,
+                        title="[bold green]ACTUAL OUTPUT FROM CODE EXECUTION[/bold green]",
+                        border_style="green",
+                        padding=(1, 2)
+                    ))
+                else:
+                    console.print("[dim]No output[/dim]")
             else:
-                print(f"✗ Failed: {result.error_message}")
+                console.print(f"[bold red]✗ Execution Failed[/bold red]")
+                console.print(Panel(
+                    result.error_message,
+                    title="[bold red]ERROR[/bold red]",
+                    border_style="red"
+                ))
 
         # Save turn
         turn = ExplorationTurn(
@@ -214,7 +244,7 @@ def explore_and_generate_questions(
         # Check if model generated questions
         questions_generated = try_parse_questions(response)
         if questions_generated:
-            print(f"\n[Success] Model generated {len(questions_generated)} questions!")
+            console.print(f"\n[bold green]✓ Success! Model generated {len(questions_generated)} questions![/bold green]")
             break
 
         # Build feedback
@@ -236,7 +266,7 @@ def explore_and_generate_questions(
 
     # 3. Validate we got questions
     if not questions_generated:
-        print("\n[Warning] Model didn't generate questions. Forcing...")
+        console.print("\n[bold yellow]⚠ Warning: Model didn't generate questions. Forcing...[/bold yellow]")
         questions_generated = force_question_generation(llm, conversation)
 
     # 4. Create trace
@@ -256,13 +286,13 @@ def explore_and_generate_questions(
     questions_file = output_path / "questions.json"
     with open(questions_file, 'w') as f:
         json.dump(questions_generated, f, indent=2)
-    print(f"\n[Saved] Questions → {questions_file}")
+    console.print(f"\n[bold green]💾 Saved questions → {questions_file}[/bold green]")
 
     # Save exploration trace
     trace_file = output_path / "exploration_trace.json"
     with open(trace_file, 'w') as f:
         json.dump(trace.model_dump(), f, indent=2, default=str)
-    print(f"[Saved] Exploration trace → {trace_file}")
+    console.print(f"[bold green]💾 Saved exploration trace → {trace_file}[/bold green]")
 
     # Cleanup
     kernel.shutdown()
@@ -309,10 +339,10 @@ def main():
         )
 
         # Print summary
-        print(f"\n{'='*60}")
-        print("SUMMARY")
-        print(f"{'='*60}")
-        print(f"Total questions: {len(questions)}")
+        console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
+        console.print("[bold cyan]SUMMARY[/bold cyan]")
+        console.print(f"[bold cyan]{'=' * 60}[/bold cyan]")
+        console.print(f"[bold]Total questions:[/bold] {len(questions)}")
 
         # Count by difficulty
         difficulty_counts = {}
@@ -320,19 +350,24 @@ def main():
             diff = q.get("difficulty", "UNKNOWN")
             difficulty_counts[diff] = difficulty_counts.get(diff, 0) + 1
 
+        console.print("\n[bold]By difficulty:[/bold]")
         for diff, count in sorted(difficulty_counts.items()):
-            print(f"  {diff}: {count}")
+            console.print(f"  [cyan]{diff}:[/cyan] {count}")
 
-        print(f"\nSample questions:")
+        console.print(f"\n[bold]Sample questions:[/bold]")
         for i, q in enumerate(questions[:3], 1):
-            print(f"\n{i}. [{q['difficulty']}] {q['question']}")
-            print(f"   Steps: {q['n_steps']}")
-            print(f"   Hint: {q['hint'][:80]}{'...' if len(q['hint']) > 80 else ''}")
+            console.print(Panel(
+                f"[bold]{q['question']}[/bold]\n\n"
+                f"[dim]Steps:[/dim] {q['n_steps']}\n"
+                f"[dim]Hint:[/dim] {q['hint']}",
+                title=f"[bold cyan]Question {i} - {q['difficulty']}[/bold cyan]",
+                border_style="cyan"
+            ))
 
         return 0
 
     except Exception as e:
-        print(f"\n[Error] {e}", file=sys.stderr)
+        console.print(f"\n[bold red]Error: {e}[/bold red]", style="bold red")
         import traceback
         traceback.print_exc()
         return 1
