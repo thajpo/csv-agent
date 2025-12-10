@@ -20,6 +20,50 @@ from src.conversation import Turn, CodeCellResult, ConversationManager
 from src.kernel import JupyterKernel
 
 
+def truncate_output_lines(text: str, max_line_length: int = 200) -> str:
+    """Truncate each line of output to max_line_length characters."""
+    lines = text.split('\n')
+    truncated_lines = []
+    for line in lines:
+        if len(line) > max_line_length:
+            truncated_lines.append(line[:max_line_length] + "... [truncated]")
+        else:
+            truncated_lines.append(line)
+    return '\n'.join(truncated_lines)
+
+
+def validate_turn_structure(response: str, code_cells: list[str]) -> tuple[bool, str]:
+    """
+    Validate that turn follows required pattern: reasoning text + exactly one code block.
+
+    Args:
+        response: Full model response
+        code_cells: Extracted code cells from response
+
+    Returns:
+        (is_valid, error_message) - error_message is empty string if valid
+    """
+    # Check for exactly one code block
+    if len(code_cells) == 0:
+        return False, "❌ No code block found. You must write exactly ONE ```python code block."
+
+    if len(code_cells) > 1:
+        return False, f"❌ Found {len(code_cells)} code blocks. Write exactly ONE ```python code block per turn."
+
+    # Check for reasoning text before code
+    # Extract text before first code block
+    code_block_pattern = r'```python\n.*?```'
+    parts = re.split(code_block_pattern, response, maxsplit=1, flags=re.DOTALL)
+
+    reasoning_text = parts[0].strip() if parts else ""
+
+    # Require at least some minimal reasoning (not just whitespace)
+    if not reasoning_text or len(reasoning_text) < 10:
+        return False, "❌ Write your reasoning first: explain what you'll do and why (1-3 sentences), then write the code block."
+
+    return True, ""
+
+
 class Environment:
     """
     RL-style environment for CSV exploration.
@@ -132,7 +176,6 @@ class Environment:
             turn_number=state.current_turn,
             timestamp=datetime.now(),
             model_response="",  # No model response yet
-            truncated_response="",
             done_signal=False,
             feedback_message=self.rollout_config.final_msg,
             reasoning=None
@@ -151,7 +194,6 @@ class Environment:
             turn_number=state.current_turn + 1,
             timestamp=datetime.now(),
             model_response=response,
-            truncated_response=response,
             done_signal=True,
             feedback_message="",
             reasoning=None
@@ -178,7 +220,25 @@ class Environment:
         # 1. Extract Python cells from response
         code_cells = self.extract_python_cells(response)
 
-        # 2. Execute all cells
+        # 2. Validate turn structure
+        is_valid, error_msg = validate_turn_structure(response, code_cells)
+        if not is_valid:
+            # Give model clear feedback to try again
+            error_turn = Turn(
+                turn_number=state.current_turn,
+                timestamp=datetime.now(),
+                model_response=response,
+                code_cells=[],
+                execution_results=[],
+                done_signal=False,
+                feedback_message=error_msg + "\n\nPlease try again following the correct format.",
+                reasoning=None,
+            )
+            state.conversation_manager.add_turn(error_turn)
+            # Don't increment turn counter - let model retry
+            return
+
+        # 3. Execute all cells
         execution_results = []
         submitted_answer = None
 
@@ -200,17 +260,21 @@ class Environment:
                     submitted_answer = result.submitted_answer
                     break  # Stop on submit()
 
-        # 3. Build feedback from execution results
+        # 4. Build feedback from execution results
         if code_cells:
             feedback_parts = []
             for i, result in enumerate(execution_results, 1):
                 if result.success:
                     feedback_parts.append(f"✓ Cell {i} executed successfully")
                     if result.stdout.strip():
-                        feedback_parts.append(f"Output:\n{result.stdout}")
+                        # Truncate stdout to 200 chars per line
+                        truncated_stdout = truncate_output_lines(result.stdout)
+                        feedback_parts.append(f"Output:\n{truncated_stdout}")
                 else:
                     feedback_parts.append(f"✗ Cell {i} failed")
-                    feedback_parts.append(f"Error:\n{result.stderr}")
+                    # Truncate stderr to 200 chars per line
+                    truncated_stderr = truncate_output_lines(result.stderr)
+                    feedback_parts.append(f"Error:\n{truncated_stderr}")
 
             feedback = "\n\n".join(feedback_parts)
             feedback += self.rollout_config.continue_msg
@@ -219,15 +283,14 @@ class Environment:
             if self.logger:
                 self.logger.info("no_code_blocks")
 
-        # 4. Check for completion (submit() was called)
+        # 5. Check for completion (submit() was called)
         done_signal = (submitted_answer is not None)
 
-        # 5. Create Turn object
+        # 6. Create Turn object
         turn = Turn(
             turn_number=state.current_turn,
             timestamp=datetime.now(),
             model_response=response,
-            truncated_response=response,
             code_cells=code_cells,
             execution_results=execution_results,
             done_signal=done_signal,
@@ -235,10 +298,10 @@ class Environment:
             reasoning=None,
         )
 
-        # 6. Add turn to conversation manager (auto-purges if needed)
+        # 7. Add turn to conversation manager (auto-purges if needed)
         state.conversation_manager.add_turn(turn)
 
-        # 7. Check completion
+        # 8. Check completion
         if done_signal:
             state.is_completed = True
             if self.logger:

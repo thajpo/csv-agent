@@ -166,24 +166,22 @@ class JupyterKernel:
         - Loads the CSV file as 'df'
         - Imports pandas and numpy
         """
-        builtin_code = f"""
-        import pandas as pd
-        import numpy as np
+        builtin_code = f"""import pandas as pd
+import numpy as np
 
-        __SUBMITTED_ANSWER__ = None
+__SUBMITTED_ANSWER__ = None
 
-        def submit(answer):
-            '''Submit your final answer.'''
-            global __SUBMITTED_ANSWER__
-            __SUBMITTED_ANSWER__ = answer
-            print(f"✓ Submitted: {{answer}}")
-            return answer
+def submit(answer):
+    '''Submit your final answer.'''
+    global __SUBMITTED_ANSWER__
+    __SUBMITTED_ANSWER__ = answer
+    print(f"✓ Submitted: {{answer}}")
+    return answer
 
-        # Load dataset
-        df = pd.read_csv({csv_path!r})
-        print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
-        """
-
+# Load dataset
+df = pd.read_csv({csv_path!r})
+print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
+"""
         result = self.execute(builtin_code.strip())
         if not result.success:
             raise RuntimeError(f"Failed to setup kernel builtins: {result.error_message}")

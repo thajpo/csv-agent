@@ -1,62 +1,74 @@
 [
   {
-    "question": "Compare the mean TL between control and EL_500_4g/L. Which is higher?",
-    "hint": "Group by TR, calculate mean TL for control and EL_500_4g/L, then compare.",
-    "difficulty": "MEDIUM",
-    "type": "comparison"
+    "question": "What is the overall mean of the `TL` column?",
+    "hint": "Simply call `.mean()` on the `TL` series. No filtering required.",
+    "n_steps": 1,
+    "difficulty": "EASY"
   },
   {
-    "question": "For rows where TL > 1, what is the mean IN?",
-    "hint": "Filter rows where TL > 1, then calculate the aggregation.",
-    "difficulty": "MEDIUM",
-    "type": "filtering"
+    "question": "How many rows belong to the `control` treatment (`TR == 'control'`)?",
+    "hint": "Filter the dataframe where `TR` equals `'control'` and then use `.shape[0]` to count rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
   },
   {
-    "question": "What is the difference in mean IN between EL_500_20g/L and PP_333_20g/L?",
-    "hint": "Calculate mean IN for both EL_500_20g/L and PP_333_20g/L, then compute the difference or percentage.",
-    "difficulty": "HARD",
-    "type": "multi_step"
+    "question": "What is the median `TL` for rows where `BR` is `'A'`?",
+    "hint": "Select rows with `BR == 'A'` and compute the median of `TL`.",
+    "n_steps": 3,
+    "difficulty": "EASY"
   },
   {
-    "question": "Which TR has the lowest mean TL?",
-    "hint": "Group by TR, calculate the aggregation on TL, then find the max/min group.",
-    "difficulty": "MEDIUM",
-    "type": "comparison"
+    "question": "Which treatment (`TR`) yields the highest mean `TL`, and what is the standard deviation of `TL` for that treatment?",
+    "hint": "Group by `TR` \u2192 compute mean `TL` \u2192 locate the max \u2192 filter to that group \u2192 compute `.std()` on `TL`.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
   },
   {
-    "question": "Which TR has the highest mean TL?",
-    "hint": "Group by TR, calculate the aggregation on TL, then find the max/min group.",
-    "difficulty": "MEDIUM",
-    "type": "comparison"
+    "question": "For each `TREE`, calculate the average of `INTERNODE_1`. Which `TREE` has the greatest average, and what is its corresponding average `TL`?",
+    "hint": "Group by `TREE` \u2192 mean of `INTERNODE_1`; identify the max; filter rows of that `TREE`; compute mean `TL`.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
   },
   {
-    "question": "What is the mean TL for the EL_500_4g/L group?",
-    "hint": "Filter to EL_500_4g/L, then use .mean() on the TL column.",
-    "difficulty": "EASY",
-    "type": "simple_aggregation"
+    "question": "Compute the total `N` for each `TR` level. Among the treatments whose total `N` exceeds 400, find the one with the lowest mean `INTERNODE_5`. What is that mean?",
+    "hint": "Aggregate sum `N` per `TR`; filter `TR`s with sum\u202f>\u202f400; for those, compute mean `INTERNODE_5`; pick the minimum and report the mean value.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
   },
   {
-    "question": "What is the mean IN for the control group?",
-    "hint": "Filter to control, then use .mean() on the IN column.",
-    "difficulty": "EASY",
-    "type": "simple_aggregation"
+    "question": "Identify the `BR` category with the highest average `INTERNODE_7`. Then, for rows belonging to that `BR`, calculate the 90th percentile of `TL`.",
+    "hint": "Group by `BR` \u2192 mean of `INTERNODE_7`; locate the max; filter to that `BR`; use `.quantile(0.9)` on `TL`.",
+    "n_steps": 7,
+    "difficulty": "HARD"
   },
   {
-    "question": "Find the TR with the highest mean IN, then calculate its standard deviation.",
-    "hint": "First find the group with highest mean IN, then calculate its std deviation.",
-    "difficulty": "HARD",
-    "type": "multi_step"
+    "question": "Take all rows where `INTERNODE_2`\u202f>\u202f5. Within this subset, which `TR` has the highest median `TL`? After identifying that treatment, compute the variance of `INTERNODE_3` for the same rows.",
+    "hint": "Filter `INTERNODE_2 > 5`; group by `TR` \u2192 median `TL`; pick the treatment with max median; filter again to that treatment; calculate `.var()` of `INTERNODE_3`.",
+    "n_steps": 8,
+    "difficulty": "HARD"
   },
   {
-    "question": "How many PP_333_20g/L rows have TL above 1?",
-    "hint": "Filter rows where TL > 1, then calculate the aggregation.",
-    "difficulty": "MEDIUM",
-    "type": "filtering"
+    "question": "Create a new column `internode_sum` (sum of all INTERNODE columns per row, ignoring NaNs). Which `TREE` yields the highest average `internode_sum`? For that `TREE`, report the mean `TL` and the count of rows where `internode_sum` exceeds 20.",
+    "hint": "Add `internode_sum` via `df[internode_cols].sum(axis=1, skipna=True)`. Group by `TREE` \u2192 mean `internode_sum`; pick the top `TREE`. Filter rows of that `TREE` to compute mean `TL` and count rows with `internode_sum > 20`.",
+    "n_steps": 9,
+    "difficulty": "HARD"
   },
   {
-    "question": "What is the maximum TL in the methanol_control group?",
-    "hint": "Filter to methanol_control, then use .max() on the TL column.",
-    "difficulty": "EASY",
-    "type": "simple_aggregation"
+    "question": "Rank all `TR` levels by the average of `INTERNODE_8`. Take the top two treatments from this ranking. For each of those two treatments, compute the ratio (mean `TL`\u202f/\u202fmean `INTERNODE_9`). Which treatment has the larger ratio and what is its value?",
+    "hint": "Group by `TR` \u2192 mean `INTERNODE_8`; sort descending; select top two `TR`s. For each, compute mean `TL` and mean `INTERNODE_9`, then divide. Compare the two ratios.",
+    "n_steps": 10,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Using the column `internode_per_N` (internode sum divided by `N`), find the 5 rows with the largest values. For those rows, list the distinct `TR` values present and compute the overall standard deviation of `TL` across the five rows.",
+    "hint": "Sort the dataframe by `internode_per_N` descending, take the head(5). Extract unique `TR` values from those rows, and compute `.std()` of `TL` for the same subset.",
+    "n_steps": 11,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Determine the `TREE` that maximizes the product of (average `INTERNODE_6`) \u00d7 (average `TL`). After locating that `TREE`, calculate the 25th percentile of `INTERNODE_12` for all rows belonging to the same `TREE`.",
+    "hint": "Group by `TREE` \u2192 compute mean `INTERNODE_6` and mean `TL`; multiply the two means to get a score; pick the `TREE` with the highest score. Then filter to that `TREE` and compute `.quantile(0.25)` of `INTERNODE_12`.",
+    "n_steps": 12,
+    "difficulty": "VERY_HARD"
   }
 ]

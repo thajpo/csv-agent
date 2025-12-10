@@ -44,7 +44,21 @@ Your code will execute in a stateful Jupyter kernel. You can:
 - Print intermediate results: print(df_filtered.shape)
 - Build incrementally: define variables across multiple cells
 
-Write ONE code cell per turn in ```python blocks. End with submit(final_answer) when you have the answer.
+TURN STRUCTURE (IMPORTANT):
+Each turn must follow this exact pattern:
+1. Write your reasoning: Explain what you'll do and why (1-3 sentences)
+2. Write exactly ONE ```python code block
+3. STOP - Do not write analysis or next steps after the code
+
+The execution result will be shown at the start of your next turn.
+
+Example:
+"I'll filter to the control group and calculate the mean TL.
+```python
+df_control = df[df['TR'] == 'control']
+mean_tl = df_control['TL'].mean()
+print(f"Mean TL: {mean_tl}")
+```"
 """.strip()
 
 TEACHER_CONSISTENCY_PROMPT = """You are a data analyst solving pandas problems efficiently.
@@ -62,7 +76,12 @@ QUESTION:
 
 Your code will execute in a stateful Jupyter kernel. The dataframe 'df' is already loaded.
 
-Write Python code in ```python blocks to solve this question. Call submit(final_answer) when done.
+TURN STRUCTURE:
+1. Explain what you'll do (1-2 sentences)
+2. Write exactly ONE ```python code block
+3. Stop after the code
+
+Execution results appear at the start of your next turn. Call submit(final_answer) when done.
 """.strip()
 
 STUDENT_PROMPT = """Solve this data analysis question using Python and pandas.
@@ -78,8 +97,11 @@ DATA OVERVIEW:
 QUESTION:
 {question_text}
 
-The dataframe 'df' is already loaded. Write Python code in ```python blocks.
-Call submit(final_answer) when you have the answer.
+The dataframe 'df' is already loaded.
+
+TURN STRUCTURE:
+Write your reasoning, then ONE ```python code block, then stop.
+Execution results appear next turn. Call submit(final_answer) when done.
 """.strip()
 
 
@@ -124,7 +146,7 @@ def build_rollout_config(
                 hint=hint
             ),
             mode=mode,
-            continue_msg="\n\nExecution result above. Continue if needed, or call submit() if done.",
+            continue_msg="\n\nWhat will you do next?",
             final_msg="Turn limit reached. Please call submit() with your final answer.",
         )
 
@@ -136,7 +158,7 @@ def build_rollout_config(
                 question_text=question_text
             ),
             mode=mode,
-            continue_msg="\n\nExecution result above. Continue if needed, or call submit() if done.",
+            continue_msg="\n\nWhat will you do next?",
             final_msg="Turn limit reached. Please call submit() with your final answer.",
         )
 
@@ -148,7 +170,7 @@ def build_rollout_config(
                 question_text=question_text
             ),
             mode=mode,
-            continue_msg="\n\nExecution result above. Continue if needed, or call submit() if done.",
+            continue_msg="\n\nWhat will you do next?",
             final_msg="Turn limit reached. Please call submit() with your final answer.",
         )
 

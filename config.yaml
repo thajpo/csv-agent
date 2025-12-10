@@ -27,8 +27,11 @@ hint: "Filter the data to the control group first, then calculate the mean."
 # Number of question blueprints to generate (legacy, may be removed)
 target_questions: 10
 
-# Teacher model identifier for metadata
+# Teacher model identifier (used for teacher-tutor and teacher-consistency modes)
 teacher_model: "openai/gpt-oss-120b"
+
+# Question generation model identifier (used for question generation exploration)
+question_gen_model: "openai/gpt-oss-120b"
 
 # Sampling arguments for the model
 sampling_args:
@@ -38,4 +41,7 @@ sampling_args:
 # Conversation context management
 max_active_turns: 5
 max_context_tokens: 80000
+
+# Question generation settings
+question_gen_max_turns: 20
 

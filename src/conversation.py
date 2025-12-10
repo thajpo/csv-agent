@@ -29,7 +29,6 @@ class Turn(BaseModel):
 
     # Model interaction
     model_response: str
-    truncated_response: str
 
     # Code execution (for Jupyter-style execution)
     code_cells: list[str] = []
@@ -47,7 +46,7 @@ class Turn(BaseModel):
     def to_messages(self) -> list[dict]:
         """Convert turn to OpenAI message format."""
         messages = [
-            {"role": "assistant", "content": self.truncated_response}
+            {"role": "assistant", "content": self.model_response}
         ]
         if not self.done_signal and self.feedback_message:
             messages.append({"role": "user", "content": self.feedback_message})
@@ -55,7 +54,7 @@ class Turn(BaseModel):
 
     def estimate_tokens(self) -> int:
         """Rough token estimation (4 chars ≈ 1 token)."""
-        total_chars = len(self.truncated_response) + len(self.feedback_message)
+        total_chars = len(self.model_response) + len(self.feedback_message)
         return total_chars // 4
 
 

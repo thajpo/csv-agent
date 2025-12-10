@@ -32,7 +32,7 @@ def parse_args(config: dict) -> argparse.Namespace:
     parser.add_argument("--target-questions", type=int, default=config.get("target_questions", 10), help="Number of question blueprints to generate in explore mode")
     parser.add_argument("--question", default=config.get("question", "What is the mean TL (total length) for the control group?"), help="Question for the teacher/student to solve")
     parser.add_argument("--hint", default=config.get("hint", "Filter the data to the control group first, then calculate the mean."), help="Hint for teacher-tutor mode")
-    parser.add_argument("--teacher-model", default=config.get("teacher_model", "grok-4.1-fast"), help="Teacher model identifier for metadata")
+    parser.add_argument("--teacher-model", default=config.get("teacher_model"), help="Teacher model identifier for metadata")
     # Context management args
     parser.add_argument("--max-active-turns", type=int, default=config.get("max_active_turns", 5), help="Maximum number of active turns to keep in context (older turns are archived)")
     parser.add_argument("--max-context-tokens", type=int, default=config.get("max_context_tokens", 80000), help="Maximum context tokens before purging oldest turns")
@@ -43,12 +43,17 @@ def main():
     parser = argparse.ArgumentParser(description="CSV Exploration Agent with Rich Terminal UI")
     parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
     args_prelim, _ = parser.parse_known_args()
-    
+
     # Load config from YAML file
     config = load_config(args_prelim.config)
-    
+
     # Parse all arguments with config file defaults
     args = parse_args(config)
+
+    # Validate required config values
+    if not args.teacher_model:
+        print("Error: teacher_model must be specified in config.yaml")
+        sys.exit(1)
     
     description = args.description or DEFAULT_DATASET_DESCRIPTION
     pipeline_mode = args.mode

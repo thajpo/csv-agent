@@ -7,7 +7,7 @@ This script:
 3. Saves verified episodes to disk
 
 Usage:
-    python -m scripts.generate_episodes --csv data.csv --questions questions.json --output episodes/
+    python -m scripts.generate_episodes --config config.yaml --questions questions.json --output episodes/
 """
 
 import argparse
@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 import uuid
+import yaml
 
 from src.teacher import batch_triangulate
 from src.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
@@ -52,19 +53,43 @@ def load_questions(questions_path: str) -> list[dict]:
         return json.load(f)
 
 
+def load_config(config_path: str) -> dict:
+    """Load configuration from YAML file."""
+    config_file = Path(config_path)
+    if config_file.exists():
+        with open(config_file) as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
 def main():
+    # Parse preliminary args to get config path
+    parser_prelim = argparse.ArgumentParser(description="Generate verified training episodes")
+    parser_prelim.add_argument("--config", default="config.yaml", help="Path to config YAML file")
+    args_prelim, _ = parser_prelim.parse_known_args()
+
+    # Load config
+    config = load_config(args_prelim.config)
+
+    # Parse all arguments with config defaults
     parser = argparse.ArgumentParser(description="Generate verified training episodes")
-    parser.add_argument("--csv", default="data.csv", help="Path to CSV file")
+    parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
+    parser.add_argument("--csv", default=config.get("csv", "data.csv"), help="Path to CSV file")
     parser.add_argument("--questions", default="questions.json", help="Path to questions JSON")
     parser.add_argument("--output", "-o", default="episodes/", help="Output directory for episodes")
     parser.add_argument("--n-consistency", type=int, default=3, help="Number of consistency traces per question")
-    parser.add_argument("--model", default="openai/gpt-oss-120b", help="Teacher model")
-    parser.add_argument("--max-turns", type=int, default=10, help="Max turns per trace")
-    parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
-    parser.add_argument("--max-tokens", type=int, default=1000, help="Max tokens per response")
+    parser.add_argument("--teacher-model", default=config.get("teacher_model"), help="Teacher model")
+    parser.add_argument("--max-turns", type=int, default=config.get("max_turns", 10), help="Max turns per trace")
+    parser.add_argument("--temperature", type=float, default=config.get("sampling_args", {}).get("temperature", 0.7), help="Sampling temperature")
+    parser.add_argument("--max-tokens", type=int, default=config.get("sampling_args", {}).get("max_tokens", 1000), help="Max tokens per response")
     parser.add_argument("--verified-only", action="store_true", help="Only save verified episodes")
 
     args = parser.parse_args()
+
+    # Validate required config values
+    if not args.teacher_model:
+        print("Error: teacher_model must be specified in config.yaml")
+        sys.exit(1)
 
     # Setup
     output_dir = Path(args.output)
@@ -92,7 +117,7 @@ def main():
     logger.info("pipeline_start", extra={
         "n_questions": len(questions),
         "n_consistency": args.n_consistency,
-        "model": args.model,
+        "model": args.teacher_model,
         "output_dir": str(output_dir),
     })
 
@@ -101,7 +126,7 @@ def main():
         csv_path=args.csv,
         questions=questions,
         n_consistency=args.n_consistency,
-        model=args.model,
+        model=args.teacher_model,
         dataset_description=DEFAULT_DATASET_DESCRIPTION,
         data_overview=data_overview,
         max_turns=args.max_turns,

@@ -14,6 +14,7 @@ import argparse
 import json
 import re
 import sys
+import yaml
 from pathlib import Path
 from datetime import datetime
 
@@ -22,6 +23,15 @@ from src.model import APILLM
 from src.conversation import ConversationManager, Turn, CodeCellResult
 from src.types import ExplorationTurn, ExplorationTrace
 from src.prompts import EXPLORATION_SYSTEM_PROMPT, EXPLORATION_CONTINUE_MSG
+
+
+def load_config(config_path: str) -> dict:
+    """Load configuration from YAML file."""
+    config_file = Path(config_path)
+    if config_file.exists():
+        with open(config_file) as f:
+            return yaml.safe_load(f) or {}
+    return {}
 
 
 def extract_python_cells(response: str) -> list[str]:
@@ -97,7 +107,6 @@ def force_question_generation(llm: APILLM, conversation: ConversationManager) ->
         turn_number=conversation.get_active_turn_count(),
         timestamp=datetime.now(),
         model_response="",
-        truncated_response="",
         done_signal=False,
         feedback_message="You've explored enough. Now generate the 13 questions in JSON format as specified in the system prompt.",
         reasoning=None
@@ -217,7 +226,6 @@ def explore_and_generate_questions(
             turn_number=turn_num,
             timestamp=datetime.now(),
             model_response=response,
-            truncated_response=response,
             code_cells=code_cells,
             execution_results=execution_results,
             done_signal=False,
@@ -263,14 +271,23 @@ def explore_and_generate_questions(
 
 
 def main():
+    # Parse preliminary args to get config path
+    parser_prelim = argparse.ArgumentParser(description="Generate questions using LLM exploration", add_help=False)
+    parser_prelim.add_argument("--config", default="config.yaml", help="Path to config YAML file")
+    args_prelim, _ = parser_prelim.parse_known_args()
+
+    # Load config
+    config = load_config(args_prelim.config)
+
+    # Parse all arguments with config defaults
     parser = argparse.ArgumentParser(description="Generate questions using LLM exploration")
-    parser.add_argument("--csv", default="data.csv", help="Path to CSV file")
+    parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
+    parser.add_argument("--csv", default=config.get("csv", "data.csv"), help="Path to CSV file")
     parser.add_argument("--output", "-o", default="questions.json", help="Output JSON file for questions")
     parser.add_argument("--exploration-output", default="exploration_trace.json", help="Output JSON file for exploration trace")
-    parser.add_argument("--model", default="meta-llama/llama-3.2-3b-instruct:free", help="Model identifier")
-    parser.add_argument("--max-turns", type=int, default=20, help="Max exploration turns")
-    parser.add_argument("--temperature", type=float, default=0.7, help="Sampling temperature")
-    parser.add_argument("--max-tokens", type=int, default=2000, help="Max tokens per response")
+    parser.add_argument("--max-turns", type=int, default=config.get("question_gen_max_turns", 20), help="Max exploration turns")
+    parser.add_argument("--temperature", type=float, default=config.get("sampling_args", {}).get("temperature", 0.7), help="Sampling temperature")
+    parser.add_argument("--max-tokens", type=int, default=config.get("sampling_args", {}).get("max_tokens", 2000), help="Max tokens per response")
 
     args = parser.parse_args()
 
@@ -280,9 +297,11 @@ def main():
         output_dir = "."
 
     try:
+        model = config.get("question_gen_model") or args.model
+
         questions, trace = explore_and_generate_questions(
             csv_path=args.csv,
-            model=args.model,
+            model=model,
             max_turns=args.max_turns,
             temperature=args.temperature,
             max_tokens=args.max_tokens,
