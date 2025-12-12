@@ -21,11 +21,11 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 
-from src.kernel import JupyterKernel
-from src.model import APILLM
-from src.conversation import ConversationManager, Turn, CodeCellResult
-from src.types import ExplorationTurn, ExplorationTrace
-from src.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
+from src.core.kernel import JupyterKernel
+from src.core.model import APILLM
+from src.core.conversation import ConversationManager, Turn, CodeCellResult
+from src.authoring.types import ExplorationTurn, ExplorationTrace
+from src.authoring.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
 
 class QuestionGenUI:

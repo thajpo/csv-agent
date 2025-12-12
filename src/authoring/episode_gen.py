@@ -18,11 +18,11 @@ from datetime import datetime
 import uuid
 import yaml
 
-from src.teacher import batch_triangulate
-from src.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
-from src.types import Episode
-from src.rich_logger import setup_rich_logger
-from src.prompts import RolloutConfig
+from src.authoring.teacher import batch_triangulate
+from src.authoring.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
+from src.authoring.types import Episode
+from src.utils.rich_logger import setup_rich_logger
+from src.core.prompts import RolloutConfig
 
 
 def save_episode(episode: Episode, output_dir: Path) -> Path:

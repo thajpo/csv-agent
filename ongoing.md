@@ -153,3 +153,11 @@ Okay
 It is a new day
 
 
+
+#  12/11/25
+I need to organize myself better.
+I made the necessary changes to pipeline s.t. tools no longer exist
+
+I need to lock the fuck in on making a good dataset
+
+Before doing anything else, I need a good dataset pipeline. In-fact, the dataset is actually all I have. 

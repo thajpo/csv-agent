@@ -6,7 +6,7 @@ are rewarded for matching intermediate data states (artifacts) created
 by the teacher, not just for matching the final answer.
 """
 
-from src.types import Artifact
+from src.core.types import Artifact
 
 
 def calculate_scavenger_hunt_reward(

@@ -76,6 +76,14 @@ class JupyterKernel:
         # --- Step 3: Setup built-in functions and load CSV ---
         if csv_path:
             self.setup_kernel_builtins(csv_path)
+            # Define baseline variables to exclude from artifact snapshots
+            # These are pre-loaded by setup_kernel_builtins() and exist in every execution
+            self.baseline_vars = {
+                'np', 'pd', 'scipy', 'sklearn', 'statsmodels', 'sm',  # Libraries
+                'df', 'submit', '__SUBMITTED_ANSWER__'  # Kernel builtins
+            }
+        else:
+            self.baseline_vars = set()
 
         # Register cleanup on program exit
         atexit.register(self.shutdown)
@@ -310,20 +318,28 @@ print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
         Get all local variables from the kernel namespace.
 
         Returns:
-            Dict of variable names to their values
+            Dict of variable names to their values (DataFrames, scalars, and __SUBMITTED_ANSWER__)
         """
-        # Use %who_ls to get variable names, then extract each
+        # Extract only serializable variables (DataFrames, scalars, and submitted answer)
         result = self.execute("""
-        import pickle
-        import base64
+import pickle
+import base64
+import pandas as pd
 
-        # Get all non-private variables
-        _vars = {k: v for k, v in globals().items() if not k.startswith('_')}
+# Get variables we care about: DataFrames, scalars, and __SUBMITTED_ANSWER__
+_vars_to_serialize = {}
+for _k, _v in list(globals().items()):
+    if _k.startswith('_') and _k != '__SUBMITTED_ANSWER__':
+        continue
+    if isinstance(_v, pd.DataFrame):
+        _vars_to_serialize[_k] = _v
+    elif isinstance(_v, (int, float, str, bool, type(None))):
+        _vars_to_serialize[_k] = _v
 
-        # Serialize to base64 to avoid repr issues
-        _serialized = base64.b64encode(pickle.dumps(_vars)).decode('ascii')
-        _serialized
-        """)
+# Serialize to base64
+_serialized = base64.b64encode(pickle.dumps(_vars_to_serialize)).decode('ascii')
+_serialized
+        """, skip_validation=True)
 
         if not result.success or not result.result:
             return {}
@@ -339,18 +355,25 @@ print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
 
     def snapshot_artifacts(self) -> dict:
         """
-        Capture all DataFrames and scalars in namespace as Artifacts.
+        Capture only USER-CREATED DataFrames and scalars as Artifacts.
+
+        Excludes baseline variables (df, pd, np, submit, etc.) that exist
+        in every execution to prevent false positive matches.
 
         Returns:
             Dict of {variable_name: Artifact}
         """
-        from src.types import Artifact, hash_artifact
+        from src.core.types import Artifact, hash_artifact
         import pandas as pd
 
         locals_dict = self.get_locals()
         artifacts = {}
 
         for name, obj in locals_dict.items():
+            # Skip baseline variables (df, pd, np, submit, etc.)
+            if hasattr(self, 'baseline_vars') and name in self.baseline_vars:
+                continue
+
             if name.startswith('_'):
                 continue  # Skip private vars
 

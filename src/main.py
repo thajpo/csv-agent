@@ -3,11 +3,11 @@ import sys
 from pathlib import Path
 import yaml
 
-from src.environment import Environment
-from src.rich_logger import setup_rich_logger
-from src.types import EnvironmentConfig
-from src.prompts import DEFAULT_DATASET_DESCRIPTION, build_rollout_config
-from src.prompts import generate_data_overview
+from src.training.environment import Environment
+from src.utils.rich_logger import setup_rich_logger
+from src.core.types import EnvironmentConfig
+from src.authoring.prompts import DEFAULT_DATASET_DESCRIPTION, generate_data_overview
+from src.core.prompts import build_rollout_config
 
 # Constants
 PARSER_DESCRIPTION = "CSV Exploration Agent with Rich Terminal UI"

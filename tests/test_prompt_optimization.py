@@ -3,15 +3,21 @@
 Test script to validate prompt token optimization.
 
 Compares different verbosity modes and configurations for the student prompt.
+
+NOTE: This test file references old functions that may no longer exist:
+  - build_student_prompt
+  - extract_tools_from_trace
+  - format_tool_docs (from src.tools)
+This file needs to be updated to work with the refactored codebase.
 """
 
-from src.prompts import (
-    build_student_prompt,
+from src.authoring.prompts import (
+    # build_student_prompt,  # TODO: Function doesn't exist in refactored code
     generate_data_overview,
     DEFAULT_DATASET_DESCRIPTION,
-    extract_tools_from_trace,
+    # extract_tools_from_trace,  # TODO: Function doesn't exist in refactored code
 )
-from src.tools import format_tool_docs
+# from src.tools import format_tool_docs  # TODO: src.tools module doesn't exist
 
 
 def estimate_tokens(text: str) -> int:

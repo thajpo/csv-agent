@@ -7,9 +7,9 @@ This script demonstrates the hybrid logging approach with Environment + RichHand
 import logging
 from dataclasses import dataclass
 
-from src.environment import Environment
-from src.rich_logger import setup_rich_logger
-from src.types import EnvironmentConfig
+from src.training.environment import Environment
+from src.utils.rich_logger import setup_rich_logger
+from src.core.types import EnvironmentConfig
 
 
 # Mock RolloutConfig for testing

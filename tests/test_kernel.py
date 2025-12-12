@@ -1,4 +1,4 @@
-from src.kernel import JupyterKernel
+from src.core.kernel import JupyterKernel
 
 def test_kernel_execute():
     kernel = JupyterKernel()

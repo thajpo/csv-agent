@@ -12,12 +12,13 @@ from datetime import datetime
 
 import pandas as pd
 
-from src.model import APILLM
-from src.rich_logger import LogContext
-from src.prompts import generate_data_overview, RolloutConfig
-from src.types import EnvironmentConfig, StateConfig
-from src.conversation import Turn, CodeCellResult, ConversationManager
-from src.kernel import JupyterKernel
+from src.core.model import APILLM
+from src.utils.rich_logger import LogContext
+from src.authoring.prompts import generate_data_overview
+from src.core.prompts import RolloutConfig
+from src.core.types import EnvironmentConfig, StateConfig
+from src.core.conversation import Turn, CodeCellResult, ConversationManager
+from src.core.kernel import JupyterKernel
 
 
 def truncate_output_lines(text: str, max_line_length: int = 200) -> str:

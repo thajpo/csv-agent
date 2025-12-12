@@ -1,5 +1,5 @@
 import pytest
-from src.llm import LLM, has_gpu
+from src.core.model import LLM, has_gpu
 
 
 @pytest.mark.skipif(not has_gpu(), reason="No CUDA/ROCm GPU available")

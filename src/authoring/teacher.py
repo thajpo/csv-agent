@@ -17,10 +17,11 @@ import logging
 from collections import Counter
 from typing import List, Tuple
 
-from src.environment import Environment
-from src.types import TeacherTrace, hash_artifact, EnvironmentConfig
-from src.prompts import build_rollout_config
-from src.kernel import JupyterKernel
+from src.training.environment import Environment
+from src.authoring.types import TeacherTrace
+from src.core.types import hash_artifact, EnvironmentConfig
+from src.core.prompts import build_rollout_config
+from src.core.kernel import JupyterKernel
 
 
 def execute_teacher_trace(
