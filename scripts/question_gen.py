@@ -6,14 +6,12 @@ This script uses an LLM to:
 2. Document exploration observations
 3. Generate questions with varying difficulty levels (EASY, MEDIUM, HARD, VERY_HARD)
 
-Usage:
-    python -m scripts.question_gen --csv data.csv --output questions.json
+Configuration is loaded from config.yaml.
 """
-
-import argparse
 import json
 import re
 import sys
+import textwrap
 import yaml
 from pathlib import Path
 from datetime import datetime
@@ -27,11 +25,150 @@ from src.kernel import JupyterKernel
 from src.model import APILLM
 from src.conversation import ConversationManager, Turn, CodeCellResult
 from src.types import ExplorationTurn, ExplorationTrace
-from src.prompts import EXPLORATION_SYSTEM_PROMPT, EXPLORATION_CONTINUE_MSG, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
+from src.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
-# Create rich console
-console = Console()
 
+class QuestionGenUI:
+    """Handles all Rich console output for question generation."""
+    
+    def __init__(self):
+        self.console = Console()
+    
+    def print_header(self, title: str, **kwargs) -> None:
+        """Print a formatted header."""
+        self.console.print(f"\n[bold green]{title}[/bold green]", **kwargs)
+    
+    def print_info(self, label: str, value: str) -> None:
+        """Print a key-value info line."""
+        self.console.print(f"[bold blue]{label}:[/bold blue] {value}")
+    
+    def print_turn_header(self, turn_num: int, max_turns: int) -> None:
+        """Print the turn separator and header."""
+        self.console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
+        self.console.print(f"[bold cyan]TURN {turn_num + 1}/{max_turns}[/bold cyan]")
+        self.console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
+    
+    def print_llm_response(self, response: str) -> None:
+        """Display LLM response with appropriate formatting."""
+        if response.strip().startswith('{') and '"questions"' in response:
+            try:
+                parsed_json = json.loads(response.strip())
+                formatted_json = json.dumps(parsed_json, indent=2)
+                syntax = Syntax(formatted_json, "json", theme="monokai", line_numbers=False)
+                self.console.print(Panel(
+                    syntax,
+                    title="[bold yellow]LLM Response (JSON)[/bold yellow]",
+                    border_style="yellow"
+                ))
+            except json.JSONDecodeError:
+                self.console.print(Panel(
+                    Markdown(response),
+                    title="[bold yellow]LLM Response[/bold yellow]",
+                    border_style="yellow"
+                ))
+        else:
+            self.console.print(Panel(
+                Markdown(response),
+                title="[bold yellow]LLM Response[/bold yellow]",
+                border_style="yellow"
+            ))
+    
+    def print_code_cell(self, cell_num: int, code: str) -> None:
+        """Display a code cell with syntax highlighting."""
+        self.console.print(f"\n[bold magenta]Executing Cell {cell_num}[/bold magenta]")
+        syntax = Syntax(code, "python", theme="monokai", line_numbers=True)
+        self.console.print(Panel(
+            syntax,
+            title=f"[bold magenta]Code Cell {cell_num}[/bold magenta]",
+            border_style="magenta"
+        ))
+    
+    def print_execution_success(self, stdout: str) -> None:
+        """Display successful execution result."""
+        self.console.print("[bold green]✓ Execution Successful[/bold green]")
+        if stdout.strip():
+            self.console.print(Panel(
+                stdout,
+                title="[bold green]ACTUAL OUTPUT FROM CODE EXECUTION[/bold green]",
+                border_style="green",
+                padding=(1, 2)
+            ))
+        else:
+            self.console.print("[dim]No output[/dim]")
+    
+    def print_execution_failure(self, error_message: str) -> None:
+        """Display execution failure."""
+        self.console.print("[bold red]✗ Execution Failed[/bold red]")
+        self.console.print(Panel(
+            error_message,
+            title="[bold red]ERROR[/bold red]",
+            border_style="red"
+        ))
+    
+    def print_status(self, message: str, style: str = "yellow") -> None:
+        """Print a status message."""
+        self.console.print(f"[{style}]{message}[/{style}]")
+    
+    def print_success(self, message: str) -> None:
+        """Print a success message."""
+        self.console.print(f"[bold green]✓ {message}[/bold green]")
+    
+    def print_error(self, message: str) -> None:
+        """Print an error message."""
+        self.console.print(f"[bold red]✗ {message}[/bold red]")
+    
+    def print_warning(self, message: str) -> None:
+        """Print a warning message."""
+        self.console.print(f"[bold yellow]⚠ {message}[/bold yellow]")
+    
+    def print_saved_file(self, file_path: Path) -> None:
+        """Print file save confirmation."""
+        label = "questions" if "questions" in str(file_path) else "exploration trace"
+        self.console.print(f"[bold green]💾 Saved {label} → {file_path}[/bold green]")
+    
+    def print_summary_header(self) -> None:
+        """Print summary section header."""
+        self.console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
+        self.console.print("[bold cyan]SUMMARY[/bold cyan]")
+        self.console.print(f"[bold cyan]{'=' * 60}[/bold cyan]")
+    
+    def print_question_panel(self, question_num: int, question: dict) -> None:
+        """Print a question in a formatted panel."""
+        self.console.print(Panel(
+            f"[bold]{question['question']}[/bold]\n\n"
+            f"[dim]Steps:[/dim] {question['n_steps']}\n"
+            f"[dim]Hint:[/dim] {question['hint']}",
+            title=f"[bold cyan]Question {question_num} - {question['difficulty']}[/bold cyan]",
+            border_style="cyan"
+        ))
+    
+    def print_code_blocks_found(self, count: int) -> None:
+        """Print number of code blocks found."""
+        self.console.print(f"\n[bold blue]Found {count} code block(s)[/bold blue]")
+    
+    def print_total_questions(self, count: int) -> None:
+        """Print total question count."""
+        self.console.print(f"[bold]Total questions:[/bold] {count}")
+    
+    def print_difficulty_header(self) -> None:
+        """Print difficulty section header."""
+        self.console.print("\n[bold]By difficulty:[/bold]")
+    
+    def print_difficulty_count(self, difficulty: str, count: int) -> None:
+        """Print a difficulty count."""
+        self.console.print(f"  [cyan]{difficulty}:[/cyan] {count}")
+    
+    def print_sample_questions_header(self) -> None:
+        """Print sample questions section header."""
+        self.console.print("\n[bold]Sample questions:[/bold]")
+    
+    def print_empty_line(self) -> None:
+        """Print an empty line."""
+        self.console.print()
+
+
+# Create global UI instance
+ui = QuestionGenUI()
 
 def load_config(config_path: str) -> dict:
     """Load configuration from YAML file."""
@@ -43,25 +180,28 @@ def load_config(config_path: str) -> dict:
 
 
 def extract_python_cells(response: str) -> list[str]:
-    """Extract ```python...``` code blocks from response."""
-    pattern = r'```python\n(.*?)```'
-    return re.findall(pattern, response, re.DOTALL)
+    """
+    Extract python code blocks, trimming malformed fences.
+
+    Accepts ```python``` or ```py``` fences and tolerates missing closing backticks.
+    """
+    pattern = r"```(?:python|py)\n([\s\S]*?)(?:```|$)"
+    matches = re.findall(pattern, response, re.DOTALL | re.IGNORECASE)
+    cleaned_blocks = []
+
+    for block in matches:
+        cleaned = textwrap.dedent(block).replace("\r\n", "\n").strip()
+        # Strip any trailing stray backticks the regex may have captured
+        cleaned = cleaned.rstrip("`").strip()
+        if cleaned:
+            cleaned_blocks.append(cleaned)
+
+    return cleaned_blocks
 
 
 def try_parse_questions(response: str) -> list[dict] | None:
     """
-    Try to parse questions from model response.
-
-    Looks for JSON block with structure:
-    {
-        "questions": [
-            {"question": ..., "hint": ..., "n_steps": ..., "difficulty": ...},
-            ...
-        ]
-    }
-
-    Returns:
-        List of question dicts if found and valid, None otherwise
+    Parse if found and valid, None otherwise
     """
     # Try to find ```json...``` block
     json_pattern = r'```json\n(.*?)```'
@@ -156,9 +296,10 @@ def explore_and_generate_questions(
     Returns:
         (questions, exploration_trace)
     """
-    console.print(f"\n[bold green]Question Generation[/bold green] Starting exploration of {csv_path}")
-    console.print(f"[bold blue]Model:[/bold blue] {model}")
-    console.print(f"[bold blue]Max turns:[/bold blue] {max_turns}\n")
+    ui.print_header(f"Question Generation Starting exploration of {csv_path}")
+    ui.print_info("Model", model)
+    ui.print_info("Max turns", str(max_turns))
+    ui.print_empty_line()
 
     # 1. Setup
     kernel = JupyterKernel(timeout=120, csv_path=csv_path)
@@ -174,55 +315,24 @@ def explore_and_generate_questions(
     questions_generated = None
 
     for turn_num in range(max_turns):
-        console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
-        console.print(f"[bold cyan]TURN {turn_num + 1}/{max_turns}[/bold cyan]")
-        console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
+        ui.print_turn_header(turn_num + 1, max_turns)
 
         # Get model response
         messages = conversation.to_openai_messages()
-        console.print("[yellow]Generating LLM response...[/yellow]")
+        ui.print_status("Generating LLM response...")
         response = llm(messages)
 
-        # Display LLM response in a panel
-        # If response looks like JSON, use syntax highlighting instead of markdown
-        if response.strip().startswith('{') and '"questions"' in response:
-            try:
-                # Try to parse and pretty-print JSON
-                parsed_json = json.loads(response.strip())
-                formatted_json = json.dumps(parsed_json, indent=2)
-                syntax = Syntax(formatted_json, "json", theme="monokai", line_numbers=False)
-                console.print(Panel(
-                    syntax,
-                    title="[bold yellow]LLM Response (JSON)[/bold yellow]",
-                    border_style="yellow"
-                ))
-            except json.JSONDecodeError:
-                # If JSON parsing fails, fall back to markdown
-                console.print(Panel(
-                    Markdown(response),
-                    title="[bold yellow]LLM Response[/bold yellow]",
-                    border_style="yellow"
-                ))
-        else:
-            # Regular markdown for non-JSON responses
-            console.print(Panel(
-                Markdown(response),
-                title="[bold yellow]LLM Response[/bold yellow]",
-                border_style="yellow"
-            ))
+        # Display LLM response
+        ui.print_llm_response(response)
 
         # Extract code cells
         code_cells = extract_python_cells(response)
-        console.print(f"\n[bold blue]Found {len(code_cells)} code block(s)[/bold blue]")
+        ui.print_code_blocks_found(len(code_cells))
 
         # Execute code
         execution_results = []
         for i, code in enumerate(code_cells, 1):
-            console.print(f"\n[bold magenta]Executing Cell {i}[/bold magenta]")
-
-            # Display code with syntax highlighting
-            syntax = Syntax(code, "python", theme="monokai", line_numbers=True)
-            console.print(Panel(syntax, title=f"[bold magenta]Code Cell {i}[/bold magenta]", border_style="magenta"))
+            ui.print_code_cell(i, code)
 
             result = kernel.execute(code)
             execution_results.append(CodeCellResult(
@@ -233,24 +343,9 @@ def explore_and_generate_questions(
             ))
 
             if result.success:
-                console.print("[bold green]✓ Execution Successful[/bold green]")
-                if result.stdout.strip():
-                    # Show actual output in a clearly marked panel
-                    console.print(Panel(
-                        result.stdout,
-                        title="[bold green]ACTUAL OUTPUT FROM CODE EXECUTION[/bold green]",
-                        border_style="green",
-                        padding=(1, 2)
-                    ))
-                else:
-                    console.print("[dim]No output[/dim]")
+                ui.print_execution_success(result.stdout)
             else:
-                console.print(f"[bold red]✗ Execution Failed[/bold red]")
-                console.print(Panel(
-                    result.error_message,
-                    title="[bold red]ERROR[/bold red]",
-                    border_style="red"
-                ))
+                ui.print_execution_failure(result.error_message)
 
         # Save turn
         turn = ExplorationTurn(
@@ -266,17 +361,17 @@ def explore_and_generate_questions(
         if "<DONE>" in response or "</DONE>" in response:
             # Enforce minimum exploration turns
             if turn_num < MIN_EXPLORATION_TURNS:
-                console.print(f"\n[bold yellow]⚠ Model tried to finish too early (turn {turn_num + 1}/{MIN_EXPLORATION_TURNS} minimum)[/bold yellow]")
-                console.print(f"[yellow]Rejecting early completion - continuing exploration[/yellow]")
+                ui.print_warning(f"Model tried to finish too early (turn {turn_num + 1}/{MIN_EXPLORATION_TURNS} minimum)")
+                ui.print_status("Rejecting early completion - continuing exploration")
                 # Don't parse questions, force more exploration
             else:
-                console.print(f"\n[bold green]✓ Model signaled completion with <DONE>[/bold green]")
+                ui.print_success("Model signaled completion with <DONE>")
                 questions_generated = try_parse_questions(response)
                 if questions_generated:
-                    console.print(f"[bold green]✓ Successfully extracted {len(questions_generated)} questions![/bold green]")
+                    ui.print_success(f"Successfully extracted {len(questions_generated)} questions!")
                     break
                 else:
-                    console.print(f"[bold red]✗ Found <DONE> but couldn't parse questions from response[/bold red]")
+                    ui.print_error("Found <DONE> but couldn't parse questions from response")
                     # Continue to allow retry
 
         # Build feedback with turn-aware message
@@ -298,7 +393,7 @@ def explore_and_generate_questions(
 
     # 3. Validate we got questions
     if not questions_generated:
-        console.print("\n[bold yellow]⚠ Warning: Model didn't generate questions. Forcing...[/bold yellow]")
+        ui.print_warning("Model didn't generate questions. Forcing...")
         questions_generated = force_question_generation(llm, conversation)
 
     # 4. Create trace
@@ -318,13 +413,13 @@ def explore_and_generate_questions(
     questions_file = output_path / "questions.json"
     with open(questions_file, 'w') as f:
         json.dump(questions_generated, f, indent=2)
-    console.print(f"\n[bold green]💾 Saved questions → {questions_file}[/bold green]")
+    ui.print_saved_file(questions_file)
 
     # Save exploration trace
     trace_file = output_path / "exploration_trace.json"
     with open(trace_file, 'w') as f:
         json.dump(trace.model_dump(), f, indent=2, default=str)
-    console.print(f"[bold green]💾 Saved exploration trace → {trace_file}[/bold green]")
+    ui.print_saved_file(trace_file)
 
     # Cleanup
     kernel.shutdown()
@@ -333,48 +428,35 @@ def explore_and_generate_questions(
 
 
 def main():
-    # Parse preliminary args to get config path
-    parser_prelim = argparse.ArgumentParser(description="Generate questions using LLM exploration", add_help=False)
-    parser_prelim.add_argument("--config", default="config.yaml", help="Path to config YAML file")
-    args_prelim, _ = parser_prelim.parse_known_args()
-
     # Load config
-    config = load_config(args_prelim.config)
+    config = load_config("config.yaml")
 
-    # Parse all arguments with config defaults
-    parser = argparse.ArgumentParser(description="Generate questions using LLM exploration")
-    parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
-    parser.add_argument("--csv", default=config.get("csv", "data.csv"), help="Path to CSV file")
-    parser.add_argument("--output", "-o", default="questions.json", help="Output JSON file for questions")
-    parser.add_argument("--exploration-output", default="exploration_trace.json", help="Output JSON file for exploration trace")
-    parser.add_argument("--max-turns", type=int, default=config.get("question_gen_max_turns", 20), help="Max exploration turns")
-    parser.add_argument("--temperature", type=float, default=config.get("sampling_args", {}).get("temperature", 0.7), help="Sampling temperature")
-    parser.add_argument("--max-tokens", type=int, default=config.get("sampling_args", {}).get("max_tokens", 2000), help="Max tokens per response")
-
-    args = parser.parse_args()
+    # Get values from config with defaults
+    csv_path = config.get("csv", "data.csv")
+    output_file = config.get("output", "questions.json")
+    max_turns = config.get("question_gen_max_turns", 20)
+    temperature = config.get("sampling_args", {}).get("temperature", 0.7)
+    max_tokens = config.get("sampling_args", {}).get("max_tokens", 2000)
+    model = config.get("question_gen_model", "meta-llama/llama-3.2-3b-instruct:free")
 
     # Set output directory from output file path
-    output_dir = str(Path(args.output).parent)
+    output_dir = str(Path(output_file).parent)
     if output_dir == ".":
         output_dir = "."
 
     try:
-        model = config.get("question_gen_model") or args.model
-
         questions, trace = explore_and_generate_questions(
-            csv_path=args.csv,
+            csv_path=csv_path,
             model=model,
-            max_turns=args.max_turns,
-            temperature=args.temperature,
-            max_tokens=args.max_tokens,
+            max_turns=max_turns,
+            temperature=temperature,
+            max_tokens=max_tokens,
             output_dir=output_dir
         )
 
         # Print summary
-        console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
-        console.print("[bold cyan]SUMMARY[/bold cyan]")
-        console.print(f"[bold cyan]{'=' * 60}[/bold cyan]")
-        console.print(f"[bold]Total questions:[/bold] {len(questions)}")
+        ui.print_summary_header()
+        ui.print_total_questions(len(questions))
 
         # Count by difficulty
         difficulty_counts = {}
@@ -382,24 +464,18 @@ def main():
             diff = q.get("difficulty", "UNKNOWN")
             difficulty_counts[diff] = difficulty_counts.get(diff, 0) + 1
 
-        console.print("\n[bold]By difficulty:[/bold]")
+        ui.print_difficulty_header()
         for diff, count in sorted(difficulty_counts.items()):
-            console.print(f"  [cyan]{diff}:[/cyan] {count}")
+            ui.print_difficulty_count(diff, count)
 
-        console.print(f"\n[bold]Sample questions:[/bold]")
+        ui.print_sample_questions_header()
         for i, q in enumerate(questions[:3], 1):
-            console.print(Panel(
-                f"[bold]{q['question']}[/bold]\n\n"
-                f"[dim]Steps:[/dim] {q['n_steps']}\n"
-                f"[dim]Hint:[/dim] {q['hint']}",
-                title=f"[bold cyan]Question {i} - {q['difficulty']}[/bold cyan]",
-                border_style="cyan"
-            ))
+            ui.print_question_panel(i, q)
 
         return 0
 
     except Exception as e:
-        console.print(f"\n[bold red]Error: {e}[/bold red]", style="bold red")
+        ui.print_error(f"Error: {e}")
         import traceback
         traceback.print_exc()
         return 1
