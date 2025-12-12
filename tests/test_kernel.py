@@ -1,19 +1,24 @@
-from src.core.kernel import JupyterKernel
+from src.kernel import JupyterKernel
 
-def test_kernel_execute():
-    kernel = JupyterKernel()
-    result = kernel.execute("print('Hello, World!')")
-    assert result.stdout == "Hello, World!\n"
+# Test kernel
+kernel = JupyterKernel(timeout=30, csv_path="data.csv")
 
-def test_kernel_execute_error():
-    kernel = JupyterKernel()
-    # Write to stderr explicitly
-    result = kernel.execute("import sys; sys.stderr.write('Hello, World!\\n')")
-    assert result.stderr == "Hello, World!\n"
+# Execute some code
+result1 = kernel.execute("mean_tl = df['TL'].mean()\nprint(mean_tl)")
+print(f"Exec 1 success: {result1.success}")
+print(f"Exec 1 output: {result1.stdout}")
 
-def test_kernel_reset():
-    kernel = JupyterKernel()
-    kernel.execute("print('Hello, World!')")
-    kernel.reset()
-    result = kernel.execute("print('Hello, World!')")
-    assert result.stdout == "Hello, World!\n"
+# Call submit
+result2 = kernel.execute("submit(mean_tl)")
+print(f"Exec 2 success: {result2.success}")
+print(f"Exec 2 output: {result2.stdout}")
+
+# Get final answer
+final_answer = kernel.get_final_answer()
+print(f"Final answer: {final_answer}")
+
+# Get artifacts
+artifacts = kernel.snapshot_artifacts()
+print(f"Artifacts: {artifacts}")
+
+kernel.shutdown()

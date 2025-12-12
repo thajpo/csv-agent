@@ -24,7 +24,7 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
 def parse_args(config: dict) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=PARSER_DESCRIPTION)
     parser.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="Path to config YAML file")
-    parser.add_argument("--csv", default=config.get("csv", "data.csv"), help="Path to CSV file")
+    parser.add_argument("--csv", default=config.get("csv", "csv/data.csv"), help="Path to CSV file")
     parser.add_argument("--max-turns", type=int, default=config.get("max_turns", 10), help="Maximum conversation turns")
     parser.add_argument("--description", default=config.get("description"), help="Dataset description (uses default if not provided)")
     parser.add_argument("--output", "-o", default=config.get("output"), help="Output path for JSONL")

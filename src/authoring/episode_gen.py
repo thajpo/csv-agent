@@ -74,8 +74,8 @@ def main():
     # Parse all arguments with config defaults
     parser = argparse.ArgumentParser(description="Generate verified training episodes")
     parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
-    parser.add_argument("--csv", default=config.get("csv", "data.csv"), help="Path to CSV file")
-    parser.add_argument("--questions", default="questions.json", help="Path to questions JSON")
+    parser.add_argument("--csv", default=config.get("csv", "csv/data.csv"), help="Path to CSV file")
+    parser.add_argument("--questions", default="question/questions.json", help="Path to questions JSON")
     parser.add_argument("--output", "-o", default="episodes/", help="Output directory for episodes")
     parser.add_argument("--n-consistency", type=int, default=3, help="Number of consistency traces per question")
     parser.add_argument("--teacher-model", default=config.get("teacher_model"), help="Teacher model")

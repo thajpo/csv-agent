@@ -1,7 +1,7 @@
 # CSV Exploration Agent Configuration
 
 # Path to CSV file
-csv: "data.csv"
+csv: "csv/data.csv"
 
 # Maximum conversation turns
 max_turns: 10
