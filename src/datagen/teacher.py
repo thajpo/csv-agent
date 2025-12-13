@@ -83,6 +83,7 @@ def execute_teacher_trace(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
+    ui: Any = None,  # Optional UI instance for Rich output
 ) -> tuple[ExecutionTrace, list[dict], str]:
     """
     Execute a single teacher trace (with or without hint).
@@ -162,6 +163,31 @@ def execute_teacher_trace(
                 cells = re.findall(pattern, msg["content"], re.DOTALL)
                 code_cells.extend(cells)
 
+        # Display trace in UI if provided
+        if ui:
+            # Display each turn
+            assistant_messages = [
+                msg for msg in conversation_messages
+                if msg.get("role") == "assistant"
+            ]
+
+            for i, msg in enumerate(assistant_messages, 1):
+                response = msg["content"]
+                # Extract code cells from this message
+                turn_code_cells = re.findall(pattern, response, re.DOTALL)
+
+                # Execution results are not stored in ConversationHistory
+                # (they're only available during rollout execution)
+                execution_results = []
+
+                ui.print_turn(
+                    turn_num=i,
+                    max_turns=max_turns,
+                    response=response,
+                    code_cells=turn_code_cells,
+                    execution_results=execution_results
+                )
+
         # Snapshot artifacts from kernel
         artifacts = kernel.snapshot_artifacts()
 
@@ -171,6 +197,14 @@ def execute_teacher_trace(
 
         # Check if execution was successful (submitted an answer)
         execution_success = final_answer is not None
+
+        # Display trace completion in UI
+        if ui:
+            ui.print_trace_complete(
+                success=execution_success,
+                final_answer=final_answer,
+                turns=len(assistant_messages) if 'assistant_messages' in locals() else len(code_cells)
+            )
 
         trace = ExecutionTrace(
             code_cells=code_cells,
@@ -198,6 +232,8 @@ def triangulate_teacher(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
+    ui: Any = None,  # Optional UI instance for Rich output
+    float_tol: float = 0.1,  # Moved from hardcoded below
 ) -> tuple[ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]:
     """
     Run teacher triangulation: gold trace + consistency traces.
@@ -234,6 +270,9 @@ def triangulate_teacher(
     # 1. Run gold trace (with hint)
     logger.info("executing_gold_trace", extra={"hint": hint})
 
+    if ui:
+        ui.print_trace_header(mode="gold", hint=hint)
+
     gold_trace, gold_conversation, system_prompt = execute_teacher_trace(
         csv_path=csv_path,
         question=question,
@@ -245,12 +284,16 @@ def triangulate_teacher(
         max_turns=max_turns,
         sampling_args=sampling_args,
         logger=logger,
+        ui=ui,
     )
 
     # 2. Run consistency traces (without hint)
     consistency_results = []
     for i in range(n_consistency):
         logger.info("executing_consistency_trace", extra={"trace_num": i + 1})
+
+        if ui:
+            ui.print_trace_header(mode=f"{i+1}/{n_consistency}", hint=None)
 
         trace, conversation, _ = execute_teacher_trace(
             csv_path=csv_path,
@@ -263,6 +306,7 @@ def triangulate_teacher(
             max_turns=max_turns,
             sampling_args=sampling_args,
             logger=logger,
+            ui=ui,
         )
         consistency_results.append((trace, conversation))
 
@@ -292,8 +336,6 @@ def triangulate_teacher(
     )
 
     # Check if gold matches majority (with tolerance for floats)
-    # Default tolerance is 0.1, can be configured via config
-    float_tol = 0.1  # TODO: Make configurable via function parameter
     verified = answers_match(
         gold_trace.final_answer_hash,
         majority_hash,
@@ -305,13 +347,23 @@ def triangulate_teacher(
     logger.info("triangulation_complete", extra={
         "verified": verified,
         "gold_hash": gold_trace.final_answer_hash,
-        "gold_value": str(gold_trace.final_answer)[:50],
+        "gold_value": gold_trace.final_answer,
         "majority_hash": majority_hash,
-        "majority_value": str(majority_value)[:50],
+        "majority_value": majority_value,
         "majority_count": majority_count,
         "total_consistency": len(consistency_results),
         "float_tolerance": float_tol,
     })
+
+    # Display triangulation result in UI
+    if ui:
+        consistency_traces = [trace for trace, _ in consistency_results]
+        ui.print_triangulation_result(
+            gold_trace=gold_trace,
+            consistency_traces=consistency_traces,
+            verified=verified,
+            float_tol=float_tol
+        )
 
     return gold_trace, gold_conversation, system_prompt, consistency_results, verified
 
@@ -326,6 +378,8 @@ def batch_triangulate(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
+    ui: Any = None,  # Optional UI instance for Rich output
+    float_tol: float = 0.1,  # Float tolerance for answer matching
 ) -> list[tuple[dict, ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]]:
     """
     Run triangulation on a batch of questions.
@@ -349,6 +403,7 @@ def batch_triangulate(
         logger = create_logger(silent=True)
 
     results = []
+    verified_count = 0
 
     for i, q_dict in enumerate(questions, 1):
         logger.info("batch_progress", extra={
@@ -356,6 +411,10 @@ def batch_triangulate(
             "total": len(questions),
             "question": q_dict["question"]
         })
+
+        # Display question header in UI
+        if ui:
+            ui.print_question_header(q_num=i, total=len(questions), question=q_dict)
 
         gold_trace, gold_conversation, system_prompt, consistency_results, verified = triangulate_teacher(
             csv_path=csv_path,
@@ -368,9 +427,19 @@ def batch_triangulate(
             max_turns=max_turns,
             sampling_args=sampling_args,
             logger=logger,
+            ui=ui,
+            float_tol=float_tol,
         )
 
         results.append((q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified))
+
+        # Track verification count
+        if verified:
+            verified_count += 1
+
+        # Display progress in UI
+        if ui:
+            ui.print_progress_summary(current=i, total=len(questions), verified_count=verified_count)
 
     # Summary stats
     n_verified = sum(1 for _, _, _, _, _, verified in results if verified)
