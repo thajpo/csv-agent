@@ -1,6 +1,6 @@
 from src.core.kernel import JupyterKernel
 
-kernel = JupyterKernel(timeout=30, csv_path="data.csv")
+kernel = JupyterKernel(timeout=30, csv_path="csv/data.csv")
 kernel.execute("x = 42")
 kernel.execute("submit(x)")
 

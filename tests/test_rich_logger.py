@@ -16,7 +16,7 @@ def test_silent_execution():
     print("\n=== TEST 1: Silent Execution (No Logger) ===")
 
     env = Environment(
-        data=DataConfig(csv_path="data.csv"),
+        data=DataConfig(csv_path="csv/data.csv"),
         model=ModelConfig(model_name="grok-4.1-fast"),
         execution=ExecutionConfig(max_turns=1),
         task=TaskConfig(mode="teacher-tutor"),
@@ -36,7 +36,7 @@ def test_rich_output():
     logger = create_logger()
 
     env = Environment(
-        data=DataConfig(csv_path="data.csv"),
+        data=DataConfig(csv_path="csv/data.csv"),
         model=ModelConfig(model_name="grok-4.1-fast"),
         execution=ExecutionConfig(max_turns=1),
         task=TaskConfig(mode="teacher-tutor"),
@@ -57,7 +57,7 @@ def test_file_logging():
     logger.addHandler(logging.FileHandler("test_output.log"))
 
     env = Environment(
-        data=DataConfig(csv_path="data.csv"),
+        data=DataConfig(csv_path="csv/data.csv"),
         model=ModelConfig(model_name="grok-4.1-fast"),
         execution=ExecutionConfig(max_turns=1),
         task=TaskConfig(mode="teacher-tutor"),
@@ -93,7 +93,7 @@ def test_custom_logging():
     logger.addHandler(JSONHandler())
 
     env = Environment(
-        data=DataConfig(csv_path="data.csv"),
+        data=DataConfig(csv_path="csv/data.csv"),
         model=ModelConfig(model_name="grok-4.1-fast"),
         execution=ExecutionConfig(max_turns=1),
         task=TaskConfig(mode="teacher-tutor"),

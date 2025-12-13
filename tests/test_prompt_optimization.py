@@ -11,7 +11,7 @@ NOTE: This test file references old functions that may no longer exist:
 This file needs to be updated to work with the refactored codebase.
 """
 
-from src.authoring.prompts import (
+from src.core.prompts import (
     # build_student_prompt,  # TODO: Function doesn't exist in refactored code
     generate_data_overview,
     DEFAULT_DATASET_DESCRIPTION,
@@ -30,7 +30,7 @@ def print_comparison():
 
     # Generate test data
     try:
-        data_overview = generate_data_overview("data.csv")
+        data_overview = generate_data_overview("csv/data.csv")
     except FileNotFoundError:
         # Fallback for testing without data file
         data_overview = """=== SHAPE ===

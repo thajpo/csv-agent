@@ -1,7 +1,7 @@
 from src.core.kernel import JupyterKernel
 
 # Test kernel
-kernel = JupyterKernel(timeout=30, csv_path="data.csv")
+kernel = JupyterKernel(timeout=30, csv_path="csv/data.csv")
 
 # Execute some code
 result1 = kernel.execute("mean_tl = df['TL'].mean()\nprint(mean_tl)")
