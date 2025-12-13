@@ -14,6 +14,8 @@ This filters out questions where:
 """
 
 import logging
+import pandas as pd
+import numpy as np
 from collections import Counter
 from typing import Any, List, Tuple
 
@@ -49,6 +51,34 @@ def answers_match(
 
     # If we have raw values, try tolerant comparison
     if val1 is not None and val2 is not None:
+        # DataFrame Comparison
+        if isinstance(val1, pd.DataFrame) and isinstance(val2, pd.DataFrame):
+            try:
+                # Sort by index and columns to ensure order invariance
+                # We sort by the first column if index is default RangeIndex, else sort by index
+                df1 = val1.sort_index(axis=1)
+                df2 = val2.sort_index(axis=1)
+                
+                # Check shapes first
+                if df1.shape != df2.shape:
+                    return False
+                
+                # Use pandas testing utility with tolerance
+                pd.testing.assert_frame_equal(
+                    df1, 
+                    df2, 
+                    check_dtype=False,  # Be tolerant of int vs float types
+                    check_like=True,    # Reordered columns handled by sort_index above, but good as backup
+                    atol=float_tol,
+                    rtol=float_tol
+                )
+                return True
+            except AssertionError:
+                return False
+            except Exception:
+                # Should not happen, but safe fallback
+                return False
+
         # Both floats: compare with tolerance
         if isinstance(val1, (int, float)) and isinstance(val2, (int, float)):
             return abs(float(val1) - float(val2)) <= float_tol
