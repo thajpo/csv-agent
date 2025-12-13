@@ -1,7 +1,7 @@
 # CSV Exploration Agent Configuration
 
 # Path to CSV file
-csv: "data.csv"
+csv: "csv/data.csv"
 
 # Maximum conversation turns
 max_turns: 10
@@ -46,8 +46,15 @@ max_context_tokens: 80000
 question_gen_max_turns: 20
 
 # Episode generation settings
-n_consistency: 3
+n_consistency: 5  # Increased for more robust majority voting (was 3)
 verified_only: false
+float_tolerance: 0.1  # ±0.1 tolerance for float answer comparisons
+
+# Question generation output
+questions_json: "question/questions.json"
+
+# Episode generation output
+episodes_jsonl: "episodes/episodes.jsonl"
 
 # Template-based question generation settings
 template_questions_output: "questions.json"

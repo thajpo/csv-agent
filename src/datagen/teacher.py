@@ -15,7 +15,7 @@ This filters out questions where:
 
 import logging
 from collections import Counter
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 from src.core.environment import Environment
 from src.core.types import ExecutionTrace, Question
@@ -23,6 +23,53 @@ from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.utils.hashing import hash_artifact
 from src.core.kernel import JupyterKernel
 from src.utils.logger import create_logger
+
+
+def answers_match(
+    hash1: str | None,
+    hash2: str | None,
+    val1: Any = None,
+    val2: Any = None,
+    float_tol: float = 0.1
+) -> bool:
+    """
+    Check if two answers match, with tolerance for floats.
+
+    Args:
+        hash1, hash2: Answer hashes (for exact match)
+        val1, val2: Raw answer values (for tolerant comparison)
+        float_tol: Absolute tolerance for float comparison (default ±0.1)
+
+    Returns:
+        True if answers match within tolerance
+    """
+    # Exact hash match
+    if hash1 is not None and hash2 is not None and hash1 == hash2:
+        return True
+
+    # If we have raw values, try tolerant comparison
+    if val1 is not None and val2 is not None:
+        # Both floats: compare with tolerance
+        if isinstance(val1, (int, float)) and isinstance(val2, (int, float)):
+            return abs(float(val1) - float(val2)) <= float_tol
+
+        # Both tuples/lists: compare element-wise
+        if isinstance(val1, (tuple, list)) and isinstance(val2, (tuple, list)):
+            if len(val1) != len(val2):
+                return False
+            for a, b in zip(val1, val2):
+                if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                    if abs(float(a) - float(b)) > float_tol:
+                        return False
+                elif a != b:
+                    return False
+            return True
+
+        # Exact equality for other types
+        if val1 == val2:
+            return True
+
+    return False
 
 
 def execute_teacher_trace(
@@ -36,7 +83,7 @@ def execute_teacher_trace(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
-) -> ExecutionTrace:
+) -> tuple[ExecutionTrace, list[dict], str]:
     """
     Execute a single teacher trace (with or without hint).
 
@@ -55,7 +102,7 @@ def execute_teacher_trace(
         logger: Optional logger
 
     Returns:
-        ExecutionTrace with code, artifacts, and final answer
+        Tuple of (ExecutionTrace, conversation_messages, system_prompt)
     """
     # Ensure logger exists
     if logger is None:
@@ -102,10 +149,18 @@ def execute_teacher_trace(
         # Execute rollout
         final_state = env.rollout()
 
-        # Extract code cells from all turns
+        # Extract conversation for SFT training
+        conversation_messages = final_state.conversation.to_openai_messages()
+        system_prompt = conversation_messages[0]["content"] if conversation_messages else ""
+
+        # Extract code cells from all assistant messages
+        import re
         code_cells = []
-        for turn in final_state.conversation_manager.active_turns:
-            code_cells.extend(turn.code_cells)
+        pattern = r"```python\n(.*?)```"
+        for msg in conversation_messages:
+            if msg.get("role") == "assistant":
+                cells = re.findall(pattern, msg["content"], re.DOTALL)
+                code_cells.extend(cells)
 
         # Snapshot artifacts from kernel
         artifacts = kernel.snapshot_artifacts()
@@ -117,13 +172,15 @@ def execute_teacher_trace(
         # Check if execution was successful (submitted an answer)
         execution_success = final_answer is not None
 
-        return ExecutionTrace(
+        trace = ExecutionTrace(
             code_cells=code_cells,
             artifacts=artifacts,
             final_answer=final_answer,
             final_answer_hash=final_answer_hash,
             execution_success=execution_success,
         )
+
+        return trace, conversation_messages, system_prompt
 
     finally:
         # Always cleanup kernel
@@ -141,7 +198,7 @@ def triangulate_teacher(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
-) -> Tuple[ExecutionTrace, List[ExecutionTrace], bool]:
+) -> tuple[ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]:
     """
     Run teacher triangulation: gold trace + consistency traces.
 
@@ -160,7 +217,9 @@ def triangulate_teacher(
     Returns:
         Tuple of:
         - gold_trace: ExecutionTrace WITH hint
-        - consistency_traces: List of ExecutionTrace WITHOUT hint
+        - gold_conversation: list[dict] of messages
+        - system_prompt: str
+        - consistency_results: list of (ExecutionTrace, conversation) tuples
         - verified: True if gold matches majority of consistency traces
     """
     # Ensure logger exists
@@ -175,7 +234,7 @@ def triangulate_teacher(
     # 1. Run gold trace (with hint)
     logger.info("executing_gold_trace", extra={"hint": hint})
 
-    gold_trace = execute_teacher_trace(
+    gold_trace, gold_conversation, system_prompt = execute_teacher_trace(
         csv_path=csv_path,
         question=question,
         hint=hint,
@@ -189,11 +248,11 @@ def triangulate_teacher(
     )
 
     # 2. Run consistency traces (without hint)
-    consistency_traces = []
+    consistency_results = []
     for i in range(n_consistency):
         logger.info("executing_consistency_trace", extra={"trace_num": i + 1})
 
-        trace = execute_teacher_trace(
+        trace, conversation, _ = execute_teacher_trace(
             csv_path=csv_path,
             question=question,
             hint=None,
@@ -205,38 +264,56 @@ def triangulate_teacher(
             sampling_args=sampling_args,
             logger=logger,
         )
-        consistency_traces.append(trace)
+        consistency_results.append((trace, conversation))
 
     # 3. Majority voting on final answer hashes
-    consistency_hashes = [
-        trace.final_answer_hash
-        for trace in consistency_traces
+    consistency_answers = [
+        (trace.final_answer_hash, trace.final_answer)
+        for trace, _ in consistency_results
         if trace.final_answer_hash is not None
     ]
 
-    if not consistency_hashes:
+    if not consistency_answers:
         # No consistency traces succeeded
         logger.info("triangulation_failed", extra={
             "reason": "No consistency traces produced answers"
         })
-        return gold_trace, consistency_traces, False
+        return gold_trace, gold_conversation, system_prompt, consistency_results, False
 
-    # Find majority answer
+    # Find majority answer by hash
+    consistency_hashes = [h for h, _ in consistency_answers]
     hash_counts = Counter(consistency_hashes)
     majority_hash, majority_count = hash_counts.most_common(1)[0]
 
-    # Check if gold matches majority
-    verified = (gold_trace.final_answer_hash == majority_hash)
+    # Get the actual value for the majority hash
+    majority_value = next(
+        (val for h, val in consistency_answers if h == majority_hash),
+        None
+    )
+
+    # Check if gold matches majority (with tolerance for floats)
+    # Default tolerance is 0.1, can be configured via config
+    float_tol = 0.1  # TODO: Make configurable via function parameter
+    verified = answers_match(
+        gold_trace.final_answer_hash,
+        majority_hash,
+        gold_trace.final_answer,
+        majority_value,
+        float_tol=float_tol
+    )
 
     logger.info("triangulation_complete", extra={
         "verified": verified,
         "gold_hash": gold_trace.final_answer_hash,
+        "gold_value": str(gold_trace.final_answer)[:50],
         "majority_hash": majority_hash,
+        "majority_value": str(majority_value)[:50],
         "majority_count": majority_count,
-        "total_consistency": len(consistency_traces),
+        "total_consistency": len(consistency_results),
+        "float_tolerance": float_tol,
     })
 
-    return gold_trace, consistency_traces, verified
+    return gold_trace, gold_conversation, system_prompt, consistency_results, verified
 
 
 def batch_triangulate(
@@ -249,7 +326,7 @@ def batch_triangulate(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
-) -> List[Tuple[dict, ExecutionTrace, List[ExecutionTrace], bool]]:
+) -> list[tuple[dict, ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]]:
     """
     Run triangulation on a batch of questions.
 
@@ -265,7 +342,7 @@ def batch_triangulate(
         logger: Optional logger
 
     Returns:
-        List of tuples: (question_dict, gold_trace, consistency_traces, verified)
+        List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified)
     """
     # Ensure logger exists
     if logger is None:
@@ -280,7 +357,7 @@ def batch_triangulate(
             "question": q_dict["question"]
         })
 
-        gold_trace, consistency_traces, verified = triangulate_teacher(
+        gold_trace, gold_conversation, system_prompt, consistency_results, verified = triangulate_teacher(
             csv_path=csv_path,
             question=q_dict["question"],
             hint=q_dict.get("hint", ""),
@@ -293,10 +370,10 @@ def batch_triangulate(
             logger=logger,
         )
 
-        results.append((q_dict, gold_trace, consistency_traces, verified))
+        results.append((q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified))
 
     # Summary stats
-    n_verified = sum(1 for _, _, _, verified in results if verified)
+    n_verified = sum(1 for _, _, _, _, _, verified in results if verified)
     logger.info("batch_complete", extra={
         "total": len(questions),
         "verified": n_verified,

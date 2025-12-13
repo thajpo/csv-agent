@@ -158,10 +158,6 @@ class Environment:
         """Process a single turn: extract code cells, execute, build feedback, check completion."""
         code_cells = self.extract_python_cells(response)
 
-        if not self.response_is_valid(response, code_cells):
-            # Don't increment turn counter - let model retry
-            return
-
         # Execute all cells
         execution_results = []
         submitted_answer = None
@@ -216,8 +212,12 @@ class Environment:
             self.is_completed = True
             self.logger.info("episode_complete", extra={"results": submitted_answer})
 
-    def rollout(self) -> None:
-        """Execute a multi-turn rollout episode."""
+    def rollout(self):
+        """Execute a multi-turn rollout episode.
+
+        Returns:
+            self: The Environment instance with completed conversation
+        """
         self.init_state()
 
         while not self.is_completed:
@@ -234,8 +234,16 @@ class Environment:
             # Get model response
             response = self.get_model_response()
 
+            # Extract code cells and validate
+            code_cells = self.extract_python_cells(response)
+            if not self.response_is_valid(response, code_cells):
+                # Don't increment turn counter - let model retry
+                continue
+
             # Process this turn (adds to conversation, executes code cells)
             self.process_turn(response)
 
             # Increment turn counter
             self.current_turn += 1
+
+        return self

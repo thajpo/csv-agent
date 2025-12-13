@@ -17,10 +17,11 @@ from datetime import datetime
 import uuid
 import yaml
 
-from src.authoring.teacher import batch_triangulate
+from src.datagen.teacher import batch_triangulate
 from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
-from src.authoring.types import Episode
+from src.datagen.types import Episode, EpisodeJSONL
 from src.core.types import Question
+from src.utils.logger import create_logger
 
 
 def save_episode(episode: Episode, output_dir: Path) -> Path:
@@ -71,19 +72,18 @@ def main():
     n_consistency = config["n_consistency"]
     verified_only = config["verified_only"]
 
-    # TODO: Load questions from CSV instead of JSON file
-    # questions = load_questions_from_csv(config["csv"])
-    questions = []  # Placeholder
+    # Load questions from question_gen.py output
+    questions_file = config.get("questions_json", "question/questions.json")
+    questions = load_questions(questions_file)
+    logger = create_logger()  # Create logger early for this log
+    logger.info(f"Loaded {len(questions)} questions from {questions_file}")
 
-    # TODO: Derive output directory from config or add to config.yaml
-    output_dir = Path("episodes/")  # Placeholder
+    # Output as single JSONL file
+    output_jsonl = Path(config.get("episodes_jsonl", "episodes/episodes.jsonl"))
+    output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
     # Generate data overview
     data_overview = generate_data_overview(csv_path)
-
-    # Setup logger
-    from src.utils.logger import create_logger
-    logger = create_logger()
 
     # Sampling args
     sampling_args = {
@@ -95,7 +95,7 @@ def main():
         "n_questions": len(questions),
         "n_consistency": n_consistency,
         "model": teacher_model,
-        "output_dir": str(output_dir),
+        "output_file": str(output_jsonl),
     })
 
     # Run batch triangulation
@@ -111,18 +111,24 @@ def main():
         logger=logger,
     )
 
-    # Convert to Episodes and save
-    episodes_saved = 0
+    # Convert to JSONL episodes and save
+    episodes_jsonl = []
     episodes_verified = 0
 
-    for q_dict, gold_trace, consistency_traces, verified in results:
-        # Create Episode object
+    for q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified in results:
+        # Create Question object
         question_obj = Question(
             question_text=q_dict["question"],
             hint=q_dict.get("hint"),
             difficulty=q_dict.get("difficulty"),
+            n_steps=q_dict.get("n_steps"),
         )
 
+        # Extract consistency traces (ignore conversations)
+        consistency_traces = [trace for trace, _ in consistency_results]
+        consistency_conversations = [conv for _, conv in consistency_results]
+
+        # Create Episode object
         episode = Episode(
             id=str(uuid.uuid4()),
             question=question_obj,
@@ -132,24 +138,35 @@ def main():
             timestamp=datetime.now(),
         )
 
-        # Save if verified OR if verified_only is False
-        if verified or not verified_only:
-            filepath = save_episode(episode, output_dir)
-            episodes_saved += 1
+        # Convert to JSONL format
+        episode_jsonl = EpisodeJSONL.from_episode(
+            episode=episode,
+            gold_conversation=gold_conversation,
+            system_prompt=system_prompt,
+            consistency_conversations=consistency_conversations,
+        )
 
+        # Save if verified OR verified_only is False
+        if verified or not verified_only:
+            episodes_jsonl.append(episode_jsonl)
             if verified:
                 episodes_verified += 1
 
-            logger.info("episode_saved", extra={
-                "filepath": str(filepath),
+            logger.info("episode_created", extra={
                 "verified": verified,
                 "question": q_dict["question"][:50] + "...",
             })
 
+    # Write JSONL file (one episode per line)
+    with open(output_jsonl, 'w') as f:
+        for ep in episodes_jsonl:
+            f.write(json.dumps(ep.model_dump(), default=str) + '\n')
+
     # Summary
     logger.info("pipeline_complete", extra={
+        "output_file": str(output_jsonl),
         "total_questions": len(questions),
-        "episodes_saved": episodes_saved,
+        "episodes_saved": len(episodes_jsonl),
         "episodes_verified": episodes_verified,
         "verification_rate": episodes_verified / len(questions) if questions else 0.0,
     })

@@ -1,79 +1,79 @@
 [
   {
-    "question": "What is the overall mean of the TL column?",
-    "hint": "Use the DataFrame's `mean()` method on the TL column. This is a single aggregation step.",
+    "question": "What is the overall mean of the TL column? Return as a float rounded to 2 decimal places.",
+    "hint": "A single aggregation on the target column.",
     "n_steps": 1,
     "difficulty": "EASY"
   },
   {
-    "question": "Which treatment group (TR) has the smallest median TL, and what is that median value?",
-    "hint": "Group by TR, compute the median TL for each group, then locate the group with the minimum median. Return both the group name and its median.",
+    "question": "Which treatment group (TR) has the smallest median TL? Return as a tuple (treatment_name, median_value) with median rounded to 2 decimal places.",
+    "hint": "Compare a central tendency measure across treatment groups to find the extreme.",
     "n_steps": 3,
     "difficulty": "EASY"
   },
   {
-    "question": "How many rows have TL equal to zero?",
-    "hint": "Filter the DataFrame where TL == 0 and count the resulting rows.",
+    "question": "How many rows have TL equal to zero? Return as an integer.",
+    "hint": "Filter and count based on an exact value condition.",
     "n_steps": 2,
     "difficulty": "EASY"
   },
   {
-    "question": "For the treatment group with the highest mean TL, calculate the standard deviation of TL within that group.",
-    "hint": "First compute mean TL per treatment, identify the treatment with the maximum mean, then filter to that treatment and compute TL's standard deviation.",
+    "question": "For the treatment group with the highest mean TL, calculate the standard deviation of TL within that group. Return as a float rounded to 2 decimal places.",
+    "hint": "Identify the top-performing treatment by one measure, then characterize its variability.",
     "n_steps": 4,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "What is the Pearson correlation between INTERNODE_1 and TL, after dropping rows where INTERNODE_1 is missing?",
-    "hint": "Select rows where INTERNODE_1 is not NaN, then use `.corr()` between the two columns.",
+    "question": "What is the Pearson correlation between INTERNODE_1 and TL, after dropping rows where INTERNODE_1 is missing? Return as a float rounded to 3 decimal places.",
+    "hint": "Clean the data for missing values in a specific column, then measure the linear relationship between two variables.",
     "n_steps": 3,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "Identify the TREE\u2011TR combination with the highest average TL, then report the count of observations for that combination.",
-    "hint": "Group by both TREE and TR, compute mean TL, locate the max, then filter the original DataFrame to that combo and count rows.",
+    "question": "Identify the TREE-TR combination with the highest average TL, then report the count of observations for that combination. Return as an integer.",
+    "hint": "Aggregate by multiple grouping variables, find the top performer, then count occurrences of that specific combination.",
     "n_steps": 5,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "Compute the median TL for each BR (branch) within the 'control' treatment, then find which branch has the largest difference between its median TL and the overall median TL of the control group.",
-    "hint": "Filter to TR == 'control', compute overall median TL, then group by BR to get branch medians, calculate absolute differences, and pick the max.",
+    "question": "Compute the median TL for each BR (branch) within the 'control' treatment, then find which branch has the largest absolute difference between its median TL and the overall median TL of the control group. Return as a string (the branch label).",
+    "hint": "Focus on one treatment, compute both overall and per-group statistics, then compare deviations.",
     "n_steps": 6,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "For each treatment group, calculate the proportion of rows where INTERNODE_2 is greater than 2.0, then determine which treatment has the lowest such proportion.",
-    "hint": "Within each TR, count rows with INTERNODE_2 > 2.0, divide by total rows in that treatment, and compare proportions.",
+    "question": "For each treatment group, calculate the proportion of rows where INTERNODE_2 is greater than 2.0, then determine which treatment has the lowest such proportion. Return as a string (the treatment name).",
+    "hint": "Apply a threshold condition within each group, compute rates, and compare across groups.",
     "n_steps": 5,
     "difficulty": "HARD"
   },
   {
-    "question": "Create a new column called `TL_per_IN` equal to TL divided by IN. Then, for each TREE, find the maximum `TL_per_IN` value and report the TREE identifier that achieves the overall highest `TL_per_IN` across all trees.",
-    "hint": "Add the derived column, group by TREE to get max per tree, then locate the global maximum and its TREE label.",
+    "question": "Create a derived metric equal to TL divided by IN. For each TREE, find the maximum of this metric, then report the TREE identifier that achieves the overall highest value across all trees. Return as a string (the tree identifier).",
+    "hint": "Derive a ratio metric, aggregate by one dimension to find per-group maxima, then identify the global maximum.",
     "n_steps": 7,
     "difficulty": "HARD"
   },
   {
-    "question": "Determine the internode (among INTERNODE_1 to INTERNODE_5) that has the strongest positive correlation with TL. After identifying it, compute the average TL for rows where that internode's value exceeds its overall median.",
-    "hint": "Calculate correlations for each of the first five internodes, pick the one with highest correlation, find its median, filter rows above that median, then average TL.",
+    "question": "Among INTERNODE_1 through INTERNODE_5, determine which has the strongest positive correlation with TL. After identifying it, compute the average TL for rows where that internode's value exceeds its overall median. Return as a float rounded to 2 decimal places.",
+    "hint": "Compare relationships across multiple candidate variables, select the best one, then use its distribution to filter and aggregate.",
     "n_steps": 8,
     "difficulty": "HARD"
   },
   {
-    "question": "Using only rows where TL > 0, fit a simple linear regression predicting TL from IN (treat IN as the independent variable). Report the slope coefficient rounded to three decimal places.",
-    "hint": "Filter TL > 0, then use `np.polyfit` or `stats.linregress` on IN vs TL to obtain the slope.",
+    "question": "Using only rows where TL > 0, fit a simple linear regression predicting TL from IN (IN as the independent variable). Report the slope coefficient rounded to 3 decimal places. Return as a float.",
+    "hint": "Filter to valid observations, then use a deterministic regression method to find the linear relationship.",
     "n_steps": 7,
     "difficulty": "HARD"
   },
   {
-    "question": "For each treatment, compute the Gini impurity of the TL distribution (treat TL values as a categorical variable by binning into the histogram bins defined earlier). Then, identify the treatment with the lowest Gini impurity.",
-    "hint": "Bin TL using the same edges as the histogram, calculate the proportion of rows in each bin per treatment, compute Gini = 1 - \u03a3(p_i^2), and compare across treatments.",
+    "question": "For each treatment, compute the Gini impurity of the TL distribution by binning TL into 10 equal-width bins from 0 to the maximum TL value in the dataset. Identify the treatment with the lowest Gini impurity. Return as a string (the treatment name).",
+    "hint": "Discretize a continuous variable into bins, compute diversity measures per group using the formula Gini = 1 - sum(p_i^2), and compare.",
     "n_steps": 9,
     "difficulty": "VERY_HARD"
   },
   {
-    "question": "Build a decision\u2011tree\u2011like rule: first select rows where IN \u2265 5, then within that subset choose the treatment with the highest mean TL, and finally report the median TL for that treatment among rows where INTERNODE_3 is not missing.",
-    "hint": "Step\u202f1 filter IN \u2265 5, step\u202f2 compute mean TL per treatment and pick the max, step\u202f3 further filter to rows with non\u2011NaN INTERNODE_3 and compute median TL.",
+    "question": "First select rows where IN >= 5. Within that subset, identify the treatment with the highest mean TL. Finally, among rows matching both criteria (IN >= 5 AND that treatment), compute the median TL for rows where INTERNODE_3 is not missing. Return as a float rounded to 2 decimal places.",
+    "hint": "Apply sequential filters with dependencies: each step narrows the data based on results from the previous step.",
     "n_steps": 9,
     "difficulty": "VERY_HARD"
   }
