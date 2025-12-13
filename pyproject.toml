@@ -6,6 +6,7 @@ readme = "README.md"
 tags = ["placeholder-tag", "train", "eval"]
 requires-python = ">=3.13"
 dependencies = [
+    "datetime>=6.0",
     "httpx>=0.28.1",
     "ipykernel>=7.1.0",
     "jupyter-client>=8.6.3",

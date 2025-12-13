@@ -17,11 +17,12 @@ import logging
 from collections import Counter
 from typing import List, Tuple
 
-from src.training.environment import Environment
-from src.authoring.types import TeacherTrace
-from src.core.types import hash_artifact, EnvironmentConfig
-from src.core.prompts import build_rollout_config
+from src.core.environment import Environment
+from src.core.types import ExecutionTrace, Question
+from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
+from src.utils.hashing import hash_artifact
 from src.core.kernel import JupyterKernel
+from src.utils.logger import create_logger
 
 
 def execute_teacher_trace(
@@ -35,9 +36,11 @@ def execute_teacher_trace(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
-) -> TeacherTrace:
+) -> ExecutionTrace:
     """
     Execute a single teacher trace (with or without hint).
+
+    Logger will be created silently if not provided.
 
     Args:
         csv_path: Path to CSV file
@@ -52,35 +55,46 @@ def execute_teacher_trace(
         logger: Optional logger
 
     Returns:
-        TeacherTrace with code, artifacts, and final answer
+        ExecutionTrace with code, artifacts, and final answer
     """
-    # Build environment config
-    env_config = EnvironmentConfig(
-        csv_path=csv_path,
-        model=model,
-        max_turns=max_turns,
-        pipeline_mode=mode,
-    )
+    # Ensure logger exists
+    if logger is None:
+        logger = create_logger(silent=True)
 
-    # Build rollout config
-    rollout_config = build_rollout_config(
-        mode=mode,
+    # Build question object
+    question_obj = Question(question_text=question, hint=hint) if question else None
+
+    # Build Pydantic nested configs
+    data_config = DataConfig(
+        csv_path=csv_path,
         dataset_description=dataset_description,
         data_overview=data_overview,
-        question_text=question,
-        hint=hint if mode == "teacher-tutor" else "",
+    )
+
+    model_config = ModelConfig(
+        model_name=model,
+        **(sampling_args or {})  # Unpack temperature, max_tokens, top_p
+    )
+
+    execution_config = ExecutionConfig(
+        max_turns=max_turns,
+    )
+
+    task_config = TaskConfig(
+        mode=mode,
+        question=question_obj,
     )
 
     # Create fresh kernel for this trace
     kernel = JupyterKernel(timeout=120.0, csv_path=csv_path)
 
     try:
-        # Create environment and run rollout
+        # Create environment with nested configs
         env = Environment(
-            csv_path=csv_path,
-            config=env_config,
-            sampling_args=sampling_args or {},
-            rollout_config=rollout_config,
+            data=data_config,
+            model=model_config,
+            execution=execution_config,
+            task=task_config,
             kernel=kernel,
             logger=logger,
         )
@@ -103,9 +117,7 @@ def execute_teacher_trace(
         # Check if execution was successful (submitted an answer)
         execution_success = final_answer is not None
 
-        return TeacherTrace(
-            question=question,
-            hint=hint,
+        return ExecutionTrace(
             code_cells=code_cells,
             artifacts=artifacts,
             final_answer=final_answer,
@@ -129,7 +141,7 @@ def triangulate_teacher(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
-) -> Tuple[TeacherTrace, List[TeacherTrace], bool]:
+) -> Tuple[ExecutionTrace, List[ExecutionTrace], bool]:
     """
     Run teacher triangulation: gold trace + consistency traces.
 
@@ -147,19 +159,21 @@ def triangulate_teacher(
 
     Returns:
         Tuple of:
-        - gold_trace: Teacher trace WITH hint
-        - consistency_traces: List of teacher traces WITHOUT hint
+        - gold_trace: ExecutionTrace WITH hint
+        - consistency_traces: List of ExecutionTrace WITHOUT hint
         - verified: True if gold matches majority of consistency traces
     """
-    if logger:
-        logger.info("triangulation_start", extra={
-            "question": question,
-            "n_consistency": n_consistency
-        })
+    # Ensure logger exists
+    if logger is None:
+        logger = create_logger(silent=True)
+
+    logger.info("triangulation_start", extra={
+        "question": question,
+        "n_consistency": n_consistency
+    })
 
     # 1. Run gold trace (with hint)
-    if logger:
-        logger.info("executing_gold_trace", extra={"hint": hint})
+    logger.info("executing_gold_trace", extra={"hint": hint})
 
     gold_trace = execute_teacher_trace(
         csv_path=csv_path,
@@ -177,8 +191,7 @@ def triangulate_teacher(
     # 2. Run consistency traces (without hint)
     consistency_traces = []
     for i in range(n_consistency):
-        if logger:
-            logger.info("executing_consistency_trace", extra={"trace_num": i + 1})
+        logger.info("executing_consistency_trace", extra={"trace_num": i + 1})
 
         trace = execute_teacher_trace(
             csv_path=csv_path,
@@ -203,10 +216,9 @@ def triangulate_teacher(
 
     if not consistency_hashes:
         # No consistency traces succeeded
-        if logger:
-            logger.warning("triangulation_failed", extra={
-                "reason": "No consistency traces produced answers"
-            })
+        logger.info("triangulation_failed", extra={
+            "reason": "No consistency traces produced answers"
+        })
         return gold_trace, consistency_traces, False
 
     # Find majority answer
@@ -216,14 +228,13 @@ def triangulate_teacher(
     # Check if gold matches majority
     verified = (gold_trace.final_answer_hash == majority_hash)
 
-    if logger:
-        logger.info("triangulation_complete", extra={
-            "verified": verified,
-            "gold_hash": gold_trace.final_answer_hash,
-            "majority_hash": majority_hash,
-            "majority_count": majority_count,
-            "total_consistency": len(consistency_traces),
-        })
+    logger.info("triangulation_complete", extra={
+        "verified": verified,
+        "gold_hash": gold_trace.final_answer_hash,
+        "majority_hash": majority_hash,
+        "majority_count": majority_count,
+        "total_consistency": len(consistency_traces),
+    })
 
     return gold_trace, consistency_traces, verified
 
@@ -238,7 +249,7 @@ def batch_triangulate(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
-) -> List[Tuple[dict, TeacherTrace, List[TeacherTrace], bool]]:
+) -> List[Tuple[dict, ExecutionTrace, List[ExecutionTrace], bool]]:
     """
     Run triangulation on a batch of questions.
 
@@ -256,15 +267,18 @@ def batch_triangulate(
     Returns:
         List of tuples: (question_dict, gold_trace, consistency_traces, verified)
     """
+    # Ensure logger exists
+    if logger is None:
+        logger = create_logger(silent=True)
+
     results = []
 
     for i, q_dict in enumerate(questions, 1):
-        if logger:
-            logger.info("batch_progress", extra={
-                "current": i,
-                "total": len(questions),
-                "question": q_dict["question"]
-            })
+        logger.info("batch_progress", extra={
+            "current": i,
+            "total": len(questions),
+            "question": q_dict["question"]
+        })
 
         gold_trace, consistency_traces, verified = triangulate_teacher(
             csv_path=csv_path,
@@ -282,12 +296,11 @@ def batch_triangulate(
         results.append((q_dict, gold_trace, consistency_traces, verified))
 
     # Summary stats
-    if logger:
-        n_verified = sum(1 for _, _, _, verified in results if verified)
-        logger.info("batch_complete", extra={
-            "total": len(questions),
-            "verified": n_verified,
-            "verification_rate": n_verified / len(questions) if questions else 0.0,
-        })
+    n_verified = sum(1 for _, _, _, verified in results if verified)
+    logger.info("batch_complete", extra={
+        "total": len(questions),
+        "verified": n_verified,
+        "verification_rate": n_verified / len(questions) if questions else 0.0,
+    })
 
     return results

@@ -363,7 +363,8 @@ _serialized
         Returns:
             Dict of {variable_name: Artifact}
         """
-        from src.core.types import Artifact, hash_artifact
+        from src.core.types import Artifact
+        from src.utils.hashing import hash_artifact
         import pandas as pd
 
         locals_dict = self.get_locals()

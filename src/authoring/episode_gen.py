@@ -2,15 +2,14 @@
 Episode generation pipeline.
 
 This script:
-1. Loads questions from questions.json
+1. Loads questions from CSV (TODO: implement)
 2. Runs teacher triangulation on each question
 3. Saves verified episodes to disk
 
 Usage:
-    python -m scripts.generate_episodes --config config.yaml --questions questions.json --output episodes/
+    python -m src.authoring.episode_gen
 """
 
-import argparse
 import json
 import sys
 from pathlib import Path
@@ -19,10 +18,9 @@ import uuid
 import yaml
 
 from src.authoring.teacher import batch_triangulate
-from src.authoring.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
+from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
 from src.authoring.types import Episode
-from src.utils.rich_logger import setup_rich_logger
-from src.core.prompts import RolloutConfig
+from src.core.types import Question
 
 
 def save_episode(episode: Episode, output_dir: Path) -> Path:
@@ -53,83 +51,62 @@ def load_questions(questions_path: str) -> list[dict]:
         return json.load(f)
 
 
-def load_config(config_path: str) -> dict:
+def load_config(config_path: str = "config.yaml") -> dict:
     """Load configuration from YAML file."""
     config_file = Path(config_path)
-    if config_file.exists():
-        with open(config_file) as f:
-            return yaml.safe_load(f) or {}
-    return {}
+    with open(config_file) as f:
+        return yaml.safe_load(f)
 
 
 def main():
-    # Parse preliminary args to get config path
-    parser_prelim = argparse.ArgumentParser(description="Generate verified training episodes")
-    parser_prelim.add_argument("--config", default="config.yaml", help="Path to config YAML file")
-    args_prelim, _ = parser_prelim.parse_known_args()
-
     # Load config
-    config = load_config(args_prelim.config)
+    config = load_config()
 
-    # Parse all arguments with config defaults
-    parser = argparse.ArgumentParser(description="Generate verified training episodes")
-    parser.add_argument("--config", default="config.yaml", help="Path to config YAML file")
-    parser.add_argument("--csv", default=config.get("csv", "csv/data.csv"), help="Path to CSV file")
-    parser.add_argument("--questions", default="question/questions.json", help="Path to questions JSON")
-    parser.add_argument("--output", "-o", default="episodes/", help="Output directory for episodes")
-    parser.add_argument("--n-consistency", type=int, default=3, help="Number of consistency traces per question")
-    parser.add_argument("--teacher-model", default=config.get("teacher_model"), help="Teacher model")
-    parser.add_argument("--max-turns", type=int, default=config.get("max_turns", 10), help="Max turns per trace")
-    parser.add_argument("--temperature", type=float, default=config.get("sampling_args", {}).get("temperature", 0.7), help="Sampling temperature")
-    parser.add_argument("--max-tokens", type=int, default=config.get("sampling_args", {}).get("max_tokens", 1000), help="Max tokens per response")
-    parser.add_argument("--verified-only", action="store_true", help="Only save verified episodes")
+    # Extract config values (fail-fast on missing keys)
+    csv_path = config["csv"]
+    teacher_model = config["teacher_model"]
+    max_turns = config["max_turns"]
+    temperature = config["sampling_args"]["temperature"]
+    max_tokens = config["sampling_args"]["max_tokens"]
+    n_consistency = config["n_consistency"]
+    verified_only = config["verified_only"]
 
-    args = parser.parse_args()
+    # TODO: Load questions from CSV instead of JSON file
+    # questions = load_questions_from_csv(config["csv"])
+    questions = []  # Placeholder
 
-    # Validate required config values
-    if not args.teacher_model:
-        print("Error: teacher_model must be specified in config.yaml")
-        sys.exit(1)
-
-    # Setup
-    output_dir = Path(args.output)
-    questions = load_questions(args.questions)
+    # TODO: Derive output directory from config or add to config.yaml
+    output_dir = Path("episodes/")  # Placeholder
 
     # Generate data overview
-    data_overview = generate_data_overview(args.csv)
+    data_overview = generate_data_overview(csv_path)
 
-    # Setup logger (uses rich terminal UI)
-    # Create a minimal rollout config for logger initialization
-    rollout_config = RolloutConfig(
-        system_prompt="",
-        mode="teacher-consistency",
-        continue_msg="",
-        final_msg=""
-    )
-    logger = setup_rich_logger(rollout_config)
+    # Setup logger
+    from src.utils.logger import create_logger
+    logger = create_logger()
 
     # Sampling args
     sampling_args = {
-        "temperature": args.temperature,
-        "max_tokens": args.max_tokens,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
     }
 
     logger.info("pipeline_start", extra={
         "n_questions": len(questions),
-        "n_consistency": args.n_consistency,
-        "model": args.teacher_model,
+        "n_consistency": n_consistency,
+        "model": teacher_model,
         "output_dir": str(output_dir),
     })
 
     # Run batch triangulation
     results = batch_triangulate(
-        csv_path=args.csv,
+        csv_path=csv_path,
         questions=questions,
-        n_consistency=args.n_consistency,
-        model=args.teacher_model,
+        n_consistency=n_consistency,
+        model=teacher_model,
         dataset_description=DEFAULT_DATASET_DESCRIPTION,
         data_overview=data_overview,
-        max_turns=args.max_turns,
+        max_turns=max_turns,
         sampling_args=sampling_args,
         logger=logger,
     )
@@ -140,19 +117,23 @@ def main():
 
     for q_dict, gold_trace, consistency_traces, verified in results:
         # Create Episode object
-        episode = Episode(
-            id=str(uuid.uuid4()),
-            timestamp=datetime.now(),
-            question=q_dict["question"],
+        question_obj = Question(
+            question_text=q_dict["question"],
             hint=q_dict.get("hint"),
-            teacher_trace=gold_trace,
-            consistency_traces=consistency_traces,
-            verified=verified,
             difficulty=q_dict.get("difficulty"),
         )
 
-        # Save if verified OR if --verified-only is not set
-        if verified or not args.verified_only:
+        episode = Episode(
+            id=str(uuid.uuid4()),
+            question=question_obj,
+            teacher_trace=gold_trace,
+            consistency_traces=consistency_traces,
+            verified=verified,
+            timestamp=datetime.now(),
+        )
+
+        # Save if verified OR if verified_only is False
+        if verified or not verified_only:
             filepath = save_episode(episode, output_dir)
             episodes_saved += 1
 

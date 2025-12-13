@@ -5,21 +5,10 @@ This script demonstrates the hybrid logging approach with Environment + RichHand
 """
 
 import logging
-from dataclasses import dataclass
 
-from src.training.environment import Environment
-from src.utils.rich_logger import setup_rich_logger
-from src.core.types import EnvironmentConfig
-
-
-# Mock RolloutConfig for testing
-@dataclass
-class RolloutConfig:
-    """Mock rollout config for testing."""
-    mode: str = "question-gen"
-    system_prompt: str = "Test system prompt"
-    continue_msg: str = ""
-    final_msg: str = ""
+from src.core.environment import Environment
+from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
+from src.utils.logger import create_logger
 
 
 def test_silent_execution():
@@ -27,32 +16,35 @@ def test_silent_execution():
     print("\n=== TEST 1: Silent Execution (No Logger) ===")
 
     env = Environment(
-        csv_path="data.csv",
-        config=EnvironmentConfig(model="grok-4.1-fast", max_turns=1),
-        logger=None  # Silent
+        data=DataConfig(csv_path="data.csv"),
+        model=ModelConfig(model_name="grok-4.1-fast"),
+        execution=ExecutionConfig(max_turns=1),
+        task=TaskConfig(mode="teacher-tutor"),
+        logger=create_logger(silent=True)
     )
 
     # This should run silently with no output
     # (except for any prints from the model itself)
-    print("Environment created with logger=None")
+    print("Environment created with silent logger")
     print("This should be silent when rollout() is called")
 
 
 def test_rich_output():
-    """Test with RichHandler."""
-    print("\n=== TEST 2: Rich Output ===")
+    """Test with standard logger."""
+    print("\n=== TEST 2: Standard Output ===")
 
-    rollout_config = RolloutConfig()
-    logger = setup_rich_logger(rollout_config)
+    logger = create_logger()
 
     env = Environment(
-        csv_path="data.csv",
-        config=EnvironmentConfig(model="grok-4.1-fast", max_turns=1),
+        data=DataConfig(csv_path="data.csv"),
+        model=ModelConfig(model_name="grok-4.1-fast"),
+        execution=ExecutionConfig(max_turns=1),
+        task=TaskConfig(mode="teacher-tutor"),
         logger=logger
     )
 
-    print("Environment created with RichHandler")
-    print("This should produce Rich formatted output when rollout() is called")
+    print("Environment created with standard logger")
+    print("This should produce formatted output when rollout() is called")
 
 
 def test_file_logging():
@@ -65,8 +57,10 @@ def test_file_logging():
     logger.addHandler(logging.FileHandler("test_output.log"))
 
     env = Environment(
-        csv_path="data.csv",
-        config=EnvironmentConfig(model="grok-4.1-fast", max_turns=1),
+        data=DataConfig(csv_path="data.csv"),
+        model=ModelConfig(model_name="grok-4.1-fast"),
+        execution=ExecutionConfig(max_turns=1),
+        task=TaskConfig(mode="teacher-tutor"),
         logger=logger
     )
 
@@ -99,8 +93,10 @@ def test_custom_logging():
     logger.addHandler(JSONHandler())
 
     env = Environment(
-        csv_path="data.csv",
-        config=EnvironmentConfig(model="grok-4.1-fast", max_turns=1),
+        data=DataConfig(csv_path="data.csv"),
+        model=ModelConfig(model_name="grok-4.1-fast"),
+        execution=ExecutionConfig(max_turns=1),
+        task=TaskConfig(mode="teacher-tutor"),
         logger=logger
     )
 
@@ -109,21 +105,20 @@ def test_custom_logging():
 
 
 def test_manual_logging():
-    """Test manual logger calls to verify RichHandler formatting."""
+    """Test manual logger calls to verify logger formatting."""
     print("\n=== TEST 5: Manual Logger Calls ===")
 
-    rollout_config = RolloutConfig()
-    logger = setup_rich_logger(rollout_config)
+    logger = create_logger()
 
-    # Manually trigger log events to see RichHandler formatting
+    # Manually trigger log events to see logger formatting
     logger.info("episode_start", extra={"csv_path": "test.csv"})
     logger.info("turn_start", extra={"turn": 1, "max_turns": 5})
     logger.info("model_response", extra={"response": "This is a test response from the model."})
-    logger.info("tool_executed", extra={"tool": "group_stat", "output": "Mean: 42.5", "success": True})
-    logger.info("tool_executed", extra={"tool": "bad_tool", "output": "Error: tool failed", "success": False})
+    logger.info("code_executed", extra={"success": True, "stdout": "Mean: 42.5", "stderr": ""})
+    logger.info("code_executed", extra={"success": False, "stdout": "", "stderr": "Error: execution failed"})
     logger.info("episode_complete", extra={"results": None})
 
-    print("\nAbove should show Rich-formatted output")
+    print("\nAbove should show formatted output")
 
 
 if __name__ == "__main__":

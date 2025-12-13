@@ -25,7 +25,7 @@ from src.core.kernel import JupyterKernel
 from src.core.model import APILLM
 from src.core.conversation import ConversationManager, Turn, CodeCellResult
 from src.authoring.types import ExplorationTurn, ExplorationTrace
-from src.authoring.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
+from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
 
 class QuestionGenUI:
@@ -276,7 +276,7 @@ def force_question_generation(llm: APILLM, conversation: ConversationManager) ->
 
 def explore_and_generate_questions(
     csv_path: str,
-    model: str = "meta-llama/llama-3.2-3b-instruct:free",
+    model: str,
     max_turns: int = 20,
     temperature: float = 0.7,
     max_tokens: int = 6000,  # Increased default to allow full question generation
@@ -406,19 +406,17 @@ def explore_and_generate_questions(
     )
 
     # 5. Save outputs
-    question_dir = Path("question")
-    answer_dir = Path("answer")
-    question_dir.mkdir(parents=True, exist_ok=True)
-    answer_dir.mkdir(parents=True, exist_ok=True)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
 
-    # Save questions.json to question/
-    questions_file = question_dir / "questions.json"
+    # Save questions.json
+    questions_file = output_path / "questions.json"
     with open(questions_file, 'w') as f:
         json.dump(questions_generated, f, indent=2)
     ui.print_saved_file(questions_file)
 
-    # Save exploration trace to answer/
-    trace_file = answer_dir / "exploration_trace.json"
+    # Save exploration trace
+    trace_file = output_path / "exploration_trace.json"
     with open(trace_file, 'w') as f:
         json.dump(trace.model_dump(), f, indent=2, default=str)
     ui.print_saved_file(trace_file)
@@ -433,13 +431,18 @@ def main():
     # Load config
     config = load_config("config.yaml")
 
-    # Get values from config with defaults
-    csv_path = config.get("csv", "csv/data.csv")
-    output_file = config.get("output", "question/questions.json")
-    max_turns = config.get("question_gen_max_turns", 20)
-    temperature = config.get("sampling_args", {}).get("temperature", 0.7)
-    max_tokens = config.get("sampling_args", {}).get("max_tokens", 2000)
-    model = config.get("question_gen_model", "meta-llama/llama-3.2-3b-instruct:free")
+    # Extract config values (fail-fast on missing keys)
+    csv_path = config["csv"]
+    output_file = config["output"]
+    max_turns = config["question_gen_max_turns"]
+    temperature = config["sampling_args"]["temperature"]
+    max_tokens = config["sampling_args"]["max_tokens"]
+    model = config["question_gen_model"]
+
+    # Set output directory from output file path
+    output_dir = str(Path(output_file).parent)
+    if output_dir == ".":
+        output_dir = "."
 
     try:
         questions, trace = explore_and_generate_questions(
@@ -448,7 +451,7 @@ def main():
             max_turns=max_turns,
             temperature=temperature,
             max_tokens=max_tokens,
-            output_dir="."  # Output directories are now hardcoded to question/ and answer/
+            output_dir=output_dir
         )
 
         # Print summary

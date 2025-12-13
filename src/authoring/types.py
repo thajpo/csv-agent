@@ -10,62 +10,40 @@ from typing import Any
 from datetime import datetime
 
 # Import shared types from core
-from src.core.types import Artifact
+from src.core.types import Artifact, ExecutionTrace, Question
 
 
-# ============= Teacher Trace Types =============
-
-class TeacherTrace(BaseModel):
-    """Teacher's solution execution record."""
-    question: str
-    hint: str | None = None
-    code_cells: list[str]                   # Raw Python code per turn
-    artifacts: dict[str, Artifact]          # name → Artifact
-    final_answer: Any = None                # The submit() value
-    final_answer_hash: str | None = None
-    execution_success: bool
-
-    class Config:
-        arbitrary_types_allowed = True
-
+# ============= Episode (Simplified) =============
 
 class Episode(BaseModel):
-    """Complete training episode with scavenger hunt rewards."""
-    id: str                                 # Unique episode ID
-    timestamp: datetime = datetime.now()
-    question: str
-    hint: str | None = None
+    """A verified training episode."""
+    id: str
+    question: Question                              # First-class Question object
+    teacher_trace: ExecutionTrace                   # Teacher execution WITH hint
+    consistency_traces: list[ExecutionTrace] = []   # Consistency traces WITHOUT hint (for triangulation)
+    verified: bool = False                          # Passed triangulation?
 
-    # Teacher data
-    teacher_trace: TeacherTrace
-    consistency_traces: list[TeacherTrace] = []  # For triangulation verification
+    # Student execution (populated during training)
+    student_trace: ExecutionTrace | None = None
 
-    # Student data (populated during training)
-    student_trace: Any | None = None  # StudentTrace from training.types
-
-    # Rewards (scavenger hunt)
-    intermediate_matches: list[str] = []    # Artifact names student matched
-    final_match: bool = False               # Did final answer match?
-    dense_reward: int = 0                   # +1 per intermediate match
-    sparse_reward: int = 0                  # +5 if final match
-    total_reward: float = 0.0               # Combined score
+    # Reward calculation (computed, ephemeral)
+    reward_summary: dict | None = None              # {"intermediate_matches": [...], "final_match": bool, ...}
 
     # Metadata
-    difficulty: str | None = None           # Optional difficulty tagging
-    verified: bool = False                  # Passed triangulation?
+    timestamp: datetime = datetime.now()
 
     class Config:
         arbitrary_types_allowed = True
 
 
-# ============= Question Generation Types =============
+# ============= Question Exploration Types =============
 
 class ExplorationTurn(BaseModel):
-    """Single turn in dataset exploration conversation."""
+    """Single turn during dataset exploration for question generation."""
     turn_number: int
-    reasoning: str                              # Model's written notes (what/why/hypotheses)
-    code_cells: list[str]                       # Python code executed
-    execution_results: list[Any]                # CodeCellResult objects (avoiding circular import)
+    reasoning: str
+    code_cells: list[str]
+    execution_results: list[Any]  # CodeCellResult objects
     timestamp: datetime
 
     class Config:
@@ -73,10 +51,10 @@ class ExplorationTurn(BaseModel):
 
 
 class ExplorationTrace(BaseModel):
-    """Complete exploration session for question generation."""
+    """Record of exploration session for question generation."""
     csv_path: str
     turns: list[ExplorationTurn]
-    questions_generated: list[dict]             # Final questions
+    questions_generated: list[dict]
     total_turns: int
     timestamp: datetime = datetime.now()
 
@@ -85,11 +63,11 @@ class ExplorationTrace(BaseModel):
 
 
 class GeneratedQuestion(BaseModel):
-    """LLM-generated question with metadata."""
+    """A generated question from exploration."""
     question: str
-    hint: str                                   # Max 2-3 sentences
-    n_steps: int                                # Estimated step count
-    difficulty: str                             # EASY, MEDIUM, HARD, VERY_HARD
+    hint: str
+    n_steps: int
+    difficulty: str  # EASY, MEDIUM, HARD, VERY_HARD
 
-    # Optional metadata for tracking
-    exploration_turn: int | None = None         # Which turn inspired this question
+    class Config:
+        arbitrary_types_allowed = True

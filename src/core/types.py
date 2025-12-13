@@ -7,11 +7,9 @@ both offline dataset generation and online training.
 
 from pydantic import BaseModel
 from typing import Any
-from datetime import datetime
 from hashlib import sha256
 import pickle
 import pandas as pd
-
 
 # ============= Artifact Hashing =============
 
@@ -64,28 +62,31 @@ class Artifact(BaseModel):
         arbitrary_types_allowed = True
 
 
-# ============= Environment Configuration Types =============
+# ============= New Unified Types (Phase 1) =============
 
-class EnvironmentConfig(BaseModel):
-    """Configuration for the Environment."""
-    csv_path: str = "data.csv"
-    model: str = "grok-4.1-fast"
-    pipeline_mode: str = "teacher-tutor"  # "teacher-tutor", "teacher-consistency", "student"
-    max_turns: int = 10
-    target_questions: int = 10
+class Question(BaseModel):
+    """A question with metadata."""
+    question_text: str
+    hint: str | None = None
+    difficulty: str | None = None  # EASY, MEDIUM, HARD, VERY_HARD
+    n_steps: int | None = None     # Expected step count
 
-    # Context management configuration
-    max_active_turns: int = 5
-    max_context_tokens: int = 80_000
+    # For tracking/versioning
+    id: str | None = None
+    created_at: Any | None = None  # datetime, but avoid import for now
 
 
-class StateConfig(BaseModel):
-    """State configuration for an episode."""
-    input: str
-    conversation_manager: Any  # ConversationManager - avoiding circular import
-    n_turns: int
-    is_completed: bool
-    current_turn: int
+class ExecutionTrace(BaseModel):
+    """Record of a code execution session (teacher or student)."""
+    code_cells: list[str]                   # Raw Python code per turn
+    artifacts: dict[str, Artifact]          # name → Artifact
+    final_answer: Any | None = None         # The submit() value
+    final_answer_hash: str | None = None
+    execution_success: bool
+
+    # Optional metadata (for debugging/analysis)
+    total_turns: int = 0
+    archived_turn_count: int = 0            # Turns purged from context
 
     class Config:
         arbitrary_types_allowed = True
