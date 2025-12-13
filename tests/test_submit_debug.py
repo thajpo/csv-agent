@@ -1,4 +1,4 @@
-from src.kernel import JupyterKernel
+from src.core.kernel import JupyterKernel
 
 kernel = JupyterKernel(timeout=30, csv_path="data.csv")
 kernel.execute("submit(42)")

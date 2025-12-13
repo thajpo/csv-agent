@@ -4,8 +4,8 @@ Quick test of teacher triangulation.
 This tests a single question to verify the triangulation logic works.
 """
 
-from src.authoring.teacher import triangulate_teacher
-from src.authoring.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
+from src.datagen.teacher import triangulate_teacher
+from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
 
 # Test question
 question = "What is the mean TL (total length) for the control group?"
