@@ -307,6 +307,12 @@ def submit(answer):
 # Load dataset
 df = pd.read_csv({csv_path!r})
 print(f"Dataset loaded: {{df.shape[0]}} rows, {{df.shape[1]}} columns")
+
+# Forced Seeding for Reproducibility
+import random
+random.seed(42)
+np.random.seed(42)
+print("Random seeds set to 42")
 """
         # Skip validation for setup code (it contains necessary imports)
         result = self.execute(builtin_code.strip(), skip_validation=True)
@@ -427,6 +433,32 @@ _serialized
     def __exit__(self, *args):
         self.shutdown()
 
+    def validate_state(self) -> bool:
+        """
+        Check if critical variables (df, pd, np) are still present and valid.
+
+        Returns:
+            True if state is valid, False if corruption detected.
+        """
+        code = """
+try:
+    _check = [df, pd, np, submit]
+    print("State valid")
+except NameError:
+    print("State invalid")
+except Exception:
+    print("State invalid")
+"""
+        result = self.execute(code, skip_validation=True)
+        return result.success and "State valid" in result.stdout
+
+    def restore_state(self):
+        """
+        Restore the kernel state if it has been corrupted.
+        Re-runs the setup code (reloading CSV and libraries).
+        """
+        if self.csv_path:
+            self.setup_kernel_builtins(self.csv_path)
 
 # -----------------------------------------------------------------------------
 # Quick test when run directly
