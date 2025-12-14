@@ -1,51 +1,59 @@
-# csv-agent-qa
+# csv-agent
 
-> Replace the placeholders below, then remove this callout.
+Agent for CSV dataset exploration and training data generation.
 
-### Overview
-- **Environment ID**: `csv-agent-qa`
-- **Short description**: <one-sentence description>
-- **Tags**: <comma-separated tags>
-
-### Datasets
-- **Primary dataset(s)**: <name(s) and brief description>
-- **Source links**: <links>
-- **Split sizes**: <train/eval counts>
-
-### Task
-- **Type**: <single-turn | multi-turn | tool use>
-- **Parser**: <e.g., ThinkParser, XMLParser, custom>
-- **Rubric overview**: <briefly list reward functions and key metrics>
-
-### Quickstart
-Run an evaluation with default settings:
+## Setup
 
 ```bash
-uv run vf-eval csv-agent-qa
+uv sync
 ```
 
-Configure model and sampling:
+## Pipeline
+
+### Stage 1: Generate Questions
+
+Explore a dataset and generate questions with hints:
 
 ```bash
-uv run vf-eval csv-agent-qa   -m gpt-4.1-mini   -n 20 -r 3 -t 1024 -T 0.7   -a '{"key": "value"}'  # env-specific args as JSON
+uv run python scripts/generate_questions.py --csv csv/data.csv
 ```
 
-Notes:
-- Use `-a` / `--env-args` to pass environment-specific configuration as a JSON object.
+Options:
+- `--model` - Model to use (default: `openai/gpt-4o`)
+- `--max-turns` - Max exploration turns (default: 20)
+- `--output-dir` - Output directory (default: `outputs`)
 
-### Environment Arguments
-Document any supported environment arguments and their meaning. Example:
+Output: `outputs/<dataset>/questions.json`
 
-| Arg | Type | Default | Description |
-| --- | ---- | ------- | ----------- |
-| `foo` | str | `"bar"` | What this controls |
-| `max_examples` | int | `-1` | Limit on dataset size (use -1 for all) |
+---
 
-### Metrics
-Summarize key metrics your rubric emits and how they’re interpreted.
+### Stage 2: Generate Training Data
 
-| Metric | Meaning |
-| ------ | ------- |
-| `reward` | Main scalar reward (weighted sum of criteria) |
-| `accuracy` | Exact match on target answer |
+Validate questions via teacher triangulation and save verified traces:
 
+```bash
+uv run python scripts/generate_training_data.py \
+    --csv csv/data.csv \
+    --questions outputs/data/questions.json
+```
+
+Options:
+- `--model` - Model to use (default: `openai/gpt-4o`)
+- `--n-consistency` - Number of verification traces (default: 3)
+- `--max-turns` - Max turns per trace (default: 10)
+
+Output:
+- `outputs/<dataset>/traces.json` - All traces
+- `outputs/<dataset>/training_data.json` - Verified traces only
+
+---
+
+### Stage 3: Train (future)
+
+Student RL training using verified traces. Not yet implemented.
+
+## Tests
+
+```bash
+uv run pytest tests/ -v
+```
