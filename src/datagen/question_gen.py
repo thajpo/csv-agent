@@ -24,7 +24,7 @@ from rich.markdown import Markdown
 from src.core.kernel import JupyterKernel
 from src.core.model import APILLM
 from src.core.conversation import ConversationManager, Turn, CodeCellResult
-from src.authoring.types import ExplorationTurn, ExplorationTrace
+from src.datagen.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
 

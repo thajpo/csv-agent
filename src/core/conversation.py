@@ -84,3 +84,38 @@ class ConversationHistory(BaseModel):
             {"role": "system", "content": self.system_prompt},
             *self.messages
         ]
+
+
+# ============= Legacy Turn-based API (for question_gen.py) =============
+
+@dataclass
+class Turn:
+    """A single turn in the conversation (legacy API)."""
+    turn_number: int
+    timestamp: Any
+    model_response: str
+    done_signal: bool = False
+    feedback_message: str = ""
+    reasoning: str | None = None
+    code_cells: list[str] | None = None
+    execution_results: list[CodeCellResult] | None = None
+
+
+class ConversationManager(ConversationHistory):
+    """
+    Legacy conversation manager (alias for ConversationHistory).
+    
+    Adds add_turn() method for backwards compatibility with question_gen.py.
+    """
+    
+    def add_turn(self, turn: Turn) -> None:
+        """Add a turn (legacy API)."""
+        if turn.model_response:
+            self.add_assistant_response(turn.model_response)
+        if turn.feedback_message:
+            self.add_user_feedback(turn.feedback_message)
+    
+    def get_active_turn_count(self) -> int:
+        """Return number of turns (estimate: 2 messages per turn)."""
+        return len(self.messages) // 2
+
