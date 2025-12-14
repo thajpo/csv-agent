@@ -23,7 +23,7 @@ from rich.markdown import Markdown
 
 from src.core.kernel import JupyterKernel
 from src.core.model import APILLM
-from src.core.conversation import ConversationManager, Turn, CodeCellResult
+from src.core.conversation import ConversationHistory, CodeCellResult
 from src.datagen.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
@@ -243,23 +243,17 @@ def build_execution_feedback(results: list[CodeCellResult]) -> str:
     return "\n\n".join(feedback_parts)
 
 
-def force_question_generation(llm: APILLM, conversation: ConversationManager) -> list[dict]:
+def force_question_generation(llm: APILLM, conversation: ConversationHistory) -> list[dict]:
     """
     If model hasn't generated questions by max_turns, force it with a direct prompt.
 
     Returns:
         List of question dicts
     """
-    # Add forcing message
-    force_turn = Turn(
-        turn_number=conversation.get_active_turn_count(),
-        timestamp=datetime.now(),
-        model_response="",
-        done_signal=False,
-        feedback_message="You've explored enough. Now generate the 13 questions in JSON format as specified in the system prompt.",
-        reasoning=None
+    # Add forcing message as user feedback
+    conversation.add_user_feedback(
+        "You've explored enough. Now generate the 13 questions in JSON format as specified in the system prompt."
     )
-    conversation.add_turn(force_turn)
 
     # Get response
     messages = conversation.to_openai_messages()
@@ -304,9 +298,9 @@ async def explore_and_generate_questions(
     # 1. Setup
     kernel = await JupyterKernel.create(timeout=120, workdir=None, csv_path=csv_path)
     llm = APILLM(model=model, sampling_args={"temperature": temperature, "max_tokens": max_tokens})
-    conversation = ConversationManager(
+    conversation = ConversationHistory(
         system_prompt=EXPLORATION_SYSTEM_PROMPT,
-        max_active_turns=50,  # Keep full exploration in context
+        max_messages=100,  # Keep full exploration in context
         max_context_tokens=100_000
     )
 
@@ -379,17 +373,8 @@ async def explore_and_generate_questions(
         feedback += get_exploration_continue_msg(turn_num, MIN_EXPLORATION_TURNS)
 
         # Add turn to conversation
-        conversation_turn = Turn(
-            turn_number=turn_num,
-            timestamp=datetime.now(),
-            model_response=response,
-            code_cells=code_cells,
-            execution_results=execution_results,
-            done_signal=False,
-            feedback_message=feedback,
-            reasoning=None
-        )
-        conversation.add_turn(conversation_turn)
+        conversation.add_assistant_response(response)
+        conversation.add_user_feedback(feedback)
 
     # 3. Validate we got questions
     if not questions_generated:
