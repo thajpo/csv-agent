@@ -18,6 +18,8 @@ Key concepts:
 import atexit
 from dataclasses import dataclass, field
 from jupyter_client import KernelManager
+from jupyter_client.manager import AsyncKernelManager
+from jupyter_client.asynchronous import AsyncKernelClient
 from queue import Empty
 from typing import Optional
 
@@ -48,45 +50,34 @@ class JupyterKernel:
         kernel.shutdown()
     """
     
-    def __init__(self, timeout: float = 10.0, workdir: Optional[str] = None, csv_path: Optional[str] = None):
-        """
-        Start a new Python kernel.
-
-        Args:
-            timeout: Max seconds to wait for code execution (default 10s)
-            workdir: Working directory for the kernel (default None)
-            csv_path: Path to CSV file to load automatically (default None)
-        """
+    def __init__(self, timeout, csv_path):
         self.timeout = timeout
         self.csv_path = csv_path
+        self.km = None
+        self.kc = None
+    
+    @classmethod
+    async def create(cls, timeout, csv_path, workdir):
+        kernel = cls(timeout, csv_path)
 
-        # --- Step 1: Create and start the kernel manager ---
-        # This spawns a new Python process that will run our code
-        self.km = KernelManager(kernel_name='python3', cwd=workdir)
-        self.km.start_kernel()
+        kernel.km = AsyncKernelManager(kernel_name='python3', cwd=workdir)
+        await kernel.km.start_kernel()
 
-        # --- Step 2: Get a client to talk to the kernel ---
-        # The client sends messages (code) and receives responses
-        self.kc = self.km.client()
-        self.kc.start_channels()
+        kernel.kc = kernel.km.client()
+        kernel.kc.start_channels()
+        await kernel.kc.wait_for_ready(timeout=30)
 
-        # Wait for kernel to be ready (sends a "kernel_info_request")
-        self.kc.wait_for_ready(timeout=30)
-
-        # --- Step 3: Setup built-in functions and load CSV ---
         if csv_path:
-            self.setup_kernel_builtins(csv_path)
-            # Define baseline variables to exclude from artifact snapshots
-            # These are pre-loaded by setup_kernel_builtins() and exist in every execution
-            self.baseline_vars = {
-                'np', 'pd', 'scipy', 'sklearn', 'statsmodels', 'sm',  # Libraries
-                'df', 'submit', '__SUBMITTED_ANSWER__'  # Kernel builtins
+            await kernel.setup_kernel_builtins(csv_path)
+            kernel.baseline_vars = {
+                'np', 'pd', 'scipy', 'sklearn', 'statsmodels', 'sm',
+                'df', 'submit', '__SUBMITTED_ANSWER__'
             }
         else:
-            self.baseline_vars = set()
+            kernel.baseline_vars = set()
 
-        # Register cleanup on program exit
-        atexit.register(self.shutdown)
+        atexit.register(kernel.shutdown)
+        return kernel
 
     def _validate_imports(self, code: str) -> tuple[bool, str]:
         """
@@ -183,7 +174,7 @@ Example: Use df.describe() directly instead of 'import pandas as pd'"""
 
         return (True, "")
 
-    def execute(self, code: str, skip_validation: bool = False) -> ExecutionResult:
+    async def execute(self, code: str, skip_validation: bool = False) -> ExecutionResult:
         """
         Execute code in the kernel and return the result.
 
@@ -206,7 +197,7 @@ Example: Use df.describe() directly instead of 'import pandas as pd'"""
                 )
 
         msg_id = self.kc.execute(code)
-        outputs = self._collect_outputs(msg_id)
+        outputs = await self._collect_outputs(msg_id)
         
         elapsed = int((time.perf_counter() - start) * 1000)
         
@@ -229,7 +220,7 @@ Example: Use df.describe() directly instead of 'import pandas as pd'"""
             execution_time_ms=elapsed,
         )
     
-    def _collect_outputs(self, msg_id: str) -> Optional[dict]:
+    async def _collect_outputs(self, msg_id: str) -> Optional[dict]:
         """
         Read messages from kernel until execution completes.
         Returns None on timeout, otherwise dict of collected outputs.
@@ -245,7 +236,7 @@ Example: Use df.describe() directly instead of 'import pandas as pd'"""
         
         while True:
             try:
-                msg = self.kc.get_iopub_msg(timeout=self.timeout)
+                msg = await self.kc.get_iopub_msg(timeout=self.timeout)
             except Empty:
                 return None
             
@@ -277,7 +268,7 @@ Example: Use df.describe() directly instead of 'import pandas as pd'"""
         # Wait for it to complete
         self.kc.get_shell_msg(timeout=5)
 
-    def setup_kernel_builtins(self, csv_path: str):
+    async def setup_kernel_builtins(self, csv_path: str):
         """
         Inject helper functions and load CSV into kernel namespace.
 
@@ -315,11 +306,11 @@ np.random.seed(42)
 print("Random seeds set to 42")
 """
         # Skip validation for setup code (it contains necessary imports)
-        result = self.execute(builtin_code.strip(), skip_validation=True)
+        result = await self.execute(builtin_code.strip(), skip_validation=True)
         if not result.success:
             raise RuntimeError(f"Failed to setup kernel builtins: {result.error_message}")
 
-    def get_locals(self) -> dict:
+    async def get_locals(self) -> dict:
         """
         Get all local variables from the kernel namespace.
 
@@ -327,7 +318,7 @@ print("Random seeds set to 42")
             Dict of variable names to their values (DataFrames, scalars, and __SUBMITTED_ANSWER__)
         """
         # Extract only serializable variables (DataFrames, scalars, and submitted answer)
-        result = self.execute("""
+        result = await self.execute("""
 import pickle
 import base64
 import pandas as pd
@@ -359,7 +350,7 @@ _serialized
         except Exception:
             return {}
 
-    def snapshot_artifacts(self) -> dict:
+    async def snapshot_artifacts(self) -> dict:
         """
         Capture only USER-CREATED DataFrames and scalars as Artifacts.
 
@@ -373,7 +364,7 @@ _serialized
         from src.utils.hashing import hash_artifact
         import pandas as pd
 
-        locals_dict = self.get_locals()
+        locals_dict = await self.get_locals()
         artifacts = {}
 
         for name, obj in locals_dict.items():
@@ -399,17 +390,17 @@ _serialized
 
         return artifacts
 
-    def get_final_answer(self):
+    async def get_final_answer(self):
         """
         Retrieve value passed to submit().
 
         Returns:
             The value passed to submit(), or None if not called
         """
-        locals_dict = self.get_locals()
+        locals_dict = await self.get_locals()
         return locals_dict.get('__SUBMITTED_ANSWER__', None)
 
-    def shutdown(self):
+    async def shutdown(self):
         """Stop the kernel process."""
         if getattr(self, '_shutdown', False):
             return  # Already shut down
@@ -424,7 +415,7 @@ _serialized
             self.kc.stop_channels()
             del self.kc
         if hasattr(self, 'km') and self.km is not None:
-            self.km.shutdown_kernel(now=True)
+            await self.km.shutdown_kernel(now=True)
             del self.km
     
     def __enter__(self):
@@ -433,7 +424,7 @@ _serialized
     def __exit__(self, *args):
         self.shutdown()
 
-    def validate_state(self) -> bool:
+    async def validate_state(self) -> bool:
         """
         Check if critical variables (df, pd, np) are still present and valid.
 
@@ -449,16 +440,16 @@ except NameError:
 except Exception:
     print("State invalid")
 """
-        result = self.execute(code, skip_validation=True)
+        result = await self.execute(code, skip_validation=True)
         return result.success and "State valid" in result.stdout
 
-    def restore_state(self):
+    async def restore_state(self):
         """
         Restore the kernel state if it has been corrupted.
         Re-runs the setup code (reloading CSV and libraries).
         """
         if self.csv_path:
-            self.setup_kernel_builtins(self.csv_path)
+            await self.setup_kernel_builtins(self.csv_path)
 
 # -----------------------------------------------------------------------------
 # Quick test when run directly

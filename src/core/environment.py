@@ -61,9 +61,28 @@ class Environment:
             model=model.model_name,
             sampling_args=model.sampling_args()
         )
-        self.kernel = kernel or JupyterKernel(timeout=120.0, csv_path=self.csv_path)
+        self.kernel = kernel  # Will be created in create() if None
         self.logger = logger or create_logger(silent=True)
         self.df = None  # Will be loaded on first rollout
+
+    @classmethod
+    async def create(
+        cls,
+        data: DataConfig,
+        model: ModelConfig,
+        execution: ExecutionConfig,
+        task: TaskConfig,
+        kernel: JupyterKernel | None = None,
+        logger: logging.Logger | None = None,
+    ):
+        """Async factory to create Environment with initialized kernel."""
+        env = cls(data, model, execution, task, kernel, logger)
+        
+        # Create kernel if not provided
+        if env.kernel is None:
+            env.kernel = await JupyterKernel.create(timeout=120.0, csv_path=env.csv_path)
+        
+        return env
 
     def _load_csv(self):
         """Load CSV file if not already loaded."""
@@ -108,15 +127,15 @@ class Environment:
         pattern = r"```python\n(.*?)```"
         return re.findall(pattern, response, re.DOTALL)
 
-    def execute_code_cell(self, code: str) -> CodeCellResult:
+    async def execute_code_cell(self, code: str) -> CodeCellResult:
         """
         Execute code in kernel and return execution result.
         """
         # Execute in kernel
-        result = self.kernel.execute(code)
+        result = await self.kernel.execute(code)
 
         # Check for submitted answer
-        submitted_answer = self.kernel.get_final_answer()
+        submitted_answer = await self.kernel.get_final_answer()
 
         return CodeCellResult(
             code=code,
@@ -126,20 +145,20 @@ class Environment:
             submitted_answer=submitted_answer,
         )
 
-    def handle_max_turns_reached(self) -> None:
+    async def handle_max_turns_reached(self) -> None:
         """Handle reaching max turns: prompt for final output and get response."""
         self.logger.info("max_turns_reached", extra={"max_turns": self.execution.max_turns})
         self.conversation.add_user_feedback(FINAL_MSG)
 
-        response = self.get_model_response()
+        response = await self.get_model_response()
 
         self.conversation.add_assistant_response(response)
         self.is_completed = True
 
-    def get_model_response(self) -> str:
+    async def get_model_response(self) -> str:
         """Call model and log the interaction."""
         messages = self.conversation.to_openai_messages()
-        response = self.model(messages)
+        response = await self.model(messages)
 
         self.logger.info("model_response", extra={"response": response})
         return response
@@ -154,7 +173,7 @@ class Environment:
             return False
         return True
 
-    def process_turn(self, response: str) -> None:
+    async def process_turn(self, response: str) -> None:
         """Process a single turn: extract code cells, execute, build feedback, check completion."""
         code_cells = self.extract_python_cells(response)
 
@@ -164,7 +183,7 @@ class Environment:
 
         if code_cells:
             for cell_code in code_cells:
-                result = self.execute_code_cell(cell_code)
+                result = await self.execute_code_cell(cell_code)
                 execution_results.append(result)
 
                 # Log execution
@@ -212,7 +231,7 @@ class Environment:
             self.is_completed = True
             self.logger.info("episode_complete", extra={"results": submitted_answer})
 
-    def rollout(self):
+    async def rollout(self):
         """Execute a multi-turn rollout episode.
 
         Returns:
@@ -228,11 +247,11 @@ class Environment:
 
             # Check if we've reached max turns BEFORE processing
             if self.current_turn >= self.execution.max_turns:
-                self.handle_max_turns_reached()
+                await self.handle_max_turns_reached()
                 break
 
             # Get model response
-            response = self.get_model_response()
+            response = await self.get_model_response()
 
             # Extract code cells and validate
             code_cells = self.extract_python_cells(response)
@@ -241,7 +260,7 @@ class Environment:
                 continue
 
             # Process this turn (adds to conversation, executes code cells)
-            self.process_turn(response)
+            await self.process_turn(response)
 
             # Increment turn counter
             self.current_turn += 1

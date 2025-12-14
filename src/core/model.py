@@ -48,10 +48,10 @@ class APILLM:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
-        self.client = httpx.Client(timeout=timeout)
+        self.client = httpx.AsyncClient(timeout=timeout)
         self.sampling_args = sampling_args or {}
     
-    def __call__(
+    async def __call__(
         self,
         prompt: str | list[dict],
     ) -> str:
@@ -65,7 +65,7 @@ class APILLM:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                response = self.client.post(
+                response = await self.client.post(
                     f"{self.base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     json={
@@ -111,9 +111,10 @@ class APILLM:
 
         raise RuntimeError(f"Failed after {max_retries} attempts")
     
-    def __del__(self):
+    async def aclose(self):
+        """Async cleanup method."""
         if hasattr(self, "client"):
-            self.client.close()
+            await self.client.aclose()
 
 
 class LLM:

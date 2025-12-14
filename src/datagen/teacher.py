@@ -14,6 +14,7 @@ This filters out questions where:
 """
 
 import logging
+import asyncio
 import pandas as pd
 import numpy as np
 from collections import Counter
@@ -102,7 +103,7 @@ def answers_match(
     return False
 
 
-def execute_teacher_trace(
+async def execute_teacher_trace(
     csv_path: str,
     question: str,
     hint: str | None = None,
@@ -164,11 +165,11 @@ def execute_teacher_trace(
     )
 
     # Create fresh kernel for this trace
-    kernel = JupyterKernel(timeout=120.0, csv_path=csv_path)
+    kernel = await JupyterKernel.create(timeout=120.0, csv_path=csv_path)
 
     try:
         # Create environment with nested configs
-        env = Environment(
+        env = await Environment.create(
             data=data_config,
             model=model_config,
             execution=execution_config,
@@ -178,7 +179,7 @@ def execute_teacher_trace(
         )
 
         # Execute rollout
-        final_state = env.rollout()
+        final_state = await env.rollout()
 
         # Extract conversation for SFT training
         conversation_messages = final_state.conversation.to_openai_messages()
@@ -219,10 +220,10 @@ def execute_teacher_trace(
                 )
 
         # Snapshot artifacts from kernel
-        artifacts = kernel.snapshot_artifacts()
+        artifacts = await kernel.snapshot_artifacts()
 
         # Get final answer
-        final_answer = kernel.get_final_answer()
+        final_answer = await kernel.get_final_answer()
         final_answer_hash = hash_artifact(final_answer) if final_answer is not None else None
 
         # Check if execution was successful (submitted an answer)
@@ -248,10 +249,10 @@ def execute_teacher_trace(
 
     finally:
         # Always cleanup kernel
-        kernel.shutdown()
+        await kernel.shutdown()
 
 
-def triangulate_teacher(
+async def triangulate_teacher(
     csv_path: str,
     question: str,
     hint: str,
@@ -303,7 +304,7 @@ def triangulate_teacher(
     if ui:
         ui.print_trace_header(mode="gold", hint=hint)
 
-    gold_trace, gold_conversation, system_prompt = execute_teacher_trace(
+    gold_trace, gold_conversation, system_prompt = await execute_teacher_trace(
         csv_path=csv_path,
         question=question,
         hint=hint,
@@ -317,15 +318,15 @@ def triangulate_teacher(
         ui=ui,
     )
 
-    # 2. Run consistency traces (without hint)
-    consistency_results = []
-    for i in range(n_consistency):
+    # 2. Run consistency traces (without hint) IN PARALLEL
+    async def run_consistency_trace(i: int):
+        """Helper to run a single consistency trace."""
         logger.info("executing_consistency_trace", extra={"trace_num": i + 1})
 
         if ui:
             ui.print_trace_header(mode=f"{i+1}/{n_consistency}", hint=None)
 
-        trace, conversation, _ = execute_teacher_trace(
+        trace, conversation, _ = await execute_teacher_trace(
             csv_path=csv_path,
             question=question,
             hint=None,
@@ -338,7 +339,12 @@ def triangulate_teacher(
             logger=logger,
             ui=ui,
         )
-        consistency_results.append((trace, conversation))
+        return (trace, conversation)
+
+    # Run all consistency traces concurrently
+    consistency_results = await asyncio.gather(
+        *[run_consistency_trace(i) for i in range(n_consistency)]
+    )
 
     # 3. Majority voting on final answer hashes
     consistency_answers = [
