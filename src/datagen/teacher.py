@@ -404,7 +404,7 @@ async def triangulate_teacher(
     return gold_trace, gold_conversation, system_prompt, consistency_results, verified
 
 
-def batch_triangulate(
+async def batch_triangulate(
     csv_path: str,
     questions: List[dict],
     n_consistency: int = 3,
@@ -452,7 +452,7 @@ def batch_triangulate(
         if ui:
             ui.print_question_header(q_num=i, total=len(questions), question=q_dict)
 
-        gold_trace, gold_conversation, system_prompt, consistency_results, verified = triangulate_teacher(
+        gold_trace, gold_conversation, system_prompt, consistency_results, verified = await triangulate_teacher(
             csv_path=csv_path,
             question=q_dict["question"],
             hint=q_dict.get("hint", ""),

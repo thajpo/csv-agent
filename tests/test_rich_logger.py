@@ -5,17 +5,18 @@ This script demonstrates the hybrid logging approach with Environment + RichHand
 """
 
 import logging
+import asyncio
 
 from src.core.environment import Environment
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.utils.logger import create_logger
 
 
-def test_silent_execution():
+async def test_silent_execution():
     """Test silent execution (no logger)."""
     print("\n=== TEST 1: Silent Execution (No Logger) ===")
 
-    env = Environment(
+    env = await Environment.create(
         data=DataConfig(csv_path="csv/data.csv"),
         model=ModelConfig(model_name="grok-4.1-fast"),
         execution=ExecutionConfig(max_turns=1),
@@ -29,13 +30,13 @@ def test_silent_execution():
     print("This should be silent when rollout() is called")
 
 
-def test_rich_output():
+async def test_rich_output():
     """Test with standard logger."""
     print("\n=== TEST 2: Standard Output ===")
 
     logger = create_logger()
 
-    env = Environment(
+    env = await Environment.create(
         data=DataConfig(csv_path="csv/data.csv"),
         model=ModelConfig(model_name="grok-4.1-fast"),
         execution=ExecutionConfig(max_turns=1),
@@ -47,7 +48,7 @@ def test_rich_output():
     print("This should produce formatted output when rollout() is called")
 
 
-def test_file_logging():
+async def test_file_logging():
     """Test with file logging."""
     print("\n=== TEST 3: File Logging ===")
 
@@ -56,7 +57,7 @@ def test_file_logging():
     logger.handlers.clear()
     logger.addHandler(logging.FileHandler("test_output.log"))
 
-    env = Environment(
+    env = await Environment.create(
         data=DataConfig(csv_path="csv/data.csv"),
         model=ModelConfig(model_name="grok-4.1-fast"),
         execution=ExecutionConfig(max_turns=1),
@@ -68,7 +69,7 @@ def test_file_logging():
     print("This should write logs to test_output.log")
 
 
-def test_custom_logging():
+async def test_custom_logging():
     """Test with custom JSON handler."""
     print("\n=== TEST 4: Custom JSON Logging ===")
 
@@ -92,7 +93,7 @@ def test_custom_logging():
     logger.handlers.clear()
     logger.addHandler(JSONHandler())
 
-    env = Environment(
+    env = await Environment.create(
         data=DataConfig(csv_path="csv/data.csv"),
         model=ModelConfig(model_name="grok-4.1-fast"),
         execution=ExecutionConfig(max_turns=1),
@@ -100,8 +101,8 @@ def test_custom_logging():
         logger=logger
     )
 
-    print("Environment created with JSONHandler")
-    print("This should output structured JSON logs")
+    print("Environment created with custom JSON handler")
+    print("This should output JSON-formatted logs")
 
 
 def test_manual_logging():

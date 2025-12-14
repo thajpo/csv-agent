@@ -274,7 +274,7 @@ def force_question_generation(llm: APILLM, conversation: ConversationManager) ->
     return questions
 
 
-def explore_and_generate_questions(
+async def explore_and_generate_questions(
     csv_path: str,
     model: str,
     max_turns: int = 20,
@@ -302,7 +302,7 @@ def explore_and_generate_questions(
     ui.print_empty_line()
 
     # 1. Setup
-    kernel = JupyterKernel(timeout=120, csv_path=csv_path)
+    kernel = await JupyterKernel.create(timeout=120, workdir=None, csv_path=csv_path)
     llm = APILLM(model=model, sampling_args={"temperature": temperature, "max_tokens": max_tokens})
     conversation = ConversationManager(
         system_prompt=EXPLORATION_SYSTEM_PROMPT,
@@ -320,7 +320,7 @@ def explore_and_generate_questions(
         # Get model response
         messages = conversation.to_openai_messages()
         ui.print_status("Generating LLM response...")
-        response = llm(messages)
+        response = await llm(messages)
 
         # Display LLM response
         ui.print_llm_response(response)
@@ -334,7 +334,7 @@ def explore_and_generate_questions(
         for i, code in enumerate(code_cells, 1):
             ui.print_code_cell(i, code)
 
-            result = kernel.execute(code)
+            result = await kernel.execute(code)
             execution_results.append(CodeCellResult(
                 code=code,
                 success=result.success,

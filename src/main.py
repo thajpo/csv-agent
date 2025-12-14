@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from pathlib import Path
 import yaml
@@ -22,7 +23,7 @@ def load_config(config_path: str = DEFAULT_CONFIG_PATH) -> dict:
         return yaml.safe_load(f)
 
 
-def main():
+async def main():
     # Load config from YAML file
     config = load_config()
 
@@ -69,7 +70,7 @@ def main():
             target_questions=target_questions,
         )
 
-        env = Environment(
+        env = await Environment.create(
             data=data_config,
             model=model_config,
             execution=execution_config,
@@ -78,7 +79,7 @@ def main():
         )
 
         # Run the episode
-        state = env.rollout()
+        state = await env.rollout()
 
     except Exception as e:
         print(e)
@@ -86,4 +87,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
