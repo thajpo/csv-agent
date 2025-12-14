@@ -8,20 +8,28 @@ Agent for CSV dataset exploration and training data generation.
 uv sync
 ```
 
+## Configuration
+
+All settings are in `config.yaml`:
+- `csv` - Path to dataset
+- `teacher_model` / `question_gen_model` - Model identifiers
+- `max_turns` - Max conversation turns
+- `n_consistency` - Number of verification traces
+
 ## Pipeline
 
 ### Stage 1: Generate Questions
 
-Explore a dataset and generate questions with hints:
+Explore a dataset and generate questions:
 
 ```bash
-uv run python scripts/generate_questions.py --csv csv/data.csv
+uv run python scripts/generate_questions.py
 ```
 
-Options:
-- `--model` - Model to use (default: `openai/gpt-4o`)
-- `--max-turns` - Max exploration turns (default: 20)
-- `--output-dir` - Output directory (default: `outputs`)
+Override config:
+```bash
+uv run python scripts/generate_questions.py --csv other.csv --model gpt-4o
+```
 
 Output: `outputs/<dataset>/questions.json`
 
@@ -29,18 +37,11 @@ Output: `outputs/<dataset>/questions.json`
 
 ### Stage 2: Generate Training Data
 
-Validate questions via teacher triangulation and save verified traces:
+Validate questions via teacher triangulation:
 
 ```bash
-uv run python scripts/generate_training_data.py \
-    --csv csv/data.csv \
-    --questions outputs/data/questions.json
+uv run python scripts/generate_training_data.py --questions outputs/data/questions.json
 ```
-
-Options:
-- `--model` - Model to use (default: `openai/gpt-4o`)
-- `--n-consistency` - Number of verification traces (default: 3)
-- `--max-turns` - Max turns per trace (default: 10)
 
 Output:
 - `outputs/<dataset>/traces.json` - All traces
@@ -50,7 +51,7 @@ Output:
 
 ### Stage 3: Train (future)
 
-Student RL training using verified traces. Not yet implemented.
+Student RL training. Not yet implemented.
 
 ## Tests
 
