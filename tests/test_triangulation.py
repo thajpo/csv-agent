@@ -25,8 +25,8 @@ async def main():
         csv_path="csv/data.csv",
         question=question,
         hint=hint,
+        model="openai/gpt-oss-120b",  # Required positional arg (4th)
         n_consistency=2,  # Quick test with 2 traces
-        model="openai/gpt-oss-120b",
         dataset_description=DEFAULT_DATASET_DESCRIPTION,
         data_overview=data_overview,
         max_turns=5,

@@ -8,6 +8,7 @@ This script uses an LLM to:
 
 Configuration is loaded from config.yaml.
 """
+import asyncio
 import json
 import re
 import sys
@@ -430,14 +431,14 @@ def main():
         output_dir = "."
 
     try:
-        questions, trace = explore_and_generate_questions(
+        questions, trace = asyncio.run(explore_and_generate_questions(
             csv_path=csv_path,
             model=model,
             max_turns=max_turns,
             temperature=temperature,
             max_tokens=max_tokens,
             output_dir=output_dir
-        )
+        ))
 
         # Print summary
         ui.print_summary_header()

@@ -329,8 +329,8 @@ def main():
     results = batch_triangulate(
         csv_path=csv_path,
         questions=questions,
+        model=teacher_model,  # Required positional arg (3rd)
         n_consistency=n_consistency,
-        model=teacher_model,
         dataset_description=DEFAULT_DATASET_DESCRIPTION,
         data_overview=data_overview,
         max_turns=max_turns,

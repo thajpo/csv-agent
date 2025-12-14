@@ -32,13 +32,18 @@ def has_gpu() -> bool:
 
 
 class APILLM:
-    """LLM client for OpenAI-compatible APIs (OpenRouter, vLLM, Ollama, etc.)."""
-    
+    """
+    LLM client for OpenAI-compatible APIs (OpenRouter, vLLM, Ollama, etc.).
+
+    IMPORTANT: model parameter has no default. It MUST be provided explicitly
+    from config.yaml. Do not add a default model here.
+    """
+
     def __init__(
         self,
+        model: str,  # No default! Must come from config.yaml
+        *,  # Force remaining args to be keyword-only
         base_url: str = "https://openrouter.ai/api/v1",
-        # model: str = "deepseek/deepseek-v3.2-exp",  # or try "google/gemini-2.0-flash-exp:free"
-        model: str = "meta-llama/llama-3.2-3b-instruct:free",
         api_key: str | None = None,  # Falls back to OPENROUTER_API_KEY env var
         timeout: float = 120.0,
         sampling_args: dict | None = None,

@@ -7,10 +7,15 @@ This module provides focused, single-responsibility config classes:
 - ExecutionConfig: Execution limits (turns, tokens, context)
 - TaskConfig: Task definition (mode, question)
 - Config: Main nested container
+
+IMPORTANT: Do NOT add default values for model names. All model names must
+come from config.yaml to ensure consistency and prevent hardcoded dependencies.
 """
 
+from pathlib import Path
 from pydantic import BaseModel, Field
 from src.core.types import Question
+import yaml
 
 
 class DataConfig(BaseModel):
@@ -22,10 +27,16 @@ class DataConfig(BaseModel):
 
 
 class ModelConfig(BaseModel):
-    """Configuration for LLM model and sampling parameters."""
+    """
+    Configuration for LLM model and sampling parameters.
 
-    model_name: str = "grok-4.1-fast"
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)  # Validated range
+    IMPORTANT: model_name has no default. It MUST be provided via config.yaml.
+    Do not add a default model here - all model selection should be explicit.
+    """
+
+    # No default! Must be provided via config.yaml
+    model_name: str = Field(..., description="Model identifier (e.g., 'openai/gpt-oss-120b')")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1000, gt=0)
     top_p: float = Field(default=1.0, ge=0.0, le=1.0)
 
@@ -58,6 +69,22 @@ class Config(BaseModel):
     """Main configuration with nested sub-configs."""
 
     data: DataConfig = DataConfig()
-    model: ModelConfig = ModelConfig()
+    model: ModelConfig  # No default - must be provided
     execution: ExecutionConfig = ExecutionConfig()
     task: TaskConfig = TaskConfig()
+
+
+def load_config(config_path: str = "config.yaml") -> dict:
+    """
+    Load raw configuration from YAML file.
+
+    Returns:
+        Dict of config values ready to construct Config object.
+    """
+    path = Path(config_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Config file not found: {config_path}")
+
+    with open(path) as f:
+        return yaml.safe_load(f) or {}
+

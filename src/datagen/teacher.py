@@ -106,9 +106,10 @@ def answers_match(
 async def execute_teacher_trace(
     csv_path: str,
     question: str,
+    model: str,  # No default! Must come from config.yaml
+    *,  # Force remaining args to be keyword-only
     hint: str | None = None,
     mode: str = "teacher-tutor",
-    model: str = "openai/gpt-oss-120b",
     dataset_description: str = "",
     data_overview: str = "",
     max_turns: int = 10,
@@ -256,15 +257,16 @@ async def triangulate_teacher(
     csv_path: str,
     question: str,
     hint: str,
+    model: str,  # No default! Must come from config.yaml
+    *,  # Force remaining args to be keyword-only
     n_consistency: int = 3,
-    model: str = "openai/gpt-oss-120b",
     dataset_description: str = "",
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
     ui: Any = None,  # Optional UI instance for Rich output
-    float_tol: float = 0.1,  # Moved from hardcoded below
+    float_tol: float = 0.1,
 ) -> tuple[ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]:
     """
     Run teacher triangulation: gold trace + consistency traces.
@@ -307,9 +309,9 @@ async def triangulate_teacher(
     gold_trace, gold_conversation, system_prompt = await execute_teacher_trace(
         csv_path=csv_path,
         question=question,
+        model=model,  # Required positional arg (3rd)
         hint=hint,
         mode="teacher-tutor",
-        model=model,
         dataset_description=dataset_description,
         data_overview=data_overview,
         max_turns=max_turns,
@@ -329,9 +331,9 @@ async def triangulate_teacher(
         trace, conversation, _ = await execute_teacher_trace(
             csv_path=csv_path,
             question=question,
+            model=model,  # Required positional arg (3rd)
             hint=None,
             mode="teacher-consistency",
-            model=model,
             dataset_description=dataset_description,
             data_overview=data_overview,
             max_turns=max_turns,
@@ -407,15 +409,16 @@ async def triangulate_teacher(
 async def batch_triangulate(
     csv_path: str,
     questions: List[dict],
+    model: str,  # No default! Must come from config.yaml
+    *,  # Force remaining args to be keyword-only
     n_consistency: int = 3,
-    model: str = "openai/gpt-oss-120b",
     dataset_description: str = "",
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
     logger: logging.Logger | None = None,
     ui: Any = None,  # Optional UI instance for Rich output
-    float_tol: float = 0.1,  # Float tolerance for answer matching
+    float_tol: float = 0.1,
 ) -> list[tuple[dict, ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]]:
     """
     Run triangulation on a batch of questions.

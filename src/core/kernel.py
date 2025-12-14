@@ -76,7 +76,21 @@ class JupyterKernel:
         else:
             kernel.baseline_vars = set()
 
-        atexit.register(kernel.shutdown)
+        # Register sync shutdown wrapper for atexit (shutdown() is async)
+        def _sync_shutdown():
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Can't run async from atexit if loop is running
+                    # Kernel will be cleaned up by OS on exit anyway
+                    pass
+                else:
+                    loop.run_until_complete(kernel.shutdown())
+            except Exception:
+                pass  # Best effort cleanup at exit
+
+        atexit.register(_sync_shutdown)
         return kernel
 
     def _validate_imports(self, code: str) -> tuple[bool, str]:
@@ -450,41 +464,3 @@ except Exception:
         """
         if self.csv_path:
             await self.setup_kernel_builtins(self.csv_path)
-
-# -----------------------------------------------------------------------------
-# Quick test when run directly
-# -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    print("Starting kernel...")
-    kernel = JupyterKernel(timeout=5)
-    
-    print("\n--- Test 1: Simple assignment ---")
-    r = kernel.execute("x = 42")
-    print(f"success={r.success}, stdout='{r.stdout}', result={r.result}")
-    
-    print("\n--- Test 2: Print statement ---")
-    r = kernel.execute("print(f'x = {x}')")
-    print(f"success={r.success}, stdout='{r.stdout.strip()}'")
-    
-    print("\n--- Test 3: Expression result ---")
-    r = kernel.execute("x * 2")
-    print(f"success={r.success}, result={r.result}")
-    
-    print("\n--- Test 4: Import and use pandas ---")
-    r = kernel.execute("import pandas as pd; df = pd.DataFrame({'a': [1,2,3]})")
-    print(f"success={r.success}")
-    r = kernel.execute("df")
-    print(f"result:\n{r.result}")
-    
-    print("\n--- Test 5: Error handling ---")
-    r = kernel.execute("1/0")
-    print(f"success={r.success}, error_type={r.error_type}, error_message={r.error_message}")
-    
-    print("\n--- Test 6: State persists ---")
-    r = kernel.execute("x + 100")  # x was set in test 1
-    print(f"success={r.success}, result={r.result}")
-    
-    print("\nShutting down...")
-    kernel.shutdown()
-    print("Done!")
-

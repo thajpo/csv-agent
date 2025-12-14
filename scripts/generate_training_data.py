@@ -56,8 +56,8 @@ def main():
         batch_triangulate(
             csv_path=str(csv_path),
             questions=questions,
+            model=args.model,  # Required positional arg (3rd)
             n_consistency=args.n_consistency,
-            model=args.model,
             data_overview=data_overview,
             max_turns=args.max_turns,
         )
