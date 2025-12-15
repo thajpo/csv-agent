@@ -4,6 +4,8 @@ Environment class for CSV agent.
 This is a pure RL-style environment that executes episodes (rollouts)
 for CSV exploration and question generation. It uses Python's logging
 module for output, keeping the environment logic separate from presentation.
+
+Refactored to use verifiers CSVAnalysisEnv instead of JupyterKernel.
 """
 
 import logging
@@ -17,7 +19,72 @@ from src.utils.validation import get_turn_validation_feedback
 from src.core.prompts import generate_data_overview, build_system_prompt, CONTINUE_MSG, FINAL_MSG
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
-from src.core.kernel import JupyterKernel
+from src.envs.csv_env import CSVAnalysisEnv
+
+
+def parse_execution_result(output: str) -> tuple[bool, str, str]:
+    """
+    Parse verifiers PythonEnv output string into (success, stdout, stderr).
+    
+    The verifiers format returns:
+    - stdout lines
+    - "stderr:\n..." if there's stderr
+    - Traceback if there's an error
+    - "Out[N]: ..." for results
+    - "(no output)" if empty
+    
+    Returns:
+        (success, stdout, error_message)
+    """
+    if not output or output == "(no output)":
+        return True, "", ""
+    
+    # Check for error indicators (Python traceback)
+    error_indicators = [
+        "Traceback (most recent call last):",
+        "Error:",
+        "Exception:",
+    ]
+    
+    is_error = any(indicator in output for indicator in error_indicators)
+    
+    if is_error:
+        # Extract the error portion
+        return False, "", output
+    
+    # Check for stderr section
+    if "stderr:\n" in output:
+        parts = output.split("stderr:\n", 1)
+        stdout = parts[0].strip()
+        stderr = parts[1].strip() if len(parts) > 1 else ""
+        # stderr doesn't always mean failure
+        return True, stdout, stderr
+    
+    # Normal output
+    return True, output, ""
+
+
+def parse_submitted_answer(output: str) -> str | None:
+    """
+    Extract submitted answer from execution output.
+    
+    Looks for "✓ Submitted: {answer}" pattern in stdout.
+    
+    Returns:
+        The submitted answer value, or None if no submission found
+    """
+    # Pattern: "✓ Submitted: <value>"
+    match = re.search(r"✓ Submitted: (.+)", output)
+    if match:
+        answer_str = match.group(1).strip()
+        # Try to eval it back to Python object
+        try:
+            import ast
+            return ast.literal_eval(answer_str)
+        except (ValueError, SyntaxError):
+            # Return as string if can't parse
+            return answer_str
+    return None
 
 
 class Environment:
@@ -27,6 +94,8 @@ class Environment:
     This class handles the execution of multi-turn episodes where
     an LLM explores a CSV dataset using tools. It's designed to be
     pure RL logic with no presentation dependencies (uses stdlib logging).
+    
+    Uses verifiers CSVAnalysisEnv for sandboxed code execution.
     """
 
     def __init__(
@@ -35,7 +104,7 @@ class Environment:
         model: ModelConfig,
         execution: ExecutionConfig,
         task: TaskConfig,
-        kernel: JupyterKernel | None = None,
+        env: CSVAnalysisEnv | None = None,
         logger: logging.Logger | None = None,
     ):
         """
@@ -46,7 +115,7 @@ class Environment:
             model: LLM model and sampling parameters
             execution: Execution limits (turns, tokens, context)
             task: Task definition (mode, question)
-            kernel: Optional JupyterKernel (created if None)
+            env: Optional CSVAnalysisEnv (created if None)
             logger: Optional logger (created if None)
         """
         # Store configs
@@ -61,9 +130,13 @@ class Environment:
             model=model.model_name,
             sampling_args=model.sampling_args()
         )
-        self.kernel = kernel  # Will be created in create() if None
+        self.env = env  # Will be created in create() if None
+        self.state = None  # Verifiers state dict
         self.logger = logger or create_logger(silent=True)
         self.df = None  # Will be loaded on first rollout
+        
+        # Track submitted answer across executions
+        self.submitted_answer = None
 
     @classmethod
     async def create(
@@ -72,21 +145,19 @@ class Environment:
         model: ModelConfig,
         execution: ExecutionConfig,
         task: TaskConfig,
-        kernel: JupyterKernel | None = None,
+        env: CSVAnalysisEnv | None = None,
         logger: logging.Logger | None = None,
     ):
-        """Async factory to create Environment with initialized kernel."""
-        env = cls(data, model, execution, task, kernel, logger)
+        """Async factory to create Environment with initialized CSVAnalysisEnv."""
+        instance = cls(data, model, execution, task, env, logger)
         
-        # Create kernel if not provided
-        if env.kernel is None:
-            env.kernel = await JupyterKernel.create(
-                timeout=120.0,
-                csv_path=env.csv_path,
-                workdir="."
-            )
+        # Create env and state if not provided
+        if instance.env is None:
+            instance.env = CSVAnalysisEnv(csv_path=instance.csv_path)
+            instance.state = {}
+            instance.state = await instance.env.setup_state(instance.state)
         
-        return env
+        return instance
 
     def _load_csv(self):
         """Load CSV file if not already loaded."""
@@ -125,6 +196,7 @@ class Environment:
         self.current_turn = 0
         self.is_completed = False
         self.data_overview = data_overview
+        self.submitted_answer = None  # Reset for new episode
 
     def extract_python_cells(self, response: str) -> list[str]:
         """Extract ```python...``` code blocks from response."""
@@ -133,20 +205,30 @@ class Environment:
 
     async def execute_code_cell(self, code: str) -> CodeCellResult:
         """
-        Execute code in kernel and return execution result.
+        Execute code in CSVAnalysisEnv sandbox and return execution result.
         """
-        # Execute in kernel
-        result = await self.kernel.execute(code)
-
-        # Check for submitted answer
-        submitted_answer = await self.kernel.get_final_answer()
+        # Execute via verifiers env.python()
+        output = await self.env.python(
+            code=code,
+            sandbox_id=self.state["sandbox_id"],
+            sandbox_state=self.state["sandbox_state"],
+            python_state=self.state["python_state"],
+        )
+        
+        # Parse the string output into success/stdout/stderr
+        success, stdout, stderr = parse_execution_result(output)
+        
+        # Check for submitted answer in output
+        submitted = parse_submitted_answer(output)
+        if submitted is not None:
+            self.submitted_answer = submitted
 
         return CodeCellResult(
             code=code,
-            success=result.success,
-            stdout=result.stdout,
-            stderr=result.stderr if not result.success else "",
-            submitted_answer=submitted_answer,
+            success=success,
+            stdout=stdout if success else output,  # Full output for display
+            stderr=stderr if not success else "",
+            submitted_answer=self.submitted_answer,
         )
 
     async def handle_max_turns_reached(self) -> None:
@@ -243,30 +325,39 @@ class Environment:
         """
         self.init_state()
 
-        while not self.is_completed:
-            self.logger.info(
-                "turn_start",
-                extra={"turn": self.current_turn, "max_turns": self.execution.max_turns},
-            )
+        try:
+            while not self.is_completed:
+                self.logger.info(
+                    "turn_start",
+                    extra={"turn": self.current_turn, "max_turns": self.execution.max_turns},
+                )
 
-            # Check if we've reached max turns BEFORE processing
-            if self.current_turn >= self.execution.max_turns:
-                await self.handle_max_turns_reached()
-                break
+                # Check if we've reached max turns BEFORE processing
+                if self.current_turn >= self.execution.max_turns:
+                    await self.handle_max_turns_reached()
+                    break
 
-            # Get model response
-            response = await self.get_model_response()
+                # Get model response
+                response = await self.get_model_response()
 
-            # Extract code cells and validate
-            code_cells = self.extract_python_cells(response)
-            if not self.response_is_valid(response, code_cells):
-                # Don't increment turn counter - let model retry
-                continue
+                # Extract code cells and validate
+                code_cells = self.extract_python_cells(response)
+                if not self.response_is_valid(response, code_cells):
+                    # Don't increment turn counter - let model retry
+                    continue
 
-            # Process this turn (adds to conversation, executes code cells)
-            await self.process_turn(response)
+                # Process this turn (adds to conversation, executes code cells)
+                await self.process_turn(response)
 
-            # Increment turn counter
-            self.current_turn += 1
+                # Increment turn counter
+                self.current_turn += 1
+
+        finally:
+            # Cleanup sandbox
+            if self.state and "sandbox_id" in self.state:
+                try:
+                    await self.env.destroy_sandbox(self.state["sandbox_id"])
+                except Exception as e:
+                    self.logger.warning("sandbox_cleanup_failed", extra={"error": str(e)})
 
         return self

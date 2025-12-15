@@ -24,7 +24,6 @@ from src.core.environment import Environment
 from src.core.types import ExecutionTrace, Question
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.utils.hashing import hash_artifact
-from src.core.kernel import JupyterKernel
 from src.utils.logger import create_logger
 
 
@@ -165,92 +164,82 @@ async def execute_teacher_trace(
         question=question_obj,
     )
 
-    # Create fresh kernel for this trace
-    kernel = await JupyterKernel.create(timeout=120.0, csv_path=csv_path)
+    # Create environment with nested configs (handles CSVAnalysisEnv setup internally)
+    env = await Environment.create(
+        data=data_config,
+        model=model_config,
+        execution=execution_config,
+        task=task_config,
+        logger=logger,
+    )
 
-    try:
-        # Create environment with nested configs
-        env = await Environment.create(
-            data=data_config,
-            model=model_config,
-            execution=execution_config,
-            task=task_config,
-            kernel=kernel,
-            logger=logger,
-        )
+    # Execute rollout (cleanup handled in finally block)
+    final_state = await env.rollout()
 
-        # Execute rollout
-        final_state = await env.rollout()
+    # Extract conversation for SFT training
+    conversation_messages = final_state.conversation.to_openai_messages()
+    system_prompt = conversation_messages[0]["content"] if conversation_messages else ""
 
-        # Extract conversation for SFT training
-        conversation_messages = final_state.conversation.to_openai_messages()
-        system_prompt = conversation_messages[0]["content"] if conversation_messages else ""
+    # Extract code cells from all assistant messages
+    import re
+    code_cells = []
+    pattern = r"```python\n(.*?)```"
+    for msg in conversation_messages:
+        if msg.get("role") == "assistant":
+            cells = re.findall(pattern, msg["content"], re.DOTALL)
+            code_cells.extend(cells)
 
-        # Extract code cells from all assistant messages
-        import re
-        code_cells = []
-        pattern = r"```python\n(.*?)```"
-        for msg in conversation_messages:
-            if msg.get("role") == "assistant":
-                cells = re.findall(pattern, msg["content"], re.DOTALL)
-                code_cells.extend(cells)
+    # Display trace in UI if provided
+    if ui:
+        # Display each turn
+        assistant_messages = [
+            msg for msg in conversation_messages
+            if msg.get("role") == "assistant"
+        ]
 
-        # Display trace in UI if provided
-        if ui:
-            # Display each turn
-            assistant_messages = [
-                msg for msg in conversation_messages
-                if msg.get("role") == "assistant"
-            ]
+        for i, msg in enumerate(assistant_messages, 1):
+            response = msg["content"]
+            # Extract code cells from this message
+            turn_code_cells = re.findall(pattern, response, re.DOTALL)
 
-            for i, msg in enumerate(assistant_messages, 1):
-                response = msg["content"]
-                # Extract code cells from this message
-                turn_code_cells = re.findall(pattern, response, re.DOTALL)
+            # Execution results are not stored in ConversationHistory
+            # (they're only available during rollout execution)
+            execution_results = []
 
-                # Execution results are not stored in ConversationHistory
-                # (they're only available during rollout execution)
-                execution_results = []
-
-                ui.print_turn(
-                    turn_num=i,
-                    max_turns=max_turns,
-                    response=response,
-                    code_cells=turn_code_cells,
-                    execution_results=execution_results
-                )
-
-        # Snapshot artifacts from kernel
-        artifacts = await kernel.snapshot_artifacts()
-
-        # Get final answer
-        final_answer = await kernel.get_final_answer()
-        final_answer_hash = hash_artifact(final_answer) if final_answer is not None else None
-
-        # Check if execution was successful (submitted an answer)
-        execution_success = final_answer is not None
-
-        # Display trace completion in UI
-        if ui:
-            ui.print_trace_complete(
-                success=execution_success,
-                final_answer=final_answer,
-                turns=len(assistant_messages) if 'assistant_messages' in locals() else len(code_cells)
+            ui.print_turn(
+                turn_num=i,
+                max_turns=max_turns,
+                response=response,
+                code_cells=turn_code_cells,
+                execution_results=execution_results
             )
 
-        trace = ExecutionTrace(
-            code_cells=code_cells,
-            artifacts=artifacts,
+    # Get final answer from environment's tracked submission
+    final_answer = env.submitted_answer
+    final_answer_hash = hash_artifact(final_answer) if final_answer is not None else None
+
+    # Check if execution was successful (submitted an answer)
+    execution_success = final_answer is not None
+
+    # Display trace completion in UI
+    if ui:
+        ui.print_trace_complete(
+            success=execution_success,
             final_answer=final_answer,
-            final_answer_hash=final_answer_hash,
-            execution_success=execution_success,
+            turns=len(assistant_messages) if 'assistant_messages' in locals() else len(code_cells)
         )
 
-        return trace, conversation_messages, system_prompt
+    # Artifacts tracking removed - not critical for training
+    # (Can be re-added later if needed via introspection code)
+    trace = ExecutionTrace(
+        code_cells=code_cells,
+        artifacts={},  # Empty for now
+        final_answer=final_answer,
+        final_answer_hash=final_answer_hash,
+        execution_success=execution_success,
+    )
 
-    finally:
-        # Always cleanup kernel
-        await kernel.shutdown()
+    return trace, conversation_messages, system_prompt
 
 
 async def triangulate_teacher(
