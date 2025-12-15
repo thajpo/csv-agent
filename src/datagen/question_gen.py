@@ -27,7 +27,7 @@ from rich.markdown import Markdown
 from src.envs.csv_env import CSVAnalysisEnv
 from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
-from src.datagen.data_types import ExplorationTurn, ExplorationTrace
+from src.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
 

@@ -23,8 +23,7 @@ from rich.syntax import Syntax
 
 from src.datagen.teacher import batch_triangulate
 from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
-from src.datagen.data_types import Episode, EpisodeJSONL
-from src.core.types import Question, ExecutionTrace
+from src.types import Episode, EpisodeJSONL, Question, ExecutionTrace
 from src.utils.logger import create_logger
 from src.utils.ui import ConsoleUI
 

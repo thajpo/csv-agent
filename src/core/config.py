@@ -14,7 +14,7 @@ come from config.yaml to ensure consistency and prevent hardcoded dependencies.
 
 from pathlib import Path
 from pydantic import BaseModel, Field
-from src.core.types import Question
+from src.types import Question
 import yaml
 
 

@@ -1,19 +1,58 @@
 """
-Type definitions for the authoring pipeline (offline dataset generation).
+Type definitions for CSV Agent.
 
-This module contains types used for teacher trace generation, question
-exploration, and triangulation verification.
+All shared types in one place:
+- Core types (Artifact, Question, ExecutionTrace)
+- Episode types (Episode, EpisodeJSONL)
+- Exploration types (ExplorationTurn, ExplorationTrace)
 """
 
 from pydantic import BaseModel
 from typing import Any
 from datetime import datetime
 
-# Import shared types from core
-from src.core.types import Artifact, ExecutionTrace, Question
+
+# ============= Core Types =============
+
+class Artifact(BaseModel):
+    """A checkpoint variable from code execution."""
+    name: str                # Variable name (e.g., 'df_filtered')
+    hash: str               # Hash of its state
+    type: str               # 'DataFrame' | 'scalar' | 'other'
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
-# ============= Episode (Simplified) =============
+class Question(BaseModel):
+    """A question with metadata."""
+    question_text: str
+    hint: str | None = None
+    difficulty: str | None = None  # EASY, MEDIUM, HARD, VERY_HARD
+    n_steps: int | None = None     # Expected step count
+
+    # For tracking/versioning
+    id: str | None = None
+    created_at: Any | None = None  # datetime
+
+
+class ExecutionTrace(BaseModel):
+    """Record of a code execution session (teacher or student)."""
+    code_cells: list[str]                   # Raw Python code per turn
+    artifacts: dict[str, Artifact]          # name → Artifact
+    final_answer: Any | None = None         # The submit() value
+    final_answer_hash: str | None = None
+    execution_success: bool
+
+    # Optional metadata (for debugging/analysis)
+    total_turns: int = 0
+    archived_turn_count: int = 0            # Turns purged from context
+
+    class Config:
+        arbitrary_types_allowed = True
+
+
+# ============= Episode Types =============
 
 class Episode(BaseModel):
     """A verified training episode."""
@@ -97,7 +136,7 @@ class EpisodeJSONL(BaseModel):
                 "expected_final_answer_hash": episode.teacher_trace.final_answer_hash,
                 "expected_final_answer": episode.teacher_trace.final_answer,
                 "intermediate_artifact_hashes": {
-                    name: artifact.hash  # Artifact is a Pydantic model, use dot notation
+                    name: artifact.hash
                     for name, artifact in episode.teacher_trace.artifacts.items()
                 },
             },
@@ -114,7 +153,7 @@ class EpisodeJSONL(BaseModel):
         arbitrary_types_allowed = True
 
 
-# ============= Question Exploration Types =============
+# ============= Exploration Types =============
 
 class ExplorationTurn(BaseModel):
     """Single turn during dataset exploration for question generation."""
