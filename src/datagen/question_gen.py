@@ -22,7 +22,8 @@ from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
-from rich.markdown import Markdown
+
+from src.utils.ui import ConsoleUI
 
 from src.envs.csv_env import CSVAnalysisEnv
 from src.core.model import APILLM
@@ -31,25 +32,12 @@ from src.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
 
-class QuestionGenUI:
-    """Handles all Rich console output for question generation."""
-    
-    def __init__(self):
-        self.console = Console()
-    
-    def print_header(self, title: str, **kwargs) -> None:
-        """Print a formatted header."""
-        self.console.print(f"\n[bold green]{title}[/bold green]", **kwargs)
-    
-    def print_info(self, label: str, value: str) -> None:
-        """Print a key-value info line."""
-        self.console.print(f"[bold blue]{label}:[/bold blue] {value}")
+class QuestionGenUI(ConsoleUI):
+    """Rich console output for question generation, extends base ConsoleUI."""
     
     def print_turn_header(self, turn_num: int, max_turns: int) -> None:
         """Print the turn separator and header."""
-        self.console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
-        self.console.print(f"[bold cyan]TURN {turn_num + 1}/{max_turns}[/bold cyan]")
-        self.console.print(f"[bold cyan]{'=' * 60}[/bold cyan]\n")
+        self.print_section(f"TURN {turn_num + 1}/{max_turns}")
     
     def print_llm_response(self, response: str) -> None:
         """Display LLM response with appropriate formatting."""
@@ -64,65 +52,14 @@ class QuestionGenUI:
                     border_style="yellow"
                 ))
             except json.JSONDecodeError:
-                self.console.print(Panel(
-                    Markdown(response),
-                    title="[bold yellow]LLM Response[/bold yellow]",
-                    border_style="yellow"
-                ))
+                self.print_markdown_panel(response, "LLM Response")
         else:
-            self.console.print(Panel(
-                Markdown(response),
-                title="[bold yellow]LLM Response[/bold yellow]",
-                border_style="yellow"
-            ))
+            self.print_markdown_panel(response, "LLM Response")
     
     def print_code_cell(self, cell_num: int, code: str) -> None:
         """Display a code cell with syntax highlighting."""
         self.console.print(f"\n[bold magenta]Executing Cell {cell_num}[/bold magenta]")
-        syntax = Syntax(code, "python", theme="monokai", line_numbers=True)
-        self.console.print(Panel(
-            syntax,
-            title=f"[bold magenta]Code Cell {cell_num}[/bold magenta]",
-            border_style="magenta"
-        ))
-    
-    def print_execution_success(self, stdout: str) -> None:
-        """Display successful execution result."""
-        self.console.print("[bold green]✓ Execution Successful[/bold green]")
-        if stdout.strip():
-            self.console.print(Panel(
-                stdout,
-                title="[bold green]ACTUAL OUTPUT FROM CODE EXECUTION[/bold green]",
-                border_style="green",
-                padding=(1, 2)
-            ))
-        else:
-            self.console.print("[dim]No output[/dim]")
-    
-    def print_execution_failure(self, error_message: str) -> None:
-        """Display execution failure."""
-        self.console.print("[bold red]✗ Execution Failed[/bold red]")
-        self.console.print(Panel(
-            error_message,
-            title="[bold red]ERROR[/bold red]",
-            border_style="red"
-        ))
-    
-    def print_status(self, message: str, style: str = "yellow") -> None:
-        """Print a status message."""
-        self.console.print(f"[{style}]{message}[/{style}]")
-    
-    def print_success(self, message: str) -> None:
-        """Print a success message."""
-        self.console.print(f"[bold green]✓ {message}[/bold green]")
-    
-    def print_error(self, message: str) -> None:
-        """Print an error message."""
-        self.console.print(f"[bold red]✗ {message}[/bold red]")
-    
-    def print_warning(self, message: str) -> None:
-        """Print a warning message."""
-        self.console.print(f"[bold yellow]⚠ {message}[/bold yellow]")
+        self.print_code_panel(code, f"Code Cell {cell_num}")
     
     def print_saved_file(self, file_path: Path) -> None:
         """Print file save confirmation."""
@@ -131,9 +68,7 @@ class QuestionGenUI:
     
     def print_summary_header(self) -> None:
         """Print summary section header."""
-        self.console.print(f"\n[bold cyan]{'=' * 60}[/bold cyan]")
-        self.console.print("[bold cyan]SUMMARY[/bold cyan]")
-        self.console.print(f"[bold cyan]{'=' * 60}[/bold cyan]")
+        self.print_section("SUMMARY")
     
     def print_question_panel(self, question_num: int, question: dict) -> None:
         """Print a question in a formatted panel."""
@@ -151,7 +86,7 @@ class QuestionGenUI:
     
     def print_total_questions(self, count: int) -> None:
         """Print total question count."""
-        self.console.print(f"[bold]Total questions:[/bold] {count}")
+        self.print_key_value("Total questions", count)
     
     def print_difficulty_header(self) -> None:
         """Print difficulty section header."""
@@ -164,10 +99,6 @@ class QuestionGenUI:
     def print_sample_questions_header(self) -> None:
         """Print sample questions section header."""
         self.console.print("\n[bold]Sample questions:[/bold]")
-    
-    def print_empty_line(self) -> None:
-        """Print an empty line."""
-        self.console.print()
 
 
 # Create global UI instance
