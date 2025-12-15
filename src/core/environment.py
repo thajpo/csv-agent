@@ -80,7 +80,11 @@ class Environment:
         
         # Create kernel if not provided
         if env.kernel is None:
-            env.kernel = await JupyterKernel.create(timeout=120.0, csv_path=env.csv_path)
+            env.kernel = await JupyterKernel.create(
+                timeout=120.0,
+                csv_path=env.csv_path,
+                workdir="."
+            )
         
         return env
 

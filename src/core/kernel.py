@@ -93,6 +93,18 @@ class JupyterKernel:
         atexit.register(_sync_shutdown)
         return kernel
 
+    async def soft_reset(self):
+        """
+        Perform a soft reset of the kernel namespace.
+        This is much faster than restarting the kernel process.
+        """
+        # Reset namespace
+        await self.execute("%reset -f")
+        
+        # Re-import basics if csv_path is set (simulating a fresh env)
+        if self.csv_path:
+             await self.setup_kernel_builtins(self.csv_path)
+
     def _validate_imports(self, code: str) -> tuple[bool, str]:
         """
         Validate that code contains no import statements.

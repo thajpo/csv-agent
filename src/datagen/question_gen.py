@@ -2,11 +2,13 @@
 LLM-based question generator for CSV datasets.
 
 This script uses an LLM to:
-1. Explore a dataset using Jupyter kernel
+1. Explore a dataset using verifiers CSVAnalysisEnv (Docker sandbox)
 2. Document exploration observations
 3. Generate questions with varying difficulty levels (EASY, MEDIUM, HARD, VERY_HARD)
 
 Configuration is loaded from config.yaml.
+
+Refactored to use verifiers.PythonEnv via CSVAnalysisEnv instead of JupyterKernel.
 """
 import asyncio
 import json
@@ -22,10 +24,10 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 
-from src.core.kernel import JupyterKernel
+from src.envs.csv_env import CSVAnalysisEnv
 from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
-from src.datagen.types import ExplorationTurn, ExplorationTrace
+from src.datagen.data_types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
 
@@ -226,6 +228,48 @@ def try_parse_questions(response: str) -> list[dict] | None:
     return None
 
 
+def parse_execution_result(output: str) -> tuple[bool, str, str]:
+    """
+    Parse verifiers PythonEnv output string into (success, stdout, stderr).
+    
+    The verifiers format returns:
+    - stdout lines
+    - "stderr:\n..." if there's stderr
+    - Traceback if there's an error
+    - "Out[N]: ..." for results
+    - "(no output)" if empty
+    
+    Returns:
+        (success, stdout, error_message)
+    """
+    if not output or output == "(no output)":
+        return True, "", ""
+    
+    # Check for error indicators (Python traceback)
+    error_indicators = [
+        "Traceback (most recent call last):",
+        "Error:",
+        "Exception:",
+    ]
+    
+    is_error = any(indicator in output for indicator in error_indicators)
+    
+    if is_error:
+        # Extract the error portion
+        return False, "", output
+    
+    # Check for stderr section
+    if "stderr:\n" in output:
+        parts = output.split("stderr:\n", 1)
+        stdout = parts[0].strip()
+        stderr = parts[1].strip() if len(parts) > 1 else ""
+        # stderr doesn't always mean failure
+        return True, stdout, stderr
+    
+    # Normal output
+    return True, output, ""
+
+
 def build_execution_feedback(results: list[CodeCellResult]) -> str:
     """Build feedback message from execution results."""
     if not results:
@@ -258,7 +302,7 @@ def force_question_generation(llm: APILLM, conversation: ConversationHistory) ->
 
     # Get response
     messages = conversation.to_openai_messages()
-    response = llm(messages)
+    response = asyncio.get_event_loop().run_until_complete(llm(messages))
 
     # Try to parse
     questions = try_parse_questions(response)
@@ -296,8 +340,16 @@ async def explore_and_generate_questions(
     ui.print_info("Max turns", str(max_turns))
     ui.print_empty_line()
 
-    # 1. Setup
-    kernel = await JupyterKernel.create(timeout=120, workdir=None, csv_path=csv_path)
+    # 1. Setup - Use CSVAnalysisEnv instead of JupyterKernel
+    env = CSVAnalysisEnv(csv_path=csv_path)
+    
+    # Initialize state for the environment
+    # State is a dict that holds sandbox_id, sandbox_state, python_state
+    state = {}
+    state = await env.setup_state(state)
+    
+    ui.print_status(f"CSVAnalysisEnv initialized with sandbox")
+    
     llm = APILLM(model=model, sampling_args={"temperature": temperature, "max_tokens": max_tokens})
     conversation = ConversationHistory(
         system_prompt=EXPLORATION_SYSTEM_PROMPT,
@@ -309,73 +361,91 @@ async def explore_and_generate_questions(
     exploration_turns = []
     questions_generated = None
 
-    for turn_num in range(max_turns):
-        ui.print_turn_header(turn_num + 1, max_turns)
+    try:
+        for turn_num in range(max_turns):
+            ui.print_turn_header(turn_num, max_turns)
 
-        # Get model response
-        messages = conversation.to_openai_messages()
-        ui.print_status("Generating LLM response...")
-        response = await llm(messages)
+            # Get model response
+            messages = conversation.to_openai_messages()
+            ui.print_status("Generating LLM response...")
+            response = await llm(messages)
 
-        # Display LLM response
-        ui.print_llm_response(response)
+            # Display LLM response
+            ui.print_llm_response(response)
 
-        # Extract code cells
-        code_cells = extract_python_cells(response)
-        ui.print_code_blocks_found(len(code_cells))
+            # Extract code cells
+            code_cells = extract_python_cells(response)
+            ui.print_code_blocks_found(len(code_cells))
 
-        # Execute code
-        execution_results = []
-        for i, code in enumerate(code_cells, 1):
-            ui.print_code_cell(i, code)
+            # Execute code using CSVAnalysisEnv
+            execution_results = []
+            for i, code in enumerate(code_cells, 1):
+                ui.print_code_cell(i, code)
 
-            result = await kernel.execute(code)
-            execution_results.append(CodeCellResult(
-                code=code,
-                success=result.success,
-                stdout=result.stdout,
-                stderr=result.stderr if not result.success else ""
-            ))
+                # Execute via verifiers env.python()
+                output = await env.python(
+                    code=code,
+                    sandbox_id=state["sandbox_id"],
+                    sandbox_state=state["sandbox_state"],
+                    python_state=state["python_state"],
+                )
+                
+                # Parse the string output into success/stdout/stderr
+                success, stdout, stderr = parse_execution_result(output)
+                
+                execution_results.append(CodeCellResult(
+                    code=code,
+                    success=success,
+                    stdout=stdout if success else output,  # Full output for display
+                    stderr=stderr if not success else ""
+                ))
 
-            if result.success:
-                ui.print_execution_success(result.stdout)
-            else:
-                ui.print_execution_failure(result.error_message)
-
-        # Save turn
-        turn = ExplorationTurn(
-            turn_number=turn_num,
-            reasoning=response,
-            code_cells=code_cells,
-            execution_results=execution_results,
-            timestamp=datetime.now()
-        )
-        exploration_turns.append(turn)
-
-        # Check if model signaled completion with <DONE>
-        if "<DONE>" in response or "</DONE>" in response:
-            # Enforce minimum exploration turns
-            if turn_num < MIN_EXPLORATION_TURNS:
-                ui.print_warning(f"Model tried to finish too early (turn {turn_num + 1}/{MIN_EXPLORATION_TURNS} minimum)")
-                ui.print_status("Rejecting early completion - continuing exploration")
-                # Don't parse questions, force more exploration
-            else:
-                ui.print_success("Model signaled completion with <DONE>")
-                questions_generated = try_parse_questions(response)
-                if questions_generated:
-                    ui.print_success(f"Successfully extracted {len(questions_generated)} questions!")
-                    break
+                if success:
+                    ui.print_execution_success(stdout)
                 else:
-                    ui.print_error("Found <DONE> but couldn't parse questions from response")
-                    # Continue to allow retry
+                    ui.print_execution_failure(output)
 
-        # Build feedback with turn-aware message
-        feedback = build_execution_feedback(execution_results)
-        feedback += get_exploration_continue_msg(turn_num, MIN_EXPLORATION_TURNS)
+            # Save turn
+            turn = ExplorationTurn(
+                turn_number=turn_num,
+                reasoning=response,
+                code_cells=code_cells,
+                execution_results=execution_results,
+                timestamp=datetime.now()
+            )
+            exploration_turns.append(turn)
 
-        # Add turn to conversation
-        conversation.add_assistant_response(response)
-        conversation.add_user_feedback(feedback)
+            # Check if model signaled completion with <DONE>
+            if "<DONE>" in response or "</DONE>" in response:
+                # Enforce minimum exploration turns
+                if turn_num < MIN_EXPLORATION_TURNS:
+                    ui.print_warning(f"Model tried to finish too early (turn {turn_num + 1}/{MIN_EXPLORATION_TURNS} minimum)")
+                    ui.print_status("Rejecting early completion - continuing exploration")
+                    # Don't parse questions, force more exploration
+                else:
+                    ui.print_success("Model signaled completion with <DONE>")
+                    questions_generated = try_parse_questions(response)
+                    if questions_generated:
+                        ui.print_success(f"Successfully extracted {len(questions_generated)} questions!")
+                        break
+                    else:
+                        ui.print_error("Found <DONE> but couldn't parse questions from response")
+                        # Continue to allow retry
+
+            # Build feedback with turn-aware message
+            feedback = build_execution_feedback(execution_results)
+            feedback += get_exploration_continue_msg(turn_num, MIN_EXPLORATION_TURNS)
+
+            # Add turn to conversation
+            conversation.add_assistant_response(response)
+            conversation.add_user_feedback(feedback)
+
+    finally:
+        # Cleanup the sandbox
+        try:
+            await env.destroy_sandbox(state["sandbox_id"])
+        except Exception as e:
+            ui.print_warning(f"Cleanup warning: {e}")
 
     # 3. Validate we got questions
     if not questions_generated:
@@ -406,9 +476,6 @@ async def explore_and_generate_questions(
     with open(trace_file, 'w') as f:
         json.dump(trace.model_dump(), f, indent=2, default=str)
     ui.print_saved_file(trace_file)
-
-    # Cleanup
-    kernel.shutdown()
 
     return questions_generated, trace
 
