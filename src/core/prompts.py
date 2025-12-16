@@ -6,7 +6,7 @@ and the old core/prompts.py into a single location.
 """
 
 import pandas as pd
-from src.types import Question
+from src.core.types import Question
 
 
 # ============= Teacher Prompts =============

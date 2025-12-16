@@ -21,7 +21,7 @@ from collections import Counter
 from typing import Any, List, Tuple
 
 from src.core.environment import Environment
-from src.types import ExecutionTrace, Question
+from src.core.types import ExecutionTrace, Question
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.utils.hashing import hash_artifact
 from src.utils.logger import create_logger
