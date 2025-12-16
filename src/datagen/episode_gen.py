@@ -25,7 +25,7 @@ from src.datagen.teacher import batch_triangulate
 from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
 from src.core.types import Episode, EpisodeJSONL, Question, ExecutionTrace
 
-from src.core.ui import ConsoleUI
+from src.utils.ui import ConsoleUI
 
 
 class EpisodeGenUI:

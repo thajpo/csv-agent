@@ -22,7 +22,7 @@ from typing import Any, List, Tuple
 
 from src.core.environment import Environment
 from src.core.types import ExecutionTrace
-from src.core.hashing import hash_artifact
+from src.utils.hashing import hash_artifact
 
 
 
@@ -119,20 +119,6 @@ async def execute_teacher_trace(
     """
     Execute a single teacher trace (with or without hint).
 
-    Logger will be created silently if not provided.
-
-    Args:
-        csv_path: Path to CSV file
-        question: Question to solve
-        hint: Optional hint (None for consistency mode)
-        mode: "teacher-tutor" (with hint) or "teacher-consistency" (without)
-        model: Model identifier
-        dataset_description: Dataset description for prompt
-        data_overview: Data overview for prompt
-        max_turns: Max conversation turns
-        sampling_args: Sampling parameters for model
-
-
     Returns:
         Tuple of (ExecutionTrace, conversation_messages, system_prompt)
     """
@@ -200,11 +186,8 @@ async def execute_teacher_trace(
             turns=len(assistant_messages) if 'assistant_messages' in locals() else len(code_cells)
         )
 
-    # Artifacts tracking removed - not critical for training
-    # (Can be re-added later if needed via introspection code)
     trace = ExecutionTrace(
         code_cells=code_cells,
-        artifacts={},  # Empty for now
         final_answer=final_answer,
         final_answer_hash=final_answer_hash,
         execution_success=execution_success,
@@ -230,19 +213,6 @@ async def triangulate_teacher(
 ) -> tuple[ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]:
     """
     Run teacher triangulation: gold trace + consistency traces.
-
-    Args:
-        csv_path: Path to CSV file
-        question: Question to solve
-        hint: Hint for gold trace
-        n_consistency: Number of consistency traces (default 3)
-        model: Model identifier
-        dataset_description: Dataset description
-        data_overview: Data overview
-        max_turns: Max turns per trace
-        sampling_args: Model sampling args
-
-
     Returns:
         Tuple of:
         - gold_trace: ExecutionTrace WITH hint
@@ -252,10 +222,7 @@ async def triangulate_teacher(
         - verified: True if gold matches majority of consistency traces
     """
 
-
     # 1. Run gold trace (with hint)
-
-
     if ui:
         ui.print_trace_header(mode="gold", hint=hint)
 
@@ -276,7 +243,6 @@ async def triangulate_teacher(
     # 2. Run consistency traces (without hint) IN PARALLEL
     async def run_consistency_trace(i: int):
         """Helper to run a single consistency trace."""
-
 
         if ui:
             ui.print_trace_header(mode=f"{i+1}/{n_consistency}", hint=None)
@@ -309,8 +275,6 @@ async def triangulate_teacher(
     ]
 
     if not consistency_answers:
-        # No consistency traces succeeded
-
         return gold_trace, gold_conversation, system_prompt, consistency_results, False
 
     # Find majority answer by hash
@@ -332,8 +296,6 @@ async def triangulate_teacher(
         majority_value,
         float_tol=float_tol
     )
-
-
 
     # Display triangulation result in UI
     if ui:
@@ -383,7 +345,6 @@ async def batch_triangulate(
     verified_count = 0
 
     for i, q_dict in enumerate(questions, 1):
-        # Display question header in UI
         if ui:
             ui.print_question_header(q_num=i, total=len(questions), question=q_dict)
 
@@ -403,15 +364,12 @@ async def batch_triangulate(
 
         results.append((q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified))
 
-        # Track verification count
         if verified:
             verified_count += 1
 
-        # Display progress in UI
         if ui:
             ui.print_progress_summary(current=i, total=len(questions), verified_count=verified_count)
 
-    # Summary stats
     n_verified = sum(1 for result in results if result[-1])  # verified is last element
 
     return results

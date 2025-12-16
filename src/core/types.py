@@ -39,7 +39,6 @@ class Question(BaseModel):
 class ExecutionTrace(BaseModel):
     """Record of a code execution session (teacher or student)."""
     code_cells: list[str]                   # Raw Python code per turn
-    artifacts: dict[str, Artifact]          # name → Artifact
     final_answer: Any | None = None         # The submit() value
     final_answer_hash: str | None = None
     execution_success: bool
