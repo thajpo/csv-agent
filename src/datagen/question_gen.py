@@ -7,8 +7,6 @@ This script uses an LLM to:
 3. Generate questions with varying difficulty levels (EASY, MEDIUM, HARD, VERY_HARD)
 
 Configuration is loaded from config.yaml.
-
-Refactored to use verifiers.PythonEnv via CSVAnalysisEnv instead of JupyterKernel.
 """
 import asyncio
 import json
@@ -19,11 +17,7 @@ import yaml
 from pathlib import Path
 from datetime import datetime
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-
-from src.utils.ui import ConsoleUI
+from src.datagen.ui import QuestionGenUI
 
 from src.envs.csv_env import CSVAnalysisEnv
 from src.core.model import APILLM
@@ -32,77 +26,47 @@ from src.core.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 
 
-class QuestionGenUI(ConsoleUI):
-    """Rich console output for question generation, extends base ConsoleUI."""
+def parse_execution_result(output: str) -> tuple[bool, str, str]:
+    """Parse verifiers PythonEnv output into (success, stdout, stderr)."""
+    if not output or output == "(no output)":
+        return True, "", ""
     
-    def print_turn_header(self, turn_num: int, max_turns: int) -> None:
-        """Print the turn separator and header."""
-        self.print_section(f"TURN {turn_num + 1}/{max_turns}")
+    error_indicators = ["Traceback (most recent call last):", "Error:", "Exception:"]
+    is_error = any(indicator in output for indicator in error_indicators)
     
-    def print_llm_response(self, response: str) -> None:
-        """Display LLM response with appropriate formatting."""
-        if response.strip().startswith('{') and '"questions"' in response:
-            try:
-                parsed_json = json.loads(response.strip())
-                formatted_json = json.dumps(parsed_json, indent=2)
-                syntax = Syntax(formatted_json, "json", theme="monokai", line_numbers=False)
-                self.console.print(Panel(
-                    syntax,
-                    title="[bold yellow]LLM Response (JSON)[/bold yellow]",
-                    border_style="yellow"
-                ))
-            except json.JSONDecodeError:
-                self.print_markdown_panel(response, "LLM Response")
+    if is_error:
+        return False, "", output
+    
+    if "stderr:\n" in output:
+        parts = output.split("stderr:\n", 1)
+        stdout = parts[0].strip()
+        stderr = parts[1].strip() if len(parts) > 1 else ""
+        return True, stdout, stderr
+    
+    return True, output, ""
+
+
+def build_execution_feedback(results: list[CodeCellResult]) -> str:
+    """Build feedback message from execution results."""
+    if not results:
+        return "No code blocks found. Write Python code in ```python blocks."
+
+    feedback_parts = []
+    for i, result in enumerate(results, 1):
+        if result.success:
+            feedback_parts.append(f"✓ Cell {i} executed successfully")
+            if result.stdout.strip():
+                feedback_parts.append(f"Output:\n{result.stdout}")
         else:
-            self.print_markdown_panel(response, "LLM Response")
-    
-    def print_code_cell(self, cell_num: int, code: str) -> None:
-        """Display a code cell with syntax highlighting."""
-        self.console.print(f"\n[bold magenta]Executing Cell {cell_num}[/bold magenta]")
-        self.print_code_panel(code, f"Code Cell {cell_num}")
-    
-    def print_saved_file(self, file_path: Path) -> None:
-        """Print file save confirmation."""
-        label = "questions" if "questions" in str(file_path) else "exploration trace"
-        self.console.print(f"[bold green]💾 Saved {label} → {file_path}[/bold green]")
-    
-    def print_summary_header(self) -> None:
-        """Print summary section header."""
-        self.print_section("SUMMARY")
-    
-    def print_question_panel(self, question_num: int, question: dict) -> None:
-        """Print a question in a formatted panel."""
-        self.console.print(Panel(
-            f"[bold]{question['question']}[/bold]\n\n"
-            f"[dim]Steps:[/dim] {question['n_steps']}\n"
-            f"[dim]Hint:[/dim] {question['hint']}",
-            title=f"[bold cyan]Question {question_num} - {question['difficulty']}[/bold cyan]",
-            border_style="cyan"
-        ))
-    
-    def print_code_blocks_found(self, count: int) -> None:
-        """Print number of code blocks found."""
-        self.console.print(f"\n[bold blue]Found {count} code block(s)[/bold blue]")
-    
-    def print_total_questions(self, count: int) -> None:
-        """Print total question count."""
-        self.print_key_value("Total questions", count)
-    
-    def print_difficulty_header(self) -> None:
-        """Print difficulty section header."""
-        self.console.print("\n[bold]By difficulty:[/bold]")
-    
-    def print_difficulty_count(self, difficulty: str, count: int) -> None:
-        """Print a difficulty count."""
-        self.console.print(f"  [cyan]{difficulty}:[/cyan] {count}")
-    
-    def print_sample_questions_header(self) -> None:
-        """Print sample questions section header."""
-        self.console.print("\n[bold]Sample questions:[/bold]")
+            feedback_parts.append(f"✗ Cell {i} failed")
+            feedback_parts.append(f"Error:\n{result.stderr}")
+
+    return "\n\n".join(feedback_parts)
 
 
 # Create global UI instance
 ui = QuestionGenUI()
+
 
 def load_config(config_path: str) -> dict:
     """Load configuration from YAML file."""
@@ -125,7 +89,6 @@ def extract_python_cells(response: str) -> list[str]:
 
     for block in matches:
         cleaned = textwrap.dedent(block).replace("\r\n", "\n").strip()
-        # Strip any trailing stray backticks the regex may have captured
         cleaned = cleaned.rstrip("`").strip()
         if cleaned:
             cleaned_blocks.append(cleaned)
@@ -134,10 +97,7 @@ def extract_python_cells(response: str) -> list[str]:
 
 
 def try_parse_questions(response: str) -> list[dict] | None:
-    """
-    Parse if found and valid, None otherwise
-    """
-    # Try to find ```json...``` block
+    """Parse if found and valid, None otherwise."""
     json_pattern = r'```json\n(.*?)```'
     matches = re.findall(json_pattern, response, re.DOTALL)
 
@@ -147,7 +107,6 @@ def try_parse_questions(response: str) -> list[dict] | None:
     try:
         data = json.loads(matches[0])
         if "questions" in data and isinstance(data["questions"], list):
-            # Validate structure
             questions = data["questions"]
             for q in questions:
                 if not all(key in q for key in ["question", "hint", "n_steps", "difficulty"]):
@@ -159,66 +118,6 @@ def try_parse_questions(response: str) -> list[dict] | None:
     return None
 
 
-def parse_execution_result(output: str) -> tuple[bool, str, str]:
-    """
-    Parse verifiers PythonEnv output string into (success, stdout, stderr).
-    
-    The verifiers format returns:
-    - stdout lines
-    - "stderr:\n..." if there's stderr
-    - Traceback if there's an error
-    - "Out[N]: ..." for results
-    - "(no output)" if empty
-    
-    Returns:
-        (success, stdout, error_message)
-    """
-    if not output or output == "(no output)":
-        return True, "", ""
-    
-    # Check for error indicators (Python traceback)
-    error_indicators = [
-        "Traceback (most recent call last):",
-        "Error:",
-        "Exception:",
-    ]
-    
-    is_error = any(indicator in output for indicator in error_indicators)
-    
-    if is_error:
-        # Extract the error portion
-        return False, "", output
-    
-    # Check for stderr section
-    if "stderr:\n" in output:
-        parts = output.split("stderr:\n", 1)
-        stdout = parts[0].strip()
-        stderr = parts[1].strip() if len(parts) > 1 else ""
-        # stderr doesn't always mean failure
-        return True, stdout, stderr
-    
-    # Normal output
-    return True, output, ""
-
-
-def build_execution_feedback(results: list[CodeCellResult]) -> str:
-    """Build feedback message from execution results."""
-    if not results:
-        return "No code blocks found. Write Python code in ```python blocks."
-
-    feedback_parts = []
-    for i, result in enumerate(results, 1):
-        if result.success:
-            feedback_parts.append(f"✓ Cell {i} executed successfully")
-            if result.stdout.strip():
-                feedback_parts.append(f"Output:\n{result.stdout}")
-        else:
-            feedback_parts.append(f"✗ Cell {i} failed")
-            feedback_parts.append(f"Error:\n{result.stderr}")
-
-    return "\n\n".join(feedback_parts)
-
-
 def force_question_generation(llm: APILLM, conversation: ConversationHistory) -> list[dict]:
     """
     If model hasn't generated questions by max_turns, force it with a direct prompt.
@@ -226,16 +125,13 @@ def force_question_generation(llm: APILLM, conversation: ConversationHistory) ->
     Returns:
         List of question dicts
     """
-    # Add forcing message as user feedback
     conversation.add_user_feedback(
         "You've explored enough. Now generate the 13 questions in JSON format as specified in the system prompt."
     )
 
-    # Get response
     messages = conversation.to_openai_messages()
     response = asyncio.get_event_loop().run_until_complete(llm(messages))
 
-    # Try to parse
     questions = try_parse_questions(response)
 
     if not questions:
@@ -249,7 +145,7 @@ async def explore_and_generate_questions(
     model: str,
     max_turns: int = 20,
     temperature: float = 0.7,
-    max_tokens: int = 6000,  # Increased default to allow full question generation
+    max_tokens: int = 6000,
     output_dir: str = "."
 ) -> tuple[list[dict], ExplorationTrace]:
     """
@@ -271,11 +167,8 @@ async def explore_and_generate_questions(
     ui.print_info("Max turns", str(max_turns))
     ui.print_empty_line()
 
-    # 1. Setup - Use CSVAnalysisEnv instead of JupyterKernel
+    # 1. Setup
     env = CSVAnalysisEnv(csv_path=csv_path)
-    
-    # Initialize state for the environment
-    # State is a dict that holds sandbox_id, sandbox_state, python_state
     state = {}
     state = await env.setup_state(state)
     
@@ -284,7 +177,7 @@ async def explore_and_generate_questions(
     llm = APILLM(model=model, sampling_args={"temperature": temperature, "max_tokens": max_tokens})
     conversation = ConversationHistory(
         system_prompt=EXPLORATION_SYSTEM_PROMPT,
-        max_messages=100,  # Keep full exploration in context
+        max_messages=100,
         max_context_tokens=100_000
     )
 
@@ -296,24 +189,20 @@ async def explore_and_generate_questions(
         for turn_num in range(max_turns):
             ui.print_turn_header(turn_num, max_turns)
 
-            # Get model response
             messages = conversation.to_openai_messages()
             ui.print_status("Generating LLM response...")
             response = await llm(messages)
 
-            # Display LLM response
             ui.print_llm_response(response)
 
-            # Extract code cells
             code_cells = extract_python_cells(response)
             ui.print_code_blocks_found(len(code_cells))
 
-            # Execute code using CSVAnalysisEnv
+            # Execute code
             execution_results = []
             for i, code in enumerate(code_cells, 1):
                 ui.print_code_cell(i, code)
 
-                # Execute via verifiers env.python()
                 output = await env.python(
                     code=code,
                     sandbox_id=state["sandbox_id"],
@@ -321,13 +210,12 @@ async def explore_and_generate_questions(
                     python_state=state["python_state"],
                 )
                 
-                # Parse the string output into success/stdout/stderr
                 success, stdout, stderr = parse_execution_result(output)
                 
                 execution_results.append(CodeCellResult(
                     code=code,
                     success=success,
-                    stdout=stdout if success else output,  # Full output for display
+                    stdout=stdout if success else output,
                     stderr=stderr if not success else ""
                 ))
 
@@ -346,13 +234,11 @@ async def explore_and_generate_questions(
             )
             exploration_turns.append(turn)
 
-            # Check if model signaled completion with <DONE>
+            # Check for completion
             if "<DONE>" in response or "</DONE>" in response:
-                # Enforce minimum exploration turns
                 if turn_num < MIN_EXPLORATION_TURNS:
                     ui.print_warning(f"Model tried to finish too early (turn {turn_num + 1}/{MIN_EXPLORATION_TURNS} minimum)")
                     ui.print_status("Rejecting early completion - continuing exploration")
-                    # Don't parse questions, force more exploration
                 else:
                     ui.print_success("Model signaled completion with <DONE>")
                     questions_generated = try_parse_questions(response)
@@ -361,18 +247,15 @@ async def explore_and_generate_questions(
                         break
                     else:
                         ui.print_error("Found <DONE> but couldn't parse questions from response")
-                        # Continue to allow retry
 
-            # Build feedback with turn-aware message
+            # Build feedback
             feedback = build_execution_feedback(execution_results)
             feedback += get_exploration_continue_msg(turn_num, MIN_EXPLORATION_TURNS)
 
-            # Add turn to conversation
             conversation.add_assistant_response(response)
             conversation.add_user_feedback(feedback)
 
     finally:
-        # Cleanup the sandbox
         try:
             await env.destroy_sandbox(state["sandbox_id"])
         except Exception as e:
@@ -396,13 +279,11 @@ async def explore_and_generate_questions(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Save questions.json
     questions_file = output_path / "questions.json"
     with open(questions_file, 'w') as f:
         json.dump(questions_generated, f, indent=2)
     ui.print_saved_file(questions_file)
 
-    # Save exploration trace
     trace_file = output_path / "exploration_trace.json"
     with open(trace_file, 'w') as f:
         json.dump(trace.model_dump(), f, indent=2, default=str)
@@ -412,10 +293,8 @@ async def explore_and_generate_questions(
 
 
 def main():
-    # Load config
     config = load_config("config.yaml")
 
-    # Extract config values (fail-fast on missing keys)
     csv_path = config["csv"]
     output_file = config["output"]
     max_turns = config["question_gen_max_turns"]
@@ -423,7 +302,6 @@ def main():
     max_tokens = config["sampling_args"]["max_tokens"]
     model = config["question_gen_model"]
 
-    # Set output directory from output file path
     output_dir = str(Path(output_file).parent)
     if output_dir == ".":
         output_dir = "."
@@ -438,11 +316,9 @@ def main():
             output_dir=output_dir
         ))
 
-        # Print summary
         ui.print_summary_header()
         ui.print_total_questions(len(questions))
 
-        # Count by difficulty
         difficulty_counts = {}
         for q in questions:
             diff = q.get("difficulty", "UNKNOWN")
