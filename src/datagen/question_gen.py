@@ -23,7 +23,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 
-from src.utils.ui import ConsoleUI
+from src.core.ui import ConsoleUI
 
 from src.envs.csv_env import CSVAnalysisEnv
 from src.core.model import APILLM

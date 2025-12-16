@@ -4,16 +4,14 @@ Uses Data Profiler and Personas to generate high-volume, structurally diverse qu
 """
 import asyncio
 import json
-import logging
+
 from pathlib import Path
 from typing import Dict, List, Any
 
 from src.core.model import APILLM
 from src.datagen.profiler import DataProfiler
 from src.datagen.personas import PERSONA_REGISTRY, Persona
-from src.utils.logger import create_logger
 
-logger = create_logger(__name__)
 
 class StructureGenerator:
     """
@@ -28,18 +26,17 @@ class StructureGenerator:
 
     async def generate(self, csv_path: str, n_questions_per_persona: int = 5) -> List[Dict[str, Any]]:
         """Run the full generation pipeline for a dataset."""
-        logger.info(f"Generating Tier 1 data for {csv_path}...")
+
         
         # 1. Profile
         try:
             profile = self.profiler.analyze(csv_path)
         except Exception as e:
-            logger.error(f"Profiling failed: {e}")
             return []
             
         # 2. Select Personas
         active_personas = self._select_personas(profile)
-        logger.info(f"Selected Personas: {[p.name for p in active_personas]}")
+
         
         # 3. Parallel Generation
         tasks = []
@@ -53,7 +50,7 @@ class StructureGenerator:
         for res in results:
             all_questions.extend(res)
             
-        logger.info(f"Generated {len(all_questions)} Tier 1 questions.")
+
         return all_questions
 
     def _select_personas(self, profile: Dict[str, Any]) -> List[Persona]:
@@ -138,7 +135,6 @@ class StructureGenerator:
             return tagged_questions
             
         except Exception as e:
-            logger.error(f"Generation failed for {persona.name}: {e}")
             return []
 
     def _summarize_profile_for_prompt(self, profile: Dict[str, Any]) -> Dict[str, Any]:

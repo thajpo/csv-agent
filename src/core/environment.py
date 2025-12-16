@@ -8,14 +8,13 @@ module for output, keeping the environment logic separate from presentation.
 Refactored to use verifiers CSVAnalysisEnv instead of JupyterKernel.
 """
 
-import logging
+
 import re
 
 import pandas as pd
 
 from src.core.model import APILLM
-from src.utils.logger import create_logger
-from src.utils.validation import get_turn_validation_feedback
+from src.core.validation import get_turn_validation_feedback
 from src.core.prompts import generate_data_overview, build_system_prompt, CONTINUE_MSG, FINAL_MSG
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
@@ -105,7 +104,7 @@ class Environment:
         execution: ExecutionConfig,
         task: TaskConfig,
         env: CSVAnalysisEnv | None = None,
-        logger: logging.Logger | None = None,
+
     ):
         """
         Initialize Environment with focused configs.
@@ -116,7 +115,7 @@ class Environment:
             execution: Execution limits (turns, tokens, context)
             task: Task definition (mode, question)
             env: Optional CSVAnalysisEnv (created if None)
-            logger: Optional logger (created if None)
+
         """
         # Store configs
         self.data = data
@@ -132,7 +131,7 @@ class Environment:
         )
         self.env = env  # Will be created in create() if None
         self.state = None  # Verifiers state dict
-        self.logger = logger or create_logger(silent=True)
+
         self.df = None  # Will be loaded on first rollout
         
         # Track submitted answer across executions
@@ -146,10 +145,10 @@ class Environment:
         execution: ExecutionConfig,
         task: TaskConfig,
         env: CSVAnalysisEnv | None = None,
-        logger: logging.Logger | None = None,
+
     ):
         """Async factory to create Environment with initialized CSVAnalysisEnv."""
-        instance = cls(data, model, execution, task, env, logger)
+        instance = cls(data, model, execution, task, env)
         
         # Create env and state if not provided
         if instance.env is None:
@@ -159,21 +158,81 @@ class Environment:
         
         return instance
 
+    @classmethod
+    async def from_params(
+        cls,
+        csv_path: str,
+        model: str,
+        *,
+        question: str | None = None,
+        hint: str | None = None,
+        mode: str = "teacher-tutor",
+        dataset_description: str = "",
+        data_overview: str = "",
+        max_turns: int = 10,
+        sampling_args: dict | None = None,
+    ):
+        """
+        Factory with primitive args - handles config construction internally.
+        
+        This is the preferred way to create an Environment. Callers pass primitives,
+        and this method builds the config objects internally.
+        
+        Args:
+            csv_path: Path to CSV file
+            model: Model identifier (e.g., 'openai/gpt-4o')
+            question: Question text (optional)
+            hint: Hint for the question (optional)
+            mode: Execution mode (teacher-tutor, teacher-consistency, student)
+            dataset_description: Description of the dataset
+            data_overview: Generated data overview string
+            max_turns: Maximum conversation turns
+            sampling_args: Dict of temperature, max_tokens, top_p (optional)
+        
+        Returns:
+            Initialized Environment ready for rollout
+        """
+        from src.core.types import Question
+        
+        # Build question object if provided
+        question_obj = Question(question_text=question, hint=hint) if question else None
+        
+        # Build configs from primitives
+        data_config = DataConfig(
+            csv_path=csv_path,
+            dataset_description=dataset_description,
+            data_overview=data_overview,
+        )
+        
+        model_config = ModelConfig(
+            model_name=model,
+            **(sampling_args or {})
+        )
+        
+        execution_config = ExecutionConfig(
+            max_turns=max_turns,
+        )
+        
+        task_config = TaskConfig(
+            mode=mode,
+            question=question_obj,
+        )
+        
+        return await cls.create(
+            data=data_config,
+            model=model_config,
+            execution=execution_config,
+            task=task_config,
+        )
+
     def _load_csv(self):
         """Load CSV file if not already loaded."""
         if self.df is None:
             self.df = pd.read_csv(self.csv_path)
-            self.logger.info(
-                "csv_loaded",
-                extra={
-                    "csv_path": self.csv_path,
-                    "rows": len(self.df),
-                    "cols": len(self.df.columns),
-                },
-            )
+
 
     def init_state(self):
-        self.logger.info("episode_start", extra={"csv_path": self.csv_path})
+
 
         self._load_csv()
         data_overview = generate_data_overview(self.csv_path)
@@ -197,6 +256,7 @@ class Environment:
         self.is_completed = False
         self.data_overview = data_overview
         self.submitted_answer = None  # Reset for new episode
+        self.code_cells = []  # Track all executed code cells
 
     def extract_python_cells(self, response: str) -> list[str]:
         """Extract ```python...``` code blocks from response."""
@@ -233,7 +293,7 @@ class Environment:
 
     async def handle_max_turns_reached(self) -> None:
         """Handle reaching max turns: prompt for final output and get response."""
-        self.logger.info("max_turns_reached", extra={"max_turns": self.execution.max_turns})
+
         self.conversation.add_user_feedback(FINAL_MSG)
 
         response = await self.get_model_response()
@@ -246,7 +306,7 @@ class Environment:
         messages = self.conversation.to_openai_messages()
         response = await self.model(messages)
 
-        self.logger.info("model_response", extra={"response": response})
+
         return response
 
     def response_is_valid(self, response: str, code_cells: list[str]) -> bool:
@@ -271,16 +331,10 @@ class Environment:
             for cell_code in code_cells:
                 result = await self.execute_code_cell(cell_code)
                 execution_results.append(result)
+                self.code_cells.append(cell_code)  # Track executed code
 
                 # Log execution
-                self.logger.info(
-                    "code_executed",
-                    extra={
-                        "success": result.success,
-                        "stdout": result.stdout,
-                        "stderr": result.stderr,
-                    },
-                )
+
 
                 # Check for submission
                 if result.submitted_answer is not None:
@@ -303,7 +357,7 @@ class Environment:
             feedback += CONTINUE_MSG
         else:
             feedback = "No code blocks found. Write Python code in ```python blocks."
-            self.logger.info("no_code_blocks")
+
 
         # 5. Check for completion (submit() was called)
         done_signal = submitted_answer is not None
@@ -315,7 +369,7 @@ class Environment:
         # 7. Check completion
         if done_signal:
             self.is_completed = True
-            self.logger.info("episode_complete", extra={"results": submitted_answer})
+
 
     async def rollout(self):
         """Execute a multi-turn rollout episode.
@@ -327,10 +381,7 @@ class Environment:
 
         try:
             while not self.is_completed:
-                self.logger.info(
-                    "turn_start",
-                    extra={"turn": self.current_turn, "max_turns": self.execution.max_turns},
-                )
+
 
                 # Check if we've reached max turns BEFORE processing
                 if self.current_turn >= self.execution.max_turns:
@@ -358,6 +409,6 @@ class Environment:
                 try:
                     await self.env.destroy_sandbox(self.state["sandbox_id"])
                 except Exception as e:
-                    self.logger.warning("sandbox_cleanup_failed", extra={"error": str(e)})
+                    pass  # Silently ignore cleanup failures
 
         return self

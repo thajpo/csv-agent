@@ -24,8 +24,8 @@ from rich.syntax import Syntax
 from src.datagen.teacher import batch_triangulate
 from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
 from src.core.types import Episode, EpisodeJSONL, Question, ExecutionTrace
-from src.utils.logger import create_logger
-from src.utils.ui import ConsoleUI
+
+from src.core.ui import ConsoleUI
 
 
 class EpisodeGenUI:
@@ -302,8 +302,7 @@ def main():
     output_jsonl = Path(config.get("episodes_jsonl", "episodes/episodes.jsonl"))
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
-    # Create logger (silent mode - UI will show output)
-    logger = create_logger(silent=True)
+
 
     # Display pipeline header
     ui.print_pipeline_header(
@@ -334,7 +333,7 @@ def main():
         data_overview=data_overview,
         max_turns=max_turns,
         sampling_args=sampling_args,
-        logger=logger,
+
         ui=ui,
         float_tol=float_tol,
     )
@@ -344,7 +343,7 @@ def main():
     episodes_verified = 0
 
     for q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified in results:
-        # Create Question object
+        # Create Question object (question, metadata)
         question_obj = Question(
             question_text=q_dict["question"],
             hint=q_dict.get("hint"),

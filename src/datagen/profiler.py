@@ -3,7 +3,7 @@ Data Profiler for CSV datasets.
 Generates a heavy-context "Fact Bundle" for Tier 1 Question Generation.
 """
 import json
-import logging
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -11,10 +11,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from src.utils.logger import create_logger
 
-# Configure logger
-logger = create_logger(__name__)
 
 
 class DataProfiler:
@@ -66,8 +63,7 @@ class DataProfiler:
 
             return profile
 
-        except Exception as e:
-            logger.error(f"Profiling failed for {csv_path}: {e}")
+        except Exception:
             raise
 
     def _coerce_types(self, df: pd.DataFrame) -> pd.DataFrame:
