@@ -21,6 +21,13 @@ from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
 
 
+def truncate_output(text: str, max_length: int = 500) -> str:
+    """Truncate execution output to max_length chars."""
+    if len(text) <= max_length:
+        return text
+    return text[:max_length] + f"\n... (truncated {len(text) - max_length} chars)"
+
+
 def parse_execution_result(output: str) -> tuple[bool, str, str]:
     """
     Parse verifiers PythonEnv output string into (success, stdout, stderr).
@@ -273,6 +280,7 @@ class Environment:
         self.data_overview = data_overview
         self.submitted_answer = None  # Reset for new episode
         self.code_cells = []  # Track all executed code cells
+        self.execution_results_per_turn = []  # Track execution results per turn
 
     def extract_python_cells(self, response: str) -> list[str]:
         """Extract ```python...``` code blocks from response."""
@@ -346,6 +354,11 @@ class Environment:
         if code_cells:
             for cell_code in code_cells:
                 result = await self.execute_code_cell(cell_code)
+
+                # Truncate outputs to save memory
+                result.stdout = truncate_output(result.stdout, max_length=500)
+                result.stderr = truncate_output(result.stderr, max_length=500)
+
                 execution_results.append(result)
                 self.code_cells.append(cell_code)  # Track executed code
 
@@ -378,7 +391,10 @@ class Environment:
         # 5. Check for completion (submit() was called)
         done_signal = submitted_answer is not None
 
-        # 6. Add to conversation (response + feedback)
+        # 6. Store execution results for this turn
+        self.execution_results_per_turn.append(execution_results)
+
+        # 7. Add to conversation (response + feedback)
         self.conversation.add_assistant_response(response)
         self.conversation.add_user_feedback(feedback)
 

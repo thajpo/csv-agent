@@ -13,6 +13,8 @@ Usage:
 import asyncio
 import json
 import sys
+import signal
+import subprocess
 from pathlib import Path
 from datetime import datetime
 import uuid
@@ -23,6 +25,27 @@ from src.datagen.teacher import batch_triangulate
 from src.datagen.ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
 from src.core.types import Episode, EpisodeJSONL, Question, ExecutionTrace
+
+
+def cleanup_containers():
+    """Emergency cleanup of all CSV sandbox containers."""
+    try:
+        subprocess.run(
+            "docker stop $(docker ps -q --filter 'name=csv-sandbox') 2>/dev/null && "
+            "docker rm $(docker ps -aq --filter 'name=csv-sandbox') 2>/dev/null",
+            shell=True,
+            capture_output=True
+        )
+    except Exception:
+        pass
+
+
+def signal_handler(signum, frame):
+    """Handle Ctrl+C gracefully."""
+    print("\n\n🛑 Interrupted! Cleaning up containers...")
+    cleanup_containers()
+    print("✓ Cleanup complete")
+    sys.exit(0)
 
 
 # Create global UI instance
@@ -65,6 +88,10 @@ def load_config(config_path: str = "config.yaml") -> dict:
 
 
 async def main():
+    # Register signal handler for Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
     # Load config
     config = load_config()
 

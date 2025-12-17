@@ -15,6 +15,7 @@ This filters out questions where:
 
 
 import asyncio
+import time
 import pandas as pd
 import numpy as np
 from collections import Counter
@@ -117,15 +118,23 @@ async def execute_teacher_trace(
     state: dict | None = None,  # Optional pre-created state (for pooling)
     reuse_env: bool = False,  # If True, reset instead of destroy
     ui: Any = None,  # Optional UI instance for Rich output
-) -> tuple[ExecutionTrace, list[dict], str]:
+    trace_mode: str = "gold",  # For UI display ("gold" or "1/5", etc.)
+) -> tuple[ExecutionTrace, list[dict], str, float]:
     """
     Execute a single teacher trace (with or without hint).
 
     Returns:
-        Tuple of (ExecutionTrace, conversation_messages, system_prompt)
+        Tuple of (ExecutionTrace, conversation_messages, system_prompt, elapsed_seconds)
     """
+    # Track timing
+    start_time = time.time()
+
+    # Show trace start
+    if ui:
+        ui.print_trace_start(trace_mode)
+
     # Create environment and execute rollout
-    final_state = await Environment.from_params(
+    env_instance = await Environment.from_params(
         csv_path=csv_path,
         model=model,
         question=question,
@@ -139,7 +148,7 @@ async def execute_teacher_trace(
         state=state,
         reuse_env=reuse_env,
     )
-    final_state = await final_state.rollout()
+    final_state = await env_instance.rollout()
 
     # Extract conversation for SFT training
     conversation_messages = final_state.conversation.to_openai_messages()
@@ -149,24 +158,42 @@ async def execute_teacher_trace(
     code_cells = final_state.code_cells
 
     # Display trace in UI if provided
-    if ui:
+    # Show full details for gold trace and consistency trace 1 (for visibility)
+    # Other consistency traces just show summary to avoid clutter
+    show_turns = ui and (trace_mode == "gold" or trace_mode.startswith("1/"))
+
+    if show_turns:
         import re
         pattern = r"```python\n(.*?)```"
-        
+
         # Display each turn
         assistant_messages = [
             msg for msg in conversation_messages
             if msg.get("role") == "assistant"
         ]
 
+        # Get execution results from final_state (stored during rollout)
+        stored_results = getattr(final_state, 'execution_results_per_turn', [])
+
         for i, msg in enumerate(assistant_messages, 1):
             response = msg["content"]
             # Extract code cells from this message
             turn_code_cells = re.findall(pattern, response, re.DOTALL)
 
-            # Execution results are not stored in ConversationHistory
-            # (they're only available during rollout execution)
-            execution_results = []
+            # Get execution results for this turn (if available)
+            if i - 1 < len(stored_results):
+                turn_results = stored_results[i - 1]
+                # Convert CodeCellResult objects to dicts for UI
+                execution_results = [
+                    {
+                        "success": r.success,
+                        "stdout": r.stdout,
+                        "stderr": r.stderr,
+                    }
+                    for r in turn_results
+                ]
+            else:
+                execution_results = []
 
             ui.print_turn(
                 turn_num=i,
@@ -175,20 +202,31 @@ async def execute_teacher_trace(
                 code_cells=turn_code_cells,
                 execution_results=execution_results
             )
+    elif ui and trace_mode != "gold" and not trace_mode.startswith("1/"):
+        # For consistency traces 2-5, just show summary
+        assistant_messages = [
+            msg for msg in conversation_messages
+            if msg.get("role") == "assistant"
+        ]
+        ui.console.print(f"[dim]    Executed {len(assistant_messages)} turn(s)[/dim]")
 
     # Get final answer from environment's tracked submission
-    final_answer = env.submitted_answer
+    final_answer = final_state.submitted_answer
     final_answer_hash = hash_artifact(final_answer) if final_answer is not None else None
 
     # Check if execution was successful (submitted an answer)
     execution_success = final_answer is not None
+
+    # Calculate elapsed time
+    elapsed_seconds = time.time() - start_time
 
     # Display trace completion in UI
     if ui:
         ui.print_trace_complete(
             success=execution_success,
             final_answer=final_answer,
-            turns=len(assistant_messages) if 'assistant_messages' in locals() else len(code_cells)
+            turns=len(assistant_messages) if 'assistant_messages' in locals() else len(code_cells),
+            elapsed_seconds=elapsed_seconds
         )
 
     trace = ExecutionTrace(
@@ -198,7 +236,7 @@ async def execute_teacher_trace(
         execution_success=execution_success,
     )
 
-    return trace, conversation_messages, system_prompt
+    return trace, conversation_messages, system_prompt, elapsed_seconds
 
 
 async def triangulate_teacher(
@@ -239,7 +277,7 @@ async def triangulate_teacher(
         ui.print_trace_header(mode="gold", hint=hint)
 
     gold_env, gold_state = container_pool[0] if use_pool else (None, None)
-    gold_trace, gold_conversation, system_prompt = await execute_teacher_trace(
+    gold_trace, gold_conversation, system_prompt, gold_elapsed = await execute_teacher_trace(
         csv_path=csv_path,
         question=question,
         model=model,  # Required positional arg (3rd)
@@ -253,6 +291,7 @@ async def triangulate_teacher(
         state=gold_state,
         reuse_env=use_pool,
         ui=ui,
+        trace_mode="gold",
     )
 
     # 2. Run consistency traces (without hint) IN PARALLEL
@@ -264,7 +303,7 @@ async def triangulate_teacher(
 
         # Use pool slot i+1 (slot 0 is for gold trace)
         c_env, c_state = container_pool[i + 1] if use_pool else (None, None)
-        trace, conversation, _ = await execute_teacher_trace(
+        trace, conversation, _, elapsed = await execute_teacher_trace(
             csv_path=csv_path,
             question=question,
             model=model,  # Required positional arg (3rd)
@@ -278,6 +317,7 @@ async def triangulate_teacher(
             state=c_state,
             reuse_env=use_pool,
             ui=ui,
+            trace_mode=f"{i+1}/{n_consistency}",
         )
         return (trace, conversation)
 
@@ -369,18 +409,40 @@ async def batch_triangulate(
     # Create container pool if enabled
     if use_container_pool:
         pool_size = 1 + n_consistency  # 1 gold + N consistency traces
+
+        # Cleanup existing containers first
+        if ui:
+            ui.base.print_status("Cleaning up old containers...")
+        try:
+            import subprocess
+            subprocess.run(
+                "docker stop $(docker ps -q --filter 'name=csv-sandbox') 2>/dev/null && "
+                "docker rm $(docker ps -aq --filter 'name=csv-sandbox') 2>/dev/null",
+                shell=True,
+                capture_output=True
+            )
+        except Exception:
+            pass  # Ignore cleanup errors
+
         if ui:
             ui.base.print_status(f"Creating container pool ({pool_size} containers)...")
-        
-        container_pool = []
-        for i in range(pool_size):
+            ui.console.print(f"[dim]  → Creating container 1/{pool_size}...[/dim]")
+
+        # Create containers in parallel for speed
+        async def create_container(i: int):
+            """Helper to create a single container."""
             env = LocalCSVAnalysisEnv(csv_path=csv_path)
             state = {}
             state = await env.setup_state(state)
-            container_pool.append((env, state))
-        
+            return (env, state)
+
+        # Create all containers in parallel
+        container_pool = await asyncio.gather(
+            *[create_container(i) for i in range(pool_size)]
+        )
+
         if ui:
-            ui.base.print_success(f"Container pool ready ({pool_size} containers)")
+            ui.base.print_success(f"✓ Container pool ready ({pool_size} containers)")
 
     try:
         for i, q_dict in enumerate(questions, 1):

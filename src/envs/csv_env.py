@@ -23,6 +23,11 @@ from scipy import stats
 import sklearn
 import statsmodels
 import statsmodels.api as sm
+
+def submit(answer):
+    """Submit your final answer. Only call this once."""
+    print(f"✓ Submitted: {{answer}}")
+    return answer
 '''
 
 class VerifiersCSVAnalysisEnv(PythonEnv):
@@ -156,7 +161,7 @@ while True:
         namespace["__name__"] = "__main__"
         execution_count = 0
         with open(RESPONSE_FIFO, "w", encoding="utf-8") as response_file:
-            response_file.write(json.dumps({"status": "ok", "reset": True}))
+            response_file.write(json.dumps({{"status": "ok", "reset": True}}))
         continue
     code = request.get("code", "")
     execution_count += 1

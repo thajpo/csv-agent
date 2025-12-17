@@ -1,0 +1,26 @@
+csv: csv/data.csv
+description: null
+episodes_jsonl: episodes/episodes_test.jsonl
+float_tolerance: 0.1
+hint: Filter the data to the control group first, then calculate the mean.
+max_active_turns: 5
+max_context_tokens: 80000
+max_turns: 10
+mode: teacher-tutor
+n_consistency: 2
+question: What is the mean TL (total length) for the control group?
+question_gen_max_turns: 20
+question_gen_model: openai/gpt-oss-120b
+questions_json: question/questions_test.json
+sampling_args:
+  max_tokens: 6000
+  temperature: 0.7
+target_questions: 10
+teacher_model: openai/gpt-oss-120b
+template_n_comparison: 5
+template_n_filtering: 3
+template_n_multi_step: 3
+template_n_simple: 5
+template_questions_output: questions.json
+template_seed: 42
+verified_only: false

@@ -159,6 +159,21 @@ class EpisodeGenUI:
         if hint and mode == "gold":
             self.console.print(f"[dim]  Hint: {hint}[/dim]")
 
+    def print_trace_start(self, mode: str) -> None:
+        """Print trace start indicator."""
+        if mode == "gold":
+            self.console.print(f"[dim]  ⏱️  Starting gold trace execution...[/dim]")
+        else:
+            self.console.print(f"[dim]  ⏱️  Starting consistency trace {mode} execution...[/dim]")
+
+    def print_api_call_start(self, turn_num: int, max_turns: int) -> None:
+        """Print API call start indicator."""
+        self.console.print(f"[dim]    → Turn {turn_num}/{max_turns}: Calling LLM API...[/dim]")
+
+    def print_api_call_complete(self, turn_num: int, elapsed_seconds: float) -> None:
+        """Print API call completion with timing."""
+        self.console.print(f"[dim]    ✓ Turn {turn_num} response received ({elapsed_seconds:.1f}s)[/dim]")
+
     def print_turn(
         self,
         turn_num: int,
@@ -173,9 +188,7 @@ class EpisodeGenUI:
         reasoning = re.sub(r'```python.*?```', '', response, flags=re.DOTALL).strip()
 
         if reasoning:
-            max_len = 200
-            if len(reasoning) > max_len:
-                reasoning = reasoning[:max_len] + "..."
+            # Show full reasoning without truncation
             self.console.print(f"[dim]  {reasoning}[/dim]\n")
 
         for i, (code, result) in enumerate(zip(code_cells, execution_results), 1):
@@ -199,13 +212,18 @@ class EpisodeGenUI:
                 if stderr.strip():
                     self.console.print(f"[red]  Error:[/red] {stderr.strip()}")
 
-    def print_trace_complete(self, success: bool, final_answer: Any, turns: int) -> None:
+    def print_trace_complete(self, success: bool, final_answer: Any, turns: int, elapsed_seconds: float | None = None) -> None:
         """Print trace completion status."""
         if success:
             self.base.print_success(f"Answer submitted: {final_answer}")
-            self.console.print(f"[dim]  Completed in {turns} turn(s)[/dim]")
+            if elapsed_seconds is not None:
+                self.console.print(f"[dim]  Completed in {turns} turn(s) • {elapsed_seconds:.1f}s total[/dim]")
+            else:
+                self.console.print(f"[dim]  Completed in {turns} turn(s)[/dim]")
         else:
             self.base.print_error("Failed to produce an answer")
+            if elapsed_seconds is not None:
+                self.console.print(f"[dim]  Failed after {elapsed_seconds:.1f}s[/dim]")
 
     def print_triangulation_result(
         self,
