@@ -233,8 +233,7 @@ class EpisodeGenUI:
         float_tol: float
     ) -> None:
         """Print triangulation summary with verification status."""
-        from collections import Counter
-        from src.datagen.teacher import answers_match
+        from src.datagen.teacher import answers_match, get_majority_answer
 
         self.console.print("\n[bold cyan]┌─ TRIANGULATION " + "─" * 42 + "┐[/bold cyan]")
 
@@ -261,19 +260,11 @@ class EpisodeGenUI:
             hash_display = f"{answer_hash[:8]}..." if isinstance(answer_hash, str) else "None"
             self.console.print(f"[bold cyan]│[/bold cyan]   Trace {i}: {answer}  (hash: {hash_display}) {check}")
 
-        consistency_hashes = [
-            t.final_answer_hash for t in consistency_traces
-            if t.final_answer_hash is not None
+        valid_answers = [
+            t.final_answer for t in consistency_traces
+            if t.final_answer is not None
         ]
-        if consistency_hashes:
-            hash_counts = Counter(consistency_hashes)
-            majority_hash, majority_count = hash_counts.most_common(1)[0]
-            majority_value = next(
-                (t.final_answer for t in consistency_traces if t.final_answer_hash == majority_hash),
-                None
-            )
-        else:
-            majority_hash, majority_count, majority_value = None, 0, None
+        majority_value, majority_count = get_majority_answer(valid_answers, float_tol=float_tol)
 
         self.console.print("[bold cyan]│[/bold cyan]")
         self.console.print(f"[bold cyan]│[/bold cyan] [bold]Majority:[/bold] {majority_value} ({majority_count}/{len(consistency_traces)} votes)")

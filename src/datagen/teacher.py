@@ -27,6 +27,48 @@ from src.utils.hashing import hash_artifact
 
 
 
+def normalize_value(val: Any) -> Any:
+    """
+    Standardize answer formats for better comparison.
+    Converts DataFrames/Series to Dictionaries or Scalars where appropriate.
+    """
+    if val is None:
+        return None
+
+    # Handle Pandas/Numpy types
+    if isinstance(val, pd.DataFrame):
+        if val.empty:
+            return {}
+        
+        # 1x1 -> scalar
+        if val.shape == (1, 1):
+            return val.iloc[0, 0]
+        
+        # 1 column -> dict (if index meaningful) or list
+        if val.shape[1] == 1:
+            series = val.iloc[:, 0]
+            if not isinstance(val.index, pd.RangeIndex):
+                return series.to_dict()
+            return series.tolist()
+
+        # 2 columns -> dict {col0: col1}
+        if val.shape[1] == 2:
+            return dict(zip(val.iloc[:, 0], val.iloc[:, 1]))
+        
+        # Default: list of records
+        return val.to_dict('records')
+    
+    if isinstance(val, pd.Series):
+        if val.size == 1:
+            return val.iloc[0]
+        return val.to_dict()
+
+    if isinstance(val, np.generic):
+        return val.item()
+    
+    return val
+
+
 def answers_match(
     hash1: str | None,
     hash2: str | None,
@@ -35,7 +77,7 @@ def answers_match(
     float_tol: float = 0.1
 ) -> bool:
     """
-    Check if two answers match, with tolerance for floats.
+    Check if two answers match, with tolerance for floats and flexible types.
 
     Args:
         hash1, hash2: Answer hashes (for exact match)
@@ -45,50 +87,52 @@ def answers_match(
     Returns:
         True if answers match within tolerance
     """
-    # Exact hash match
+    # 1. Exact hash match (fast path)
     if hash1 is not None and hash2 is not None and hash1 == hash2:
         return True
 
-    # If we have raw values, try tolerant comparison
-    # TODO: REVIEW
+    # 2. Tolerant comparison if we have raw values
     if val1 is not None and val2 is not None:
-        # DataFrame Comparison
+        # A. Direct DataFrame vs DataFrame (preserves sorting/testing logic)
         if isinstance(val1, pd.DataFrame) and isinstance(val2, pd.DataFrame):
             try:
-                # Sort by index and columns to ensure order invariance
-                # We sort by the first column if index is default RangeIndex, else sort by index
+                # 1. Sort columns
                 df1 = val1.sort_index(axis=1)
                 df2 = val2.sort_index(axis=1)
                 
-                # Check shapes first
                 if df1.shape != df2.shape:
                     return False
                 
-                # Use pandas testing utility with tolerance
+                # 2. Sort rows by values to handle reordering
+                # We sort by all columns to be completely order-invariant
+                df1 = df1.sort_values(by=list(df1.columns)).reset_index(drop=True)
+                df2 = df2.sort_values(by=list(df2.columns)).reset_index(drop=True)
+
                 pd.testing.assert_frame_equal(
-                    df1, 
-                    df2, 
-                    check_dtype=False,  # Be tolerant of int vs float types
-                    check_like=True,    # Reordered columns handled by sort_index above, but good as backup
-                    atol=float_tol,
+                    df1, df2, 
+                    check_dtype=False, 
+                    check_like=True,
+                    atol=float_tol, 
                     rtol=float_tol
                 )
                 return True
-            except AssertionError:
-                return False
-            except Exception:
-                # Should not happen, but safe fallback
-                return False
+            except (AssertionError, Exception):
+                pass # Try normalization path if direct comparison fails
 
-        # Both floats: compare with tolerance
-        if isinstance(val1, (int, float)) and isinstance(val2, (int, float)):
-            return abs(float(val1) - float(val2)) <= float_tol
+        # B. Normalize and compare
+        v1 = normalize_value(val1)
+        v2 = normalize_value(val2)
 
-        # Both tuples/lists: compare element-wise
-        if isinstance(val1, (tuple, list)) and isinstance(val2, (tuple, list)):
-            if len(val1) != len(val2):
+        # Both floats
+        if isinstance(v1, (int, float)) and isinstance(v2, (int, float)):
+            return abs(float(v1) - float(v2)) <= float_tol
+
+        # Both dicts: compare keys exactly, values with float tolerance
+        if isinstance(v1, dict) and isinstance(v2, dict):
+            if set(v1.keys()) != set(v2.keys()):
                 return False
-            for a, b in zip(val1, val2):
+            for k in v1.keys():
+                a, b = v1[k], v2[k]
                 if isinstance(a, (int, float)) and isinstance(b, (int, float)):
                     if abs(float(a) - float(b)) > float_tol:
                         return False
@@ -96,11 +140,52 @@ def answers_match(
                     return False
             return True
 
-        # Exact equality for other types
-        if val1 == val2:
+        # Both tuples/lists: compare element-wise
+        if isinstance(v1, (tuple, list)) and isinstance(v2, (tuple, list)):
+            if len(v1) != len(v2):
+                return False
+            for a, b in zip(v1, v2):
+                if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                    if abs(float(a) - float(b)) > float_tol:
+                        return False
+                elif a != b:
+                    return False
             return True
 
+        # Exact equality for others
+        try:
+            if v1 == v2:
+                return True
+        except Exception:
+            return False
+
     return False
+
+
+def get_majority_answer(answers: list[Any], float_tol: float = 0.1) -> tuple[Any, int]:
+    """
+    Find the majority answer by clustering values using answers_match.
+    
+    Returns:
+        Tuple of (majority_value, vote_count)
+    """
+    if not answers:
+        return None, 0
+        
+    clusters = []  # list of [representative_value, count]
+    for ans in answers:
+        found = False
+        for cluster in clusters:
+            if answers_match(None, None, cluster[0], ans, float_tol=float_tol):
+                cluster[1] += 1
+                found = True
+                break
+        if not found:
+            clusters.append([ans, 1])
+            
+    # Sort by count descending
+    clusters.sort(key=lambda x: x[1], reverse=True)
+    return clusters[0][0], clusters[0][1]
 
 
 async def execute_teacher_trace(
@@ -326,31 +411,24 @@ async def triangulate_teacher(
         *[run_consistency_trace(i) for i in range(n_consistency)]
     )
 
-    # 3. Majority voting on final answer hashes
-    consistency_answers = [
-        (trace.final_answer_hash, trace.final_answer)
+    # 3. Cluster-based voting on consistency answers
+    # This is more robust than strict hashing as it handles float tolerance and formatting differences
+    valid_answers = [
+        trace.final_answer
         for trace, _ in consistency_results
-        if trace.final_answer_hash is not None
+        if trace.final_answer is not None
     ]
 
-    if not consistency_answers:
+    if not valid_answers:
         return gold_trace, gold_conversation, system_prompt, consistency_results, False
 
-    # Find majority answer by hash
-    consistency_hashes = [h for h, _ in consistency_answers]
-    hash_counts = Counter(consistency_hashes)
-    majority_hash, majority_count = hash_counts.most_common(1)[0]
+    # Find majority answer by clustering
+    majority_value, majority_count = get_majority_answer(valid_answers, float_tol=float_tol)
 
-    # Get the actual value for the majority hash
-    majority_value = next(
-        (val for h, val in consistency_answers if h == majority_hash),
-        None
-    )
-
-    # Check if gold matches majority (with tolerance for floats)
+    # Check if gold matches majority (with tolerance for floats and formats)
     verified = answers_match(
-        gold_trace.final_answer_hash,
-        majority_hash,
+        None,
+        None,
         gold_trace.final_answer,
         majority_value,
         float_tol=float_tol
