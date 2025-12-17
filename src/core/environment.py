@@ -104,7 +104,8 @@ class Environment:
         execution: ExecutionConfig,
         task: TaskConfig,
         env: CSVAnalysisEnv | None = None,
-
+        state: dict | None = None,
+        reuse_env: bool = False,
     ):
         """
         Initialize Environment with focused configs.
@@ -130,7 +131,8 @@ class Environment:
             sampling_args=model.sampling_args()
         )
         self.env = env  # Will be created in create() if None
-        self.state = None  # Verifiers state dict
+        self.state = state  # Verifiers state dict
+        self.reuse_env = reuse_env  # If True, reset instead of destroy
 
         self.df = None  # Will be loaded on first rollout
         
@@ -145,14 +147,19 @@ class Environment:
         execution: ExecutionConfig,
         task: TaskConfig,
         env: CSVAnalysisEnv | None = None,
-
+        state: dict | None = None,
+        reuse_env: bool = False,
     ):
         """Async factory to create Environment with initialized CSVAnalysisEnv."""
-        instance = cls(data, model, execution, task, env)
+        instance = cls(data, model, execution, task, env, state, reuse_env)
         
         # Create env and state if not provided
         if instance.env is None:
             instance.env = CSVAnalysisEnv(csv_path=instance.csv_path)
+            instance.state = {}
+            instance.state = await instance.env.setup_state(instance.state)
+        elif instance.state is None:
+            # Env provided but no state - set up state
             instance.state = {}
             instance.state = await instance.env.setup_state(instance.state)
         
@@ -171,6 +178,9 @@ class Environment:
         data_overview: str = "",
         max_turns: int = 10,
         sampling_args: dict | None = None,
+        env: CSVAnalysisEnv | None = None,
+        state: dict | None = None,
+        reuse_env: bool = False,
     ):
         """
         Factory with primitive args - handles config construction internally.
@@ -188,6 +198,9 @@ class Environment:
             data_overview: Generated data overview string
             max_turns: Maximum conversation turns
             sampling_args: Dict of temperature, max_tokens, top_p (optional)
+            env: Optional pre-created LocalCSVAnalysisEnv (for pooling)
+            state: Optional pre-created state dict (for pooling)
+            reuse_env: If True, reset env after rollout instead of destroying
         
         Returns:
             Initialized Environment ready for rollout
@@ -223,6 +236,9 @@ class Environment:
             model=model_config,
             execution=execution_config,
             task=task_config,
+            env=env,
+            state=state,
+            reuse_env=reuse_env,
         )
 
     def _load_csv(self):
@@ -404,10 +420,17 @@ class Environment:
                 self.current_turn += 1
 
         finally:
-            # Cleanup sandbox
+            # Cleanup or reset sandbox
             if self.state and "sandbox_id" in self.state:
                 try:
-                    await self.env.destroy_sandbox(self.state["sandbox_id"])
+                    if self.reuse_env:
+                        # Reset for reuse instead of destroying
+                        await self.env.reset(
+                            self.state["sandbox_id"],
+                            self.state.get("python_state")
+                        )
+                    else:
+                        await self.env.destroy_sandbox(self.state["sandbox_id"])
                 except Exception as e:
                     pass  # Silently ignore cleanup failures
 

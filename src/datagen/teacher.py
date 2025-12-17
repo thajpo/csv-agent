@@ -113,7 +113,9 @@ async def execute_teacher_trace(
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
-
+    env = None,  # Optional pre-created env (for pooling)
+    state: dict | None = None,  # Optional pre-created state (for pooling)
+    reuse_env: bool = False,  # If True, reset instead of destroy
     ui: Any = None,  # Optional UI instance for Rich output
 ) -> tuple[ExecutionTrace, list[dict], str]:
     """
@@ -123,7 +125,7 @@ async def execute_teacher_trace(
         Tuple of (ExecutionTrace, conversation_messages, system_prompt)
     """
     # Create environment and execute rollout
-    env = await Environment.from_params(
+    final_state = await Environment.from_params(
         csv_path=csv_path,
         model=model,
         question=question,
@@ -133,8 +135,11 @@ async def execute_teacher_trace(
         data_overview=data_overview,
         max_turns=max_turns,
         sampling_args=sampling_args,
+        env=env,
+        state=state,
+        reuse_env=reuse_env,
     )
-    final_state = await env.rollout()
+    final_state = await final_state.rollout()
 
     # Extract conversation for SFT training
     conversation_messages = final_state.conversation.to_openai_messages()
@@ -207,12 +212,18 @@ async def triangulate_teacher(
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
-
+    container_pool: list[tuple] | None = None,  # List of (env, state) tuples for reuse
     ui: Any = None,  # Optional UI instance for Rich output
     float_tol: float = 0.1,
 ) -> tuple[ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]:
     """
     Run teacher triangulation: gold trace + consistency traces.
+    
+    Args:
+        container_pool: Optional list of (env, state) tuples for container reuse.
+                       Should have 1 + n_consistency entries.
+                       If None, creates new containers for each trace.
+    
     Returns:
         Tuple of:
         - gold_trace: ExecutionTrace WITH hint
@@ -221,11 +232,13 @@ async def triangulate_teacher(
         - consistency_results: list of (ExecutionTrace, conversation) tuples
         - verified: True if gold matches majority of consistency traces
     """
+    use_pool = container_pool is not None
 
     # 1. Run gold trace (with hint)
     if ui:
         ui.print_trace_header(mode="gold", hint=hint)
 
+    gold_env, gold_state = container_pool[0] if use_pool else (None, None)
     gold_trace, gold_conversation, system_prompt = await execute_teacher_trace(
         csv_path=csv_path,
         question=question,
@@ -236,7 +249,9 @@ async def triangulate_teacher(
         data_overview=data_overview,
         max_turns=max_turns,
         sampling_args=sampling_args,
-
+        env=gold_env,
+        state=gold_state,
+        reuse_env=use_pool,
         ui=ui,
     )
 
@@ -247,6 +262,8 @@ async def triangulate_teacher(
         if ui:
             ui.print_trace_header(mode=f"{i+1}/{n_consistency}", hint=None)
 
+        # Use pool slot i+1 (slot 0 is for gold trace)
+        c_env, c_state = container_pool[i + 1] if use_pool else (None, None)
         trace, conversation, _ = await execute_teacher_trace(
             csv_path=csv_path,
             question=question,
@@ -257,7 +274,9 @@ async def triangulate_teacher(
             data_overview=data_overview,
             max_turns=max_turns,
             sampling_args=sampling_args,
-
+            env=c_env,
+            state=c_state,
+            reuse_env=use_pool,
             ui=ui,
         )
         return (trace, conversation)
@@ -320,7 +339,7 @@ async def batch_triangulate(
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
-
+    use_container_pool: bool = True,  # Enable container reuse optimization
     ui: Any = None,  # Optional UI instance for Rich output
     float_tol: float = 0.1,
 ) -> list[tuple[dict, ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]]:
@@ -336,39 +355,71 @@ async def batch_triangulate(
         data_overview: Data overview
         max_turns: Max turns per trace
         sampling_args: Model sampling args
-
+        use_container_pool: If True, create containers once and reuse (much faster)
 
     Returns:
         List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified)
     """
+    from src.envs.csv_env import LocalCSVAnalysisEnv
+    
     results = []
     verified_count = 0
+    container_pool = None
 
-    for i, q_dict in enumerate(questions, 1):
+    # Create container pool if enabled
+    if use_container_pool:
+        pool_size = 1 + n_consistency  # 1 gold + N consistency traces
         if ui:
-            ui.print_question_header(q_num=i, total=len(questions), question=q_dict)
-
-        gold_trace, gold_conversation, system_prompt, consistency_results, verified = await triangulate_teacher(
-            csv_path=csv_path,
-            question=q_dict["question"],
-            hint=q_dict.get("hint", ""),
-            n_consistency=n_consistency,
-            model=model,
-            dataset_description=dataset_description,
-            data_overview=data_overview,
-            max_turns=max_turns,
-            sampling_args=sampling_args,
-            ui=ui,
-            float_tol=float_tol,
-        )
-
-        results.append((q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified))
-
-        if verified:
-            verified_count += 1
-
+            ui.base.print_status(f"Creating container pool ({pool_size} containers)...")
+        
+        container_pool = []
+        for i in range(pool_size):
+            env = LocalCSVAnalysisEnv(csv_path=csv_path)
+            state = {}
+            state = await env.setup_state(state)
+            container_pool.append((env, state))
+        
         if ui:
-            ui.print_progress_summary(current=i, total=len(questions), verified_count=verified_count)
+            ui.base.print_success(f"Container pool ready ({pool_size} containers)")
+
+    try:
+        for i, q_dict in enumerate(questions, 1):
+            if ui:
+                ui.print_question_header(q_num=i, total=len(questions), question=q_dict)
+
+            gold_trace, gold_conversation, system_prompt, consistency_results, verified = await triangulate_teacher(
+                csv_path=csv_path,
+                question=q_dict["question"],
+                hint=q_dict.get("hint", ""),
+                n_consistency=n_consistency,
+                model=model,
+                dataset_description=dataset_description,
+                data_overview=data_overview,
+                max_turns=max_turns,
+                sampling_args=sampling_args,
+                container_pool=container_pool,
+                ui=ui,
+                float_tol=float_tol,
+            )
+
+            results.append((q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified))
+
+            if verified:
+                verified_count += 1
+
+            if ui:
+                ui.print_progress_summary(current=i, total=len(questions), verified_count=verified_count)
+
+    finally:
+        # Clean up container pool
+        if container_pool:
+            if ui:
+                ui.base.print_status("Cleaning up container pool...")
+            for env, state in container_pool:
+                try:
+                    await env.destroy_sandbox(state["sandbox_id"])
+                except Exception:
+                    pass  # Ignore cleanup failures
 
     n_verified = sum(1 for result in results if result[-1])  # verified is last element
 
