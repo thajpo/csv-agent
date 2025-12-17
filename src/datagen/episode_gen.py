@@ -10,6 +10,7 @@ Usage:
     python -m src.authoring.episode_gen
 """
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -63,7 +64,7 @@ def load_config(config_path: str = "config.yaml") -> dict:
         return yaml.safe_load(f)
 
 
-def main():
+async def main():
     # Load config
     config = load_config()
 
@@ -107,7 +108,7 @@ def main():
     }
 
     # Run batch triangulation with UI
-    results = batch_triangulate(
+    results = await batch_triangulate(
         csv_path=csv_path,
         questions=questions,
         model=teacher_model,  # Required positional arg (3rd)
@@ -191,4 +192,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(asyncio.run(main()))

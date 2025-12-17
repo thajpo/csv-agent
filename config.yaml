@@ -9,9 +9,6 @@ max_turns: 10
 # Dataset description (leave null to use default)
 description: null
 
-# Output path for JSONL (null = no output file)
-output: null
-
 # Pipeline mode: teacher-tutor, teacher-consistency, or student
 # - teacher-tutor: Solve with hints (verbose, educational)
 # - teacher-consistency: Solve without hints (efficient)

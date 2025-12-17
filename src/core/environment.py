@@ -18,7 +18,7 @@ from src.utils.validation import get_turn_validation_feedback
 from src.core.prompts import generate_data_overview, build_system_prompt, CONTINUE_MSG, FINAL_MSG
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
-from src.envs.csv_env import CSVAnalysisEnv
+from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
 
 
 def parse_execution_result(output: str) -> tuple[bool, str, str]:

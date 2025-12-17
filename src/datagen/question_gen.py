@@ -19,7 +19,7 @@ from datetime import datetime
 
 from src.datagen.ui import QuestionGenUI
 
-from src.envs.csv_env import CSVAnalysisEnv
+from src.envs.csv_env import LocalCSVAnalysisEnv
 from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
 from src.core.types import ExplorationTurn, ExplorationTrace
@@ -97,23 +97,53 @@ def extract_python_cells(response: str) -> list[str]:
 
 
 def try_parse_questions(response: str) -> list[dict] | None:
-    """Parse if found and valid, None otherwise."""
-    json_pattern = r'```json\n(.*?)```'
+    """
+    Parse questions from response. Tries multiple formats for robustness.
+    Output is always normalized to the same structure regardless of input format.
+    """
+    def validate_questions(questions: list) -> bool:
+        """Check if questions list has valid structure."""
+        return all(
+            isinstance(q, dict) and
+            all(key in q for key in ["question", "hint", "n_steps", "difficulty"])
+            for q in questions
+        )
+
+    # Strategy 1: Look for ```json fenced blocks (preferred format)
+    json_pattern = r'```json\s*\n(.*?)```'
     matches = re.findall(json_pattern, response, re.DOTALL)
+    if matches:
+        try:
+            data = json.loads(matches[0])
+            if "questions" in data and isinstance(data["questions"], list):
+                if validate_questions(data["questions"]):
+                    return data["questions"]
+        except json.JSONDecodeError:
+            pass
 
-    if not matches:
-        return None
+    # Strategy 2: Look for bare JSON object
+    json_obj_pattern = r'\{\s*"questions"\s*:\s*\[.*?\]\s*\}'
+    matches = re.findall(json_obj_pattern, response, re.DOTALL)
+    if matches:
+        try:
+            data = json.loads(matches[0])
+            if "questions" in data and isinstance(data["questions"], list):
+                if validate_questions(data["questions"]):
+                    return data["questions"]
+        except json.JSONDecodeError:
+            pass
 
-    try:
-        data = json.loads(matches[0])
-        if "questions" in data and isinstance(data["questions"], list):
-            questions = data["questions"]
-            for q in questions:
-                if not all(key in q for key in ["question", "hint", "n_steps", "difficulty"]):
-                    return None
-            return questions
-    except json.JSONDecodeError:
-        return None
+    # Strategy 3: Look for Python dict assignment
+    python_dict_pattern = r'(?:questions|output)\s*=\s*(\{.*?\})'
+    matches = re.findall(python_dict_pattern, response, re.DOTALL)
+    if matches:
+        try:
+            data = json.loads(matches[0])
+            if "questions" in data and isinstance(data["questions"], list):
+                if validate_questions(data["questions"]):
+                    return data["questions"]
+        except json.JSONDecodeError:
+            pass
 
     return None
 
@@ -168,7 +198,7 @@ async def explore_and_generate_questions(
     ui.print_empty_line()
 
     # 1. Setup
-    env = CSVAnalysisEnv(csv_path=csv_path)
+    env = LocalCSVAnalysisEnv(csv_path=csv_path)
     state = {}
     state = await env.setup_state(state)
     
@@ -296,7 +326,7 @@ def main():
     config = load_config("config.yaml")
 
     csv_path = config["csv"]
-    output_file = config["output"]
+    output_file = config["questions_json"]
     max_turns = config["question_gen_max_turns"]
     temperature = config["sampling_args"]["temperature"]
     max_tokens = config["sampling_args"]["max_tokens"]

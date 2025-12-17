@@ -1,4 +1,7 @@
 """
+NOTE: This is experimental, and may be included after initial validation. 
+It is currently not used by the main system.
+
 Tier 1 Structure Generator.
 Uses Data Profiler and Personas to generate high-volume, structurally diverse questions.
 """

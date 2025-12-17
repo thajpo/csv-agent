@@ -163,6 +163,8 @@ The following libraries are ALREADY imported and ready to use. DO NOT import the
    - Hyperparameter tuning
 
 OUTPUT FORMAT (Last Turn Only):
+When you're ready to output the questions, you MUST use this EXACT format:
+
 ```json
 {
   "questions": [
@@ -175,6 +177,20 @@ OUTPUT FORMAT (Last Turn Only):
   ]
 }
 ```
+
+CRITICAL FORMAT RULES:
+✅ DO: Use ```json fence markers (opening and closing)
+✅ DO: Use proper JSON syntax with double quotes
+✅ DO: Output <DONE> on a new line after the closing ```
+❌ DON'T: Use Python dict syntax (questions = {...})
+❌ DON'T: Output bare JSON without ```json fences
+❌ DON'T: Use single quotes or Python-specific syntax
+
+EXAMPLE CORRECT OUTPUT:
+```json
+{"questions": [...]}
+```
+<DONE>
 
 REMEMBER:
 - Write ONE code block.

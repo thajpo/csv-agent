@@ -1,0 +1,266 @@
+{
+  "csv_path": "csv/data.csv",
+  "turns": [
+    {
+      "turn_number": 0,
+      "reasoning": "We will run df.head().```python\ndf.head()\n```",
+      "code_cells": [
+        "df.head()"
+      ],
+      "execution_results": [
+        {
+          "code": "df.head()",
+          "success": true,
+          "stdout": "Out[2]:    N       TR TREE BR  ...  INTERNODE_26  INTERNODE_27  INTERNODE_28 INTERNODE_29\n0  1  control  G28  A  ...             ?             ?             ?            ?\n1  2  control  G28  B  ...             ?             ?             ?            ?\n2  3  control  G28  C  ...             ?             ?             ?            ?\n3  4  control  G28  C  ...             ?             ?             ?            ?\n4  5  control  G28  D  ...             ?             ?             ?            ?\n\n[5 rows x 35 columns]",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-16 21:17:15.516445"
+    },
+    {
+      "turn_number": 1,
+      "reasoning": "```python\ndf.info()\n```",
+      "code_cells": [
+        "df.info()"
+      ],
+      "execution_results": [
+        {
+          "code": "df.info()",
+          "success": true,
+          "stdout": "<class 'pandas.core.frame.DataFrame'>\nRangeIndex: 2796 entries, 0 to 2795\nData columns (total 35 columns):\n #   Column        Non-Null Count  Dtype  \n---  ------        --------------  -----  \n 0   N             2796 non-null   int64  \n 1   TR            2796 non-null   object \n 2   TREE          2796 non-null   object \n 3   BR            2796 non-null   object \n 4   TL            2796 non-null   float64\n 5   IN            2796 non-null   int64  \n 6   INTERNODE_1   2796 non-null   float64\n 7   INTERNODE_2   2796 non-null   object \n 8   INTERNODE_3   2796 non-null   object \n 9   INTERNODE_4   2796 non-null   object \n 10  INTERNODE_5   2796 non-null   object \n 11  INTERNODE_6   2796 non-null   object \n 12  INTERNODE_7   2796 non-null   object \n 13  INTERNODE_8   2796 non-null   object \n 14  INTERNODE_9   2796 non-null   object \n 15  INTERNODE_10  2796 non-null   object \n 16  INTERNODE_11  2796 non-null   object \n 17  INTERNODE_12  2796 non-null   object \n 18  INTERNODE_13  2796 non-null   object \n 19  INTERNODE_14  2796 non-null   object \n 20  INTERNODE_15  2796 non-null   object \n 21  INTERNODE_16  2796 non-null   object \n 22  INTERNODE_17  2796 non-null   object \n 23  INTERNODE_18  2796 non-null   object \n 24  INTERNODE_19  2796 non-null   object \n 25  INTERNODE_20  2796 non-null   object \n 26  INTERNODE_21  2796 non-null   object \n 27  INTERNODE_22  2796 non-null   object \n 28  INTERNODE_23  2796 non-null   object \n 29  INTERNODE_24  2796 non-null   object \n 30  INTERNODE_25  2796 non-null   object \n 31  INTERNODE_26  2796 non-null   object \n 32  INTERNODE_27  2796 non-null   object \n 33  INTERNODE_28  2796 non-null   object \n 34  INTERNODE_29  2796 non-null   object \ndtypes: float64(2), int64(2), object(31)\nmemory usage: 764.7+ KB",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-16 21:17:16.898611"
+    },
+    {
+      "turn_number": 2,
+      "reasoning": "```python\ndf['INTERNODE_2'].unique()[:20]\n```We need to wait for output.We must wait for system output.```python\ndf['INTERNODE_2'].value_counts().head()\n```Wait for output.We need to wait.```python\ndf.describe(include='all')\n```Wait for output.We need to wait.```python\n# Convert all INTERNODE_* columns to numeric, coercing errors to NaN\ninternode_cols = [col for col in df.columns if col.startswith('INTERNODE_')]\ndf[internode_cols] = df[internode_cols].apply(pd.to_numeric, errors='coerce')\ndf[internode_cols].isnull().sum().head()\n```Wait for output.We need to wait.```python\ndf[['TL'] + internode_cols].corr(method='pearson')\n```Wait for output.We need to wait.```python\ndf.groupby('TR')['TL'].mean().reset_index()\n```Wait for output.We need to wait.```python\ndf['TR'].value_counts()\n```Wait for output.We must wait.```python\nmissing_pct = df[internode_cols].isnull().mean().sort_values(ascending=False)\nmissing_pct.head(10)\n```Wait for output.We need to wait.```python\n# Correlation between TL and each internode (after dropping NaNs)\ncorrs = {}\nfor col in internode_cols:\n    corr = df[['TL', col]].dropna().corr().iloc[0,1]\n    corrs[col] = corr\nsorted_corrs = sorted(corrs.items(), key=lambda x: abs(x[1]), reverse=True)\nsorted_corrs[:5]\n```Wait for output.We need to wait.```python\n# Count of observations per TREE and average TL\ndf.groupby('TREE')['TL'].agg(['count','mean']).reset_index()\n```Wait for output.We need to wait.```python\ndf['TREE'].value_counts()\n```Wait for output.We need to wait.```python\ndf.shape\n```Wait for output.We need to wait.```python\ndf.head(2)\n```Wait for output.We need to wait.```python\nlist(df.columns)\n```Wait for output.We need to wait.```json\n{\n  \"questions\": [\n    {\n      \"question\": \"What is the average TL (total length) for each TR group (e.g., control vs treatment)?\",\n      \"hint\": \"Group by the 'TR' column and compute the mean of 'TL'.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a statistically significant difference in TL between the 'control' and 'treatment' groups?\",\n      \"hint\": \"Perform an independent two-sample t-test on TL values split by 'TR'.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Which INTERNODE measurement has the strongest Pearson correlation with TL?\",\n      \"hint\": \"Calculate Pearson correlation between TL and each INTERNODE_* column, then identify the max absolute value.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the Spearman rank correlation between TL and the sum of all INTERNODE measurements for each observation?\",\n      \"hint\": \"Create a new column summing all INTERNODE_* values (after converting to numeric), then compute Spearman correlation with TL.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do different TREE identifiers exhibit distinct average TL values?\",\n      \"hint\": \"Group by 'TREE' and calculate the mean TL; optionally run ANOVA to test differences across groups.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is there a linear relationship between TL and the number of internodes (IN column)?\",\n      \"hint\": \"Fit a simple OLS regression model with TL as the dependent variable and IN as the independent variable; report coefficient and R\u00b2.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Which BR (branch) categories have TL values significantly higher than the overall mean?\",\n      \"hint\": \"Calculate mean TL per 'BR', then perform one-sample t-tests comparing each BR's TL to the overall TL mean; adjust for multiple testing.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Can TL be predicted using a multiple linear regression model that includes all INTERNODE_* measurements?\",\n      \"hint\": \"Fit an OLS model with TL as the outcome and all numeric INTERNODE_* columns as predictors; report adjusted R\u00b2 and significant predictors.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Does the relationship between TL and the sum of INTERNODE measurements differ between control and treatment groups?\",\n      \"hint\": \"Create interaction terms between 'TR' and the sum of INTERNODE_* values in a linear regression; test significance of the interaction.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Is there evidence of heteroscedasticity in the TL vs. INTERNODE sum regression model?\",\n      \"hint\": \"After fitting the regression, perform Breusch-Pagan or White test on residuals.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Using a linear regression with TL as outcome, does including the categorical variable 'TREE' improve model fit compared to a model without it?\",\n      \"hint\": \"Fit two models (with and without dummy variables for 'TREE'), then compare using an F-test or AIC/BIC.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"What proportion of the total variance in TL is explained by the number of internodes (IN) and the sum of INTERNODE measurements combined?\",\n      \"hint\": \"Fit a multiple regression with TL ~ IN + sum(INTERNODE_*); compute the partial R\u00b2 for each predictor.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    }\n  ]\n}\n```\n<DONE>",
+      "code_cells": [
+        "df['INTERNODE_2'].unique()[:20]",
+        "df['INTERNODE_2'].value_counts().head()",
+        "df.describe(include='all')",
+        "# Convert all INTERNODE_* columns to numeric, coercing errors to NaN\ninternode_cols = [col for col in df.columns if col.startswith('INTERNODE_')]\ndf[internode_cols] = df[internode_cols].apply(pd.to_numeric, errors='coerce')\ndf[internode_cols].isnull().sum().head()",
+        "df[['TL'] + internode_cols].corr(method='pearson')",
+        "df.groupby('TR')['TL'].mean().reset_index()",
+        "df['TR'].value_counts()",
+        "missing_pct = df[internode_cols].isnull().mean().sort_values(ascending=False)\nmissing_pct.head(10)",
+        "# Correlation between TL and each internode (after dropping NaNs)\ncorrs = {}\nfor col in internode_cols:\n    corr = df[['TL', col]].dropna().corr().iloc[0,1]\n    corrs[col] = corr\nsorted_corrs = sorted(corrs.items(), key=lambda x: abs(x[1]), reverse=True)\nsorted_corrs[:5]",
+        "# Count of observations per TREE and average TL\ndf.groupby('TREE')['TL'].agg(['count','mean']).reset_index()",
+        "df['TREE'].value_counts()",
+        "df.shape",
+        "df.head(2)",
+        "list(df.columns)"
+      ],
+      "execution_results": [
+        {
+          "code": "df['INTERNODE_2'].unique()[:20]",
+          "success": true,
+          "stdout": "Out[4]: array(['2.3', '1.3', '1.0', '1.2', '0.7', '0.9', '2.8', '0.5', '0.6',\n       '0.8', '1.5', '2.2', '3.0', '2.4', '2.0', '9.2', '4.8', '4.1',\n       '3.7', '2.6'], dtype=object)",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "df['INTERNODE_2'].value_counts().head()",
+          "success": true,
+          "stdout": "Out[5]: INTERNODE_2\n0.3    866\n0.5    701\n0.6    161\n0.7    109\n1.0    107\nName: count, dtype: int64",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "df.describe(include='all')",
+          "success": true,
+          "stdout": "Out[6]:                   N            TR  TREE  ... INTERNODE_27  INTERNODE_28  INTERNODE_29\ncount   2796.000000          2796  2796  ...         2796          2796          2796\nunique          NaN             6    57  ...            2             2             2\ntop             NaN  PP_333_20g/L   G27  ...            ?             ?             ?\nfreq            NaN           680   139  ...         2795          2795          2795\nmean    1398.500000           NaN   NaN  ...          NaN           NaN           NaN\nstd      807.280001           NaN   NaN  ...          NaN           NaN           NaN\nmin        1.000000           NaN   NaN  ...          NaN           NaN           NaN\n25%      699.750000           NaN   NaN  ...          NaN           NaN           NaN\n50%     1398.500000           NaN   NaN  ...          NaN           NaN           NaN\n75%     2097.250000           NaN   NaN  ...          NaN           NaN           NaN\nmax     2796.000000           NaN   NaN  ...          NaN           NaN           NaN\n\n[11 rows x 35 columns]",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "# Convert all INTERNODE_* columns to numeric, coercing errors to NaN\ninternode_cols = [col for col in df.columns if col.startswith('INTERNODE_')]\ndf[internode_cols] = df[internode_cols].apply(pd.to_numeric, errors='coerce')\ndf[internode_cols].isnull().sum().head()",
+          "success": true,
+          "stdout": "Out[7]: INTERNODE_1       0\nINTERNODE_2      64\nINTERNODE_3     637\nINTERNODE_4    1634\nINTERNODE_5    1999\ndtype: int64",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "df[['TL'] + internode_cols].corr(method='pearson')",
+          "success": true,
+          "stdout": "Out[8]:                     TL  INTERNODE_1  ...  INTERNODE_28  INTERNODE_29\nTL            1.000000     0.450606  ...           NaN           NaN\nINTERNODE_1   0.450606     1.000000  ...           NaN           NaN\nINTERNODE_2   0.664901     0.755856  ...           NaN           NaN\nINTERNODE_3   0.733396     0.604777  ...           NaN           NaN\nINTERNODE_4   0.750696     0.509765  ...           NaN           NaN\nINTERNODE_5   0.787430     0.423696  ...           NaN           NaN\nINTERNODE_6   0.853962     0.368103  ...           NaN           NaN\nINTERNODE_7   0.866480     0.284212  ...           NaN           NaN\nINTERNODE_8   0.861873     0.297788  ...           NaN           NaN\nINTERNODE_9   0.816628     0.268947  ...           NaN           NaN\nINTERNODE_10  0.771003     0.194811  ...           NaN           NaN\nINTERNODE_11  0.771084     0.198383  ...           NaN           NaN\nINTERNODE_12  0.775441     0.168801  ...           NaN           NaN\nINTERNODE_13  0.788077     0.203911  ...           NaN           NaN\nINTERNODE_14  0.742253     0.161553  ...           NaN           NaN\nINTERNODE_15  0.742384     0.146081  ...           NaN           NaN\nINTERNODE_16  0.726989     0.179255  ...           NaN           NaN\nINTERNODE_17  0.643500     0.203353  ...           NaN           NaN\nINTERNODE_18  0.674734     0.252756  ...           NaN           NaN\nINTERNODE_19  0.699296     0.393728  ...           NaN           NaN\nINTERNODE_20  0.732126     0.483682  ...           NaN           NaN\nINTERNODE_21  0.686602     0.354813  ...           NaN           NaN\nINTERNODE_22  0.561769     0.258485  ...           NaN           NaN\nINTERNODE_23  0.608223     0.768507  ...           NaN           NaN\nINTERNODE_24  0.332043     0.956541  ...           NaN           NaN\nINTERNODE_25  0.940443     0.987158  ...           NaN           NaN\nINTERNODE_26       NaN          NaN  ...           NaN           NaN\nINTERNODE_27       NaN          NaN  ...           NaN           NaN\nINTERNODE_28       NaN          NaN  ...           NaN           NaN\nINTERNODE_29       NaN          NaN  ...           NaN           NaN\n\n[30 rows x 30 columns]",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "df.groupby('TR')['TL'].mean().reset_index()",
+          "success": true,
+          "stdout": "Out[9]:                  TR         TL\n0      EL_500_20g/L   4.960069\n1       EL_500_4g/L   7.904692\n2      PP_333_20g/L   3.672059\n3       PP_333_4g/L  11.226027\n4           control  14.252415\n5  methanol_control  23.397810",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "df['TR'].value_counts()",
+          "success": true,
+          "stdout": "Out[10]: TR\nPP_333_20g/L        680\nEL_500_20g/L        576\nPP_333_4g/L         511\ncontrol             414\nEL_500_4g/L         341\nmethanol_control    274\nName: count, dtype: int64",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "missing_pct = df[internode_cols].isnull().mean().sort_values(ascending=False)\nmissing_pct.head(10)",
+          "success": true,
+          "stdout": "Out[11]: INTERNODE_29    0.999642\nINTERNODE_28    0.999642\nINTERNODE_27    0.999642\nINTERNODE_26    0.999642\nINTERNODE_25    0.998569\nINTERNODE_24    0.997496\nINTERNODE_23    0.996423\nINTERNODE_22    0.993920\nINTERNODE_21    0.990701\nINTERNODE_20    0.984621\ndtype: float64",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "# Correlation between TL and each internode (after dropping NaNs)\ncorrs = {}\nfor col in internode_cols:\n    corr = df[['TL', col]].dropna().corr().iloc[0,1]\n    corrs[col] = corr\nsorted_corrs = sorted(corrs.items(), key=lambda x: abs(x[1]), reverse=True)\nsorted_corrs[:5]",
+          "success": true,
+          "stdout": "Out[12]: [('INTERNODE_25', np.float64(0.9404427248466108)), ('INTERNODE_7', np.float64(0.8664802956466444)), ('INTERNODE_8', np.float64(0.8618726949380234)), ('INTERNODE_6', np.float64(0.853962251350835)), ('INTERNODE_9', np.float64(0.8166284434261394))]",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "# Count of observations per TREE and average TL\ndf.groupby('TREE')['TL'].agg(['count','mean']).reset_index()",
+          "success": true,
+          "stdout": "Out[13]:    TREE  count       mean\n0   D10     77   4.155844\n1   D13    125   1.140000\n2   D14     50   5.430000\n3   D16     44  13.977273\n4   D18    106   1.617925\n5   D19     63   9.269841\n6   D20     35   8.714286\n7   D21     26  21.076923\n8   D22    110   5.218182\n9   G10     26  11.192308\n10   G2     44   4.590909\n11  G20     52   7.009615\n12  G21     35  26.342857\n13  G24     38   3.723684\n14  G27    139   1.104317\n15  G28     17  32.882353\n16  G29     53  10.622642\n17   G4     64   6.953125\n18   G5     53  13.320755\n19   G6     27  13.555556\n20   G7      9  35.722222\n21   G8     42  10.297619\n22   G9     61  10.057377\n23   J1     57   7.201754\n24  J10     25  30.680000\n25  J12     41  12.865854\n26  J13     43  17.023256\n27  J15     51   4.441176\n28  J17     24  31.125000\n29  J19     16  36.375000\n30  J20     26   1.057692\n31  J25     16  49.062500\n32  J27     78  12.326923\n33  J29     59  17.313559\n34  J31     79   2.575949\n35   J6     64  10.265625\n36   J8     27  19.814815\n37  M10     62   5.274194\n38  M17      4  21.500000\n39  M20     13  25.730769\n40  M25     65   7.046154\n41  M33     44  21.272727\n42   M6     37  18.986486\n43  O20     57  10.938596\n44  O27     39  28.166667\n45  O28     16  45.937500\n46  O33     16  42.062500\n47  O3O     17   3.029412\n48  Q12     38   5.250000\n49  Q17    126   1.130952\n50  Q19     74   6.263514\n51  Q23     86   5.912791\n52  Q25     82   1.018293\n53   Q3     21  14.642857\n54  Q34     33   3.818182\n55   Q4     35   1.028571\n56   Q5     29  14.103448",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "df['TREE'].value_counts()",
+          "success": true,
+          "stdout": "Out[14]: TREE\nG27    139\nQ17    126\nD13    125\nD22    110\nD18    106\nQ23     86\nQ25     82\nJ31     79\nJ27     78\nD10     77\nQ19     74\nM25     65\nJ6      64\nG4      64\nD19     63\nM10     62\nG9      61\nJ29     59\nO20     57\nJ1      57\nG5      53\nG29     53\nG20     52\nJ15     51\nD14     50\nM33     44\nG2      44\nD16     44\nJ13     43\nG8      42\nJ12     41\nO27     39\nQ12     38\nG24     38\nM6      37\nG21     35\nQ4      35\nD20     35\nQ34     33\nQ5      29\nG6      27\nJ8      27\nJ20     26\nG10     26\nD21     26\nJ10     25\nJ17     24\nQ3      21\nG28     17\nO3O     17\nJ19     16\nJ25     16\nO33     16\nO28     16\nM20     13\nG7       9\nM17      4\nName: count, dtype: int64",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "df.shape",
+          "success": true,
+          "stdout": "Out[15]: (2796, 35)",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "df.head(2)",
+          "success": true,
+          "stdout": "Out[16]:    N       TR TREE BR  ...  INTERNODE_26  INTERNODE_27  INTERNODE_28  INTERNODE_29\n0  1  control  G28  A  ...           NaN           NaN           NaN           NaN\n1  2  control  G28  B  ...           NaN           NaN           NaN           NaN\n\n[2 rows x 35 columns]",
+          "stderr": "",
+          "submitted_answer": null
+        },
+        {
+          "code": "list(df.columns)",
+          "success": true,
+          "stdout": "Out[17]: ['N', 'TR', 'TREE', 'BR', 'TL', 'IN', 'INTERNODE_1', 'INTERNODE_2', 'INTERNODE_3', 'INTERNODE_4', 'INTERNODE_5', 'INTERNODE_6', 'INTERNODE_7', 'INTERNODE_8', 'INTERNODE_9', 'INTERNODE_10', 'INTERNODE_11', 'INTERNODE_12', 'INTERNODE_13', 'INTERNODE_14', 'INTERNODE_15', 'INTERNODE_16', 'INTERNODE_17', 'INTERNODE_18', 'INTERNODE_19', 'INTERNODE_20', 'INTERNODE_21', 'INTERNODE_22', 'INTERNODE_23', 'INTERNODE_24', 'INTERNODE_25', 'INTERNODE_26', 'INTERNODE_27', 'INTERNODE_28', 'INTERNODE_29']",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-16 21:17:33.041739"
+    },
+    {
+      "turn_number": 3,
+      "reasoning": "```python\n# Summary statistics for TL\ntl_stats = df['TL'].describe()\ntl_stats\n```",
+      "code_cells": [
+        "# Summary statistics for TL\ntl_stats = df['TL'].describe()\ntl_stats"
+      ],
+      "execution_results": [
+        {
+          "code": "# Summary statistics for TL\ntl_stats = df['TL'].describe()\ntl_stats",
+          "success": true,
+          "stdout": "Out[18]: count    2796.000000\nmean        9.333870\nstd        21.925648\nmin         0.000000\n25%         1.000000\n50%         1.000000\n75%         4.000000\nmax       195.000000\nName: TL, dtype: float64",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-16 21:17:35.508349"
+    },
+    {
+      "turn_number": 4,
+      "reasoning": "```json\n{\n  \"questions\": [\n    {\n      \"question\": \"What is the average TL (total length) for each TR group (e.g., control vs treatment)?\",\n      \"hint\": \"Group by the 'TR' column and compute the mean of 'TL'.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the median TL across the entire dataset?\",\n      \"hint\": \"Use the pandas `median()` function on the 'TL' column.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which INTERNODE measurement has the strongest Pearson correlation with TL?\",\n      \"hint\": \"Calculate Pearson correlation between TL and each INTERNODE_* column, then identify the one with the highest absolute correlation value.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a statistically significant difference in TL between the 'control' and 'treatment' groups?\",\n      \"hint\": \"Perform an independent two\u2011sample t\u2011test on TL values split by 'TR'.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the Spearman rank correlation between TL and the sum of all INTERNODE measurements for each observation?\",\n      \"hint\": \"Create a new column summing all INTERNODE_* values (after converting them to numeric), then compute the Spearman correlation with TL.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do different TREE identifiers exhibit distinct average TL values?\",\n      \"hint\": \"Group by 'TREE' and calculate the mean TL; optionally run a one\u2011way ANOVA to test differences across groups.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is there a linear relationship between TL and the number of internodes (IN column)?\",\n      \"hint\": \"Fit a simple OLS regression model with TL as the dependent variable and IN as the independent variable; report the coefficient and R\u00b2.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Which BR (branch) categories have TL values significantly higher than the overall mean?\",\n      \"hint\": \"Calculate mean TL per 'BR', then perform one\u2011sample t\u2011tests comparing each BR's TL to the overall TL mean; adjust for multiple testing.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Can TL be predicted using a multiple linear regression model that includes all INTERNODE_* measurements?\",\n      \"hint\": \"Fit an OLS model with TL as the outcome and all numeric INTERNODE_* columns as predictors; report adjusted R\u00b2 and the statistically significant predictors.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Does the relationship between TL and the sum of INTERNODE measurements differ between control and treatment groups?\",\n      \"hint\": \"Create interaction terms between 'TR' and the sum of INTERNODE_* values in a linear regression; test the significance of the interaction term.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"What proportion of the total variance in TL is explained by the number of internodes (IN) and the sum of INTERNODE measurements combined?\",\n      \"hint\": \"Fit a multiple regression with TL ~ IN + sum(INTERNODE_*); compute the partial R\u00b2 for each predictor.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Is there evidence of heteroscedasticity in the TL vs. INTERNODE\u2011sum regression model?\",\n      \"hint\": \"After fitting the regression, perform a Breusch\u2011Pagan or White test on the residuals.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Using a linear regression with TL as outcome, does including the categorical variable 'TREE' improve model fit compared to a model without it?\",\n      \"hint\": \"Fit two models (with and without dummy variables for 'TREE'), then compare them using an F\u2011test or AIC/BIC.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    }\n  ]\n}\n```\n<DONE>",
+      "code_cells": [],
+      "execution_results": [],
+      "timestamp": "2025-12-16 21:17:48.205124"
+    }
+  ],
+  "questions_generated": [
+    {
+      "question": "What is the average TL (total length) for each TR group (e.g., control vs treatment)?",
+      "hint": "Group by the 'TR' column and compute the mean of 'TL'.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the median TL across the entire dataset?",
+      "hint": "Use the pandas `median()` function on the 'TL' column.",
+      "n_steps": 1,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Which INTERNODE measurement has the strongest Pearson correlation with TL?",
+      "hint": "Calculate Pearson correlation between TL and each INTERNODE_* column, then identify the one with the highest absolute correlation value.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Is there a statistically significant difference in TL between the 'control' and 'treatment' groups?",
+      "hint": "Perform an independent two\u2011sample t\u2011test on TL values split by 'TR'.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the Spearman rank correlation between TL and the sum of all INTERNODE measurements for each observation?",
+      "hint": "Create a new column summing all INTERNODE_* values (after converting them to numeric), then compute the Spearman correlation with TL.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Do different TREE identifiers exhibit distinct average TL values?",
+      "hint": "Group by 'TREE' and calculate the mean TL; optionally run a one\u2011way ANOVA to test differences across groups.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Is there a linear relationship between TL and the number of internodes (IN column)?",
+      "hint": "Fit a simple OLS regression model with TL as the dependent variable and IN as the independent variable; report the coefficient and R\u00b2.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Which BR (branch) categories have TL values significantly higher than the overall mean?",
+      "hint": "Calculate mean TL per 'BR', then perform one\u2011sample t\u2011tests comparing each BR's TL to the overall TL mean; adjust for multiple testing.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Can TL be predicted using a multiple linear regression model that includes all INTERNODE_* measurements?",
+      "hint": "Fit an OLS model with TL as the outcome and all numeric INTERNODE_* columns as predictors; report adjusted R\u00b2 and the statistically significant predictors.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Does the relationship between TL and the sum of INTERNODE measurements differ between control and treatment groups?",
+      "hint": "Create interaction terms between 'TR' and the sum of INTERNODE_* values in a linear regression; test the significance of the interaction term.",
+      "n_steps": 8,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "What proportion of the total variance in TL is explained by the number of internodes (IN) and the sum of INTERNODE measurements combined?",
+      "hint": "Fit a multiple regression with TL ~ IN + sum(INTERNODE_*); compute the partial R\u00b2 for each predictor.",
+      "n_steps": 8,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Is there evidence of heteroscedasticity in the TL vs. INTERNODE\u2011sum regression model?",
+      "hint": "After fitting the regression, perform a Breusch\u2011Pagan or White test on the residuals.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Using a linear regression with TL as outcome, does including the categorical variable 'TREE' improve model fit compared to a model without it?",
+      "hint": "Fit two models (with and without dummy variables for 'TREE'), then compare them using an F\u2011test or AIC/BIC.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    }
+  ],
+  "total_turns": 5,
+  "timestamp": "2025-12-16 21:17:49.574710"
+}
