@@ -325,50 +325,63 @@ async def explore_and_generate_questions(
 def main():
     config = load_config("config.yaml")
 
-    csv_path = config["csv"]
-    output_file = config["questions_json"]
-    max_turns = config["question_gen_max_turns"]
+    # Handle single csv (legacy) or csv_sources (new)
+    csv_sources = config.get("csv_sources", config.get("csv", []))
+    if isinstance(csv_sources, str):
+        csv_sources = [csv_sources]
+    
+    if not csv_sources:
+        ui.print_error("No CSV sources found in config (csv or csv_sources)")
+        return 1
+
+    # Common config
     temperature = config["sampling_args"]["temperature"]
     max_tokens = config["sampling_args"]["max_tokens"]
     model = config["question_gen_model"]
+    max_turns = config.get("question_gen_max_turns", 20)
+    
+    # Base output directory
+    base_output_dir = Path(config.get("questions_json", "question/questions.json")).parent
 
-    output_dir = str(Path(output_file).parent)
-    if output_dir == ".":
-        output_dir = "."
+    success_count = 0
+    failure_count = 0
 
-    try:
-        questions, trace = asyncio.run(explore_and_generate_questions(
-            csv_path=csv_path,
-            model=model,
-            max_turns=max_turns,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            output_dir=output_dir
-        ))
+    for i, csv_path in enumerate(csv_sources, 1):
+        ui.print_section(f"Processing CSV {i}/{len(csv_sources)}: {csv_path}")
+        
+        # Derive output directory for this CSV (e.g. "data" from "csv/data.csv")
+        dataset_name = Path(csv_path).stem
+        output_dir = base_output_dir / dataset_name
+        
+        try:
+            questions, trace = asyncio.run(explore_and_generate_questions(
+                csv_path=csv_path,
+                model=model,
+                max_turns=max_turns,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                output_dir=str(output_dir)
+            ))
+            
+            ui.print_success(f"✓ Generated {len(questions)} questions for {dataset_name}")
+            success_count += 1
+            
+            # Print sample for this batch
+            ui.print_sample_questions_header()
+            for j, q in enumerate(questions[:3], 1):
+                ui.print_question_panel(j, q)
 
-        ui.print_summary_header()
-        ui.print_total_questions(len(questions))
-
-        difficulty_counts = {}
-        for q in questions:
-            diff = q.get("difficulty", "UNKNOWN")
-            difficulty_counts[diff] = difficulty_counts.get(diff, 0) + 1
-
-        ui.print_difficulty_header()
-        for diff, count in sorted(difficulty_counts.items()):
-            ui.print_difficulty_count(diff, count)
-
-        ui.print_sample_questions_header()
-        for i, q in enumerate(questions[:3], 1):
-            ui.print_question_panel(i, q)
-
-        return 0
-
-    except Exception as e:
-        ui.print_error(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
+        except Exception as e:
+            ui.print_error(f"Failed to generate questions for {csv_path}: {e}")
+            import traceback
+            traceback.print_exc()
+            failure_count += 1
+            
+    # Final summary
+    ui.print_summary_header()
+    ui.print_status(f"Processed {len(csv_sources)} sources: {success_count} success, {failure_count} failed")
+    
+    return 1 if failure_count > 0 else 0
 
 
 if __name__ == "__main__":

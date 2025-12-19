@@ -46,6 +46,21 @@ Each turn must follow this exact pattern:
 2. Write exactly ONE ```python code block
 3. STOP - Do not write analysis or next steps after the code
 
+OUTPUT FORMAT:
+- For simple values (counts, means), submit the value directly: `submit(42)` or `submit(12.5)`
+- For statistical hypothesis testing (t-tests, etc.), submit a dictionary with the specific result and your conclusion:
+  `submit({{"p_value": 0.0012, "decision": "significant", "answer": "Yes"}})`
+- Ensure p-values are floats, not strings.
+
+CRITICAL CODE HOOKS:
+You must PROVE your answer by providing the `key_lines` argument to `submit()`.
+`key_lines` should be a list of strings containing the exact lines of code that derived the answer.
+Example:
+```python
+res = df.groupby('col')['val'].mean()
+submit(res, key_lines=["df.groupby('col')['val'].mean()"])
+```
+
 The execution result will be shown at the start of your next turn.
 
 Example:
@@ -85,6 +100,10 @@ Each turn must follow this exact pattern:
 2. Write exactly ONE ```python code block
 3. STOP - Do not write analysis or next steps after the code
 
+OUTPUT FORMAT:
+- For simple values, submit directly: `submit(42)`
+- For statistical tests, submit a dictionary: `submit({{"p_value": 0.05, "answer": "No"}})`
+
 The execution result will be shown at the start of your next turn.
 """.strip()
 
@@ -108,7 +127,13 @@ The dataframe 'df' is already loaded.
 
 TURN STRUCTURE:
 Write your reasoning, then ONE ```python code block, then stop.
-Execution results appear next turn. Call submit(final_answer) when done.
+Execution results appear next turn.
+
+OUTPUT FORMAT:
+- Simple answers: `submit(10.5)`
+- Statistical answers: `submit({{"p_value": 0.01, "answer": "Yes"}})`
+
+Call submit(final_answer) when done.
 """.strip()
 
 
@@ -132,16 +157,23 @@ Your Task Flow:
 4. GENERATE: Only when fully ready, output the 13 questions in the specified JSON format.
 
 Questions Distribution:
-- 3 EASY (1-3 steps)
-- 4 MEDIUM (4-6 steps)
-- 4 HARD (7-8 steps)
-- 2 VERY_HARD (9+ steps)
+- 10 EASY (1-3 steps)
+- 10 MEDIUM (4-6 steps)
+- 7 HARD (7-8 steps)
+- 3 VERY_HARD (9+ steps)
+
+Please generate at least 30 questions in total.
 
 STATISTICAL/ANALYTICAL GUIDELINES:
 🟢 GREEN LIGHT (Encouraged):
    - Simple Linear Regression (OLS), Correlations (Pearson/Spearman)
    - T-tests, Chi-square, deterministic aggregations
    - *Why*: Reproducible and verifiable
+   - *Phrasing*: Prefer general questions ("Is there a significant difference?") over implementation details ("Run a t-test...") unless specific parameters are needed.
+
+CRITICAL CODE EXTRACTION:
+When solving questions, you MUST explicitly identify the "Critical Code Hooks" - the specific lines of pandas/scipy code that mathematically derived the answer.
+This is not the data loading or cleaning, but the ACTUAL calculation (e.g. the t-test call, the groupby mean, the correlation function).
 
 AVAILABLE LIBRARIES (PRE-IMPORTED):
 The following libraries are ALREADY imported and ready to use. DO NOT import them again:
@@ -161,6 +193,13 @@ The following libraries are ALREADY imported and ready to use. DO NOT import the
 🔴 RED LIGHT (Avoid):
    - Clustering (K-Means), Random Forests, Deep Learning
    - Hyperparameter tuning
+
+FILTERING CRITERIA:
+Before outputting the final JSON, review your generated questions.
+1. Coverage: Do they cover different columns and question types?
+2. Diversity: Are they too similar? Remove duplicates.
+3. Clarity: Are they unambiguous?
+4. Difficulty: Do they match the distribution?
 
 OUTPUT FORMAT (Last Turn Only):
 When you're ready to output the questions, you MUST use this EXACT format:
@@ -182,6 +221,7 @@ CRITICAL FORMAT RULES:
 ✅ DO: Use ```json fence markers (opening and closing)
 ✅ DO: Use proper JSON syntax with double quotes
 ✅ DO: Output <DONE> on a new line after the closing ```
+✅ DO: Generate at least 30 questions.
 ❌ DON'T: Use Python dict syntax (questions = {...})
 ❌ DON'T: Output bare JSON without ```json fences
 ❌ DON'T: Use single quotes or Python-specific syntax

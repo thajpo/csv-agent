@@ -43,6 +43,9 @@ class ExecutionTrace(BaseModel):
     final_answer_hash: str | None = None
     execution_success: bool
 
+    # Metadata from submit(..., extra=...)
+    submission_metadata: dict[str, Any] = {}
+
     # Optional metadata (for debugging/analysis)
     total_turns: int = 0
     archived_turn_count: int = 0            # Turns purged from context
@@ -134,10 +137,7 @@ class EpisodeJSONL(BaseModel):
             rl_verification_data={
                 "expected_final_answer_hash": episode.teacher_trace.final_answer_hash,
                 "expected_final_answer": episode.teacher_trace.final_answer,
-                "intermediate_artifact_hashes": {
-                    name: artifact.hash
-                    for name, artifact in episode.teacher_trace.artifacts.items()
-                },
+                "intermediate_artifact_hashes": {},  # Legacy field, not currently populated
             },
             triangulation_metadata={
                 "n_consistency_runs": len(consistency_traces),

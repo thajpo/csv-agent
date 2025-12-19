@@ -74,7 +74,8 @@ def answers_match(
     hash2: str | None,
     val1: Any = None,
     val2: Any = None,
-    float_tol: float = 0.1
+    float_tol: float = 0.1,
+    p_value_tol: float = 0.002,
 ) -> bool:
     """
     Check if two answers match, with tolerance for floats and flexible types.
@@ -83,6 +84,7 @@ def answers_match(
         hash1, hash2: Answer hashes (for exact match)
         val1, val2: Raw answer values (for tolerant comparison)
         float_tol: Absolute tolerance for float comparison (default ±0.1)
+        p_value_tol: Tighter tolerance for p-value comparison (default ±0.002)
 
     Returns:
         True if answers match within tolerance
@@ -129,6 +131,31 @@ def answers_match(
 
         # Both dicts: compare keys exactly, values with float tolerance
         if isinstance(v1, dict) and isinstance(v2, dict):
+            # Special case for structured statistical answers
+            # If both have 'answer' and/or 'p_value', focus on those
+            if ('answer' in v1 and 'answer' in v2) or ('p_value' in v1 and 'p_value' in v2):
+                # 1. Compare 'answer' (categorical conclusion) if present in both
+                if 'answer' in v1 and 'answer' in v2:
+                    if str(v1['answer']).lower().strip() != str(v2['answer']).lower().strip():
+                        return False
+                
+                # 2. Compare 'p_value' (numeric evidence) if present in both
+                if 'p_value' in v1 and 'p_value' in v2:
+                    try:
+                        p1 = float(v1['p_value'])
+                        p2 = float(v2['p_value'])
+                        if abs(p1 - p2) > p_value_tol:
+                            return False
+                    except (ValueError, TypeError):
+                        pass # If not convertible to float, ignore p_value check or fail?
+                             # Let's fail if they are meant to be numbers but aren't matching
+                        if v1['p_value'] != v2['p_value']:
+                            return False
+
+                # If we verified the core keys, we accept the match (ignore extra keys like 'decision')
+                return True
+
+            # Standard exact key match for other dicts
             if set(v1.keys()) != set(v2.keys()):
                 return False
             for k in v1.keys():
@@ -319,6 +346,7 @@ async def execute_teacher_trace(
         final_answer=final_answer,
         final_answer_hash=final_answer_hash,
         execution_success=execution_success,
+        submission_metadata=getattr(final_state, "submission_metadata", {}),
     )
 
     return trace, conversation_messages, system_prompt, elapsed_seconds

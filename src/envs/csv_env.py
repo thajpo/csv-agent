@@ -23,11 +23,74 @@ from scipy import stats
 import sklearn
 import statsmodels
 import statsmodels.api as sm
+import json
 
-def submit(answer):
-    """Submit your final answer. Only call this once."""
-    print(f"✓ Submitted: {{answer}}")
-    return answer
+def normalize_value(val):
+    """
+    Standardize answer formats for better comparison.
+    Converts DataFrames/Series to Dictionaries or Scalars where appropriate.
+    """
+    if val is None:
+        return None
+
+    # Handle Pandas/Numpy types
+    if isinstance(val, pd.DataFrame):
+        if val.empty:
+            return {{}}
+
+        # 1x1 -> scalar
+        if val.shape == (1, 1):
+            return val.iloc[0, 0]
+
+        # 1 column -> dict (if index meaningful) or list
+        if val.shape[1] == 1:
+            series = val.iloc[:, 0]
+            if not isinstance(val.index, pd.RangeIndex):
+                return series.to_dict()
+            return series.tolist()
+
+        # 2 columns -> dict {{col0: col1}}
+        if val.shape[1] == 2:
+            return dict(zip(val.iloc[:, 0], val.iloc[:, 1]))
+
+        # Default: list of records
+        return val.to_dict('records')
+
+    if isinstance(val, pd.Series):
+        if val.size == 1:
+            return val.iloc[0]
+        return val.to_dict()
+
+    if isinstance(val, np.generic):
+        return val.item()
+
+    return val
+
+def json_default(obj):
+    if isinstance(obj, (np.integer, int)):
+        return int(obj)
+    if isinstance(obj, (np.floating, float)):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return str(obj)
+
+def submit(answer, **kwargs):
+    """
+    Submit your final answer. Only call this once.
+    
+    Args:
+        answer: The answer value (number, string, dict).
+        **kwargs: specific keys like 'key_lines' (list of code lines) for evidence.
+    """
+    normalized = normalize_value(answer)
+    # Wrap in specific protocol structure
+    submission = {{"__csv_agent_answer__": normalized}}
+    submission.update(kwargs)
+    
+    serialized = json.dumps(submission, default=json_default)
+    print(f"✓ Submitted: {{serialized}}")
+    return normalized
 '''
 
 class VerifiersCSVAnalysisEnv(PythonEnv):
@@ -119,6 +182,12 @@ class LocalCSVAnalysisEnv:
     _RESPONSE_FIFO = "/tmp/python_env_res"
     _READY_FLAG = "/tmp/python_env_ready"
     _WORKER_PATH = "/tmp/python_worker.py"
+    
+    IMAGE_NAME = "csv-analysis-env"
+    DOCKERFILE_PATH = "src/envs/Dockerfile"
+    
+    _build_lock = asyncio.Lock()
+    _image_checked = False
 
     # Worker script that runs inside the container
     # Maintains a namespace dict and communicates via FIFOs
@@ -230,6 +299,36 @@ while True:
         if check and proc.returncode != 0:
             raise RuntimeError(f"Docker command failed: {stderr.decode()}")
         return stdout.decode(), stderr.decode()
+        
+    @classmethod
+    async def _ensure_image(cls) -> None:
+        """Ensure the docker image exists, building it if necessary."""
+        async with cls._build_lock:
+            if cls._image_checked:
+                return
+
+            # Check if image exists
+            proc = await asyncio.create_subprocess_exec(
+                "docker", "image", "inspect", cls.IMAGE_NAME,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL
+            )
+            await proc.communicate()
+            
+            if proc.returncode != 0:
+                print(f"Building docker image '{cls.IMAGE_NAME}'...")
+                # Build image
+                build_proc = await asyncio.create_subprocess_exec(
+                    "docker", "build", "-t", cls.IMAGE_NAME, "-f", cls.DOCKERFILE_PATH, ".",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await build_proc.communicate()
+                if build_proc.returncode != 0:
+                    raise RuntimeError(f"Failed to build docker image: {stderr.decode()}")
+                print(f"✓ Built docker image '{cls.IMAGE_NAME}'")
+            
+            cls._image_checked = True
 
     async def _wait_for_worker_ready(self, sandbox_id: str, timeout: float = 30.0) -> None:
         """Wait for the Python worker to signal it's ready."""
@@ -251,13 +350,15 @@ while True:
         
         Returns state dict with sandbox_id and python_state.
         """
+        await self._ensure_image()
+        
         sandbox_id = f"csv-sandbox-{uuid.uuid4().hex[:8]}"
         
         # Start container
         await self._run_docker(
             "run", "-d",
             "--name", sandbox_id,
-            "python:3.11-slim",
+            self.IMAGE_NAME,
             "tail", "-f", "/dev/null"
         )
         
@@ -268,12 +369,7 @@ while True:
             f"{sandbox_id}:/data.csv"
         )
         
-        # Install packages
-        await self._run_docker(
-            "exec", sandbox_id,
-            "pip", "install", "-q",
-            *self.pip_install_packages.split()
-        )
+        # Note: pip install skipped as packages are in the image
         
         # Write worker script into container
         worker_code = self._WORKER_SCRIPT.format(

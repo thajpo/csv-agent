@@ -96,123 +96,142 @@ async def main():
     config = load_config()
 
     # Extract config values (fail-fast on missing keys)
-    csv_path = config["csv"]
-    teacher_model = config["teacher_model"]
-    max_turns = config["max_turns"]
-    temperature = config["sampling_args"]["temperature"]
-    max_tokens = config["sampling_args"]["max_tokens"]
-    n_consistency = config["n_consistency"]
-    verified_only = config["verified_only"]
-    float_tol = config.get("float_tolerance", 0.1)
+    # Handle single csv (legacy) or csv_sources (new)
+    csv_sources = config.get("csv_sources", config.get("csv", []))
+    if isinstance(csv_sources, str):
+        csv_sources = [csv_sources]
 
-    # Load questions from question_gen.py output
-    questions_file = config.get("questions_json", "question/questions.json")
-    questions = load_questions(questions_file)
-
-    # Output as single JSONL file
+    # Output as single JSONL file (append mode supported by logic below)
     output_jsonl = Path(config.get("episodes_jsonl", "episodes/episodes.jsonl"))
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Clear output file initially if we want to overwrite (optional, but safer to start fresh if running full pipeline)
+    # But if users want to append, we should be careful. 
+    # Let's overwrite start, then append.
+    if output_jsonl.exists():
+        output_jsonl.unlink()
+        
+    # Base questions dir
+    base_questions_dir = Path(config.get("questions_json", "question/questions.json")).parent
 
+    total_episodes_saved = 0
+    total_verified = 0
 
+    for i, csv_path in enumerate(csv_sources, 1):
+        dataset_name = Path(csv_path).stem
+        ui.base.print_section(f"Processing CSV {i}/{len(csv_sources)}: {csv_path}")
 
-    # Display pipeline header
-    ui.print_pipeline_header(
-        n_questions=len(questions),
-        n_consistency=n_consistency,
-        csv_path=csv_path,
-        model=teacher_model,
-        float_tol=float_tol,
-        output_file=str(output_jsonl)
-    )
+        # Locate questions
+        questions_file = base_questions_dir / dataset_name / "questions.json"
+        
+        # Legacy fallback for single CSV config
+        if not questions_file.exists() and len(csv_sources) == 1:
+            legacy_path = Path(config.get("questions_json", "question/questions.json"))
+            if legacy_path.exists():
+                questions_file = legacy_path
 
-    # Generate data overview
-    data_overview = generate_data_overview(csv_path)
+        if not questions_file.exists():
+            ui.base.print_warning(f"Skipping {dataset_name}: No questions found at {questions_file}")
+            continue
 
-    # Sampling args
-    sampling_args = {
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
+        questions = load_questions(str(questions_file))
+        ui.base.print_status(f"Loaded {len(questions)} questions")
 
-    # Run batch triangulation with UI
-    results = await batch_triangulate(
-        csv_path=csv_path,
-        questions=questions,
-        model=teacher_model,  # Required positional arg (3rd)
-        n_consistency=n_consistency,
-        dataset_description=DEFAULT_DATASET_DESCRIPTION,
-        data_overview=data_overview,
-        max_turns=max_turns,
-        sampling_args=sampling_args,
-
-        ui=ui,
-        float_tol=float_tol,
-    )
-
-    # Convert to JSONL episodes and save
-    episodes_jsonl = []
-    episodes_verified = 0
-
-    for q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified in results:
-        # Create Question object (question, metadata)
-        question_obj = Question(
-            question_text=q_dict["question"],
-            hint=q_dict.get("hint"),
-            difficulty=q_dict.get("difficulty"),
-            n_steps=q_dict.get("n_steps"),
+        # Display pipeline header for this CSV
+        ui.print_pipeline_header(
+            n_questions=len(questions),
+            n_consistency=n_consistency,
+            csv_path=csv_path,
+            model=teacher_model,
+            float_tol=float_tol,
+            output_file=str(output_jsonl)
         )
 
-        # Extract consistency traces (ignore conversations)
-        consistency_traces = [trace for trace, _ in consistency_results]
-        consistency_conversations = [conv for _, conv in consistency_results]
+        # Generate data overview
+        data_overview = generate_data_overview(csv_path)
 
-        # Create Episode object
-        episode = Episode(
-            id=str(uuid.uuid4()),
-            question=question_obj,
-            teacher_trace=gold_trace,
-            consistency_traces=consistency_traces,
-            verified=verified,
-            timestamp=datetime.now(),
+        # Sampling args
+        sampling_args = {
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        # Run batch triangulation with UI
+        results = await batch_triangulate(
+            csv_path=csv_path,
+            questions=questions,
+            model=teacher_model,  # Required positional arg (3rd)
+            n_consistency=n_consistency,
+            dataset_description=DEFAULT_DATASET_DESCRIPTION,
+            data_overview=data_overview,
+            max_turns=max_turns,
+            sampling_args=sampling_args,
+
+            ui=ui,
+            float_tol=float_tol,
         )
 
-        # Convert to JSONL format
-        episode_jsonl = EpisodeJSONL.from_episode(
-            episode=episode,
-            gold_conversation=gold_conversation,
-            system_prompt=system_prompt,
-            consistency_conversations=consistency_conversations,
-        )
+        # Convert to JSONL episodes and save (Append to global file)
+        episodes_jsonl = []
+        batch_verified = 0
 
-        # Save if verified OR verified_only is False
-        if verified or not verified_only:
-            episodes_jsonl.append(episode_jsonl)
-            if verified:
-                episodes_verified += 1
+        for q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified in results:
+            # Create Question object (question, metadata)
+            question_obj = Question(
+                question_text=q_dict["question"],
+                hint=q_dict.get("hint"),
+                difficulty=q_dict.get("difficulty"),
+                n_steps=q_dict.get("n_steps"),
+                id=q_dict.get("id"), # Pass ID if exists
+            )
 
-    # Write JSONL file (one episode per line)
-    with open(output_jsonl, 'w') as f:
-        for ep in episodes_jsonl:
-            f.write(json.dumps(ep.model_dump(), default=str) + '\n')
+            # Extract consistency traces (ignore conversations)
+            consistency_traces = [trace for trace, _ in consistency_results]
+            consistency_conversations = [conv for _, conv in consistency_results]
+
+            # Create Episode object
+            episode = Episode(
+                id=str(uuid.uuid4()),
+                question=question_obj,
+                teacher_trace=gold_trace,
+                consistency_traces=consistency_traces,
+                verified=verified,
+                timestamp=datetime.now(),
+            )
+
+            # Convert to JSONL format
+            episode_jsonl = EpisodeJSONL.from_episode(
+                episode=episode,
+                gold_conversation=gold_conversation,
+                system_prompt=system_prompt,
+                consistency_conversations=consistency_conversations,
+            )
+
+            # Save if verified OR verified_only is False
+            if verified or not verified_only:
+                episodes_jsonl.append(episode_jsonl)
+                if verified:
+                    batch_verified += 1
+
+        # Write JSONL file (Append)
+        mode = 'a' if output_jsonl.exists() else 'w'
+        with open(output_jsonl, mode) as f:
+            for ep in episodes_jsonl:
+                f.write(json.dumps(ep.model_dump(), default=str) + '\n')
+                
+        total_episodes_saved += len(episodes_jsonl)
+        total_verified += batch_verified
+        
+        ui.base.print_success(f"✓ Saved {len(episodes_jsonl)} episodes for {dataset_name} ({batch_verified} verified)")
+
 
     # Display final summary
     ui.base.print_section("PIPELINE COMPLETE")
     ui.base.print_key_value("Output file", str(output_jsonl))
-    ui.base.print_key_value("Total questions", len(questions))
-    ui.base.print_key_value("Episodes saved", len(episodes_jsonl))
-    ui.base.print_key_value("Episodes verified", episodes_verified)
-    verification_rate = episodes_verified / len(questions) * 100 if questions else 0.0
-    ui.base.print_key_value("Verification rate", f"{verification_rate:.1f}%")
-
-    if verification_rate == 100:
-        ui.base.print_success("All episodes verified!")
-    elif verification_rate >= 80:
-        ui.base.print_success(f"High verification rate: {verification_rate:.1f}%")
-    elif verification_rate >= 50:
-        ui.base.print_warning(f"Moderate verification rate: {verification_rate:.1f}%")
-    else:
-        ui.base.print_error(f"Low verification rate: {verification_rate:.1f}%")
-
+    ui.base.print_key_value("Total sources", len(csv_sources))
+    ui.base.print_key_value("Total episodes saved", total_episodes_saved)
+    ui.base.print_key_value("Total verified", total_verified)
+    
     ui.base.print_empty_line()
 
     return 0

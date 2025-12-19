@@ -1,0 +1,80 @@
+[
+  {
+    "question": "What is the average TL (total length) for each TR group (e.g., control vs treatment)?",
+    "hint": "Group by the 'TR' column and compute the mean of 'TL'.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the median TL across the entire dataset?",
+    "hint": "Use the pandas `median()` function on the 'TL' column.",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which INTERNODE measurement has the strongest Pearson correlation with TL?",
+    "hint": "Calculate Pearson correlation between TL and each INTERNODE_* column, then identify the one with the highest absolute correlation value.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a statistically significant difference in TL between the 'control' and 'treatment' groups?",
+    "hint": "Perform an independent two\u2011sample t\u2011test on TL values split by 'TR'.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the Spearman rank correlation between TL and the sum of all INTERNODE measurements for each observation?",
+    "hint": "Create a new column summing all INTERNODE_* values (after converting them to numeric), then compute the Spearman correlation with TL.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Do different TREE identifiers exhibit distinct average TL values?",
+    "hint": "Group by 'TREE' and calculate the mean TL; optionally run a one\u2011way ANOVA to test differences across groups.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there a linear relationship between TL and the number of internodes (IN column)?",
+    "hint": "Fit a simple OLS regression model with TL as the dependent variable and IN as the independent variable; report the coefficient and R\u00b2.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which BR (branch) categories have TL values significantly higher than the overall mean?",
+    "hint": "Calculate mean TL per 'BR', then perform one\u2011sample t\u2011tests comparing each BR's TL to the overall TL mean; adjust for multiple testing.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Can TL be predicted using a multiple linear regression model that includes all INTERNODE_* measurements?",
+    "hint": "Fit an OLS model with TL as the outcome and all numeric INTERNODE_* columns as predictors; report adjusted R\u00b2 and the statistically significant predictors.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Does the relationship between TL and the sum of INTERNODE measurements differ between control and treatment groups?",
+    "hint": "Create interaction terms between 'TR' and the sum of INTERNODE_* values in a linear regression; test the significance of the interaction term.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "What proportion of the total variance in TL is explained by the number of internodes (IN) and the sum of INTERNODE measurements combined?",
+    "hint": "Fit a multiple regression with TL ~ IN + sum(INTERNODE_*); compute the partial R\u00b2 for each predictor.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Is there evidence of heteroscedasticity in the TL vs. INTERNODE\u2011sum regression model?",
+    "hint": "After fitting the regression, perform a Breusch\u2011Pagan or White test on the residuals.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Using a linear regression with TL as outcome, does including the categorical variable 'TREE' improve model fit compared to a model without it?",
+    "hint": "Fit two models (with and without dummy variables for 'TREE'), then compare them using an F\u2011test or AIC/BIC.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  }
+]

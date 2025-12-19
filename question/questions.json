@@ -1,80 +1,80 @@
 [
   {
-    "question": "What is the average TL (total length) for each TR group (e.g., control vs treatment)?",
-    "hint": "Group by the 'TR' column and compute the mean of 'TL'.",
+    "question": "What is the average TL for each TR group?",
+    "hint": "Group by the TR column and compute the mean of TL.",
     "n_steps": 2,
     "difficulty": "EASY"
   },
   {
-    "question": "What is the median TL across the entire dataset?",
-    "hint": "Use the pandas `median()` function on the 'TL' column.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which INTERNODE measurement has the strongest Pearson correlation with TL?",
-    "hint": "Calculate Pearson correlation between TL and each INTERNODE_* column, then identify the one with the highest absolute correlation value.",
+    "question": "What proportion of rows have missing values in INTERNODE_5?",
+    "hint": "Count NaNs in INTERNODE_5 and divide by total number of rows.",
     "n_steps": 3,
     "difficulty": "EASY"
   },
   {
-    "question": "Is there a statistically significant difference in TL between the 'control' and 'treatment' groups?",
-    "hint": "Perform an independent two\u2011sample t\u2011test on TL values split by 'TR'.",
+    "question": "What is the Pearson correlation coefficient between TL and IN?",
+    "hint": "Use scipy.stats.pearsonr on the TL and IN columns.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a statistically significant difference in TL between the control and treatment groups?",
+    "hint": "Perform an independent two\u2011sample t\u2011test on TL for rows where TR is 'control' vs 'treatment'.",
     "n_steps": 4,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "What is the Spearman rank correlation between TL and the sum of all INTERNODE measurements for each observation?",
-    "hint": "Create a new column summing all INTERNODE_* values (after converting them to numeric), then compute the Spearman correlation with TL.",
+    "question": "Does the distribution of INTERNODE_1 differ across BR categories?",
+    "hint": "Run a one\u2011way ANOVA (or Kruskal\u2011Wallis if assumptions fail) on INTERNODE_1 grouped by BR.",
     "n_steps": 5,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "Do different TREE identifiers exhibit distinct average TL values?",
-    "hint": "Group by 'TREE' and calculate the mean TL; optionally run a one\u2011way ANOVA to test differences across groups.",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Is there a linear relationship between TL and the number of internodes (IN column)?",
-    "hint": "Fit a simple OLS regression model with TL as the dependent variable and IN as the independent variable; report the coefficient and R\u00b2.",
+    "question": "What is the mean value of INTERNODE_2 for each TREE type after removing missing entries?",
+    "hint": "Drop rows where INTERNODE_2 is NaN, then group by TREE and calculate the mean.",
     "n_steps": 4,
     "difficulty": "MEDIUM"
   },
   {
-    "question": "Which BR (branch) categories have TL values significantly higher than the overall mean?",
-    "hint": "Calculate mean TL per 'BR', then perform one\u2011sample t\u2011tests comparing each BR's TL to the overall TL mean; adjust for multiple testing.",
+    "question": "Is there a monotonic relationship between INTERNODE_10 and INTERNODE_15?",
+    "hint": "Compute the Spearman rank correlation between the two columns, handling missing values.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Build an OLS regression model predicting TL from IN and INTERNODE_1; what is the adjusted R\u2011squared?",
+    "hint": "Convert INTERNODE_1 to numeric, drop rows with missing values, fit statsmodels OLS, retrieve adj. R\u00b2.",
     "n_steps": 7,
     "difficulty": "HARD"
   },
   {
-    "question": "Can TL be predicted using a multiple linear regression model that includes all INTERNODE_* measurements?",
-    "hint": "Fit an OLS model with TL as the outcome and all numeric INTERNODE_* columns as predictors; report adjusted R\u00b2 and the statistically significant predictors.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Does the relationship between TL and the sum of INTERNODE measurements differ between control and treatment groups?",
-    "hint": "Create interaction terms between 'TR' and the sum of INTERNODE_* values in a linear regression; test the significance of the interaction term.",
+    "question": "Does an interaction between TR and BR affect INTERNODE_3?",
+    "hint": "After converting INTERNODE_3 to numeric and dropping NaNs, run a two\u2011way ANOVA with TR and BR as factors.",
     "n_steps": 8,
     "difficulty": "HARD"
   },
   {
-    "question": "What proportion of the total variance in TL is explained by the number of internodes (IN) and the sum of INTERNODE measurements combined?",
-    "hint": "Fit a multiple regression with TL ~ IN + sum(INTERNODE_*); compute the partial R\u00b2 for each predictor.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Is there evidence of heteroscedasticity in the TL vs. INTERNODE\u2011sum regression model?",
-    "hint": "After fitting the regression, perform a Breusch\u2011Pagan or White test on the residuals.",
+    "question": "Using a train/test split (random_state=42), fit a regression model to predict INTERNODE_12 from INTERNODE_1\u2011INTERNODE_11 and report the test RMSE.",
+    "hint": "Convert the internode columns to numeric, drop rows with missing values, split the data, fit OLS, compute RMSE on the test set.",
     "n_steps": 9,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Do the frequencies of TR differ across TREE categories?",
+    "hint": "Create a contingency table of TR vs TREE and perform a chi\u2011square test of independence.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Using a train/test split (random_state=42), build two regression models to predict TL: one with only numeric internode variables, and another with numeric internodes plus one\u2011hot encoded categorical variables (TR, TREE, BR). Which model yields a lower test RMSE?",
+    "hint": "Convert internodes to numeric, one\u2011hot encode the three categorical columns, split the data, fit OLS for both models, compute and compare RMSEs.",
+    "n_steps": 10,
     "difficulty": "VERY_HARD"
   },
   {
-    "question": "Using a linear regression with TL as outcome, does including the categorical variable 'TREE' improve model fit compared to a model without it?",
-    "hint": "Fit two models (with and without dummy variables for 'TREE'), then compare them using an F\u2011test or AIC/BIC.",
-    "n_steps": 9,
+    "question": "Perform forward stepwise selection based on AIC to identify the best subset of internode predictors for TL; which variables are selected?",
+    "hint": "Start with an empty model, iteratively add the internode variable that most reduces AIC until no improvement, then report the final set of predictors.",
+    "n_steps": 11,
     "difficulty": "VERY_HARD"
   }
 ]

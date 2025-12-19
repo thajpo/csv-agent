@@ -1,3 +1,9 @@
+# 12/17/25
+Looking to add data quality checks
+- Constrain the teacher to output more modular traces
+- Understand failure modes for problems -> what vars correlate with triangulation failure?
+- ... (this is a task for tomorrow morning)
+
 # 12/8/25
 I had claude do a major refactor, after realizing that the tool-based approach was slowing me down, and probably not effective.
 

@@ -73,9 +73,10 @@ def parse_execution_result(output: str) -> tuple[bool, str, str]:
 def parse_submitted_answer(output: str) -> str | None:
     """
     Extract submitted answer from execution output.
-    
+
     Looks for "✓ Submitted: {answer}" pattern in stdout.
-    
+    The answer is expected to be JSON-serialized.
+
     Returns:
         The submitted answer value, or None if no submission found
     """
@@ -83,14 +84,54 @@ def parse_submitted_answer(output: str) -> str | None:
     match = re.search(r"✓ Submitted: (.+)", output)
     if match:
         answer_str = match.group(1).strip()
-        # Try to eval it back to Python object
+        # Try to parse as JSON first (new format)
         try:
-            import ast
-            return ast.literal_eval(answer_str)
-        except (ValueError, SyntaxError):
-            # Return as string if can't parse
-            return answer_str
+            import json
+            return json.loads(answer_str)
+        except (json.JSONDecodeError, ValueError):
+            # Fall back to ast.literal_eval for backward compatibility
+            try:
+                import ast
+                return ast.literal_eval(answer_str)
+            except (ValueError, SyntaxError):
+                # Return as string if can't parse
+                return answer_str
     return None
+
+
+# Keywords that suggest a statistical/hypothesis answer needing structured format
+_STATISTICAL_KEYWORDS = {'yes', 'no', 'significant', 'not significant', 'reject', 'fail to reject', 'accept'}
+
+def _needs_structured_format(answer) -> bool:
+    """
+    Check if a submitted answer looks like it should be structured but isn't.
+    
+    Returns True if the answer is a string containing statistical keywords,
+    suggesting the model should have submitted a dict with answer/p_value.
+    """
+    if not isinstance(answer, str):
+        return False
+    
+    answer_lower = answer.lower().strip()
+    
+    # If it's already a simple value (number, short label), accept it
+    if len(answer_lower) < 20 and not any(kw in answer_lower for kw in _STATISTICAL_KEYWORDS):
+        return False
+    
+    # If it contains statistical keywords, it should be structured
+    return any(kw in answer_lower for kw in _STATISTICAL_KEYWORDS)
+
+
+FORMAT_REPROMPT_MSG = """
+⚠️ Your answer appears to be a statistical conclusion but was submitted as a plain string.
+
+Please re-submit using the structured format:
+```python
+submit({"answer": "Yes", "p_value": 0.0012})
+```
+
+Replace "Yes" with your conclusion and the p-value with your computed value.
+"""
 
 
 class Environment:
@@ -278,9 +319,12 @@ class Environment:
         self.current_turn = 0
         self.is_completed = False
         self.data_overview = data_overview
+        self.data_overview = data_overview
         self.submitted_answer = None  # Reset for new episode
+        self.submission_metadata = {}  # Metadata (key_lines, etc.)
         self.code_cells = []  # Track all executed code cells
         self.execution_results_per_turn = []  # Track execution results per turn
+        self.format_reprompt_count = 0  # Track format re-prompts (force-accept after 3)
 
     def extract_python_cells(self, response: str) -> list[str]:
         """Extract ```python...``` code blocks from response."""
@@ -305,7 +349,12 @@ class Environment:
         # Check for submitted answer in output
         submitted = parse_submitted_answer(output)
         if submitted is not None:
-            self.submitted_answer = submitted
+            # Check for wrapped protocol format
+            if isinstance(submitted, dict) and "__csv_agent_answer__" in submitted:
+                self.submitted_answer = submitted["__csv_agent_answer__"]
+                self.submission_metadata = submitted
+            else:
+                self.submitted_answer = submitted
 
         return CodeCellResult(
             code=code,
@@ -387,9 +436,18 @@ class Environment:
         else:
             feedback = "No code blocks found. Write Python code in ```python blocks."
 
-
         # 5. Check for completion (submit() was called)
         done_signal = submitted_answer is not None
+
+        # 5a. Format validation: if answer needs structured format, re-prompt (up to 3 times)
+        if done_signal and _needs_structured_format(submitted_answer):
+            self.format_reprompt_count += 1
+            if self.format_reprompt_count < 3:
+                # Re-prompt for correct format
+                feedback = FORMAT_REPROMPT_MSG
+                done_signal = False
+                self.submitted_answer = None  # Clear so they can re-submit
+            # else: force-accept after 3 retries
 
         # 6. Store execution results for this turn
         self.execution_results_per_turn.append(execution_results)
@@ -398,7 +456,7 @@ class Environment:
         self.conversation.add_assistant_response(response)
         self.conversation.add_user_feedback(feedback)
 
-        # 7. Check completion
+        # 8. Check completion
         if done_signal:
             self.is_completed = True
 
