@@ -16,15 +16,6 @@ if TYPE_CHECKING:
     from src.core.conversation import CodeCellResult
 
 
-# ============= Result Types =============
-
-class ExecutionResult(NamedTuple):
-    """Result of parsing code execution output."""
-    success: bool
-    stdout: str
-    stderr: str
-
-
 # ============= TypedDicts for JSONL Serialization =============
 
 class QuestionDict(TypedDict, total=False):

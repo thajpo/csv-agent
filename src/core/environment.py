@@ -14,9 +14,8 @@ import re
 import pandas as pd
 
 from src.core.model import APILLM
-from src.utils.validation import get_turn_validation_feedback
-from src.utils.execution import parse_execution_result
-from src.utils.parsing import extract_python_cells
+from src.core.model import APILLM
+from src.utils.interaction import get_turn_validation_feedback, parse_execution_result, extract_python_cells
 from src.core.prompts import generate_data_overview, build_system_prompt, CONTINUE_MSG, FINAL_MSG
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
@@ -303,7 +302,8 @@ class Environment:
         )
         
         # Parse the string output into success/stdout/stderr
-        success, stdout, stderr = parse_execution_result(output)
+        result = parse_execution_result(output)
+        result.code = code
         
         # Check for submitted answer in output
         submitted = parse_submitted_answer(output)
@@ -314,14 +314,18 @@ class Environment:
                 self.submission_metadata = submitted
             else:
                 self.submitted_answer = submitted
+            
+            result.submitted_answer = self.submitted_answer
 
-        return CodeCellResult(
-            code=code,
-            success=success,
-            stdout=stdout if success else output,  # Full output for display
-            stderr=stderr if not success else "",
-            submitted_answer=self.submitted_answer,
-        )
+        # If success is True, stdout is already populated by parse_execution_result.
+        # If success is False, stderr is populated.
+        # CodeCellResult logic in environment (lines 321-322 originally) was using `output` 
+        # as fallback for stdout. parse_execution_result does:
+        # success=True -> stdout=output, stderr="" (if normal)
+        # success=False -> stdout="", stderr=output (if error)
+        # So we can just return the result object as is.
+
+        return result
 
     async def handle_max_turns_reached(self) -> None:
         """Handle reaching max turns: prompt for final output and get response."""

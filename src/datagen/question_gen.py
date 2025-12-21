@@ -23,8 +23,7 @@ from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
 from src.core.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
-from src.utils.execution import parse_execution_result
-from src.utils.parsing import extract_python_cells
+from src.utils.interaction import parse_execution_result, extract_python_cells
 from src.core.config import load_config
 
 
@@ -194,19 +193,19 @@ async def explore_and_generate_questions(
                     python_state=state["python_state"],
                 )
                 
-                success, stdout, stderr = parse_execution_result(output)
+                # result is now CodeCellResult object
+                result = parse_execution_result(output)
+                result.code = code
+                # If success, use stdout, else keep output in stderr? 
+                # Actually parse_execution_result handles this splitting already.
+                # Just ensure code is set.
                 
-                execution_results.append(CodeCellResult(
-                    code=code,
-                    success=success,
-                    stdout=stdout if success else output,
-                    stderr=stderr if not success else ""
-                ))
+                execution_results.append(result)
 
-                if success:
-                    ui.print_execution_success(stdout)
+                if result.success:
+                    ui.print_execution_success(result.stdout)
                 else:
-                    ui.print_execution_failure(output)
+                    ui.print_execution_failure(result.stderr or output)
 
             # Save turn
             turn = ExplorationTurn(
