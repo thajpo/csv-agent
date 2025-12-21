@@ -5,11 +5,15 @@ All shared types in one place:
 - Core types (Question, ExecutionTrace, Hook)
 - Episode types (Episode, EpisodeJSONL)
 - Exploration types (ExplorationTurn, ExplorationTrace)
+- TypedDicts for JSONL serialization
 """
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypedDict, TYPE_CHECKING
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from src.core.conversation import CodeCellResult
 
 
 # ============= Result Types =============
@@ -19,6 +23,61 @@ class ExecutionResult(NamedTuple):
     success: bool
     stdout: str
     stderr: str
+
+
+# ============= TypedDicts for JSONL Serialization =============
+
+class QuestionDict(TypedDict, total=False):
+    """Serialized Question structure."""
+    id: str | None
+    question_text: str
+    hint: str | None
+    difficulty: str | None
+    n_steps: int | None
+    created_at: str | None
+
+
+class HookDict(TypedDict, total=False):
+    """Serialized Hook structure."""
+    code_line: str
+    variable_name: str | None
+    value_hash: str
+    description: str | None
+    depends_on: list[str]
+
+
+class ExecutionTraceDict(TypedDict, total=False):
+    """Serialized ExecutionTrace structure."""
+    code_cells: list[str]
+    final_answer: Any
+    final_answer_hash: str | None
+    execution_success: bool
+    hooks: list[HookDict]
+    submission_metadata: dict[str, Any]
+    total_turns: int
+    archived_turn_count: int
+
+
+
+class ConversationForSFTDict(TypedDict):
+    """Conversation data for SFT training."""
+    system_prompt: str
+    messages: list[dict]  # MessageDict from conversation.py
+
+
+class RLVerificationDataDict(TypedDict):
+    """RL verification data."""
+    expected_final_answer_hash: str | None
+    expected_final_answer: Any
+
+
+class TriangulationMetadataDict(TypedDict):
+    """Triangulation results."""
+    n_consistency_runs: int
+    n_consistency_succeeded: int
+    majority_answer_hash: str | None
+    majority_count: int
+    gold_matches_majority: bool
 
 
 # ============= Core Types =============
@@ -117,18 +176,18 @@ class EpisodeJSONL(BaseModel):
     verified: bool
 
     # Question
-    question: dict
+    question: QuestionDict
 
     # Traces
-    teacher_gold_trace: dict
-    consistency_traces: list[dict]
+    teacher_gold_trace: ExecutionTraceDict
+    consistency_traces: list[ExecutionTraceDict]
 
     # Training data
-    conversation_for_sft: dict  # {"system_prompt": str, "messages": list}
-    rl_verification_data: dict
+    conversation_for_sft: ConversationForSFTDict
+    rl_verification_data: RLVerificationDataDict
 
     # Metadata
-    triangulation_metadata: dict
+    triangulation_metadata: TriangulationMetadataDict
 
     @classmethod
     def from_episode(
@@ -190,7 +249,7 @@ class ExplorationTurn(BaseModel):
     turn_number: int
     reasoning: str
     code_cells: list[str]
-    execution_results: list[Any]  # CodeCellResult objects
+    execution_results: list["CodeCellResult"]  # Forward ref to avoid circular import
     timestamp: datetime
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -200,8 +259,9 @@ class ExplorationTrace(BaseModel):
     """Record of exploration session for question generation."""
     csv_path: str
     turns: list[ExplorationTurn]
-    questions_generated: list[dict]
+    questions_generated: list[QuestionDict]  # Use typed dict
     total_turns: int
     timestamp: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+

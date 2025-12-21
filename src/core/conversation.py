@@ -7,7 +7,15 @@ within token limits. Uses simple Message objects instead of complex Turn trackin
 
 from pydantic import BaseModel, ConfigDict
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
+
+
+# ============= TypedDict for Messages =============
+
+class MessageDict(TypedDict):
+    """OpenAI message format."""
+    role: str  # "system", "user", "assistant"
+    content: str
 
 
 # ============= Code Execution Result (still needed by some code) =============
@@ -39,8 +47,8 @@ class ConversationHistory(BaseModel):
     Manages conversation messages with context pruning.
     """
     system_prompt: str
-    messages: list[dict] = []  # Direct OpenAI format: [{"role": ..., "content": ...}]
-    archived_count: int = 0     # Number of messages archived
+    messages: list[MessageDict] = []  # OpenAI format with type hints
+    archived_count: int = 0           # Number of messages archived
 
     # Limits
     max_messages: int = 10       # Max active messages (2 msgs/turn)
