@@ -28,17 +28,12 @@ from src.core.types import Episode, EpisodeJSONL, Question, ExecutionTrace
 from src.core.config import load_config
 
 
+from src.utils.docker import cleanup_csv_sandbox_containers
+
+
 def cleanup_containers():
     """Emergency cleanup of all CSV sandbox containers."""
-    try:
-        subprocess.run(
-            "docker stop $(docker ps -q --filter 'name=csv-sandbox') 2>/dev/null && "
-            "docker rm $(docker ps -aq --filter 'name=csv-sandbox') 2>/dev/null",
-            shell=True,
-            capture_output=True
-        )
-    except Exception:
-        pass
+    cleanup_csv_sandbox_containers()
 
 
 def signal_handler(signum, frame):

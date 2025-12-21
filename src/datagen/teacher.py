@@ -519,16 +519,8 @@ async def batch_triangulate(
         # Cleanup existing containers first
         if ui:
             ui.base.print_status("Cleaning up old containers...")
-        try:
-            import subprocess
-            subprocess.run(
-                "docker stop $(docker ps -q --filter 'name=csv-sandbox') 2>/dev/null && "
-                "docker rm $(docker ps -aq --filter 'name=csv-sandbox') 2>/dev/null",
-                shell=True,
-                capture_output=True
-            )
-        except Exception:
-            pass  # Ignore cleanup errors
+        from src.utils.docker import cleanup_csv_sandbox_containers
+        cleanup_csv_sandbox_containers()
 
         if ui:
             ui.base.print_status(f"Creating container pool ({pool_size} containers)...")
