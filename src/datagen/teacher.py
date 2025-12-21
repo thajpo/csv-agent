@@ -77,7 +77,7 @@ def answers_match(
                 )
                 return True
             except (AssertionError, Exception):
-                pass # Try normalization path if direct comparison fails
+                pass  # DataFrame comparison failed, fall through to normalization
 
         # B. Normalize and compare
         v1 = normalize_value(val1)
@@ -105,9 +105,8 @@ def answers_match(
                         if abs(p1 - p2) > p_value_tol:
                             return False
                     except (ValueError, TypeError):
-                        pass # If not convertible to float, ignore p_value check or fail?
-                             # Let's fail if they are meant to be numbers but aren't matching
-                        if v1['p_value'] != v2['p_value']:
+                        # Not convertible to float - compare as strings
+                        if str(v1['p_value']) != str(v2['p_value']):
                             return False
 
                 # If we verified the core keys, we accept the match (ignore extra keys like 'decision')

@@ -73,7 +73,7 @@ def try_parse_questions(response: str) -> list[dict] | None:
                 if validate_questions(data["questions"]):
                     return data["questions"]
         except json.JSONDecodeError:
-            pass
+            pass  # Strategy failed, try next
 
     # Strategy 2: Look for bare JSON object
     json_obj_pattern = r'\{\s*"questions"\s*:\s*\[.*?\]\s*\}'
@@ -85,7 +85,7 @@ def try_parse_questions(response: str) -> list[dict] | None:
                 if validate_questions(data["questions"]):
                     return data["questions"]
         except json.JSONDecodeError:
-            pass
+            pass  # Strategy failed, try next
 
     # Strategy 3: Look for Python dict assignment
     python_dict_pattern = r'(?:questions|output)\s*=\s*(\{.*?\})'
@@ -97,7 +97,7 @@ def try_parse_questions(response: str) -> list[dict] | None:
                 if validate_questions(data["questions"]):
                     return data["questions"]
         except json.JSONDecodeError:
-            pass
+            pass  # Strategy failed, return None below
 
     return None
 
