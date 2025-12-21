@@ -317,14 +317,6 @@ class Environment:
             
             result.submitted_answer = self.submitted_answer
 
-        # If success is True, stdout is already populated by parse_execution_result.
-        # If success is False, stderr is populated.
-        # CodeCellResult logic in environment (lines 321-322 originally) was using `output` 
-        # as fallback for stdout. parse_execution_result does:
-        # success=True -> stdout=output, stderr="" (if normal)
-        # success=False -> stdout="", stderr=output (if error)
-        # So we can just return the result object as is.
-
         return result
 
     async def handle_max_turns_reached(self) -> None:
