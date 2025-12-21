@@ -7,7 +7,7 @@ All shared types in one place:
 - Exploration types (ExplorationTurn, ExplorationTrace)
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Any, NamedTuple
 from datetime import datetime
 
@@ -29,8 +29,7 @@ class Artifact(BaseModel):
     hash: str               # Hash of its state
     type: str               # 'DataFrame' | 'scalar' | 'other'
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class Question(BaseModel):
@@ -59,8 +58,7 @@ class ExecutionTrace(BaseModel):
     total_turns: int = 0
     archived_turn_count: int = 0            # Turns purged from context
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 # ============= Episode Types =============
@@ -82,8 +80,7 @@ class Episode(BaseModel):
     # Metadata
     timestamp: datetime = datetime.now()
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class EpisodeJSONL(BaseModel):
@@ -157,8 +154,7 @@ class EpisodeJSONL(BaseModel):
             },
         )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 # ============= Exploration Types =============
@@ -171,8 +167,7 @@ class ExplorationTurn(BaseModel):
     execution_results: list[Any]  # CodeCellResult objects
     timestamp: datetime
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class ExplorationTrace(BaseModel):
@@ -183,8 +178,7 @@ class ExplorationTrace(BaseModel):
     total_turns: int
     timestamp: datetime = datetime.now()
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class GeneratedQuestion(BaseModel):
@@ -194,5 +188,4 @@ class GeneratedQuestion(BaseModel):
     n_steps: int
     difficulty: str  # EASY, MEDIUM, HARD, VERY_HARD
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

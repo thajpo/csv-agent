@@ -5,7 +5,7 @@ Simplified conversation tracking with automatic context pruning to stay
 within token limits. Uses simple Message objects instead of complex Turn tracking.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,14 +14,13 @@ from typing import Any
 
 class CodeCellResult(BaseModel):
     """Result of executing one code cell."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     code: str
     success: bool
     stdout: str
     stderr: str
     submitted_answer: Any | None = None
-
-    class Config:
-        arbitrary_types_allowed = True
 
 
 # ============= Simple Message Representation =============
