@@ -42,7 +42,7 @@ def json_default(obj):
 # Storage for hooks captured during execution
 _captured_hooks = []
 
-def hook(value, name=None, description=None, code_line=None):
+def hook(value, name=None, description=None, code_line=None, depends_on=None):
     """
     Capture an intermediate checkpoint for RL verification.
     
@@ -54,10 +54,14 @@ def hook(value, name=None, description=None, code_line=None):
         name: Optional variable name (e.g., 'df_filtered')
         description: Optional semantic description
         code_line: Optional code that produced this (auto-captured if omitted)
+        depends_on: List of hook names this depends on (for DAG ordering)
     
     Example:
         df_filtered = df[df['status'] == 'active']
         hook(df_filtered, name='df_filtered', description='Filtered to active rows')
+        
+        result = df_filtered.groupby('cat').mean()
+        hook(result, name='result', depends_on=['df_filtered'])
     """
     import hashlib
     normalized = normalize_value(value)
@@ -69,6 +73,7 @@ def hook(value, name=None, description=None, code_line=None):
         "value_hash": value_hash,
         "description": description,
         "code_line": code_line,
+        "depends_on": depends_on or [],
     }
     _captured_hooks.append(hook_data)
     

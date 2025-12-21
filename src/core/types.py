@@ -68,11 +68,13 @@ class Hook(BaseModel):
     
     Hooks capture intermediate states during code execution for RL reward.
     The value_hash allows verification without storing the actual value.
+    The depends_on field tracks which previous hooks must be computed first.
     """
     code_line: str                      # The code that produced this
     variable_name: str | None = None    # e.g., 'df_filtered'
     value_hash: str                     # Hash of the value at this point
     description: str | None = None      # Optional semantic description
+    depends_on: list[str] = []          # Names of hooks this depends on (DAG edges)
 
 
 class ExecutionTrace(BaseModel):

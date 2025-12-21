@@ -307,10 +307,16 @@ async def execute_teacher_trace(
             variable_name=h.get("variable_name"),
             value_hash=h.get("value_hash", ""),
             description=h.get("description"),
+            depends_on=h.get("depends_on", []),
         )
         for h in raw_hooks
         if isinstance(h, dict) and h.get("value_hash")  # Skip malformed hooks
     ]
+    
+    # Warn if trace has few hooks (may indicate question/prompt issue)
+    if len(hooks) < 2 and execution_success:
+        import logging
+        logging.warning(f"Trace has only {len(hooks)} hook(s) - consider adding more intermediate checkpoints")
 
     trace = ExecutionTrace(
         code_cells=code_cells,
