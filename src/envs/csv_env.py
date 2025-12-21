@@ -15,7 +15,9 @@ from datasets import Dataset
 from verifiers.envs.python_env import PythonEnv
 
 PACKAGES = "pandas numpy scipy scikit-learn statsmodels"
-SETUP_CODE = f'''
+
+# Base imports for container - normalize_value is injected dynamically
+_SETUP_IMPORTS = '''
 import pandas as pd
 import numpy as np
 import scipy
@@ -24,48 +26,10 @@ import sklearn
 import statsmodels
 import statsmodels.api as sm
 import json
+'''
 
-def normalize_value(val):
-    """
-    Standardize answer formats for better comparison.
-    Converts DataFrames/Series to Dictionaries or Scalars where appropriate.
-    """
-    if val is None:
-        return None
-
-    # Handle Pandas/Numpy types
-    if isinstance(val, pd.DataFrame):
-        if val.empty:
-            return {{}}
-
-        # 1x1 -> scalar
-        if val.shape == (1, 1):
-            return val.iloc[0, 0]
-
-        # 1 column -> dict (if index meaningful) or list
-        if val.shape[1] == 1:
-            series = val.iloc[:, 0]
-            if not isinstance(val.index, pd.RangeIndex):
-                return series.to_dict()
-            return series.tolist()
-
-        # 2 columns -> dict {{col0: col1}}
-        if val.shape[1] == 2:
-            return dict(zip(val.iloc[:, 0], val.iloc[:, 1]))
-
-        # Default: list of records
-        return val.to_dict('records')
-
-    if isinstance(val, pd.Series):
-        if val.size == 1:
-            return val.iloc[0]
-        return val.to_dict()
-
-    if isinstance(val, np.generic):
-        return val.item()
-
-    return val
-
+# submit() and helpers - injected after normalize_value
+_SETUP_SUBMIT = '''
 def json_default(obj):
     if isinstance(obj, (np.integer, int)):
         return int(obj)
@@ -85,13 +49,36 @@ def submit(answer, **kwargs):
     """
     normalized = normalize_value(answer)
     # Wrap in specific protocol structure
-    submission = {{"__csv_agent_answer__": normalized}}
+    submission = {"__csv_agent_answer__": normalized}
     submission.update(kwargs)
     
     serialized = json.dumps(submission, default=json_default)
-    print(f"✓ Submitted: {{serialized}}")
+    print(f"✓ Submitted: {serialized}")
     return normalized
 '''
+
+
+def get_setup_code() -> str:
+    """
+    Generate setup code with normalize_value injected from shared source.
+    
+    This ensures the container's normalize_value stays in sync with
+    the host-side version used in teacher.py for answer comparison.
+    """
+    import inspect
+    from src.utils.normalization import normalize_value
+    
+    # Get source, remove type hints that might not work in container
+    source = inspect.getsource(normalize_value)
+    # Remove the 'from typing import Any' dependency by simplifying signature
+    source = source.replace(') -> Any:', '):')
+    source = source.replace('val: Any', 'val')
+    
+    return _SETUP_IMPORTS + '\n' + source + '\n' + _SETUP_SUBMIT
+
+
+# Legacy compatibility - but prefer get_setup_code() for dynamic generation
+SETUP_CODE = get_setup_code()
 
 class VerifiersCSVAnalysisEnv(PythonEnv):
     """
