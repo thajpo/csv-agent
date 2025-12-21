@@ -2,7 +2,7 @@
 LLM-based question generator for CSV datasets.
 
 This script uses an LLM to:
-1. Explore a dataset using verifiers CSVAnalysisEnv (Docker sandbox)
+1. Explore a dataset using a sandboxed Python environment
 2. Document exploration observations
 3. Generate questions with varying difficulty levels (EASY, MEDIUM, HARD, VERY_HARD)
 

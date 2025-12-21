@@ -14,7 +14,6 @@ import asyncio
 import json
 import sys
 import signal
-import subprocess
 from pathlib import Path
 from datetime import datetime
 import uuid

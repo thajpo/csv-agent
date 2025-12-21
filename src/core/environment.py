@@ -5,7 +5,7 @@ This is a pure RL-style environment that executes episodes (rollouts)
 for CSV exploration and question generation. It uses Python's logging
 module for output, keeping the environment logic separate from presentation.
 
-Refactored to use verifiers CSVAnalysisEnv instead of JupyterKernel.
+Refactored to use a sandboxed Python environment for code execution.
 """
 
 
@@ -102,7 +102,7 @@ class Environment:
     an LLM explores a CSV dataset using tools. It's designed to be
     pure RL logic with no presentation dependencies (uses stdlib logging).
     
-    Uses verifiers CSVAnalysisEnv for sandboxed code execution.
+    Uses a sandboxed Python environment for code execution.
     """
 
     def __init__(
