@@ -39,6 +39,43 @@ def json_default(obj):
         return obj.tolist()
     return str(obj)
 
+# Storage for hooks captured during execution
+_captured_hooks = []
+
+def hook(value, name=None, description=None, code_line=None):
+    """
+    Capture an intermediate checkpoint for RL verification.
+    
+    Call this after computing an important intermediate result.
+    The value will be hashed and stored for reward calculation.
+    
+    Args:
+        value: The intermediate value to checkpoint (DataFrame, scalar, etc.)
+        name: Optional variable name (e.g., 'df_filtered')
+        description: Optional semantic description
+        code_line: Optional code that produced this (auto-captured if omitted)
+    
+    Example:
+        df_filtered = df[df['status'] == 'active']
+        hook(df_filtered, name='df_filtered', description='Filtered to active rows')
+    """
+    import hashlib
+    normalized = normalize_value(value)
+    value_hash = hashlib.sha256(json.dumps(normalized, sort_keys=True, default=json_default).encode()).hexdigest()[:16]
+    
+    hook_data = {
+        "__csv_agent_hook__": True,
+        "variable_name": name,
+        "value_hash": value_hash,
+        "description": description,
+        "code_line": code_line,
+    }
+    _captured_hooks.append(hook_data)
+    
+    serialized = json.dumps(hook_data, default=json_default)
+    print(f"📍 Hook: {serialized}")
+    return value  # Pass through for chaining
+
 def submit(answer, **kwargs):
     """
     Submit your final answer. Only call this once.
@@ -51,6 +88,10 @@ def submit(answer, **kwargs):
     # Wrap in specific protocol structure
     submission = {"__csv_agent_answer__": normalized}
     submission.update(kwargs)
+    
+    # Include captured hooks in submission
+    if _captured_hooks:
+        submission["hooks"] = _captured_hooks.copy()
     
     serialized = json.dumps(submission, default=json_default)
     print(f"✓ Submitted: {serialized}")

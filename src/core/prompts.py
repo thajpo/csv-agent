@@ -53,12 +53,22 @@ OUTPUT FORMAT:
 - Ensure p-values are floats, not strings.
 
 CRITICAL CODE HOOKS:
-You must PROVE your answer by providing the `key_lines` argument to `submit()`.
-`key_lines` should be a list of strings containing the exact lines of code that derived the answer.
-Example:
+You must capture INTERMEDIATE CHECKPOINTS using the `hook()` function.
+After computing an important intermediate variable, call `hook(value, name='var_name')`.
+This records a verifiable checkpoint without requiring you to describe the code.
+
+Example workflow:
 ```python
-res = df.groupby('col')['val'].mean()
-submit(res, key_lines=["df.groupby('col')['val'].mean()"])
+# Step 1: Filter data
+df_filtered = df[df['status'] == 'active']
+hook(df_filtered, name='df_filtered', description='Filtered to active rows')
+
+# Step 2: Aggregate
+result = df_filtered.groupby('category')['value'].mean()
+hook(result, name='result', description='Mean value per category')
+
+# Step 3: Submit final answer
+submit(result.to_dict())
 ```
 
 The execution result will be shown at the start of your next turn.

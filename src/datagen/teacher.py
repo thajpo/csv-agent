@@ -22,7 +22,7 @@ from collections import Counter
 from typing import Any, List, Tuple
 
 from src.core.environment import Environment
-from src.core.types import ExecutionTrace
+from src.core.types import ExecutionTrace, Hook
 from src.utils.hashing import hash_artifact
 from src.utils.normalization import normalize_value
 
@@ -298,12 +298,27 @@ async def execute_teacher_trace(
             elapsed_seconds=elapsed_seconds
         )
 
+    # Extract hooks from submission_metadata
+    submission_metadata = getattr(final_state, "submission_metadata", {})
+    raw_hooks = submission_metadata.get("hooks", [])
+    hooks = [
+        Hook(
+            code_line=h.get("code_line", ""),
+            variable_name=h.get("variable_name"),
+            value_hash=h.get("value_hash", ""),
+            description=h.get("description"),
+        )
+        for h in raw_hooks
+        if isinstance(h, dict) and h.get("value_hash")  # Skip malformed hooks
+    ]
+
     trace = ExecutionTrace(
         code_cells=code_cells,
         final_answer=final_answer,
         final_answer_hash=final_answer_hash,
         execution_success=execution_success,
-        submission_metadata=getattr(final_state, "submission_metadata", {}),
+        hooks=hooks,
+        submission_metadata=submission_metadata,
     )
 
     return trace, conversation_messages, system_prompt, elapsed_seconds

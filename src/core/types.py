@@ -63,12 +63,27 @@ class Question(BaseModel):
         return q
 
 
+class Hook(BaseModel):
+    """A verifiable checkpoint in the solution trace.
+    
+    Hooks capture intermediate states during code execution for RL reward.
+    The value_hash allows verification without storing the actual value.
+    """
+    code_line: str                      # The code that produced this
+    variable_name: str | None = None    # e.g., 'df_filtered'
+    value_hash: str                     # Hash of the value at this point
+    description: str | None = None      # Optional semantic description
+
+
 class ExecutionTrace(BaseModel):
     """Record of a code execution session (teacher or student)."""
     code_cells: list[str]                   # Raw Python code per turn
     final_answer: Any | None = None         # The submit() value
     final_answer_hash: str | None = None
     execution_success: bool
+
+    # Intermediate checkpoints for RL dense reward
+    hooks: list[Hook] = []
 
     # Metadata from submit(..., extra=...)
     submission_metadata: dict[str, Any] = {}
