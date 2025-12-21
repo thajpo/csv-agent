@@ -12,7 +12,7 @@ import asyncio
 import json
 import re
 import sys
-import yaml
+
 from pathlib import Path
 from datetime import datetime
 
@@ -25,6 +25,7 @@ from src.core.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 from src.utils.execution import parse_execution_result
 from src.utils.parsing import extract_python_cells
+from src.core.config import load_config
 
 
 def build_execution_feedback(results: list[CodeCellResult]) -> str:

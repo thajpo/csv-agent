@@ -18,13 +18,14 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 import uuid
-import yaml
+
 from typing import Any
 
 from src.datagen.teacher import batch_triangulate
 from src.datagen.ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
 from src.core.types import Episode, EpisodeJSONL, Question, ExecutionTrace
+from src.core.config import load_config
 
 
 def cleanup_containers():
@@ -80,11 +81,7 @@ def load_questions(questions_path: str) -> list[dict]:
         return json.load(f)
 
 
-def load_config(config_path: str = "config.yaml") -> dict:
-    """Load configuration from YAML file."""
-    config_file = Path(config_path)
-    with open(config_file) as f:
-        return yaml.safe_load(f)
+
 
 
 async def main():
