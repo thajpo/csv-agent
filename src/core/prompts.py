@@ -55,17 +55,17 @@ OUTPUT FORMAT:
 CRITICAL CODE HOOKS:
 You must capture INTERMEDIATE CHECKPOINTS using the `hook()` function.
 After computing an important intermediate variable, call `hook(value, name='var_name')`.
-This records a verifiable checkpoint without requiring you to describe the code.
+This records a verifiable checkpoint. Use `depends_on` to specify which previous hooks were required.
 
 Example workflow:
 ```python
-# Step 1: Filter data
+# Step 1: Filter data (no dependencies - starting point)
 df_filtered = df[df['status'] == 'active']
 hook(df_filtered, name='df_filtered', description='Filtered to active rows')
 
-# Step 2: Aggregate
+# Step 2: Aggregate (depends on df_filtered)
 result = df_filtered.groupby('category')['value'].mean()
-hook(result, name='result', description='Mean value per category')
+hook(result, name='result', depends_on=['df_filtered'])
 
 # Step 3: Submit final answer
 submit(result.to_dict())
