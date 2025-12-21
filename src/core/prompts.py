@@ -151,6 +151,9 @@ Call submit(final_answer) when done.
 
 EXPLORATION_SYSTEM_PROMPT = """You are a data analyst exploring a CSV dataset using a persistent Jupyter Notebook.
 
+DATASET:
+{dataset_description}
+
 Your goal is to eventually generate 13 analytical questions, but FIRST you must explore the data via code execution.
 
 CRITICAL INTERACTION RULES:

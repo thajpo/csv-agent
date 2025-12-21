@@ -86,12 +86,6 @@ async def main():
     # Load config
     config = load_config()
 
-    # Enforce mandatory dataset description
-    if not config.description or not config.description.strip():
-        ui.base.print_error("ERROR: 'description' is missing or empty in config.yaml.")
-        ui.base.print_info("Note", "A detailed dataset description is required for high-quality episode generation.")
-        return 1
-
     # Extract config values (typed access)
     teacher_model = config.teacher_model
     n_consistency = config.n_consistency
@@ -124,6 +118,27 @@ async def main():
     for i, csv_path in enumerate(csv_sources, 1):
         dataset_name = Path(csv_path).stem
         ui.base.print_section(f"Processing CSV {i}/{len(csv_sources)}: {csv_path}")
+
+        # Determine dataset description (Config > Sidecar Metadata > Error)
+        dataset_description = config.description
+        
+        if not dataset_description:
+            # Look for sidecar metadata: slug.meta.json or csv_filename.meta.json
+            meta_path = Path(csv_path).with_suffix(".meta.json")
+            if meta_path.exists():
+                try:
+                    with open(meta_path) as f:
+                        meta_data = json.load(f)
+                        dataset_description = meta_data.get("description") or meta_data.get("subtitle")
+                        if dataset_description:
+                            ui.base.print_status(f"Loaded description from sidecar metadata: {meta_path.name}")
+                except Exception as e:
+                    ui.base.print_warning(f"Failed to read metadata from {meta_path}: {e}")
+
+        if not dataset_description or not dataset_description.strip():
+            ui.base.print_error(f"ERROR: No description found for {dataset_name}")
+            ui.base.print_info("Hint", f"Add 'description' to config.yaml or create {dataset_name}.meta.json")
+            continue
 
         # Locate questions
         questions_file = base_questions_dir / dataset_name / "questions.json"
@@ -166,7 +181,7 @@ async def main():
             questions=questions,
             model=teacher_model,  # Required positional arg (3rd)
             n_consistency=n_consistency,
-            dataset_description=config.description,
+            dataset_description=dataset_description,
             data_overview=data_overview,
             max_turns=max_turns,
             sampling_args=sampling_args,

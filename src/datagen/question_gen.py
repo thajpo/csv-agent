@@ -129,7 +129,8 @@ async def explore_and_generate_questions(
     max_turns: int = 20,
     temperature: float = 0.7,
     max_tokens: int = 6000,
-    output_dir: str = "."
+    output_dir: str = ".",
+    dataset_description: str = ""
 ) -> tuple[list[dict], ExplorationTrace]:
     """
     LLM explores dataset and generates questions.
@@ -159,7 +160,7 @@ async def explore_and_generate_questions(
     
     llm = APILLM(model=model, sampling_args={"temperature": temperature, "max_tokens": max_tokens})
     conversation = ConversationHistory(
-        system_prompt=EXPLORATION_SYSTEM_PROMPT,
+        system_prompt=EXPLORATION_SYSTEM_PROMPT.format(dataset_description=dataset_description),
         max_messages=100,
         max_context_tokens=100_000
     )
@@ -306,6 +307,28 @@ def main():
     for i, csv_path in enumerate(csv_sources, 1):
         ui.print_section(f"Processing CSV {i}/{len(csv_sources)}: {csv_path}")
         
+        # Determine dataset description (Config > Sidecar Metadata > Error)
+        dataset_description = config.description
+        
+        if not dataset_description:
+            # Look for sidecar metadata: slug.meta.json or csv_filename.meta.json
+            meta_path = Path(csv_path).with_suffix(".meta.json")
+            if meta_path.exists():
+                try:
+                    with open(meta_path) as f:
+                        meta_data = json.load(f)
+                        dataset_description = meta_data.get("description") or meta_data.get("subtitle")
+                        if dataset_description:
+                            ui.print_status(f"Loaded description from sidecar metadata: {meta_path.name}")
+                except Exception as e:
+                    ui.print_warning(f"Failed to read metadata from {meta_path}: {e}")
+
+        if not dataset_description or not dataset_description.strip():
+            ui.print_error(f"ERROR: No description found for {csv_path}")
+            ui.print_info("Hint", f"Add 'description' to config.yaml or create {Path(csv_path).stem}.meta.json")
+            failure_count += 1
+            continue
+
         # Derive output directory for this CSV (e.g. "data" from "csv/data.csv")
         dataset_name = Path(csv_path).stem
         output_dir = base_output_dir / dataset_name
@@ -317,7 +340,8 @@ def main():
                 max_turns=max_turns,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                output_dir=str(output_dir)
+                output_dir=str(output_dir),
+                dataset_description=dataset_description
             ))
             
             ui.print_success(f"✓ Generated {len(questions)} questions for {dataset_name}")

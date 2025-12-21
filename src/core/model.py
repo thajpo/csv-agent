@@ -16,19 +16,21 @@ Usage:
     llm = APILLM(base_url="http://localhost:8000/v1", model="Qwen/Qwen3-32B", api_key="none")
 """
 
+from typing import Any
 import asyncio
 import os
 import httpx
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
 
 def has_gpu() -> bool:
     """Check if CUDA or ROCm GPU is available."""
-    has_cuda = torch.cuda.is_available()
-    has_rocm = hasattr(torch.version, "hip") and torch.version.hip is not None
-    return has_cuda or has_rocm
+    try:
+        import torch
+        has_cuda = torch.cuda.is_available()
+        has_rocm = hasattr(torch.version, "hip") and torch.version.hip is not None
+        return has_cuda or has_rocm
+    except ImportError:
+        return False
 
 
 class APILLM:
@@ -127,9 +129,15 @@ class LLM:
         self,
         model_name: str = "Qwen/Qwen3-4B",  # 3B not released yet, 4B is closest
         device: str | None = None,
-        torch_dtype: torch.dtype = torch.bfloat16,
+        torch_dtype: Any = None,
         attn_implementation: str = "sdpa",
     ):
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        
+        if torch_dtype is None:
+            torch_dtype = torch.bfloat16
+
         if not has_gpu():
             raise RuntimeError("No CUDA/ROCm device available")
         
@@ -166,6 +174,7 @@ class LLM:
 
         inputs = self.tokenizer(text, return_tensors="pt").to(self.device)
         
+        import torch
         with torch.no_grad():
             try:
                 outputs = self.model.generate(

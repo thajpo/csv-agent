@@ -45,13 +45,6 @@ class Config(BaseModel):
     csv_sources: Union[str, List[str]] = Field(default="data.csv")
     description: Optional[str] = Field(default=None, description="Detailed description of the dataset(s)")
 
-    @field_validator('description')
-    @classmethod
-    def check_description(cls, v):
-        if not v or not v.strip():
-            raise ValueError("Dataset 'description' cannot be empty or null in config.yaml")
-        return v
-
     # Execution / Policy
     max_turns: int = 10
     mode: str = "teacher-tutor"
