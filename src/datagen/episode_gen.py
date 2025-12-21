@@ -178,14 +178,8 @@ async def main():
         batch_verified = 0
 
         for q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified in results:
-            # Create Question object (question, metadata)
-            question_obj = Question(
-                question_text=q_dict["question"],
-                hint=q_dict.get("hint"),
-                difficulty=q_dict.get("difficulty"),
-                n_steps=q_dict.get("n_steps"),
-                id=q_dict.get("id"), # Pass ID if exists
-            )
+            # Create Question object with auto-generated ID
+            question_obj = Question.from_dict(q_dict)
 
             # Extract consistency traces (ignore conversations)
             consistency_traces = [trace for trace, _ in consistency_results]

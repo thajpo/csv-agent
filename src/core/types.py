@@ -43,6 +43,25 @@ class Question(BaseModel):
     id: str | None = None
     created_at: Any | None = None  # datetime
 
+    def generate_id(self) -> str:
+        """Generate deterministic ID from question_text + hint."""
+        import hashlib
+        content = f"{self.question_text}|{self.hint or ''}"
+        return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Question":
+        """Create Question from dict, auto-generating ID if missing."""
+        # Map 'question' key to 'question_text' if needed
+        data = dict(d)
+        if "question" in data and "question_text" not in data:
+            data["question_text"] = data.pop("question")
+        
+        q = cls(**data)
+        if q.id is None:
+            q.id = q.generate_id()
+        return q
+
 
 class ExecutionTrace(BaseModel):
     """Record of a code execution session (teacher or student)."""
