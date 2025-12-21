@@ -7,7 +7,7 @@ All shared types in one place:
 - Exploration types (ExplorationTurn, ExplorationTrace)
 """
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, NamedTuple
 from datetime import datetime
 
@@ -78,7 +78,7 @@ class Episode(BaseModel):
     reward_summary: dict | None = None              # {"intermediate_matches": [...], "final_match": bool, ...}
 
     # Metadata
-    timestamp: datetime = datetime.now()
+    timestamp: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -176,6 +176,6 @@ class ExplorationTrace(BaseModel):
     turns: list[ExplorationTurn]
     questions_generated: list[dict]
     total_turns: int
-    timestamp: datetime = datetime.now()
+    timestamp: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
