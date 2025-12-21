@@ -2,7 +2,7 @@
 Type definitions for CSV Agent.
 
 All shared types in one place:
-- Core types (Artifact, Question, ExecutionTrace)
+- Core types (Question, ExecutionTrace, Hook)
 - Episode types (Episode, EpisodeJSONL)
 - Exploration types (ExplorationTurn, ExplorationTrace)
 """
@@ -22,15 +22,6 @@ class ExecutionResult(NamedTuple):
 
 
 # ============= Core Types =============
-
-class Artifact(BaseModel):
-    """A checkpoint variable from code execution."""
-    name: str                # Variable name (e.g., 'df_filtered')
-    hash: str               # Hash of its state
-    type: str               # 'DataFrame' | 'scalar' | 'other'
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
 
 class Question(BaseModel):
     """A question with metadata."""
@@ -179,7 +170,6 @@ class EpisodeJSONL(BaseModel):
             rl_verification_data={
                 "expected_final_answer_hash": episode.teacher_trace.final_answer_hash,
                 "expected_final_answer": episode.teacher_trace.final_answer,
-                "intermediate_artifact_hashes": {},  # Legacy field, not currently populated
             },
             triangulation_metadata={
                 "n_consistency_runs": len(consistency_traces),
