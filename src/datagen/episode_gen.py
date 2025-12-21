@@ -88,6 +88,17 @@ async def main():
     config = load_config()
 
     # Extract config values (fail-fast on missing keys)
+    teacher_model = config["teacher_model"]  # Required
+    n_consistency = config.get("n_consistency", 5)
+    max_turns = config.get("max_turns", 10)
+    float_tol = config.get("float_tolerance", 0.1)
+    verified_only = config.get("verified_only", False)
+    
+    # Sampling args
+    sampling_config = config.get("sampling_args", {})
+    temperature = sampling_config.get("temperature", 0.7)
+    max_tokens = sampling_config.get("max_tokens", 6000)
+
     # Handle single csv (legacy) or csv_sources (new)
     csv_sources = config.get("csv_sources", config.get("csv", []))
     if isinstance(csv_sources, str):
