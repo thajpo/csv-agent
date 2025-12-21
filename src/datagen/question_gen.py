@@ -276,10 +276,14 @@ async def explore_and_generate_questions(
 
 
 def main():
-    config = load_config("config.yaml")
+    try:
+        config = load_config("config.yaml")
+    except Exception as e:
+        ui.print_error(f"Configuration error: {e}")
+        return 1
 
     # Handle single csv (legacy) or csv_sources (new)
-    csv_sources = config.get("csv_sources", config.get("csv", []))
+    csv_sources = config.csv_sources
     if isinstance(csv_sources, str):
         csv_sources = [csv_sources]
     
@@ -287,14 +291,14 @@ def main():
         ui.print_error("No CSV sources found in config (csv or csv_sources)")
         return 1
 
-    # Common config
-    temperature = config["sampling_args"]["temperature"]
-    max_tokens = config["sampling_args"]["max_tokens"]
-    model = config["question_gen_model"]
-    max_turns = config.get("question_gen_max_turns", 20)
+    # Common config (typed access)
+    temperature = config.sampling_args.temperature
+    max_tokens = config.sampling_args.max_tokens
+    model = config.question_gen_model
+    max_turns = config.question_gen_max_turns
     
     # Base output directory
-    base_output_dir = Path(config.get("questions_json", "question/questions.json")).parent
+    base_output_dir = Path(config.questions_json).parent
 
     success_count = 0
     failure_count = 0

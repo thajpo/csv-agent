@@ -2,89 +2,140 @@
 Pydantic nested configuration for CSV agent.
 
 This module provides focused, single-responsibility config classes:
-- DataConfig: Dataset paths and metadata
-- ModelConfig: LLM model and sampling parameters
-- ExecutionConfig: Execution limits (turns, tokens, context)
-- TaskConfig: Task definition (mode, question)
-- Config: Main nested container
+- SamplingArgs: Model sampling parameters
+- Config: Main flat configuration mapping to config.yaml
 
-IMPORTANT: Do NOT add default values for model names. All model names must
-come from config.yaml to ensure consistency and prevent hardcoded dependencies.
+And legacy sub-configs for Environment integration:
+- DataConfig
+- ModelConfig
+- ExecutionConfig
+- TaskConfig
 """
 
 from pathlib import Path
-from pydantic import BaseModel, Field
+from typing import List, Union, Dict, Any, Optional
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from src.core.types import Question
 import yaml
 
 
-class DataConfig(BaseModel):
-    """Configuration for dataset access and metadata."""
+# =============================================================================
+# 1. Base Components (Used globally)
+# =============================================================================
 
+class SamplingArgs(BaseModel):
+    """Configuration for LLM sampling parameters."""
+    temperature: float = 0.7
+    max_tokens: int = 1000
+    top_p: float = 1.0
+
+
+# =============================================================================
+# 2. Main Application Configuration (Matches config.yaml)
+# =============================================================================
+
+class Config(BaseModel):
+    """
+    Main application configuration.
+    Maps exactly to the flat structure of config.yaml.
+    """
+    model_config = ConfigDict(extra='ignore')
+
+    # Data
+    csv_sources: Union[str, List[str]] = Field(default="data.csv")
+    description: Optional[str] = Field(default=None, description="Detailed description of the dataset(s)")
+
+    @field_validator('description')
+    @classmethod
+    def check_description(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Dataset 'description' cannot be empty or null in config.yaml")
+        return v
+
+    # Execution / Policy
+    max_turns: int = 10
+    mode: str = "teacher-tutor"
+    question: Optional[str] = None
+    hint: Optional[str] = None
+    target_questions: int = 10
+
+    # Models
+    teacher_model: str = Field(..., description="Model for teacher roles")
+    question_gen_model: str = Field(..., description="Model for question generation")
+    sampling_args: SamplingArgs = Field(default_factory=SamplingArgs)
+
+    # Context / Memory
+    max_active_turns: int = 5
+    max_context_tokens: int = 80000
+
+    # pipelines: question generation
+    question_gen_max_turns: int = 20
+    num_questions_to_generate: int = 30
+
+    # pipelines: episode generation / triangulation
+    n_consistency: int = 5
+    verified_only: bool = False
+    float_tolerance: float = 0.1
+
+    # Outputs
+    questions_json: str = "question/questions.json"
+    episodes_jsonl: str = "episodes/episodes.jsonl"
+
+    # Template-based generation (optional branch)
+    template_questions_output: str = "questions.json"
+    template_n_simple: int = 5
+    template_n_comparison: int = 5
+    template_n_multi_step: int = 3
+    template_n_filtering: int = 3
+    template_seed: int = 42
+
+
+# =============================================================================
+# 3. Environment Sub-configs (Internal use for src.core.environment)
+# =============================================================================
+
+class DataConfig(BaseModel):
     csv_path: str = "data.csv"
     dataset_description: str = ""
     data_overview: str = ""
 
-
 class ModelConfig(BaseModel):
-    """
-    Configuration for LLM model and sampling parameters.
+    model_name: str
+    temperature: float = 0.7
+    max_tokens: int = 1000
+    top_p: float = 1.0
 
-    IMPORTANT: model_name has no default. It MUST be provided via config.yaml.
-    Do not add a default model here - all model selection should be explicit.
-    """
-
-    # No default! Must be provided via config.yaml
-    model_name: str = Field(..., description="Model identifier (e.g., 'openai/gpt-oss-120b')")
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=1000, gt=0)
-    top_p: float = Field(default=1.0, ge=0.0, le=1.0)
-
-    def sampling_args(self) -> dict:
-        """Extract sampling args for LLM API."""
+    def sampling_args_dict(self) -> dict:
         return {
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "top_p": self.top_p,
         }
 
-
 class ExecutionConfig(BaseModel):
-    """Configuration for execution limits and context management."""
-
     max_turns: int = Field(default=10, gt=0)
-    max_active_turns: int = Field(default=5, gt=0)  # For conversation pruning
+    max_active_turns: int = Field(default=5, gt=0)
     max_context_tokens: int = Field(default=80_000, gt=0)
 
-
 class TaskConfig(BaseModel):
-    """Configuration for the specific task to execute."""
-
-    mode: str = "teacher-tutor"  # teacher-tutor, teacher-consistency, student, question-gen
-    question: Question | None = None
-    target_questions: int = Field(default=10, gt=0)  # For question-gen mode
+    mode: str = "teacher-tutor"
+    question: Optional[Question] = None
+    target_questions: int = Field(default=10, gt=0)
 
 
-class Config(BaseModel):
-    """Main configuration with nested sub-configs."""
+# =============================================================================
+# 4. Loading Utilities
+# =============================================================================
 
-    data: DataConfig = DataConfig()
-    model: ModelConfig  # No default - must be provided
-    execution: ExecutionConfig = ExecutionConfig()
-    task: TaskConfig = TaskConfig()
-
-
-def load_config(config_path: str = "config.yaml") -> dict:
+def load_config(config_path: str = "config.yaml") -> Config:
     """
-    Load raw configuration from YAML file.
-
-    Returns:
-        Dict of config values ready to construct Config object.
+    Load configuration from YAML and return a validated Pydantic Config object.
     """
     path = Path(config_path)
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     with open(path) as f:
-        return yaml.safe_load(f) or {}
+        raw_data = yaml.safe_load(f) or {}
 
+    return Config(**raw_data)

@@ -361,8 +361,10 @@ def build_system_prompt(
 
 
 # ============= Dataset Description =============
+# ============= Example Dataset Description =============
+# This is used for tests and as a reference structure.
 
-DEFAULT_DATASET_DESCRIPTION = """
+EXAMPLE_TREE_DATASET_DESCRIPTION = """
 Tree branch growth measurements from an agricultural experiment.
 - TR: Treatment (control, methanol_control, PP_333_4g/L, PP_333_20g/L, EL_500_4g/L, EL_500_20g/L)
 - TREE: Tree identifier (e.g., G28, M33)

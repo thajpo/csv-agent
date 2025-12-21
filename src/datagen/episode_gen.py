@@ -22,7 +22,7 @@ from typing import Any
 
 from src.datagen.teacher import batch_triangulate
 from src.datagen.ui import EpisodeGenUI
-from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
+from src.core.prompts import generate_data_overview
 from src.core.types import Episode, EpisodeJSONL, Question, ExecutionTrace
 from src.core.config import load_config
 
@@ -86,35 +86,37 @@ async def main():
     # Load config
     config = load_config()
 
-    # Extract config values (fail-fast on missing keys)
-    teacher_model = config["teacher_model"]  # Required
-    n_consistency = config.get("n_consistency", 5)
-    max_turns = config.get("max_turns", 10)
-    float_tol = config.get("float_tolerance", 0.1)
-    verified_only = config.get("verified_only", False)
+    # Enforce mandatory dataset description
+    if not config.description or not config.description.strip():
+        ui.base.print_error("ERROR: 'description' is missing or empty in config.yaml.")
+        ui.base.print_info("Note", "A detailed dataset description is required for high-quality episode generation.")
+        return 1
+
+    # Extract config values (typed access)
+    teacher_model = config.teacher_model
+    n_consistency = config.n_consistency
+    max_turns = config.max_turns
+    float_tol = config.float_tolerance
+    verified_only = config.verified_only
     
     # Sampling args
-    sampling_config = config.get("sampling_args", {})
-    temperature = sampling_config.get("temperature", 0.7)
-    max_tokens = sampling_config.get("max_tokens", 6000)
+    temperature = config.sampling_args.temperature
+    max_tokens = config.sampling_args.max_tokens
 
     # Handle single csv (legacy) or csv_sources (new)
-    csv_sources = config.get("csv_sources", config.get("csv", []))
+    csv_sources = config.csv_sources
     if isinstance(csv_sources, str):
         csv_sources = [csv_sources]
 
-    # Output as single JSONL file (append mode supported by logic below)
-    output_jsonl = Path(config.get("episodes_jsonl", "episodes/episodes.jsonl"))
+    # Output as single JSONL file
+    output_jsonl = Path(config.episodes_jsonl)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
     
-    # Clear output file initially if we want to overwrite (optional, but safer to start fresh if running full pipeline)
-    # But if users want to append, we should be careful. 
-    # Let's overwrite start, then append.
     if output_jsonl.exists():
         output_jsonl.unlink()
         
     # Base questions dir
-    base_questions_dir = Path(config.get("questions_json", "question/questions.json")).parent
+    base_questions_dir = Path(config.questions_json).parent
 
     total_episodes_saved = 0
     total_verified = 0
@@ -128,7 +130,7 @@ async def main():
         
         # Legacy fallback for single CSV config
         if not questions_file.exists() and len(csv_sources) == 1:
-            legacy_path = Path(config.get("questions_json", "question/questions.json"))
+            legacy_path = Path(config.questions_json)
             if legacy_path.exists():
                 questions_file = legacy_path
 
@@ -164,7 +166,7 @@ async def main():
             questions=questions,
             model=teacher_model,  # Required positional arg (3rd)
             n_consistency=n_consistency,
-            dataset_description=DEFAULT_DATASET_DESCRIPTION,
+            dataset_description=config.description,
             data_overview=data_overview,
             max_turns=max_turns,
             sampling_args=sampling_args,
