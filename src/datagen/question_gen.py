@@ -24,26 +24,7 @@ from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
 from src.core.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
-
-
-def parse_execution_result(output: str) -> tuple[bool, str, str]:
-    """Parse verifiers PythonEnv output into (success, stdout, stderr)."""
-    if not output or output == "(no output)":
-        return True, "", ""
-    
-    error_indicators = ["Traceback (most recent call last):", "Error:", "Exception:"]
-    is_error = any(indicator in output for indicator in error_indicators)
-    
-    if is_error:
-        return False, "", output
-    
-    if "stderr:\n" in output:
-        parts = output.split("stderr:\n", 1)
-        stdout = parts[0].strip()
-        stderr = parts[1].strip() if len(parts) > 1 else ""
-        return True, stdout, stderr
-    
-    return True, output, ""
+from src.utils.execution import parse_execution_result
 
 
 def build_execution_feedback(results: list[CodeCellResult]) -> str:

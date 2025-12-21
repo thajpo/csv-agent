@@ -8,8 +8,17 @@ All shared types in one place:
 """
 
 from pydantic import BaseModel
-from typing import Any
+from typing import Any, NamedTuple
 from datetime import datetime
+
+
+# ============= Result Types =============
+
+class ExecutionResult(NamedTuple):
+    """Result of parsing code execution output."""
+    success: bool
+    stdout: str
+    stderr: str
 
 
 # ============= Core Types =============

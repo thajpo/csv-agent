@@ -15,6 +15,7 @@ import pandas as pd
 
 from src.core.model import APILLM
 from src.utils.validation import get_turn_validation_feedback
+from src.utils.execution import parse_execution_result
 from src.core.prompts import generate_data_overview, build_system_prompt, CONTINUE_MSG, FINAL_MSG
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
@@ -26,48 +27,6 @@ def truncate_output(text: str, max_length: int = 500) -> str:
     if len(text) <= max_length:
         return text
     return text[:max_length] + f"\n... (truncated {len(text) - max_length} chars)"
-
-
-def parse_execution_result(output: str) -> tuple[bool, str, str]:
-    """
-    Parse verifiers PythonEnv output string into (success, stdout, stderr).
-    
-    The verifiers format returns:
-    - stdout lines
-    - "stderr:\n..." if there's stderr
-    - Traceback if there's an error
-    - "Out[N]: ..." for results
-    - "(no output)" if empty
-    
-    Returns:
-        (success, stdout, error_message)
-    """
-    if not output or output == "(no output)":
-        return True, "", ""
-    
-    # Check for error indicators (Python traceback)
-    error_indicators = [
-        "Traceback (most recent call last):",
-        "Error:",
-        "Exception:",
-    ]
-    
-    is_error = any(indicator in output for indicator in error_indicators)
-    
-    if is_error:
-        # Extract the error portion
-        return False, "", output
-    
-    # Check for stderr section
-    if "stderr:\n" in output:
-        parts = output.split("stderr:\n", 1)
-        stdout = parts[0].strip()
-        stderr = parts[1].strip() if len(parts) > 1 else ""
-        # stderr doesn't always mean failure
-        return True, stdout, stderr
-    
-    # Normal output
-    return True, output, ""
 
 
 def parse_submitted_answer(output: str) -> str | None:
