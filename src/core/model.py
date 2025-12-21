@@ -16,6 +16,7 @@ Usage:
     llm = APILLM(base_url="http://localhost:8000/v1", model="Qwen/Qwen3-32B", api_key="none")
 """
 
+import asyncio
 import os
 import time
 import httpx
@@ -97,7 +98,7 @@ class APILLM:
                     if error_code == 500 and attempt < max_retries - 1:
                         # Retry on 500 errors
                         wait_time = 2 ** attempt
-                        time.sleep(wait_time)
+                        await asyncio.sleep(wait_time)
                         continue
                     raise ValueError(f"API error: {json_response['error']}")
 
@@ -110,7 +111,7 @@ class APILLM:
                 if e.response.status_code >= 500 and attempt < max_retries - 1:
                     # Retry on 5xx errors
                     wait_time = 2 ** attempt
-                    time.sleep(wait_time)
+                    await asyncio.sleep(wait_time)
                     continue
                 raise
 
