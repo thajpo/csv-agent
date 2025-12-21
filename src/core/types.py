@@ -179,13 +179,3 @@ class ExplorationTrace(BaseModel):
     timestamp: datetime = datetime.now()
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-
-
-class GeneratedQuestion(BaseModel):
-    """A generated question from exploration."""
-    question: str
-    hint: str
-    n_steps: int
-    difficulty: str  # EASY, MEDIUM, HARD, VERY_HARD
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
