@@ -49,12 +49,36 @@ Output:
 
 ---
 
-### Stage 3: Train (future)
+### Adding Datasets from Kaggle
 
-Student RL training. Not yet implemented.
+To expand your training data with Kaggle datasets:
+
+1. Install the optional kaggle dependency:
+   ```bash
+   uv sync --extra kaggle
+   ```
+
+2. Set up Kaggle API credentials (see `kaggle/README.md`)
+
+3. Download datasets:
+   ```bash
+   # Download popular tabular datasets
+   uv run python kaggle/download_datasets.py --limit 10
+
+   # Or from a curated list
+   uv run python kaggle/download_datasets.py --from-list kaggle/curated_datasets.json
+   ```
+
+4. Use downloaded datasets:
+   ```bash
+   uv run python scripts/generate_questions.py --csv kaggle/downloaded/uciml_iris.csv
+   ```
+
+---
 
 ## Tests
 
 ```bash
 uv run pytest tests/ -v
 ```
+

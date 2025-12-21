@@ -1,0 +1,9 @@
+{
+    "description": "Curated list of high-quality tabular datasets for training.",
+    "datasets": [
+        "uciml/iris",
+        "uciml/adult-census-income",
+        "datasnaek/youtube-new",
+        "rfordatascience/tidytuesday"
+    ]
+}
