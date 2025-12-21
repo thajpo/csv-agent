@@ -12,7 +12,6 @@ import asyncio
 import json
 import re
 import sys
-import textwrap
 import yaml
 from pathlib import Path
 from datetime import datetime
@@ -25,6 +24,7 @@ from src.core.conversation import ConversationHistory, CodeCellResult
 from src.core.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 from src.utils.execution import parse_execution_result
+from src.utils.parsing import extract_python_cells
 
 
 def build_execution_feedback(results: list[CodeCellResult]) -> str:
@@ -47,34 +47,6 @@ def build_execution_feedback(results: list[CodeCellResult]) -> str:
 
 # Create global UI instance
 ui = QuestionGenUI()
-
-
-def load_config(config_path: str) -> dict:
-    """Load configuration from YAML file."""
-    config_file = Path(config_path)
-    if config_file.exists():
-        with open(config_file) as f:
-            return yaml.safe_load(f) or {}
-    return {}
-
-
-def extract_python_cells(response: str) -> list[str]:
-    """
-    Extract python code blocks, trimming malformed fences.
-
-    Accepts ```python``` or ```py``` fences and tolerates missing closing backticks.
-    """
-    pattern = r"```(?:python|py)\n([\s\S]*?)(?:```|$)"
-    matches = re.findall(pattern, response, re.DOTALL | re.IGNORECASE)
-    cleaned_blocks = []
-
-    for block in matches:
-        cleaned = textwrap.dedent(block).replace("\r\n", "\n").strip()
-        cleaned = cleaned.rstrip("`").strip()
-        if cleaned:
-            cleaned_blocks.append(cleaned)
-
-    return cleaned_blocks
 
 
 def try_parse_questions(response: str) -> list[dict] | None:
