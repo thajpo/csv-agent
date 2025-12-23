@@ -1,0 +1,12 @@
+{
+    "description": "Tree branch growth measurements from an agricultural experiment.",
+    "columns": {
+        "TR": "Treatment (control, methanol_control, PP_333_4g/L, PP_333_20g/L, EL_500_4g/L, EL_500_20g/L)",
+        "TREE": "Tree identifier (e.g., G28, M33)",
+        "BR": "Branch label (A-J)",
+        "TL": "Total branch length (cm)",
+        "IN": "Number of internodes",
+        "INTERNODE_1 to INTERNODE_29": "Length of each internode (cm), \"?\" = missing"
+    },
+    "goal": "Understand how treatments affect branch growth patterns."
+}

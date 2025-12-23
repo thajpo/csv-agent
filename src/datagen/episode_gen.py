@@ -7,9 +7,8 @@ This script:
 3. Saves verified episodes to disk
 
 Usage:
-    python -m src.authoring.episode_gen
+    python -m src.datagen.episode_gen
 """
-
 import asyncio
 import json
 import sys
@@ -17,7 +16,6 @@ import signal
 from pathlib import Path
 from datetime import datetime
 import uuid
-
 from typing import Any
 
 from src.datagen.teacher import batch_triangulate
@@ -25,60 +23,23 @@ from src.datagen.ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
 from src.core.types import Episode, EpisodeJSONL, Question, ExecutionTrace
 from src.core.config import load_config
-
-
 from src.utils.docker import cleanup_csv_sandbox_containers
-
-
-def cleanup_containers():
-    """Emergency cleanup of all CSV sandbox containers."""
-    cleanup_csv_sandbox_containers()
-
 
 def signal_handler(signum, frame):
     """Handle Ctrl+C gracefully."""
     print("\n\n🛑 Interrupted! Cleaning up containers...")
-    cleanup_containers()
+    cleanup_csv_sandbox_containers()
     print("✓ Cleanup complete")
     sys.exit(0)
-
-
-# Create global UI instance
-ui = EpisodeGenUI()
-
-
-def save_episode(episode: Episode, output_dir: Path) -> Path:
-    """
-    Save episode as JSON file.
-
-    Args:
-        episode: Episode to save
-        output_dir: Directory to save to
-
-    Returns:
-        Path to saved file
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Generate filename: {id}.json
-    filepath = output_dir / f"{episode.id}.json"
-
-    with open(filepath, 'w') as f:
-        json.dump(episode.model_dump(), f, indent=2, default=str)
-
-    return filepath
-
 
 def load_questions(questions_path: str) -> list[dict]:
     """Load questions from JSON file."""
     with open(questions_path) as f:
         return json.load(f)
 
-
-
-
-
 async def main():
+    # Create global UI instance
+    ui = EpisodeGenUI()
     # Register signal handler for Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -86,18 +47,15 @@ async def main():
     # Load config
     config = load_config()
 
-    # Extract config values (typed access)
     teacher_model = config.teacher_model
     n_consistency = config.n_consistency
     max_turns = config.max_turns
     float_tol = config.float_tolerance
     verified_only = config.verified_only
-    
-    # Sampling args
     temperature = config.sampling_args.temperature
     max_tokens = config.sampling_args.max_tokens
 
-    # Handle single csv (legacy) or csv_sources (new)
+    # Handle single csv or list of csvs
     csv_sources = config.csv_sources
     if isinstance(csv_sources, str):
         csv_sources = [csv_sources]
@@ -109,7 +67,7 @@ async def main():
     if output_jsonl.exists():
         output_jsonl.unlink()
         
-    # Base questions dir
+    # Get parent directory of questions
     base_questions_dir = Path(config.questions_json).parent
 
     total_episodes_saved = 0
@@ -119,25 +77,24 @@ async def main():
         dataset_name = Path(csv_path).stem
         ui.base.print_section(f"Processing CSV {i}/{len(csv_sources)}: {csv_path}")
 
-        # Determine dataset description (Config > Sidecar Metadata > Error)
-        dataset_description = config.description
+        # Determine dataset description (Sidecar Metadata only)
+        dataset_description = None
         
-        if not dataset_description:
-            # Look for sidecar metadata: slug.meta.json or csv_filename.meta.json
-            meta_path = Path(csv_path).with_suffix(".meta.json")
-            if meta_path.exists():
-                try:
-                    with open(meta_path) as f:
-                        meta_data = json.load(f)
-                        dataset_description = meta_data.get("description") or meta_data.get("subtitle")
-                        if dataset_description:
-                            ui.base.print_status(f"Loaded description from sidecar metadata: {meta_path.name}")
-                except Exception as e:
-                    ui.base.print_warning(f"Failed to read metadata from {meta_path}: {e}")
+        # Look for sidecar metadata: slug.meta.json or csv_filename.meta.json
+        meta_path = Path(csv_path).with_suffix(".meta.json")
+        if meta_path.exists():
+            try:
+                with open(meta_path) as f:
+                    meta_data = json.load(f)
+                    dataset_description = meta_data.get("description") or meta_data.get("subtitle")
+                    if dataset_description:
+                        ui.base.print_status(f"Loaded description from sidecar metadata: {meta_path.name}")
+            except Exception as e:
+                ui.base.print_warning(f"Failed to read metadata from {meta_path}: {e}")
 
         if not dataset_description or not dataset_description.strip():
             ui.base.print_error(f"ERROR: No description found for {dataset_name}")
-            ui.base.print_info("Hint", f"Add 'description' to config.yaml or create {dataset_name}.meta.json")
+            ui.base.print_info("Hint", f"Create {dataset_name}.meta.json with a 'description' field.")
             continue
 
         # Locate questions
