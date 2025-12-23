@@ -1,5 +1,42 @@
 # Quick Start: Fine-Tuning Data Preparation
 
+## MVP End-to-End Pipeline
+
+Validate the full pipeline with test fixtures (no API key needed for data prep):
+
+```bash
+# 1. Verify SFT data formatting works
+uv run python -m src.training.prepare_finetune_data \
+  --input test_fixtures/mock_episodes.jsonl \
+  --provider openai \
+  --output /tmp/test_openai.jsonl
+
+# 2. Validate output format
+head -1 /tmp/test_openai.jsonl | python -m json.tool
+
+# 3. Count examples
+wc -l /tmp/test_openai.jsonl
+```
+
+**With API key**, run the full pipeline:
+```bash
+# Generate real episodes (requires LLM API)
+export OPENAI_API_KEY=sk-...
+uv run python -m src.datagen.episode_gen
+
+# Format for fine-tuning
+uv run python -m src.training.prepare_finetune_data \
+  --input episodes/episodes.jsonl \
+  --provider openai
+
+# Evaluate fine-tuned model
+uv run python -m scripts.evaluate_model \
+  --model openai/ft:gpt-4o-mini:your-org:your-model \
+  --episodes test_fixtures/mock_episodes.jsonl
+```
+
+---
+
 ## TL;DR
 
 Convert episode data to API fine-tuning format in one command:
