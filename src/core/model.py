@@ -116,6 +116,15 @@ class APILLM:
                     continue
                 raise
 
+            except (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException) as e:
+                # Retry on network errors (connection issues, timeouts, read errors)
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt
+                    print(f"⚠️  Network error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}. Retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                    continue
+                raise
+
         raise RuntimeError(f"Failed after {max_retries} attempts")
     
     async def aclose(self):

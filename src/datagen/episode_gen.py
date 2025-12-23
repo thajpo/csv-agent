@@ -148,9 +148,10 @@ async def main(legacy_mode: bool = False):
             float_tol=float_tol,
         )
 
-        # Convert to JSONL episodes and save (Append to global file)
-        episodes_jsonl = []
+        # Convert to JSONL episodes and save incrementally (one at a time)
+        # This ensures progress is saved even if pipeline crashes mid-batch
         batch_verified = 0
+        batch_saved = 0
 
         for q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata in results:
             # Create Question object with auto-generated ID
@@ -177,24 +178,22 @@ async def main(legacy_mode: bool = False):
                 system_prompt=system_prompt,
                 consistency_conversations=consistency_conversations,
                 csv_source=csv_path,
+                timing_metadata=timing_metadata,
             )
 
-            # Save if verified OR verified_only is False
+            # Save immediately if verified OR verified_only is False (incremental saving)
             if verified or not verified_only:
-                episodes_jsonl.append(episode_jsonl)
+                mode = 'a' if output_jsonl.exists() else 'w'
+                with open(output_jsonl, mode) as f:
+                    f.write(json.dumps(episode_jsonl.model_dump(), default=str) + '\n')
+                batch_saved += 1
                 if verified:
                     batch_verified += 1
 
-        # Write JSONL file (Append)
-        mode = 'a' if output_jsonl.exists() else 'w'
-        with open(output_jsonl, mode) as f:
-            for ep in episodes_jsonl:
-                f.write(json.dumps(ep.model_dump(), default=str) + '\n')
-                
-        total_episodes_saved += len(episodes_jsonl)
+        total_episodes_saved += batch_saved
         total_verified += batch_verified
-        
-        ui.base.print_success(f"✓ Saved {len(episodes_jsonl)} episodes for {dataset_name} ({batch_verified} verified)")
+
+        ui.base.print_success(f"✓ Saved {batch_saved} episodes for {dataset_name} ({batch_verified} verified)")
 
 
     # Display final summary
