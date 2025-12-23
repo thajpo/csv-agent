@@ -218,16 +218,16 @@ OUTPUT FORMAT (Last Turn Only):
 When you're ready to output the questions, you MUST use this EXACT format:
 
 ```json
-{
+{{
   "questions": [
-    {
+    {{
       "question": "What is the average TL for the 'control' group?",
       "hint": "Filter for control group, then aggregate TL.",
       "n_steps": 2,
       "difficulty": "EASY"
-    }
+    }}
   ]
-}
+}}
 ```
 
 CRITICAL FORMAT RULES:
@@ -235,13 +235,13 @@ CRITICAL FORMAT RULES:
 ✅ DO: Use proper JSON syntax with double quotes
 ✅ DO: Output <DONE> on a new line after the closing ```
 ✅ DO: Generate at least 30 questions.
-❌ DON'T: Use Python dict syntax (questions = {...})
+❌ DON'T: Use Python dict syntax (questions = {{...}})
 ❌ DON'T: Output bare JSON without ```json fences
 ❌ DON'T: Use single quotes or Python-specific syntax
 
 EXAMPLE CORRECT OUTPUT:
 ```json
-{"questions": [...]}
+{{"questions": [...]}}
 ```
 <DONE>
 

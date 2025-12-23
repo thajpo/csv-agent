@@ -12,6 +12,7 @@ import asyncio
 import json
 import re
 import sys
+import argparse
 
 from pathlib import Path
 from datetime import datetime
@@ -24,7 +25,9 @@ from src.core.conversation import ConversationHistory, CodeCellResult
 from src.core.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
 from src.utils.interaction import parse_execution_result, extract_python_cells
-from src.core.config import load_config
+
+# Rebuild Pydantic model to resolve forward reference to CodeCellResult
+ExplorationTurn.model_rebuild()
 
 
 def build_execution_feedback(results: list[CodeCellResult]) -> str:
@@ -279,7 +282,7 @@ async def explore_and_generate_questions(
 from src.core.config import config
 
 
-def main():
+def main(legacy_mode: bool = False):
     # Handle single csv (legacy) or csv_sources (new)
     csv_sources = config.csv_sources
     if isinstance(csv_sources, str):
@@ -325,9 +328,13 @@ def main():
             failure_count += 1
             continue
 
-        # Derive output directory for this CSV (e.g. "data" from "csv/data.csv")
+        # Derive output directory for this CSV
         dataset_name = Path(csv_path).stem
-        output_dir = base_output_dir / dataset_name
+        if legacy_mode:
+            output_dir = base_output_dir
+            ui.print_status(f"Using legacy mode: Saving directly to {output_dir}")
+        else:
+            output_dir = base_output_dir / dataset_name
         
         try:
             questions, trace = asyncio.run(explore_and_generate_questions(
@@ -362,4 +369,12 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser(description="LLM-based question generator for CSV datasets.")
+    parser.add_argument("--legacy", action="store_true", help="Save questions to a single flat file instead of subfolders")
+    args = parser.parse_args()
+
+    try:
+        sys.exit(main(legacy_mode=args.legacy))
+    except KeyboardInterrupt:
+        print("\n\n🛑 Interrupted by user")
+        sys.exit(0)
