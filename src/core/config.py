@@ -74,6 +74,12 @@ class Config(BaseModel):
     questions_json: str = "question/questions.json"
     episodes_jsonl: str = "episodes/episodes.jsonl"
 
+    # Train/Test/Val Splitting
+    split_seed: int = 42
+    train_ratio: float = 0.8
+    val_ratio: float = 0.1
+    test_ratio: float = 0.1
+
     # Template-based generation (optional branch)
     template_questions_output: str = "questions.json"
     template_n_simple: int = 5
