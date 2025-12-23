@@ -166,6 +166,9 @@ class EpisodeJSONL(BaseModel):
     timestamp: datetime
     verified: bool
 
+    # Data source
+    csv_source: str  # Path to CSV used for this episode
+
     # Question
     question: QuestionDict
 
@@ -187,6 +190,7 @@ class EpisodeJSONL(BaseModel):
         gold_conversation: list[dict],
         system_prompt: str,
         consistency_conversations: list[list[dict]],
+        csv_source: str = "",
     ) -> "EpisodeJSONL":
         """Convert Episode to JSONL format."""
         from collections import Counter
@@ -210,6 +214,7 @@ class EpisodeJSONL(BaseModel):
             episode_id=episode.id,
             timestamp=episode.timestamp,
             verified=episode.verified,
+            csv_source=csv_source,
             question=episode.question.model_dump(),
             teacher_gold_trace=episode.teacher_trace.model_dump(),
             consistency_traces=[t.model_dump() for t in consistency_traces],

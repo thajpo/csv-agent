@@ -218,6 +218,7 @@ async def main():
                 gold_conversation=gold_conversation,
                 system_prompt=system_prompt,
                 consistency_conversations=consistency_conversations,
+                csv_source=csv_path,
             )
 
             # Save if verified OR verified_only is False
