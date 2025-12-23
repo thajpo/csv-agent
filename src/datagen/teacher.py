@@ -13,13 +13,10 @@ This filters out questions where:
 - The dataset doesn't support the question
 """
 
-
 import asyncio
 import time
 import pandas as pd
-import numpy as np
-from collections import Counter
-from typing import Any, List, Tuple
+from typing import Any, List
 
 from src.core.environment import Environment
 from src.core.types import ExecutionTrace, Hook
@@ -59,21 +56,22 @@ def answers_match(
                 # 1. Sort columns
                 df1 = val1.sort_index(axis=1)
                 df2 = val2.sort_index(axis=1)
-                
+
                 if df1.shape != df2.shape:
                     return False
-                
+
                 # 2. Sort rows by values to handle reordering
                 # We sort by all columns to be completely order-invariant
                 df1 = df1.sort_values(by=list(df1.columns)).reset_index(drop=True)
                 df2 = df2.sort_values(by=list(df2.columns)).reset_index(drop=True)
 
                 pd.testing.assert_frame_equal(
-                    df1, df2, 
-                    check_dtype=False, 
+                    df1,
+                    df2,
+                    check_dtype=False,
                     check_like=True,
-                    atol=float_tol, 
-                    rtol=float_tol
+                    atol=float_tol,
+                    rtol=float_tol,
                 )
                 return True
             except (AssertionError, Exception):
@@ -91,22 +89,27 @@ def answers_match(
         if isinstance(v1, dict) and isinstance(v2, dict):
             # Special case for structured statistical answers
             # If both have 'answer' and/or 'p_value', focus on those
-            if ('answer' in v1 and 'answer' in v2) or ('p_value' in v1 and 'p_value' in v2):
+            if ("answer" in v1 and "answer" in v2) or (
+                "p_value" in v1 and "p_value" in v2
+            ):
                 # 1. Compare 'answer' (categorical conclusion) if present in both
-                if 'answer' in v1 and 'answer' in v2:
-                    if str(v1['answer']).lower().strip() != str(v2['answer']).lower().strip():
+                if "answer" in v1 and "answer" in v2:
+                    if (
+                        str(v1["answer"]).lower().strip()
+                        != str(v2["answer"]).lower().strip()
+                    ):
                         return False
-                
+
                 # 2. Compare 'p_value' (numeric evidence) if present in both
-                if 'p_value' in v1 and 'p_value' in v2:
+                if "p_value" in v1 and "p_value" in v2:
                     try:
-                        p1 = float(v1['p_value'])
-                        p2 = float(v2['p_value'])
+                        p1 = float(v1["p_value"])
+                        p2 = float(v2["p_value"])
                         if abs(p1 - p2) > p_value_tol:
                             return False
                     except (ValueError, TypeError):
                         # Not convertible to float - compare as strings
-                        if str(v1['p_value']) != str(v2['p_value']):
+                        if str(v1["p_value"]) != str(v2["p_value"]):
                             return False
 
                 # If we verified the core keys, we accept the match (ignore extra keys like 'decision')
@@ -149,13 +152,13 @@ def answers_match(
 def get_majority_answer(answers: list[Any], float_tol: float = 0.1) -> tuple[Any, int]:
     """
     Find the majority answer by clustering values using answers_match.
-    
+
     Returns:
         Tuple of (majority_value, vote_count)
     """
     if not answers:
         return None, 0
-        
+
     clusters = []  # list of [representative_value, count]
     for ans in answers:
         found = False
@@ -166,7 +169,7 @@ def get_majority_answer(answers: list[Any], float_tol: float = 0.1) -> tuple[Any
                 break
         if not found:
             clusters.append([ans, 1])
-            
+
     # Sort by count descending
     clusters.sort(key=lambda x: x[1], reverse=True)
     return clusters[0][0], clusters[0][1]
@@ -183,7 +186,7 @@ async def execute_teacher_trace(
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
-    env = None,  # Optional pre-created env (for pooling)
+    env=None,  # Optional pre-created env (for pooling)
     state: dict | None = None,  # Optional pre-created state (for pooling)
     reuse_env: bool = False,  # If True, reset instead of destroy
     ui: Any = None,  # Optional UI instance for Rich output
@@ -198,9 +201,7 @@ async def execute_teacher_trace(
     # Track timing
     start_time = time.time()
 
-    # Show trace start
-    if ui:
-        ui.print_trace_start(trace_mode)
+    ui.print_trace_start(trace_mode)
 
     # Create environment and execute rollout
     env_instance = await Environment.from_params(
@@ -226,6 +227,11 @@ async def execute_teacher_trace(
     # Get code cells from environment (already extracted during execution)
     code_cells = final_state.code_cells
 
+    # Extract assistant messages (used for turn counting and UI display)
+    assistant_messages = [
+        msg for msg in conversation_messages if msg.get("role") == "assistant"
+    ]
+
     # Display trace in UI if provided
     # Show full details for gold trace and consistency trace 1 (for visibility)
     # Other consistency traces just show summary to avoid clutter
@@ -233,23 +239,18 @@ async def execute_teacher_trace(
 
     if show_turns:
         import re
-        pattern = r"```python\n(.*?)```"
 
-        # Display each turn
-        assistant_messages = [
-            msg for msg in conversation_messages
-            if msg.get("role") == "assistant"
-        ]
+        code_pattern = r"```python\n(.*?)```"
 
         # Get execution results from final_state (stored during rollout)
-        stored_results = getattr(final_state, 'execution_results_per_turn', [])
+        stored_results = getattr(final_state, "execution_results_per_turn", [])
 
         for i, msg in enumerate(assistant_messages, 1):
             response = msg["content"]
             # Extract code cells from this message
-            turn_code_cells = re.findall(pattern, response, re.DOTALL)
+            turn_code_cells = re.findall(code_pattern, response, re.DOTALL)
 
-            # Get execution results for this turn (if available)
+            # Get execution results unless we are at the end of conversation
             if i - 1 < len(stored_results):
                 turn_results = stored_results[i - 1]
                 # Convert CodeCellResult objects to dicts for UI
@@ -269,19 +270,17 @@ async def execute_teacher_trace(
                 max_turns=max_turns,
                 response=response,
                 code_cells=turn_code_cells,
-                execution_results=execution_results
+                execution_results=execution_results,
             )
     elif ui and trace_mode != "gold" and not trace_mode.startswith("1/"):
         # For consistency traces 2-5, just show summary
-        assistant_messages = [
-            msg for msg in conversation_messages
-            if msg.get("role") == "assistant"
-        ]
         ui.console.print(f"[dim]    Executed {len(assistant_messages)} turn(s)[/dim]")
 
     # Get final answer from environment's tracked submission
     final_answer = final_state.submitted_answer
-    final_answer_hash = hash_artifact(final_answer) if final_answer is not None else None
+    final_answer_hash = (
+        hash_artifact(final_answer) if final_answer is not None else None
+    )
 
     # Check if execution was successful (submitted an answer)
     execution_success = final_answer is not None
@@ -294,8 +293,8 @@ async def execute_teacher_trace(
         ui.print_trace_complete(
             success=execution_success,
             final_answer=final_answer,
-            turns=len(assistant_messages) if 'assistant_messages' in locals() else len(code_cells),
-            elapsed_seconds=elapsed_seconds
+            turns=len(assistant_messages),
+            elapsed_seconds=elapsed_seconds,
         )
 
     # Extract hooks from submission_metadata
@@ -312,11 +311,14 @@ async def execute_teacher_trace(
         for h in raw_hooks
         if isinstance(h, dict) and h.get("value_hash")  # Skip malformed hooks
     ]
-    
+
     # Warn if trace has few hooks (may indicate question/prompt issue)
     if len(hooks) < 2 and execution_success:
         import logging
-        logging.warning(f"Trace has only {len(hooks)} hook(s) - consider adding more intermediate checkpoints")
+
+        logging.warning(
+            f"Trace has only {len(hooks)} hook(s) - consider adding more intermediate checkpoints"
+        )
 
     trace = ExecutionTrace(
         code_cells=code_cells,
@@ -344,15 +346,17 @@ async def triangulate_teacher(
     container_pool: list[tuple] | None = None,  # List of (env, state) tuples for reuse
     ui: Any = None,  # Optional UI instance for Rich output
     float_tol: float = 0.1,
-) -> tuple[ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]:
+) -> tuple[
+    ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool
+]:
     """
     Run teacher triangulation: gold trace + consistency traces.
-    
+
     Args:
         container_pool: Optional list of (env, state) tuples for container reuse.
                        Should have 1 + n_consistency entries.
                        If None, creates new containers for each trace.
-    
+
     Returns:
         Tuple of:
         - gold_trace: ExecutionTrace WITH hint
@@ -368,7 +372,12 @@ async def triangulate_teacher(
         ui.print_trace_header(mode="gold", hint=hint)
 
     gold_env, gold_state = container_pool[0] if use_pool else (None, None)
-    gold_trace, gold_conversation, system_prompt, gold_elapsed = await execute_teacher_trace(
+    (
+        gold_trace,
+        gold_conversation,
+        system_prompt,
+        gold_elapsed,
+    ) = await execute_teacher_trace(
         csv_path=csv_path,
         question=question,
         model=model,  # Required positional arg (3rd)
@@ -390,7 +399,7 @@ async def triangulate_teacher(
         """Helper to run a single consistency trace."""
 
         if ui:
-            ui.print_trace_header(mode=f"{i+1}/{n_consistency}", hint=None)
+            ui.print_trace_header(mode=f"{i + 1}/{n_consistency}", hint=None)
 
         # Use pool slot i+1 (slot 0 is for gold trace)
         c_env, c_state = container_pool[i + 1] if use_pool else (None, None)
@@ -408,7 +417,7 @@ async def triangulate_teacher(
             state=c_state,
             reuse_env=use_pool,
             ui=ui,
-            trace_mode=f"{i+1}/{n_consistency}",
+            trace_mode=f"{i + 1}/{n_consistency}",
         )
         return (trace, conversation)
 
@@ -429,15 +438,13 @@ async def triangulate_teacher(
         return gold_trace, gold_conversation, system_prompt, consistency_results, False
 
     # Find majority answer by clustering
-    majority_value, majority_count = get_majority_answer(valid_answers, float_tol=float_tol)
+    majority_value, majority_count = get_majority_answer(
+        valid_answers, float_tol=float_tol
+    )
 
     # Check if gold matches majority (with tolerance for floats and formats)
     verified = answers_match(
-        None,
-        None,
-        gold_trace.final_answer,
-        majority_value,
-        float_tol=float_tol
+        None, None, gold_trace.final_answer, majority_value, float_tol=float_tol
     )
 
     # Display triangulation result in UI
@@ -447,7 +454,7 @@ async def triangulate_teacher(
             gold_trace=gold_trace,
             consistency_traces=consistency_traces,
             verified=verified,
-            float_tol=float_tol
+            float_tol=float_tol,
         )
 
     return gold_trace, gold_conversation, system_prompt, consistency_results, verified
@@ -466,7 +473,16 @@ async def batch_triangulate(
     use_container_pool: bool = True,  # Enable container reuse optimization
     ui: Any = None,  # Optional UI instance for Rich output
     float_tol: float = 0.1,
-) -> list[tuple[dict, ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool]]:
+) -> list[
+    tuple[
+        dict,
+        ExecutionTrace,
+        list[dict],
+        str,
+        list[tuple[ExecutionTrace, list[dict]]],
+        bool,
+    ]
+]:
     """
     Run triangulation on a batch of questions.
 
@@ -485,7 +501,7 @@ async def batch_triangulate(
         List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified)
     """
     from src.envs.csv_env import LocalCSVAnalysisEnv
-    
+
     results = []
     verified_count = 0
     container_pool = None
@@ -498,6 +514,7 @@ async def batch_triangulate(
         if ui:
             ui.base.print_status("Cleaning up old containers...")
         from src.utils.docker import cleanup_csv_sandbox_containers
+
         cleanup_csv_sandbox_containers()
 
         if ui:
@@ -525,7 +542,13 @@ async def batch_triangulate(
             if ui:
                 ui.print_question_header(q_num=i, total=len(questions), question=q_dict)
 
-            gold_trace, gold_conversation, system_prompt, consistency_results, verified = await triangulate_teacher(
+            (
+                gold_trace,
+                gold_conversation,
+                system_prompt,
+                consistency_results,
+                verified,
+            ) = await triangulate_teacher(
                 csv_path=csv_path,
                 question=q_dict["question"],
                 hint=q_dict.get("hint", ""),
@@ -540,13 +563,24 @@ async def batch_triangulate(
                 float_tol=float_tol,
             )
 
-            results.append((q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified))
+            results.append(
+                (
+                    q_dict,
+                    gold_trace,
+                    gold_conversation,
+                    system_prompt,
+                    consistency_results,
+                    verified,
+                )
+            )
 
             if verified:
                 verified_count += 1
 
             if ui:
-                ui.print_progress_summary(current=i, total=len(questions), verified_count=verified_count)
+                ui.print_progress_summary(
+                    current=i, total=len(questions), verified_count=verified_count
+                )
 
     finally:
         # Clean up container pool
@@ -562,4 +596,3 @@ async def batch_triangulate(
     n_verified = sum(1 for result in results if result[-1])  # verified is last element
 
     return results
-
