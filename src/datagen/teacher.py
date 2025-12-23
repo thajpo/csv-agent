@@ -442,18 +442,18 @@ async def triangulate_teacher(
 
     # 3. Cluster-based voting on consistency answers
     # Extract answers from successful consistency traces (filter out None failures)
-    valid_answers = [
+    submitted_answers = [
         trace.final_answer
         for trace, _ in consistency_results
         if trace.final_answer is not None
     ]
 
-    if not valid_answers:
+    if not submitted_answers:
         return gold_trace, gold_conversation, system_prompt, consistency_results, False, timing_metadata
 
     # Find majority answer by clustering (handles float tolerance and formatting differences)
     majority_value, majority_count = get_majority_answer(
-        valid_answers, float_tol=float_tol
+        submitted_answers, float_tol=float_tol
     )
 
     # Check if gold matches majority (with tolerance for floats and formats)
