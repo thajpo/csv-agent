@@ -1,0 +1,53 @@
+# CSV Agent RL Training Configuration
+# For use with Prime Intellect verifiers: uv run vf-rl @ configs/rl/csv-agent.toml
+
+# Model to fine-tune (placeholder - user will specify)
+model = "Qwen/Qwen2.5-3B-Instruct"
+
+# Environment configuration
+[env]
+# Custom environment ID - loads src.training.rl_env.load_environment
+id = "csv_agent"
+
+[env.args]
+episodes_path = "test_fixtures/mock_episodes.jsonl"
+csv_path = "csv/data.csv"
+max_turns = 10
+hook_reward = 0.1
+final_reward = 1.0
+float_tolerance = 0.1
+
+# Inference server configuration
+[inference]
+gpus = 1
+
+[inference.args]
+enforce_eager = true
+max_model_len = 4096
+
+# Trainer configuration
+[trainer]
+gpus = 1
+
+[trainer.args]
+# Run identification
+run_name = "csv-agent-rl-v1"
+
+# LoRA configuration (efficient fine-tuning)
+use_lora = true
+lora_r = 16
+lora_alpha = 32
+
+# Training hyperparameters
+learning_rate = 1e-5
+micro_batch_size = 2
+batch_size = 64
+rollouts_per_example = 4
+max_steps = 100
+
+# Sequence limits
+max_tokens = 2048
+max_seq_len = 4096
+
+# Checkpointing
+save_steps = 25
