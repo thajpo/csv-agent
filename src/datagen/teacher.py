@@ -175,7 +175,7 @@ def get_majority_answer(answers: list[Any], float_tol: float = 0.1) -> tuple[Any
 async def execute_teacher_trace(
     csv_path: str,
     question: str,
-    model: str,  # No default! Must come from config.yaml
+    model: str,  # Must come from src.core.config
     *,  # Force remaining args to be keyword-only
     hint: str | None = None,
     mode: str = "teacher-tutor",
@@ -334,7 +334,7 @@ async def triangulate_teacher(
     csv_path: str,
     question: str,
     hint: str,
-    model: str,  # No default! Must come from config.yaml
+    model: str,  # Must come from src.core.config
     *,  # Force remaining args to be keyword-only
     n_consistency: int = 3,
     dataset_description: str = "",
@@ -456,7 +456,7 @@ async def triangulate_teacher(
 async def batch_triangulate(
     csv_path: str,
     questions: List[dict],
-    model: str,  # No default! Must come from config.yaml
+    model: str,  # Must come from src.core.config
     *,  # Force remaining args to be keyword-only
     n_consistency: int = 3,
     dataset_description: str = "",

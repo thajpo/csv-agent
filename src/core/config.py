@@ -3,7 +3,7 @@ Pydantic nested configuration for CSV agent.
 
 This module provides focused, single-responsibility config classes:
 - SamplingArgs: Model sampling parameters
-- Config: Main flat configuration mapping to config.yaml
+- Config: Main configuration source of truth for the project.
 
 And legacy sub-configs for Environment integration:
 - DataConfig
@@ -12,11 +12,11 @@ And legacy sub-configs for Environment integration:
 - TaskConfig
 """
 
+import os
 from pathlib import Path
 from typing import List, Union, Dict, Any, Optional
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from src.core.types import Question
-import yaml
 
 
 # =============================================================================
@@ -26,35 +26,35 @@ import yaml
 class SamplingArgs(BaseModel):
     """Configuration for LLM sampling parameters."""
     temperature: float = 0.7
-    max_tokens: int = 1000
+    max_tokens: int = 6000
     top_p: float = 1.0
 
 
 # =============================================================================
-# 2. Main Application Configuration (Matches config.yaml)
+# 2. Main Application Configuration (Source of Truth)
 # =============================================================================
 
 class Config(BaseModel):
     """
     Main application configuration.
-    Maps exactly to the flat structure of config.yaml.
+    This class defines the schema and default values for the entire project.
+    Values are managed here in Python.
     """
     model_config = ConfigDict(extra='ignore')
 
     # Data
-    csv_sources: Union[str, List[str]] = Field(default="data.csv")
-    description: Optional[str] = Field(default=None, description="Detailed description of the dataset(s)")
+    csv_sources: Union[str, List[str]] = Field(default="csv/data.csv")
 
     # Execution / Policy
     max_turns: int = 10
     mode: str = "teacher-tutor"
-    question: Optional[str] = None
-    hint: Optional[str] = None
+    question: Optional[str] = "What is the mean TL (total length) for the control group?"
+    hint: Optional[str] = "Filter the data to the control group first, then calculate the mean."
     target_questions: int = 10
 
     # Models
-    teacher_model: str = Field(..., description="Model for teacher roles")
-    question_gen_model: str = Field(..., description="Model for question generation")
+    teacher_model: str = Field(default="openai/gpt-oss-120b")
+    question_gen_model: str = Field(default="openai/gpt-oss-120b")
     sampling_args: SamplingArgs = Field(default_factory=SamplingArgs)
 
     # Context / Memory
@@ -117,18 +117,9 @@ class TaskConfig(BaseModel):
 
 
 # =============================================================================
-# 4. Loading Utilities
+# 4. Global Singleton Configuration
 # =============================================================================
 
-def load_config(config_path: str = "config.yaml") -> Config:
-    """
-    Load configuration from YAML and return a validated Pydantic Config object.
-    """
-    path = Path(config_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
-
-    with open(path) as f:
-        raw_data = yaml.safe_load(f) or {}
-
-    return Config(**raw_data)
+# Global singleton configuration object
+# This allows 'from src.core.config import config'
+config = Config()

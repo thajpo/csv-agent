@@ -22,7 +22,7 @@ from src.datagen.teacher import batch_triangulate
 from src.datagen.ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
 from src.core.types import Episode, EpisodeJSONL, Question, ExecutionTrace
-from src.core.config import load_config
+from src.core.config import config
 from src.utils.docker import cleanup_csv_sandbox_containers
 
 def signal_handler(signum, frame):
@@ -44,8 +44,7 @@ async def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    # Load config
-    config = load_config()
+    # config is already imported from src.core.config
 
     teacher_model = config.teacher_model
     n_consistency = config.n_consistency

@@ -6,7 +6,7 @@ This script uses an LLM to:
 2. Document exploration observations
 3. Generate questions with varying difficulty levels (EASY, MEDIUM, HARD, VERY_HARD)
 
-Configuration is loaded from config.yaml.
+Configuration is managed via src.core.config.
 """
 import asyncio
 import json
@@ -276,13 +276,10 @@ async def explore_and_generate_questions(
     return questions_generated, trace
 
 
-def main():
-    try:
-        config = load_config("config.yaml")
-    except Exception as e:
-        ui.print_error(f"Configuration error: {e}")
-        return 1
+from src.core.config import config
 
+
+def main():
     # Handle single csv (legacy) or csv_sources (new)
     csv_sources = config.csv_sources
     if isinstance(csv_sources, str):
@@ -307,25 +304,24 @@ def main():
     for i, csv_path in enumerate(csv_sources, 1):
         ui.print_section(f"Processing CSV {i}/{len(csv_sources)}: {csv_path}")
         
-        # Determine dataset description (Config > Sidecar Metadata > Error)
-        dataset_description = config.description
+        # Determine dataset description (Sidecar Metadata only)
+        dataset_description = None
         
-        if not dataset_description:
-            # Look for sidecar metadata: slug.meta.json or csv_filename.meta.json
-            meta_path = Path(csv_path).with_suffix(".meta.json")
-            if meta_path.exists():
-                try:
-                    with open(meta_path) as f:
-                        meta_data = json.load(f)
-                        dataset_description = meta_data.get("description") or meta_data.get("subtitle")
-                        if dataset_description:
-                            ui.print_status(f"Loaded description from sidecar metadata: {meta_path.name}")
-                except Exception as e:
-                    ui.print_warning(f"Failed to read metadata from {meta_path}: {e}")
+        # Look for sidecar metadata: slug.meta.json or csv_filename.meta.json
+        meta_path = Path(csv_path).with_suffix(".meta.json")
+        if meta_path.exists():
+            try:
+                with open(meta_path) as f:
+                    meta_data = json.load(f)
+                    dataset_description = meta_data.get("description") or meta_data.get("subtitle")
+                    if dataset_description:
+                        ui.print_status(f"Loaded description from sidecar metadata: {meta_path.name}")
+            except Exception as e:
+                ui.print_warning(f"Failed to read metadata from {meta_path}: {e}")
 
         if not dataset_description or not dataset_description.strip():
             ui.print_error(f"ERROR: No description found for {csv_path}")
-            ui.print_info("Hint", f"Add 'description' to config.yaml or create {Path(csv_path).stem}.meta.json")
+            ui.print_info("Hint", f"Create {Path(csv_path).stem}.meta.json with a 'description' field.")
             failure_count += 1
             continue
 

@@ -38,12 +38,12 @@ class APILLM:
     LLM client for OpenAI-compatible APIs (OpenRouter, vLLM, Ollama, etc.).
 
     IMPORTANT: model parameter has no default. It MUST be provided explicitly
-    from config.yaml. Do not add a default model here.
+    from src.core.config. Do not add a default model here.
     """
 
     def __init__(
         self,
-        model: str,  # No default! Must come from config.yaml
+        model: str,  # Must come from src.core.config
         *,  # Force remaining args to be keyword-only
         base_url: str = "https://openrouter.ai/api/v1",
         api_key: str | None = None,  # Falls back to OPENROUTER_API_KEY env var
