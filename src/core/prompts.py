@@ -388,3 +388,6 @@ Tree branch growth measurements from an agricultural experiment.
 
 Goal: Understand how treatments affect branch growth patterns.
 """.strip()
+
+# Alias for backward compatibility with tests
+DEFAULT_DATASET_DESCRIPTION = EXAMPLE_TREE_DATASET_DESCRIPTION
