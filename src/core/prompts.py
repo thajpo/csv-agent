@@ -52,24 +52,29 @@ OUTPUT FORMAT:
   `submit({{"p_value": 0.0012, "decision": "significant", "answer": "Yes"}})`
 - Ensure p-values are floats, not strings.
 
-CRITICAL CODE HOOKS:
-You must capture INTERMEDIATE CHECKPOINTS using the `hook()` function.
-After computing an important intermediate variable, call `hook(value, name='var_name')`.
-This records a verifiable checkpoint. Use `depends_on` to specify which previous hooks were required.
+CRITICAL CODE HOOKS (REQUIRED):
+You MUST capture each critical computation step using `hook()`.
+After computing an important intermediate variable, call `hook(value, code_line, name='var_name')`.
+The code_line argument is REQUIRED - provide the exact line of code that produced the value.
 
 Example workflow:
 ```python
-# Step 1: Filter data (no dependencies - starting point)
-df_filtered = df[df['status'] == 'active']
-hook(df_filtered, name='df_filtered', description='Filtered to active rows')
+# Step 1: Filter data
+df_filtered = df[df['TR'] == 'control']
+hook(df_filtered, "df_filtered = df[df['TR'] == 'control']", name='df_filtered')
 
 # Step 2: Aggregate (depends on df_filtered)
-result = df_filtered.groupby('category')['value'].mean()
-hook(result, name='result', depends_on=['df_filtered'])
+mean_val = df_filtered['TL'].mean()
+hook(mean_val, "mean_val = df_filtered['TL'].mean()", name='mean_val', depends_on=['df_filtered'])
 
 # Step 3: Submit final answer
-submit(result.to_dict())
+submit(mean_val)
 ```
+
+HOOK RULES:
+- Every critical computation MUST have a hook
+- The code_line must be the EXACT code that produced the value
+- Use depends_on to show which previous hooks were required for this step
 
 The execution result will be shown at the start of your next turn.
 
@@ -77,8 +82,13 @@ Example:
 "I'll filter to the control group and calculate the mean TL.
 ```python
 df_control = df[df['TR'] == 'control']
+hook(df_control, "df_control = df[df['TR'] == 'control']", name='df_control')
+
 mean_tl = df_control['TL'].mean()
+hook(mean_tl, "mean_tl = df_control['TL'].mean()", name='mean_tl', depends_on=['df_control'])
+
 print(f"Mean TL: {{mean_tl}}")
+submit(mean_tl)
 ```"
 """.strip()
 

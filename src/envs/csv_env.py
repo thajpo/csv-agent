@@ -42,26 +42,28 @@ def json_default(obj):
 # Storage for hooks captured during execution
 _captured_hooks = []
 
-def hook(value, name=None, description=None, code_line=None, depends_on=None):
+def hook(value, code_line, name=None, description=None, depends_on=None):
     """
     Capture an intermediate checkpoint for RL verification.
-    
-    Call this after computing an important intermediate result.
-    The value will be hashed and stored for reward calculation.
-    
+
+    REQUIRED: Call this after computing each critical intermediate result.
+    You must provide the exact code that produced the value.
+
     Args:
         value: The intermediate value to checkpoint (DataFrame, scalar, etc.)
+        code_line: REQUIRED - The exact code that produced this value
         name: Optional variable name (e.g., 'df_filtered')
         description: Optional semantic description
-        code_line: Optional code that produced this (auto-captured if omitted)
         depends_on: List of hook names this depends on (for DAG ordering)
-    
+
     Example:
-        df_filtered = df[df['status'] == 'active']
-        hook(df_filtered, name='df_filtered', description='Filtered to active rows')
-        
-        result = df_filtered.groupby('cat').mean()
-        hook(result, name='result', depends_on=['df_filtered'])
+        df_filtered = df[df['TR'] == 'control']
+        hook(df_filtered, "df_filtered = df[df['TR'] == 'control']", name='df_filtered')
+
+        mean_val = df_filtered['TL'].mean()
+        hook(mean_val, "mean_val = df_filtered['TL'].mean()", name='mean_val', depends_on=['df_filtered'])
+
+        submit(mean_val)
     """
     import hashlib
     normalized = normalize_value(value)

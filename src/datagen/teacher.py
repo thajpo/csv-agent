@@ -298,26 +298,42 @@ async def execute_teacher_trace(
         )
 
     # Extract hooks from submission_metadata
+    # ENFORCEMENT: Hooks MUST have code_line - this is the critical code that solves the problem
     submission_metadata = getattr(final_state, "submission_metadata", {})
     raw_hooks = submission_metadata.get("hooks", [])
-    hooks = [
-        Hook(
-            code_line=h.get("code_line") or "",
+
+    import logging
+
+    valid_hooks = []
+    invalid_hook_count = 0
+    for h in raw_hooks:
+        if not isinstance(h, dict):
+            continue
+        if not h.get("value_hash"):
+            continue
+        if not h.get("code_line"):
+            # Hook without code_line is invalid - we need to know WHAT CODE produced the value
+            invalid_hook_count += 1
+            logging.warning(f"Hook missing required code_line: {h.get('variable_name', 'unnamed')}")
+            continue
+        valid_hooks.append(Hook(
+            code_line=h.get("code_line"),
             variable_name=h.get("variable_name") or "",
-            value_hash=h.get("value_hash") or "",
+            value_hash=h.get("value_hash"),
             description=h.get("description") or "",
             depends_on=h.get("depends_on") or [],
-        )
-        for h in raw_hooks
-        if isinstance(h, dict) and h.get("value_hash")  # Skip malformed hooks
-    ]
+        ))
 
-    # Warn if trace has few hooks (may indicate question/prompt issue)
+    hooks = valid_hooks
+
+    # Warn if trace has few valid hooks (may indicate question/prompt issue)
     if len(hooks) < 2 and execution_success:
-        import logging
-
         logging.warning(
-            f"Trace has only {len(hooks)} hook(s) - consider adding more intermediate checkpoints"
+            f"Trace has only {len(hooks)} valid hook(s) with code_line - model may not be documenting solution steps"
+        )
+    if invalid_hook_count > 0:
+        logging.warning(
+            f"Rejected {invalid_hook_count} hook(s) missing code_line field"
         )
 
     trace = ExecutionTrace(
