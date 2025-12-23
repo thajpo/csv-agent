@@ -336,18 +336,18 @@ async def triangulate_teacher(
     csv_path: str,
     question: str,
     hint: str,
-    model: str,  # Must come from src.core.config
-    *,  # Force remaining args to be keyword-only
+    model: str,
+    *,
     n_consistency: int = 3,
     dataset_description: str = "",
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
-    container_pool: list[tuple] | None = None,  # List of (env, state) tuples for reuse
-    ui: Any = None,  # Optional UI instance for Rich output
+    container_pool: list[tuple] | None = None,  # Docker containers
+    ui: Any = None,  # Optional UI
     float_tol: float = 0.1,
 ) -> tuple[
-    ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool
+    ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool, dict
 ]:
     """
     Run teacher triangulation: gold trace + consistency traces.
@@ -364,6 +364,7 @@ async def triangulate_teacher(
         - system_prompt: str
         - consistency_results: list of (ExecutionTrace, conversation) tuples
         - verified: True if gold matches majority of consistency traces
+        - timing_metadata: dict with gold_elapsed, consistency_elapsed, total_elapsed, avg_elapsed
     """
     use_pool = container_pool is not None
 
@@ -419,12 +420,25 @@ async def triangulate_teacher(
             ui=ui,
             trace_mode=f"{i + 1}/{n_consistency}",
         )
-        return (trace, conversation)
+        return (trace, conversation, elapsed)
 
     # Run all consistency traces concurrently
-    consistency_results = await asyncio.gather(
+    consistency_results_with_timing = await asyncio.gather(
         *[run_consistency_trace(i) for i in range(n_consistency)]
     )
+
+    # Separate timing data from results
+    consistency_results = [(trace, conv) for trace, conv, _ in consistency_results_with_timing]
+    consistency_elapsed = [elapsed for _, _, elapsed in consistency_results_with_timing]
+
+    # Build timing metadata
+    total_elapsed = gold_elapsed + sum(consistency_elapsed)
+    timing_metadata = {
+        "gold_elapsed": gold_elapsed,
+        "consistency_elapsed": consistency_elapsed,
+        "total_elapsed": total_elapsed,
+        "avg_elapsed": total_elapsed / (1 + n_consistency),
+    }
 
     # 3. Cluster-based voting on consistency answers
     # This is more robust than strict hashing as it handles float tolerance and formatting differences
@@ -435,7 +449,7 @@ async def triangulate_teacher(
     ]
 
     if not valid_answers:
-        return gold_trace, gold_conversation, system_prompt, consistency_results, False
+        return gold_trace, gold_conversation, system_prompt, consistency_results, False, timing_metadata
 
     # Find majority answer by clustering
     majority_value, majority_count = get_majority_answer(
@@ -457,7 +471,7 @@ async def triangulate_teacher(
             float_tol=float_tol,
         )
 
-    return gold_trace, gold_conversation, system_prompt, consistency_results, verified
+    return gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata
 
 
 async def batch_triangulate(
@@ -481,6 +495,7 @@ async def batch_triangulate(
         str,
         list[tuple[ExecutionTrace, list[dict]]],
         bool,
+        dict,
     ]
 ]:
     """
@@ -498,7 +513,7 @@ async def batch_triangulate(
         use_container_pool: If True, create containers once and reuse (much faster)
 
     Returns:
-        List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified)
+        List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata)
     """
     from src.envs.csv_env import LocalCSVAnalysisEnv
 
@@ -548,6 +563,7 @@ async def batch_triangulate(
                 system_prompt,
                 consistency_results,
                 verified,
+                timing_metadata,
             ) = await triangulate_teacher(
                 csv_path=csv_path,
                 question=q_dict["question"],
@@ -571,6 +587,7 @@ async def batch_triangulate(
                     system_prompt,
                     consistency_results,
                     verified,
+                    timing_metadata,
                 )
             )
 
