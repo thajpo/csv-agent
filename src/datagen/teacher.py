@@ -441,7 +441,7 @@ async def triangulate_teacher(
     }
 
     # 3. Cluster-based voting on consistency answers
-    # This is more robust than strict hashing as it handles float tolerance and formatting differences
+    # Extract answers from successful consistency traces (filter out None failures)
     valid_answers = [
         trace.final_answer
         for trace, _ in consistency_results
@@ -451,7 +451,7 @@ async def triangulate_teacher(
     if not valid_answers:
         return gold_trace, gold_conversation, system_prompt, consistency_results, False, timing_metadata
 
-    # Find majority answer by clustering
+    # Find majority answer by clustering (handles float tolerance and formatting differences)
     majority_value, majority_count = get_majority_answer(
         valid_answers, float_tol=float_tol
     )
