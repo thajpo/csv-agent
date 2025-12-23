@@ -308,13 +308,23 @@ class Environment:
         # Check for submitted answer in output
         submitted = parse_submitted_answer(output)
         if submitted is not None:
-            # Check for wrapped protocol format
+            # Enforce strict protocol: answer MUST be wrapped
             if isinstance(submitted, dict) and "__csv_agent_answer__" in submitted:
                 self.submitted_answer = submitted["__csv_agent_answer__"]
                 self.submission_metadata = submitted
             else:
-                self.submitted_answer = submitted
-            
+                # Protocol violation: answer not wrapped
+                import logging
+                logging.error(
+                    f"Protocol violation: Answer submitted without wrapper. "
+                    f"Expected {{'__csv_agent_answer__': value}}, got {type(submitted).__name__}. "
+                    f"Agent must use submit() function."
+                )
+                raise ValueError(
+                    "Answer must be submitted via submit() function. "
+                    f"Received unwrapped {type(submitted).__name__} instead of protocol dict."
+                )
+
             result.submitted_answer = self.submitted_answer
 
         return result
