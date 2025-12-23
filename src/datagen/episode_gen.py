@@ -13,6 +13,7 @@ import asyncio
 import json
 import sys
 import signal
+import argparse
 from pathlib import Path
 from datetime import datetime
 import uuid
@@ -37,7 +38,7 @@ def load_questions(questions_path: str) -> list[dict]:
     with open(questions_path) as f:
         return json.load(f)
 
-async def main():
+async def main(legacy_mode: bool = False):
     # Create global UI instance
     ui = EpisodeGenUI()
     # Register signal handler for Ctrl+C
@@ -96,14 +97,15 @@ async def main():
             ui.base.print_info("Hint", f"Create {dataset_name}.meta.json with a 'description' field.")
             continue
 
-        # Locate questions
+        # Locate questions (Modern structure: question/[dataset_name]/questions.json)
         questions_file = base_questions_dir / dataset_name / "questions.json"
         
-        # Legacy fallback for single CSV config
-        if not questions_file.exists() and len(csv_sources) == 1:
+        # Legacy fallback only if --legacy flag is provided
+        if not questions_file.exists() and legacy_mode and len(csv_sources) == 1:
             legacy_path = Path(config.questions_json)
             if legacy_path.exists():
                 questions_file = legacy_path
+                ui.base.print_status(f"Using legacy flat file: {questions_file}")
 
         if not questions_file.exists():
             ui.base.print_warning(f"Skipping {dataset_name}: No questions found at {questions_file}")
@@ -150,7 +152,7 @@ async def main():
         episodes_jsonl = []
         batch_verified = 0
 
-        for q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified in results:
+        for q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata in results:
             # Create Question object with auto-generated ID
             question_obj = Question.from_dict(q_dict)
 
@@ -208,4 +210,12 @@ async def main():
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    parser = argparse.ArgumentParser(description="Episode generation pipeline.")
+    parser.add_argument("--legacy", action="store_true", help="Allow fallback to legacy flat questions file")
+    args = parser.parse_args()
+
+    try:
+        sys.exit(asyncio.run(main(legacy_mode=args.legacy)))
+    except KeyboardInterrupt:
+        # Already handled in signal_handler, but just in case
+        sys.exit(0)

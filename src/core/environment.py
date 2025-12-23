@@ -135,7 +135,7 @@ class Environment:
         self.csv_path = data.csv_path
         self.model = APILLM(
             model=model.model_name,
-            sampling_args=model.sampling_args()
+            sampling_args=model.sampling_args_dict()
         )
         self.env = env  # Will be created in create() if None
         self.state = state  # Verifiers state dict

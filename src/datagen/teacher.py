@@ -302,11 +302,11 @@ async def execute_teacher_trace(
     raw_hooks = submission_metadata.get("hooks", [])
     hooks = [
         Hook(
-            code_line=h.get("code_line", ""),
-            variable_name=h.get("variable_name"),
-            value_hash=h.get("value_hash", ""),
-            description=h.get("description"),
-            depends_on=h.get("depends_on", []),
+            code_line=h.get("code_line") or "",
+            variable_name=h.get("variable_name") or "",
+            value_hash=h.get("value_hash") or "",
+            description=h.get("description") or "",
+            depends_on=h.get("depends_on") or [],
         )
         for h in raw_hooks
         if isinstance(h, dict) and h.get("value_hash")  # Skip malformed hooks
