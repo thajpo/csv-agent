@@ -49,6 +49,31 @@ Output:
 
 ---
 
+### Stage 3: Upload to HuggingFace
+
+Upload verified episodes for training:
+
+```bash
+# Login first (one-time)
+huggingface-cli login
+
+# Upload splits
+uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --splits data/episodes/splits
+
+# Private dataset
+uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --private
+```
+
+Then load for training:
+```python
+from datasets import load_dataset
+
+ds = load_dataset("your-username/csv-agent-episodes")
+ds = ds.map(lambda x: {"messages": x["conversation_for_sft"]["messages"]})
+```
+
+---
+
 ### Adding Datasets from Kaggle
 
 To expand your training data with Kaggle datasets:
