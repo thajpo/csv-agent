@@ -542,7 +542,6 @@ while True:
         
         # Store state
         state["sandbox_id"] = sandbox_id
-        state["sandbox_state"] = None  # Not used by local env, but expected by question_gen
         state["python_state"] = {"ready": True, "execution_count": 0}
         
         # Run setup code (import libraries, load CSV)

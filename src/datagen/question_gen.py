@@ -193,7 +193,6 @@ async def explore_and_generate_questions(
                 output = await env.python(
                     code=code,
                     sandbox_id=state["sandbox_id"],
-                    sandbox_state=state["sandbox_state"],
                     python_state=state["python_state"],
                 )
                 

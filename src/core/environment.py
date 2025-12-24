@@ -297,7 +297,6 @@ class Environment:
         output = await self.env.python(
             code=code,
             sandbox_id=self.state["sandbox_id"],
-            sandbox_state=self.state["sandbox_state"],
             python_state=self.state["python_state"],
         )
         
