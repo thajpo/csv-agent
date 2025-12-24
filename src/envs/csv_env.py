@@ -226,8 +226,10 @@ class LocalCSVAnalysisEnv:
 
     # Worker script that runs inside the container
     # Maintains a namespace dict and communicates via FIFOs
+    # SECURITY: Uses restricted builtins and import whitelist
     _WORKER_SCRIPT = '''
 import ast
+import builtins
 import contextlib
 import io
 import json
@@ -239,6 +241,110 @@ COMMAND_FIFO = "{command_fifo}"
 RESPONSE_FIFO = "{response_fifo}"
 READY_FLAG = "{ready_flag}"
 
+# ============================================================================
+# SANDBOX SECURITY: Restricted builtins and import whitelist
+# ============================================================================
+
+# Modules allowed for import by agent code
+ALLOWED_IMPORTS = frozenset({{
+    # Data science essentials
+    "pandas", "numpy", "scipy", "sklearn", "statsmodels",
+    # Standard library safe modules
+    "json", "math", "re", "collections", "functools", "itertools",
+    "datetime", "time", "hashlib", "decimal", "fractions",
+    "statistics", "random", "string", "operator", "copy",
+}})
+
+_original_import = builtins.__import__
+
+def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+    \"\"\"Import hook that only allows whitelisted modules.\"\"\"
+    # Get the top-level module name
+    top_level = name.split(".")[0]
+
+    # Check whitelist
+    if top_level not in ALLOWED_IMPORTS:
+        raise ImportError(
+            f"Import of '{{name}}' is not allowed. "
+            f"Allowed modules: {{', '.join(sorted(ALLOWED_IMPORTS))}}"
+        )
+
+    return _original_import(name, globals, locals, fromlist, level)
+
+# Safe builtins - excludes dangerous functions
+SAFE_BUILTINS = {{
+    # Constants
+    "True": True, "False": False, "None": None,
+    "Ellipsis": Ellipsis, "NotImplemented": NotImplemented,
+
+    # Types
+    "bool": bool, "int": int, "float": float, "complex": complex,
+    "str": str, "bytes": bytes, "bytearray": bytearray,
+    "list": list, "tuple": tuple, "set": set, "frozenset": frozenset,
+    "dict": dict, "type": type, "object": object,
+    "slice": slice, "range": range, "memoryview": memoryview,
+
+    # Iteration & sequences
+    "len": len, "iter": iter, "next": next,
+    "enumerate": enumerate, "zip": zip, "map": map, "filter": filter,
+    "reversed": reversed, "sorted": sorted,
+
+    # Math & comparison
+    "abs": abs, "round": round, "min": min, "max": max, "sum": sum,
+    "pow": pow, "divmod": divmod,
+
+    # Logic
+    "all": all, "any": any, "not": lambda x: not x,
+
+    # String & repr
+    "repr": repr, "ascii": ascii, "chr": chr, "ord": ord,
+    "format": format, "bin": bin, "hex": hex, "oct": oct,
+    "hash": hash, "id": id,
+
+    # Attribute access
+    "hasattr": hasattr, "getattr": getattr, "setattr": setattr, "delattr": delattr,
+    "isinstance": isinstance, "issubclass": issubclass,
+    "callable": callable, "vars": vars, "dir": dir,
+
+    # I/O (print only - no file access)
+    "print": print, "input": None,  # Disable input()
+
+    # Exceptions (needed for try/except)
+    "Exception": Exception, "BaseException": BaseException,
+    "TypeError": TypeError, "ValueError": ValueError,
+    "KeyError": KeyError, "IndexError": IndexError,
+    "AttributeError": AttributeError, "ImportError": ImportError,
+    "RuntimeError": RuntimeError, "StopIteration": StopIteration,
+    "ZeroDivisionError": ZeroDivisionError, "AssertionError": AssertionError,
+    "NameError": NameError, "LookupError": LookupError,
+    "ArithmeticError": ArithmeticError, "OverflowError": OverflowError,
+    "FloatingPointError": FloatingPointError, "KeyboardInterrupt": KeyboardInterrupt,
+    "NotImplementedError": NotImplementedError, "IndentationError": IndentationError,
+    "SyntaxError": SyntaxError, "SystemExit": SystemExit,
+    "UnicodeError": UnicodeError, "UnicodeDecodeError": UnicodeDecodeError,
+    "UnicodeEncodeError": UnicodeEncodeError,
+
+    # Import (using our safe version)
+    "__import__": _safe_import,
+
+    # EXPLICITLY EXCLUDED (security risks):
+    # - open, file operations
+    # - exec, eval, compile (code execution)
+    # - globals, locals (namespace access)
+    # - __build_class__ left out to prevent class definition attacks
+}}
+
+def _create_restricted_namespace():
+    \"\"\"Create a fresh namespace with restricted builtins.\"\"\"
+    return {{
+        "__name__": "__main__",
+        "__builtins__": SAFE_BUILTINS,
+    }}
+
+# ============================================================================
+# Worker main loop
+# ============================================================================
+
 def ensure_fifo(path: str) -> None:
     if os.path.exists(path):
         os.remove(path)
@@ -249,7 +355,7 @@ for fifo_path in (COMMAND_FIFO, RESPONSE_FIFO):
 
 Path(READY_FLAG).write_text("ready", encoding="utf-8")
 
-namespace: dict[str, object] = {{"__name__": "__main__"}}
+namespace = _create_restricted_namespace()
 execution_count = 0
 
 while True:
@@ -261,8 +367,7 @@ while True:
     if request.get("shutdown"):
         break
     if request.get("reset"):
-        namespace.clear()
-        namespace["__name__"] = "__main__"
+        namespace = _create_restricted_namespace()
         execution_count = 0
         with open(RESPONSE_FIFO, "w", encoding="utf-8") as response_file:
             response_file.write(json.dumps({{"status": "ok", "reset": True}}))
