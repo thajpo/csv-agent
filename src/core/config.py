@@ -12,11 +12,45 @@ And legacy sub-configs for Environment integration:
 - TaskConfig
 """
 
+import json
 import os
 from pathlib import Path
 from typing import List, Union, Dict, Any, Optional
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from src.core.types import Question
+
+
+def discover_kaggle_datasets(kaggle_dir: str = "data/kaggle") -> list[str]:
+    """
+    Discover dataset CSV paths from Kaggle directory structure.
+
+    Expects structure:
+        data/kaggle/{slug}/data.csv
+        data/kaggle/{slug}/meta.json
+        data/kaggle/manifest.json
+
+    Returns list of absolute paths to data.csv files.
+    """
+    kaggle_path = Path(kaggle_dir)
+    if not kaggle_path.exists():
+        return []
+
+    manifest_path = kaggle_path / "manifest.json"
+    if manifest_path.exists():
+        # Use manifest for ordering
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        return [
+            str((kaggle_path / entry["slug"] / "data.csv").resolve())
+            for entry in manifest
+            if (kaggle_path / entry["slug"] / "data.csv").exists()
+        ]
+
+    # Fallback: scan directories
+    return [
+        str(p.resolve())
+        for p in sorted(kaggle_path.glob("*/data.csv"))
+    ]
 
 
 # =============================================================================
@@ -42,8 +76,9 @@ class Config(BaseModel):
     """
     model_config = ConfigDict(extra='ignore')
 
-    # Data
-    csv_sources: Union[str, List[str]] = Field(default="data/csv/data.csv")
+    # Data - auto-discovers from kaggle_dir by default
+    kaggle_dir: str = "data/kaggle"
+    csv_sources: Union[str, List[str]] = Field(default_factory=lambda: discover_kaggle_datasets())
 
     # Execution / Policy
     max_turns: int = 10

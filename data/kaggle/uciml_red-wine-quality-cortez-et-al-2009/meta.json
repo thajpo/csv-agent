@@ -1,0 +1,19 @@
+{
+  "ref": "uciml/red-wine-quality-cortez-et-al-2009",
+  "owner": "uciml",
+  "name": "red-wine-quality-cortez-et-al-2009",
+  "title": "Red Wine Quality",
+  "subtitle": "Simple and clean practice dataset for regression or classification modelling",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"alcohol\", \"name\": \"alcohol\", \"description\": \"Here's to alcohol: the cause of, and solution to, all of life's problems. -- Homer J. Simpson\", \"fullPath\": \"subject > health and fitness > food > alcohol\", \"competitionCount\": 1, \"datasetCount\": 3234, \"scriptCount\": 12723, \"totalCount\": 15958}",
+    "{\"ref\": \"earth and nature\", \"name\": \"earth and nature\", \"description\": null, \"fullPath\": \"subject > earth and nature\", \"competitionCount\": 21, \"datasetCount\": 79734, \"scriptCount\": 426, \"totalCount\": 80181}",
+    "{\"ref\": \"education\", \"name\": \"education\", \"description\": \"Education datasets and kernels relate to statistics on student performance, university rankings, and answers for all your homework questions.\", \"fullPath\": \"subject > people and society > education\", \"competitionCount\": 62, \"datasetCount\": 35758, \"scriptCount\": 15180, \"totalCount\": 51000}",
+    "{\"ref\": \"beginner\", \"name\": \"beginner\", \"description\": \"New to data science? Explore tips, tricks, and beginner friendly work from other Kagglers.\", \"fullPath\": \"audience > beginner\", \"competitionCount\": 14175, \"datasetCount\": 9876, \"scriptCount\": 43769, \"totalCount\": 67820}",
+    "{\"ref\": \"benchmark dataset\", \"name\": \"benchmark dataset\", \"description\": \"Datasets associated with known benchmarks, whether internal to Kaggle or external (e.g. on OpenML)\", \"fullPath\": \"admin > benchmark dataset\", \"competitionCount\": 0, \"datasetCount\": 60, \"scriptCount\": 0, \"totalCount\": 60}",
+    "{\"ref\": \"benchmark\", \"name\": \"benchmark\", \"description\": \"\", \"fullPath\": \"technique > benchmark\", \"competitionCount\": 9, \"datasetCount\": 234, \"scriptCount\": 94, \"totalCount\": 337}"
+  ],
+  "url": "https://www.kaggle.com/datasets/uciml/red-wine-quality-cortez-et-al-2009",
+  "totalBytes": 26176,
+  "downloadCount": 332176
+}

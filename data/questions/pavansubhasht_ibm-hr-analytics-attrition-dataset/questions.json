@@ -1,0 +1,194 @@
+[
+  {
+    "question": "What is the overall attrition rate in the dataset?",
+    "hint": "Count the number of 'Yes' in Attrition and divide by total records.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which department has the highest attrition count?",
+    "hint": "Group by Department, sum Attrition=='Yes', then sort descending.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant difference in average MonthlyIncome between employees who left and those who stayed?",
+    "hint": "Perform an independent two\u2011sample t\u2011test on MonthlyIncome for Attrition Yes vs No.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the correlation between Age and YearsAtCompany?",
+    "hint": "Compute Pearson correlation coefficient between Age and YearsAtCompany.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does overtime work increase the likelihood of attrition?",
+    "hint": "Create a contingency table of OverTime vs Attrition and run a chi\u2011square test.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which JobRole has the highest attrition percentage?",
+    "hint": "Group by JobRole, compute attrition rate (Yes/total) and identify the max.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Are employees with higher EducationField less likely to leave?",
+    "hint": "For each EducationField compute attrition rate and compare using a proportion test.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the average YearsSinceLastPromotion for employees who left versus who stayed?",
+    "hint": "Group by Attrition and calculate mean of YearsSinceLastPromotion.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a linear relationship between PercentSalaryHike and Attrition probability?",
+    "hint": "Fit a simple logistic regression with PercentSalaryHike as predictor and Attrition as binary response.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Do employees in the Sales department have higher average MonthlyRate than those in Research & Development?",
+    "hint": "Calculate mean MonthlyRate for each department and compare using a t\u2011test.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which combination of Gender and OverTime yields the highest attrition rate?",
+    "hint": "Create a multi\u2011index groupby on Gender and OverTime, compute attrition rates, and locate the maximum.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Does JobSatisfaction correlate negatively with attrition?",
+    "hint": "Calculate point\u2011biserial correlation between JobSatisfaction (ordinal) and Attrition (binary).",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the average TotalWorkingYears for employees who left compared to those who stayed?",
+    "hint": "Group by Attrition and compute mean of TotalWorkingYears.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant difference in EnvironmentSatisfaction between employees who left and those who stayed?",
+    "hint": "Conduct a Mann\u2011Whitney U test on EnvironmentSatisfaction for Attrition groups.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Build a logistic regression model (using random_state=42) to predict Attrition from Age, MonthlyIncome, OverTime, and JobLevel. What is the model's accuracy on a hold\u2011out test set?",
+    "hint": "Split data (80/20), fit LogisticRegression, predict, and compute accuracy.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Which feature among Age, DistanceFromHome, and YearsWithCurrManager has the strongest absolute Pearson correlation with Attrition (treated as binary)?",
+    "hint": "Encode Attrition as 0/1, compute Pearson correlations for the three features, compare absolute values.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Perform a stepwise forward selection (using p\u2011values) to identify a subset of predictors for Attrition. List the selected variables.",
+    "hint": "Start with no variables, add the one with lowest p\u2011value iteratively until none improve the model significantly.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Does the number of companies worked before (NumCompaniesWorked) differ between attrition groups?",
+    "hint": "Compare means with an independent t\u2011test or Mann\u2011Whitney if non\u2011normal.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Create a pivot table showing average MonthlyIncome by Department and JobRole. Which cell has the highest value?",
+    "hint": "Use pandas pivot_table with values='MonthlyIncome', aggfunc='mean', index='Department', columns='JobRole'.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a statistically significant association between MaritalStatus and Attrition?",
+    "hint": "Build a contingency table and run a chi\u2011square test of independence.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Calculate the odds ratio for Attrition when comparing employees who work overtime vs those who do not.",
+    "hint": "Construct a 2x2 table of OverTime vs Attrition, then compute (a/b)/(c/d).",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using only numeric features, apply PCA (random_state=42) and report the proportion of variance explained by the first two principal components.",
+    "hint": "Standardize numeric columns, fit PCA, sum explained_variance_ratio_ for components 0 and 1.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Does higher PerformanceRating reduce attrition risk?",
+    "hint": "Compare attrition rates across PerformanceRating levels and test trend with Cochran\u2011Armitage.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the median YearsAtCompany for each Education level?",
+    "hint": "Group by Education and compute median of YearsAtCompany.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Assess whether employees with StockOptionLevel > 0 have lower attrition than those with 0.",
+    "hint": "Separate groups by StockOptionLevel, compute attrition rates, and run a proportion z\u2011test.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Fit a decision tree classifier (random_state=42, max_depth=4) to predict Attrition using all features. What is the tree's depth and number of leaf nodes?",
+    "hint": "Train DecisionTreeClassifier, inspect .get_depth() and .get_n_leaves().",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Identify any outliers in DailyRate using the IQR method and report how many rows are flagged.",
+    "hint": "Compute Q1, Q3, IQR, then count values outside [Q1\u20111.5*IQR, Q3+1.5*IQR].",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Does the relationship between YearsSinceLastPromotion and Attrition differ by JobLevel? Perform a stratified analysis.",
+    "hint": "For each JobLevel, compute attrition rates across YearsSinceLastPromotion bins and compare.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Using cross\u2011validation (5\u2011fold, random_state=42), evaluate the logistic regression model built from Age, MonthlyIncome, OverTime, and JobLevel. Report the mean AUC.",
+    "hint": "Apply StratifiedKFold, fit LogisticRegression on training folds, predict probabilities, compute roc_auc_score, average.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Is there a monotonic relationship between WorkLifeBalance (1\u20114) and attrition rate? Test using Spearman correlation.",
+    "hint": "Encode Attrition as 0/1, compute spearmanr between WorkLifeBalance and Attrition.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Compare the distribution of YearsWithCurrManager for employees who left vs stayed using a KDE plot. Which group shows a longer tail?",
+    "hint": "Plot seaborn.kdeplot for each Attrition group on YearsWithCurrManager and visually inspect.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Perform a hierarchical clustering (Ward linkage) on standardized numeric variables and cut the dendrogram at 3 clusters. Does any cluster have a significantly higher attrition rate?",
+    "hint": "Standardize, compute linkage, form clusters with fcluster, then compute attrition rates per cluster and test with chi\u2011square.",
+    "n_steps": 10,
+    "difficulty": "VERY_HARD"
+  }
+]

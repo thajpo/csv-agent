@@ -1,0 +1,14 @@
+{
+  "ref": "neuromusic/avocado-prices",
+  "owner": "neuromusic",
+  "name": "avocado-prices",
+  "title": "Avocado Prices",
+  "subtitle": "Historical data on avocado prices and sales volume in multiple US markets",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"food\", \"name\": \"food\", \"description\": null, \"fullPath\": \"subject > health and fitness > food\", \"competitionCount\": 12, \"datasetCount\": 13198, \"scriptCount\": 750, \"totalCount\": 13960}"
+  ],
+  "url": "https://www.kaggle.com/datasets/neuromusic/avocado-prices",
+  "totalBytes": 643781,
+  "downloadCount": 333406
+}

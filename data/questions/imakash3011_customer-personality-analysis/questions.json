@@ -1,0 +1,242 @@
+[
+  {
+    "question": "What is the average income of customers?",
+    "hint": "Use df['Income'].mean()",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the median recency (days since last purchase) for the dataset?",
+    "hint": "Use df['Recency'].median()",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "How many customers have at least one child at home (Kidhome > 0)?",
+    "hint": "Filter df where Kidhome > 0 and count rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What proportion of customers are married?",
+    "hint": "Calculate the count of Marital_Status == 'Married' divided by total rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which product category (Wines, Fruits, MeatProducts, FishProducts, SweetProducts, GoldProds) has the highest total spend across all customers?",
+    "hint": "Sum each Mnt* column and compare.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant difference in average income between customers with and without teenage children at home?",
+    "hint": "Perform an independent t-test on Income grouped by Teenhome (0 vs 1).",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the Pearson correlation coefficient between Recency and total spend (sum of all Mnt* columns)?",
+    "hint": "Create a total spend column, then use scipy.stats.pearsonr.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Do customers who responded positively (Response == 1) have a higher average number of web purchases than non\u2011respondents?",
+    "hint": "Group by Response and compare NumWebPurchases means; optionally run a t-test.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the average number of deals purchases for each education level?",
+    "hint": "Group by Education and compute mean of NumDealsPurchases.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a monotonic relationship between Age (2023 - Year_Birth) and total spend?",
+    "hint": "Calculate Age, total spend, then use scipy.stats.spearmanr.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which marital status group has the highest average response rate?",
+    "hint": "Group by Marital_Status and compute mean of Response.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Do customers who accepted campaign 1 (AcceptedCmp1 == 1) spend more on wines than those who did not?",
+    "hint": "Compare MntWines means between AcceptedCmp1 groups; optionally t-test.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the distribution (count) of customers across the four education categories?",
+    "hint": "Use df['Education'].value_counts().",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a statistically significant association between Complain (0/1) and Response (0/1)?",
+    "hint": "Create a contingency table and run chi\u2011square test with scipy.stats.chi2_contingency.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the average total spend for customers who have made at least one catalog purchase?",
+    "hint": "Filter NumCatalogPurchases > 0, compute total spend, then mean.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Does the number of web visits per month correlate with the number of web purchases?",
+    "hint": "Calculate Pearson correlation between NumWebVisitsMonth and NumWebPurchases.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which campaign (AcceptedCmp1\u20115) has the highest acceptance rate?",
+    "hint": "Compute mean of each AcceptedCmp column and compare.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Are customers with higher income more likely to respond positively?",
+    "hint": "Perform logistic regression with Response as target and Income as predictor; examine coefficient significance.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "What is the average Z_CostContact for customers who responded versus those who did not?",
+    "hint": "Group by Response and compute mean of Z_CostContact.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Build a linear regression model to predict total spend from Recency, Income, and NumWebPurchases. Which predictor has the largest absolute coefficient?",
+    "hint": "Use statsmodels OLS; examine params.",
+    "n_steps": 6,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Using a train/test split (random_state=42, 70% train), evaluate the accuracy of a logistic regression model predicting Response from all numeric features.",
+    "hint": "Split data, fit LogisticRegression, compute accuracy on test set.",
+    "n_steps": 7,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Is there a significant difference in average Recency between customers with kids at home and those without?",
+    "hint": "Perform independent t-test on Recency grouped by Kidhome.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the average number of store purchases for each marital status group?",
+    "hint": "Group by Marital_Status and compute mean of NumStorePurchases.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Calculate the proportion of customers who have made at least one purchase in each product category (Mnt* > 0).",
+    "hint": "For each Mnt column, compute (df[col] > 0).mean().",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Perform a paired t\u2011test to see if customers spend more on wines than on fruits.",
+    "hint": "Use scipy.stats.ttest_rel on MntWines and MntFruits.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the average age of customers who responded positively?",
+    "hint": "Compute Age = 2023 - Year_Birth, filter Response == 1, then mean.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does the number of deals purchases correlate with total spend?",
+    "hint": "Calculate Pearson correlation between NumDealsPurchases and total spend.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Identify the top 5 customers by total spend and list their IDs and income.",
+    "hint": "Sort by total spend descending, select head(5), then retrieve ID and Income.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using a linear regression, test whether Recency predicts total spend after controlling for Income.",
+    "hint": "Fit OLS with total spend ~ Recency + Income; examine p\u2011value for Recency.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Is there a difference in average total spend between customers who accepted any campaign (any AcceptedCmp == 1) and those who accepted none?",
+    "hint": "Create a flag for any campaign acceptance, then compare total spend means; optionally t-test.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the overall response rate (mean of Response) in the dataset?",
+    "hint": "Use df['Response'].mean().",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does the day of the month when the customer was enrolled (extracted from Dt_Customer) affect response rate?",
+    "hint": "Extract day from Dt_Customer, group by day, compute mean Response, and test with ANOVA.",
+    "n_steps": 7,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Compute the effect size (Cohen's d) for the difference in income between responders and non\u2011responders.",
+    "hint": "Calculate mean and std for each group, then compute d = (mean1-mean2)/pooled_std.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "What is the average Z_Revenue for customers who complained versus those who did not?",
+    "hint": "Group by Complain and compute mean of Z_Revenue.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Perform a chi\u2011square test to see if acceptance of campaign 3 is independent of marital status.",
+    "hint": "Create contingency table of AcceptedCmp3 vs Marital_Status, run chi2_contingency.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using a train/test split (random_state=42), train a decision tree (max_depth=4) to predict Response and report the test set F1\u2011score.",
+    "hint": "Split data, fit DecisionTreeClassifier, compute f1_score on test set.",
+    "n_steps": 8,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Is there a significant trend in total spend over the years of birth (i.e., do younger customers spend more)?",
+    "hint": "Fit linear regression of total spend on Year_Birth and examine slope.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Calculate the proportion of customers who have made purchases in all product categories (all Mnt* > 0).",
+    "hint": "Check row\u2011wise if all Mnt columns are > 0, then mean.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the average number of web visits per month for customers with teenage children at home?",
+    "hint": "Filter Teenhome == 1, then compute mean of NumWebVisitsMonth.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does the number of catalog purchases predict the likelihood of responding positively? Report the odds ratio.",
+    "hint": "Fit logistic regression with Response as target and NumCatalogPurchases as predictor; exponentiate coefficient.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  }
+]

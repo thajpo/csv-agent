@@ -1,0 +1,80 @@
+[
+  {
+    "question": "What is the overall average math score?",
+    "hint": "Use df['math score'].mean().",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the median reading score for female students?",
+    "hint": "Filter df where gender == 'female' and compute median of reading score.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which race/ethnicity group has the highest average math score?",
+    "hint": "Group by 'race/ethnicity' and calculate mean of math score.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What proportion of students scored above 90 in all three subjects?",
+    "hint": "Filter rows where math, reading, and writing scores > 90 and compute proportion.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant difference in average writing scores between male and female students?",
+    "hint": "Perform an independent two\u2011sample t\u2011test on writing scores grouped by gender.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Do students who completed the test preparation course have higher average reading scores than those who did not?",
+    "hint": "Compare group means with an independent t\u2011test.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Does lunch type (standard vs. free/reduced) affect reading scores?",
+    "hint": "Use an independent t\u2011test to compare reading scores between lunch categories.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there an association between race/ethnicity and test preparation course completion?",
+    "hint": "Construct a contingency table and run a chi\u2011square test of independence.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the effect size (Cohen's d) for the difference in math scores between students who completed test preparation and those who did not?",
+    "hint": "Calculate group means, pooled standard deviation, then compute Cohen's d.",
+    "n_steps": 4,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Is there a linear relationship between reading and writing scores after controlling for gender?",
+    "hint": "Fit an OLS regression: writing ~ reading + gender and inspect the coefficient for reading.",
+    "n_steps": 4,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Does the relationship between math and writing scores differ by race/ethnicity?",
+    "hint": "Fit separate linear regressions (writing ~ math) for each race/ethnicity group and compare slopes.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "What is the adjusted R\u2011squared of a multiple linear regression predicting writing score from math score, reading score, gender, and test preparation?",
+    "hint": "Fit OLS with those predictors and extract adjusted R\u2011squared from the model summary.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Using random_state=42, split the data (80% train, 20% test) and report the RMSE of a linear model predicting reading score from math score.",
+    "hint": "Apply train_test_split with random_state=42, fit OLS on training, predict on test, compute RMSE.",
+    "n_steps": 6,
+    "difficulty": "VERY_HARD"
+  }
+]

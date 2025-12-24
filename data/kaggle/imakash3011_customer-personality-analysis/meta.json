@@ -1,0 +1,19 @@
+{
+  "ref": "imakash3011/customer-personality-analysis",
+  "owner": "imakash3011",
+  "name": "customer-personality-analysis",
+  "title": "Customer Personality Analysis",
+  "subtitle": "Analysis of company's ideal customers",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"business\", \"name\": \"business\", \"description\": \"Businesses are organizational entities that drive economic activity. Explore the inner workings of things like HR practices, product sales, and customer happiness in these competitions, kernels, and datasets.\", \"fullPath\": \"subject > people and society > business\", \"competitionCount\": 42, \"datasetCount\": 114270, \"scriptCount\": 25710, \"totalCount\": 140022}",
+    "{\"ref\": \"education\", \"name\": \"education\", \"description\": \"Education datasets and kernels relate to statistics on student performance, university rankings, and answers for all your homework questions.\", \"fullPath\": \"subject > people and society > education\", \"competitionCount\": 62, \"datasetCount\": 35758, \"scriptCount\": 15180, \"totalCount\": 51000}",
+    "{\"ref\": \"exploratory data analysis\", \"name\": \"exploratory data analysis\", \"description\": null, \"fullPath\": \"technique > exploratory data analysis\", \"competitionCount\": 22, \"datasetCount\": 5949, \"scriptCount\": 34283, \"totalCount\": 40254}",
+    "{\"ref\": \"data cleaning\", \"name\": \"data cleaning\", \"description\": null, \"fullPath\": \"analysis > data cleaning\", \"competitionCount\": 34, \"datasetCount\": 4931, \"scriptCount\": 14929, \"totalCount\": 19894}",
+    "{\"ref\": \"classification\", \"name\": \"classification\", \"description\": null, \"fullPath\": \"task > classification\", \"competitionCount\": 207, \"datasetCount\": 47077, \"scriptCount\": 20515, \"totalCount\": 67799}",
+    "{\"ref\": \"clustering\", \"name\": \"clustering\", \"description\": null, \"fullPath\": \"task > clustering\", \"competitionCount\": 26, \"datasetCount\": 1056, \"scriptCount\": 3035, \"totalCount\": 4117}"
+  ],
+  "url": "https://www.kaggle.com/datasets/imakash3011/customer-personality-analysis",
+  "totalBytes": 63450,
+  "downloadCount": 225673
+}

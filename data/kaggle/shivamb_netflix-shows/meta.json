@@ -1,0 +1,18 @@
+{
+  "ref": "shivamb/netflix-shows",
+  "owner": "shivamb",
+  "name": "netflix-shows",
+  "title": "Netflix Movies and TV Shows",
+  "subtitle": "Listings of movies and tv shows on Netflix - Regularly Updated",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"websites\", \"name\": \"websites\", \"description\": \"Websites, like this one, are collections of content that can be found under a specific address. These datasets include information on individual websites or collections of websites.\", \"fullPath\": \"subject > science and technology > internet > websites\", \"competitionCount\": 8, \"datasetCount\": 532, \"scriptCount\": 319, \"totalCount\": 859}",
+    "{\"ref\": \"arts and entertainment\", \"name\": \"arts and entertainment\", \"description\": \"Activities that holds the attention and interest of an audience, or gives pleasure and delight. It can be an idea or a task, but is more likely to be one of the activities or events that have developed over thousands of years specifically for the purpose of keeping an audience's attention.\", \"fullPath\": \"subject > arts and entertainment\", \"competitionCount\": 4, \"datasetCount\": 72574, \"scriptCount\": 22794, \"totalCount\": 95372}",
+    "{\"ref\": \"movies and tv shows\", \"name\": \"movies and tv shows\", \"description\": \"Grab a bucket of popcorn and come analyze these movie ratings. The world must know which blockbuster film is the blockbuster film of all time!\", \"fullPath\": \"subject > arts and entertainment > movies and tv shows\", \"competitionCount\": 11, \"datasetCount\": 22908, \"scriptCount\": 2310, \"totalCount\": 25229}",
+    "{\"ref\": \"exploratory data analysis\", \"name\": \"exploratory data analysis\", \"description\": null, \"fullPath\": \"technique > exploratory data analysis\", \"competitionCount\": 22, \"datasetCount\": 5949, \"scriptCount\": 34283, \"totalCount\": 40254}",
+    "{\"ref\": \"data visualization\", \"name\": \"data visualization\", \"description\": \"The art of depicting data in a visual format. Using charts and graphs, it is easier to observe patterns, relationships, and outliers.\", \"fullPath\": \"technique > data visualization\", \"competitionCount\": 24, \"datasetCount\": 8864, \"scriptCount\": 38059, \"totalCount\": 46947}"
+  ],
+  "url": "https://www.kaggle.com/datasets/shivamb/netflix-shows",
+  "totalBytes": 1400865,
+  "downloadCount": 694825
+}

@@ -104,7 +104,7 @@ def try_parse_questions(response: str) -> list[dict] | None:
     return None
 
 
-def force_question_generation(llm: APILLM, conversation: ConversationHistory) -> list[dict]:
+async def force_question_generation(llm: APILLM, conversation: ConversationHistory) -> list[dict]:
     """
     If model hasn't generated questions by max_turns, force it with a direct prompt.
 
@@ -116,7 +116,7 @@ def force_question_generation(llm: APILLM, conversation: ConversationHistory) ->
     )
 
     messages = conversation.to_openai_messages()
-    response = asyncio.get_event_loop().run_until_complete(llm(messages))
+    response = await llm(messages)
 
     questions = try_parse_questions(response)
 
@@ -251,7 +251,7 @@ async def explore_and_generate_questions(
     # 3. Validate we got questions
     if not questions_generated:
         ui.print_warning("Model didn't generate questions. Forcing...")
-        questions_generated = force_question_generation(llm, conversation)
+        questions_generated = await force_question_generation(llm, conversation)
 
     # 4. Create trace
     trace = ExplorationTrace(
@@ -282,89 +282,154 @@ async def explore_and_generate_questions(
 from src.core.config import config
 
 
-def main(legacy_mode: bool = False):
-    # Handle single csv (legacy) or csv_sources (new)
-    csv_sources = config.csv_sources
-    if isinstance(csv_sources, str):
-        csv_sources = [csv_sources]
-    
-    if not csv_sources:
-        ui.print_error("No CSV sources found in config (csv or csv_sources)")
-        return 1
+async def process_single_dataset(
+    csv_path: Path,
+    model: str,
+    max_turns: int,
+    temperature: float,
+    max_tokens: int,
+    output_dir: Path,
+    dataset_name: str,
+    dataset_description: str,
+    semaphore: asyncio.Semaphore,
+    index: int,
+    total: int,
+) -> tuple[str, bool, int | None]:
+    """
+    Process a single dataset with semaphore-controlled concurrency.
 
-    # Common config (typed access)
-    temperature = config.sampling_args.temperature
-    max_tokens = config.sampling_args.max_tokens
-    model = config.question_gen_model
-    max_turns = config.question_gen_max_turns
-    
-    # Base output directory
-    base_output_dir = Path(config.questions_json).parent
+    Returns (dataset_name, success, num_questions)
+    """
+    async with semaphore:
+        ui.print_section(f"[{index}/{total}] Starting: {dataset_name}")
 
-    success_count = 0
-    failure_count = 0
-
-    for i, csv_path in enumerate(csv_sources, 1):
-        ui.print_section(f"Processing CSV {i}/{len(csv_sources)}: {csv_path}")
-        
-        # Determine dataset description (Sidecar Metadata only)
-        dataset_description = None
-        
-        # Look for sidecar metadata: slug.meta.json or csv_filename.meta.json
-        meta_path = Path(csv_path).with_suffix(".meta.json")
-        if meta_path.exists():
-            try:
-                with open(meta_path) as f:
-                    meta_data = json.load(f)
-                    dataset_description = meta_data.get("description") or meta_data.get("subtitle")
-                    if dataset_description:
-                        ui.print_status(f"Loaded description from sidecar metadata: {meta_path.name}")
-            except Exception as e:
-                ui.print_warning(f"Failed to read metadata from {meta_path}: {e}")
-
-        if not dataset_description or not dataset_description.strip():
-            ui.print_error(f"ERROR: No description found for {csv_path}")
-            ui.print_info("Hint", f"Create {Path(csv_path).stem}.meta.json with a 'description' field.")
-            failure_count += 1
-            continue
-
-        # Derive output directory for this CSV
-        dataset_name = Path(csv_path).stem
-        if legacy_mode:
-            output_dir = base_output_dir
-            ui.print_status(f"Using legacy mode: Saving directly to {output_dir}")
-        else:
-            output_dir = base_output_dir / dataset_name
-        
         try:
-            questions, trace = asyncio.run(explore_and_generate_questions(
-                csv_path=csv_path,
+            questions, trace = await explore_and_generate_questions(
+                csv_path=str(csv_path),
                 model=model,
                 max_turns=max_turns,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 output_dir=str(output_dir),
-                dataset_description=dataset_description
-            ))
-            
-            ui.print_success(f"✓ Generated {len(questions)} questions for {dataset_name}")
-            success_count += 1
-            
-            # Print sample for this batch
-            ui.print_sample_questions_header()
-            for j, q in enumerate(questions[:3], 1):
-                ui.print_question_panel(j, q)
+                dataset_description=dataset_description,
+            )
+
+            ui.print_success(f"✓ [{index}/{total}] {dataset_name}: {len(questions)} questions")
+            return (dataset_name, True, len(questions))
 
         except Exception as e:
-            ui.print_error(f"Failed to generate questions for {csv_path}: {e}")
+            ui.print_error(f"✗ [{index}/{total}] {dataset_name}: {e}")
             import traceback
             traceback.print_exc()
-            failure_count += 1
-            
+            return (dataset_name, False, None)
+
+
+async def run_parallel_generation(
+    csv_sources: list[str],
+    legacy_mode: bool = False,
+    max_concurrent: int = 10,
+) -> tuple[int, int]:
+    """
+    Run question generation for all CSVs with parallel execution.
+
+    Returns (success_count, failure_count)
+    """
+    # Common config
+    temperature = config.sampling_args.temperature
+    max_tokens = config.sampling_args.max_tokens
+    model = config.question_gen_model
+    max_turns = config.question_gen_max_turns
+    base_output_dir = Path(config.questions_json).parent
+
+    # Prepare tasks
+    semaphore = asyncio.Semaphore(max_concurrent)
+    tasks = []
+
+    for i, csv_path_str in enumerate(csv_sources, 1):
+        csv_path = Path(csv_path_str)
+
+        # Load metadata
+        meta_path = csv_path.parent / "meta.json"
+        if not meta_path.exists():
+            meta_path = csv_path.with_suffix(".meta.json")
+
+        dataset_description = None
+        if meta_path.exists():
+            try:
+                with open(meta_path) as f:
+                    meta_data = json.load(f)
+                    dataset_description = meta_data.get("description") or meta_data.get("subtitle")
+            except Exception as e:
+                ui.print_warning(f"Failed to read metadata from {meta_path}: {e}")
+
+        if not dataset_description or not dataset_description.strip():
+            ui.print_error(f"Skipping {csv_path}: no description found")
+            continue
+
+        # Derive dataset name
+        if csv_path.name == "data.csv":
+            dataset_name = csv_path.parent.name
+        else:
+            dataset_name = csv_path.stem
+
+        # Output directory
+        if legacy_mode:
+            output_dir = base_output_dir
+        else:
+            output_dir = base_output_dir / dataset_name
+
+        tasks.append(
+            process_single_dataset(
+                csv_path=csv_path,
+                model=model,
+                max_turns=max_turns,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                output_dir=output_dir,
+                dataset_name=dataset_name,
+                dataset_description=dataset_description,
+                semaphore=semaphore,
+                index=i,
+                total=len(csv_sources),
+            )
+        )
+
+    if not tasks:
+        return 0, 0
+
+    # Run all tasks concurrently (semaphore limits actual parallelism)
+    ui.print_header(f"Processing {len(tasks)} datasets with {max_concurrent} concurrent workers")
+    results = await asyncio.gather(*tasks)
+
+    success_count = sum(1 for _, success, _ in results if success)
+    failure_count = sum(1 for _, success, _ in results if not success)
+
+    return success_count, failure_count
+
+
+def main(legacy_mode: bool = False):
+    # Handle single csv (legacy) or csv_sources (new)
+    csv_sources = config.csv_sources
+    if isinstance(csv_sources, str):
+        csv_sources = [csv_sources]
+
+    if not csv_sources:
+        ui.print_error("No CSV sources found in config (csv or csv_sources)")
+        return 1
+
+    max_concurrent = config.max_concurrent_containers
+    ui.print_info("Datasets", str(len(csv_sources)))
+    ui.print_info("Max concurrent", str(max_concurrent))
+    ui.print_empty_line()
+
+    success_count, failure_count = asyncio.run(
+        run_parallel_generation(csv_sources, legacy_mode, max_concurrent)
+    )
+
     # Final summary
     ui.print_summary_header()
     ui.print_status(f"Processed {len(csv_sources)} sources: {success_count} success, {failure_count} failed")
-    
+
     return 1 if failure_count > 0 else 0
 
 

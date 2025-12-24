@@ -1,0 +1,16 @@
+{
+  "ref": "russellyates88/suicide-rates-overview-1985-to-2016",
+  "owner": "russellyates88",
+  "name": "suicide-rates-overview-1985-to-2016",
+  "title": "Suicide Rates Overview 1985 to 2016 ",
+  "subtitle": "Compares socio-economic info with suicide rates by year and country",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"demographics\", \"name\": \"demographics\", \"description\": \"Demographics cover different aspects of life: youth, religion, housing, employment, taxes and mortality. This tag contains census data that describe various populations and communities.\", \"fullPath\": \"subject > people and society > social science > demographics\", \"competitionCount\": 2, \"datasetCount\": 1078, \"scriptCount\": 346, \"totalCount\": 1426}",
+    "{\"ref\": \"economics\", \"name\": \"economics\", \"description\": \"The economics tag contains resources for analyzing the production, consumption, and transfer of wealth.\", \"fullPath\": \"subject > people and society > social science > economics\", \"competitionCount\": 3, \"datasetCount\": 4061, \"scriptCount\": 895, \"totalCount\": 4959}",
+    "{\"ref\": \"news\", \"name\": \"news\", \"description\": null, \"fullPath\": \"subject > people and society > news\", \"competitionCount\": 2, \"datasetCount\": 17004, \"scriptCount\": 3088, \"totalCount\": 20094}"
+  ],
+  "url": "https://www.kaggle.com/datasets/russellyates88/suicide-rates-overview-1985-to-2016",
+  "totalBytes": 406636,
+  "downloadCount": 149496
+}

@@ -1,0 +1,18 @@
+{
+  "ref": "mirichoi0218/insurance",
+  "owner": "mirichoi0218",
+  "name": "insurance",
+  "title": " Medical Cost Personal Datasets",
+  "subtitle": "Insurance Forecast by using Linear Regression",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"healthcare\", \"name\": \"healthcare\", \"description\": \"AI in healthcare is a growing interest. One of the major problems is simply converting research into an application. Should be easy, right?\", \"fullPath\": \"subject > health and fitness > health > healthcare\", \"competitionCount\": 32, \"datasetCount\": 2354, \"scriptCount\": 2062, \"totalCount\": 4448}",
+    "{\"ref\": \"education\", \"name\": \"education\", \"description\": \"Education datasets and kernels relate to statistics on student performance, university rankings, and answers for all your homework questions.\", \"fullPath\": \"subject > people and society > education\", \"competitionCount\": 62, \"datasetCount\": 35758, \"scriptCount\": 15180, \"totalCount\": 51000}",
+    "{\"ref\": \"finance\", \"name\": \"finance\", \"description\": \"The finance tag covers datasets and kernels about money and investing. If you need to test some new cryptocurrency investment strategies or ward off those pesky credit card fraud enthusiasts, then you've come to the right place.\", \"fullPath\": \"subject > people and society > business > finance\", \"competitionCount\": 110, \"datasetCount\": 13136, \"scriptCount\": 4676, \"totalCount\": 17922}",
+    "{\"ref\": \"health\", \"name\": \"health\", \"description\": \"Consider the health tag your data science gym. Get in there and work out those data science muscles on health analytics. Analyze heart disease until you sweat. Then recover with with a nice candy production dataset.\", \"fullPath\": \"subject > health and fitness > health\", \"competitionCount\": 481, \"datasetCount\": 23433, \"scriptCount\": 8258, \"totalCount\": 32172}",
+    "{\"ref\": \"insurance\", \"name\": \"insurance\", \"description\": null, \"fullPath\": \"subject > people and society > business > finance > insurance\", \"competitionCount\": 34, \"datasetCount\": 3889, \"scriptCount\": 536, \"totalCount\": 4459}"
+  ],
+  "url": "https://www.kaggle.com/datasets/mirichoi0218/insurance",
+  "totalBytes": 16425,
+  "downloadCount": 368548
+}

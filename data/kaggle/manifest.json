@@ -1,0 +1,58 @@
+[
+  {
+    "ref": "shivamb/netflix-shows",
+    "slug": "shivamb_netflix-shows"
+  },
+  {
+    "ref": "gregorut/videogamesales",
+    "slug": "gregorut_videogamesales"
+  },
+  {
+    "ref": "spscientist/students-performance-in-exams",
+    "slug": "spscientist_students-performance-in-exams"
+  },
+  {
+    "ref": "uciml/pima-indians-diabetes-database",
+    "slug": "uciml_pima-indians-diabetes-database"
+  },
+  {
+    "ref": "uciml/breast-cancer-wisconsin-data",
+    "slug": "uciml_breast-cancer-wisconsin-data"
+  },
+  {
+    "ref": "neuromusic/avocado-prices",
+    "slug": "neuromusic_avocado-prices"
+  },
+  {
+    "ref": "fedesoriano/stroke-prediction-dataset",
+    "slug": "fedesoriano_stroke-prediction-dataset"
+  },
+  {
+    "ref": "uciml/red-wine-quality-cortez-et-al-2009",
+    "slug": "uciml_red-wine-quality-cortez-et-al-2009"
+  },
+  {
+    "ref": "russellyates88/suicide-rates-overview-1985-to-2016",
+    "slug": "russellyates88_suicide-rates-overview-1985-to-2016"
+  },
+  {
+    "ref": "mirichoi0218/insurance",
+    "slug": "mirichoi0218_insurance"
+  },
+  {
+    "ref": "fedesoriano/heart-failure-prediction",
+    "slug": "fedesoriano_heart-failure-prediction"
+  },
+  {
+    "ref": "imakash3011/customer-personality-analysis",
+    "slug": "imakash3011_customer-personality-analysis"
+  },
+  {
+    "ref": "pavansubhasht/ibm-hr-analytics-attrition-dataset",
+    "slug": "pavansubhasht_ibm-hr-analytics-attrition-dataset"
+  },
+  {
+    "ref": "abcsds/pokemon",
+    "slug": "abcsds_pokemon"
+  }
+]

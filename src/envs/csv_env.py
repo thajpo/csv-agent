@@ -443,7 +443,12 @@ while True:
     @classmethod
     async def _ensure_image(cls) -> None:
         """Ensure the docker image exists, building it if necessary."""
+        # Fast path: skip lock if already checked (double-checked locking)
+        if cls._image_checked:
+            return
+
         async with cls._build_lock:
+            # Re-check after acquiring lock (another task may have built it)
             if cls._image_checked:
                 return
 
@@ -454,7 +459,7 @@ while True:
                 stderr=asyncio.subprocess.DEVNULL
             )
             await proc.communicate()
-            
+
             if proc.returncode != 0:
                 print(f"Building docker image '{cls.IMAGE_NAME}'...")
                 # Build image
@@ -467,7 +472,7 @@ while True:
                 if build_proc.returncode != 0:
                     raise RuntimeError(f"Failed to build docker image: {stderr.decode()}")
                 print(f"✓ Built docker image '{cls.IMAGE_NAME}'")
-            
+
             cls._image_checked = True
 
     async def _wait_for_worker_ready(self, sandbox_id: str, timeout: float = 30.0) -> None:

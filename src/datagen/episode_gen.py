@@ -67,9 +67,12 @@ def gather_csv_tasks(
     for csv_path in csv_sources:
         dataset_name = Path(csv_path).stem
 
-        # Determine dataset description (Sidecar Metadata only)
+        # Determine dataset description (sibling meta.json or sidecar {name}.meta.json)
         dataset_description = None
-        meta_path = Path(csv_path).with_suffix(".meta.json")
+        csv_path_obj = Path(csv_path)
+        meta_path = csv_path_obj.parent / "meta.json"
+        if not meta_path.exists():
+            meta_path = csv_path_obj.with_suffix(".meta.json")
         if meta_path.exists():
             try:
                 with open(meta_path) as f:

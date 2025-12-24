@@ -1,0 +1,212 @@
+[
+  {
+    "question": "What is the overall average fixed acidity in the dataset?",
+    "hint": "Use df['fixed acidity'].mean() to compute the mean.",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which wine quality rating (3\u20138) has the highest mean alcohol content?",
+    "hint": "Group by 'quality', compute the mean of 'alcohol', then identify the quality with the maximum mean.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a statistically significant difference in mean volatile acidity between wines with quality \u2265\u202f6 and those with quality <\u202f6?",
+    "hint": "Perform an independent two\u2011sample t\u2011test on the 'volatile acidity' column for the two quality groups.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the Pearson correlation coefficient between alcohol and quality?",
+    "hint": "Use scipy.stats.pearsonr(df['alcohol'], df['quality']).",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does sulphates have a stronger linear relationship with quality than chlorides?",
+    "hint": "Compare the absolute Pearson correlation values of sulphates\u2011quality and chlorides\u2011quality.",
+    "n_steps": 2,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What proportion of wines have a pH greater than 3.5?",
+    "hint": "Filter df[df['pH'] > 3.5] and divide the count by the total number of rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is the distribution of residual sugar significantly skewed?",
+    "hint": "Compute skewness with scipy.stats.skew(df['residual sugar']) and interpret the magnitude.",
+    "n_steps": 2,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Can a simple linear regression model predict quality from alcohol alone with a statistically significant slope?",
+    "hint": "Fit OLS with statsmodels: sm.OLS(df['quality'], sm.add_constant(df['alcohol'])).fit() and check the p\u2011value of the alcohol coefficient.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the average total sulfur dioxide for wines with quality \u2265\u202f7 compared to those with quality \u2264\u202f5?",
+    "hint": "Group by the two quality thresholds and compute the mean of 'total sulfur dioxide' for each group.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant difference in mean density between wines with alcohol >\u202f11% and alcohol \u2264\u202f11%?",
+    "hint": "Perform a two\u2011sample t\u2011test on 'density' for the two alcohol groups.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which variable (excluding quality) has the highest absolute correlation with quality?",
+    "hint": "Inspect the correlation matrix and find the variable with the largest absolute correlation to 'quality'.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What are the mean and standard deviation of chlorides for each quality level?",
+    "hint": "Group by 'quality' and aggregate 'chlorides' with ['mean', 'std'].",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there evidence that higher sulphates are associated with higher quality wines?",
+    "hint": "Run a one\u2011way ANOVA comparing 'quality' groups across the 'sulphates' variable.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the effect size (Cohen\u2019s d) for the difference in alcohol between quality \u2265\u202f6 and quality <\u202f6?",
+    "hint": "Calculate Cohen\u2019s d using the means, standard deviations, and sample sizes of the two groups.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "If we fit a linear regression model using alcohol and sulphates as predictors, is the overall model significant?",
+    "hint": "Fit OLS with both predictors and examine the model F\u2011statistic and its p\u2011value.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the adjusted R\u2011squared of a regression model predicting quality from all numeric features?",
+    "hint": "Fit OLS with all features (excluding 'quality') and retrieve the adjusted R\u2011squared from the results.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Does the residual sugar distribution differ significantly between wines with quality 3\u20114 and quality 7\u20118?",
+    "hint": "Perform a Mann\u2011Whitney U test on 'residual sugar' for the two quality groups.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the 95\u202f% confidence interval for the mean pH of the entire dataset?",
+    "hint": "Compute the mean, standard error, and use scipy.stats.t.interval with df = n\u20111.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there a monotonic relationship between density and quality?",
+    "hint": "Calculate Spearman rank correlation between 'density' and 'quality' using scipy.stats.spearmanr.",
+    "n_steps": 2,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which quality level has the lowest average total sulfur dioxide?",
+    "hint": "Group by 'quality', compute the mean of 'total sulfur dioxide', then find the minimum.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does the variance of free sulfur dioxide differ across quality groups?",
+    "hint": "Apply Levene\u2019s test (scipy.stats.levene) across the 'quality' groups for 'free sulfur dioxide'.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What proportion of wines have alcohol >\u202f12% and quality \u2265\u202f7?",
+    "hint": "Filter rows meeting both conditions and divide the count by the total number of rows.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant linear relationship between density and alcohol?",
+    "hint": "Fit a simple linear regression of 'alcohol' on 'density' and check the slope\u2019s p\u2011value.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which predictor among volatile acidity, chlorides, and sulphates has the strongest negative correlation with quality?",
+    "hint": "Examine correlation signs and magnitudes for each predictor with 'quality'.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Using random_state=42, split the data 80\u202f% train / 20\u202f% test. Does a linear model trained on the training set achieve R\u00b2\u202f>\u202f0.4 on the test set?",
+    "hint": "Use train_test_split(random_state=42), fit OLS on train, predict on test, compute R\u00b2.",
+    "n_steps": 6,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Perform stepwise forward selection (using p\u2011values) to identify a subset of predictors that best explain quality. How many predictors are selected?",
+    "hint": "Iteratively add predictors with the lowest p\u2011value below 0.05, stop when none qualify.",
+    "n_steps": 8,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "With random_state=42, run a 5\u2011fold cross\u2011validated linear regression model (using all features) and report the average RMSE.",
+    "hint": "Use cross_val_score with scoring='neg_root_mean_squared_error' and KFold(n_splits=5, shuffle=True, random_state=42).",
+    "n_steps": 7,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Does a multiple regression model including alcohol, sulphates, and density significantly improve prediction of quality compared to a model with only alcohol?",
+    "hint": "Fit both models and compare them with an F\u2011test via statsmodels.stats.anova.anova_lm.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "What is the partial correlation between alcohol and quality controlling for sulphates?",
+    "hint": "Regress alcohol on sulphates, regress quality on sulphates, then compute Pearson correlation between the two sets of residuals.",
+    "n_steps": 6,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Is there evidence that the relationship between alcohol and quality differs across low (quality \u2264\u202f5) and high (quality \u2265\u202f6) quality groups?",
+    "hint": "Fit a model with an interaction term: quality ~ alcohol * quality_group and test the interaction coefficient.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Calculate the variance inflation factor (VIF) for each predictor in a full model predicting quality. Which predictor has the highest VIF?",
+    "hint": "Use statsmodels.stats.outliers_influence.variance_inflation_factor on the design matrix of the full model.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Perform a bootstrap (10\u202f000 resamples, random_state=42) to estimate the 95\u202f% confidence interval of the mean alcohol content.",
+    "hint": "Resample with replacement, compute the mean each time, then use np.percentile to obtain the interval.",
+    "n_steps": 7,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "What is the median residual sugar level for each quality rating?",
+    "hint": "Group by 'quality' and compute the median of 'residual sugar'.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does the proportion of wines with pH below 3.0 differ significantly between quality \u2264\u202f5 and quality \u2265\u202f6?",
+    "hint": "Create a contingency table and run a chi\u2011square test of independence.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the slope and its significance when regressing quality on density alone?",
+    "hint": "Fit OLS: sm.OLS(df['quality'], sm.add_constant(df['density'])).fit() and read the coefficient and p\u2011value.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  }
+]

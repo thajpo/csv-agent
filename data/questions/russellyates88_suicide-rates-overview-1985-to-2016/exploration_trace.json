@@ -1,0 +1,261 @@
+{
+  "csv_path": "/home/j/Projects/csv-agent/data/kaggle/russellyates88_suicide-rates-overview-1985-to-2016/data.csv",
+  "turns": [
+    {
+      "turn_number": 0,
+      "reasoning": "We need to output a python code block with df.head().```python\ndf.head()\n```",
+      "code_cells": [
+        "df.head()"
+      ],
+      "execution_results": [
+        {
+          "code": "df.head()",
+          "success": true,
+          "stdout": "Out[2]:    country  year  ... gdp_per_capita ($)       generation\n0  Albania  1987  ...                796     Generation X\n1  Albania  1987  ...                796           Silent\n2  Albania  1987  ...                796     Generation X\n3  Albania  1987  ...                796  G.I. Generation\n4  Albania  1987  ...                796          Boomers\n\n[5 rows x 12 columns]",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:23:13.757458"
+    },
+    {
+      "turn_number": 1,
+      "reasoning": "```python\n# Show summary information and basic statistics\ndf.info()\nprint(\"\\n--- Summary Statistics ---\")\ndf.describe(include='all')\n```",
+      "code_cells": [
+        "# Show summary information and basic statistics\ndf.info()\nprint(\"\\n--- Summary Statistics ---\")\ndf.describe(include='all')"
+      ],
+      "execution_results": [
+        {
+          "code": "# Show summary information and basic statistics\ndf.info()\nprint(\"\\n--- Summary Statistics ---\")\ndf.describe(include='all')",
+          "success": true,
+          "stdout": "<class 'pandas.core.frame.DataFrame'>\nRangeIndex: 27820 entries, 0 to 27819\nData columns (total 12 columns):\n #   Column              Non-Null Count  Dtype  \n---  ------              --------------  -----  \n 0   country             27820 non-null  object \n 1   year                27820 non-null  int64  \n 2   sex                 27820 non-null  object \n 3   age                 27820 non-null  object \n 4   suicides_no         27820 non-null  int64  \n 5   population          27820 non-null  int64  \n 6   suicides/100k pop   27820 non-null  float64\n 7   country-year        27820 non-null  object \n 8   HDI for year        8364 non-null   float64\n 9    gdp_for_year ($)   27820 non-null  object \n 10  gdp_per_capita ($)  27820 non-null  int64  \n 11  generation          27820 non-null  object \ndtypes: float64(2), int64(4), object(6)\nmemory usage: 2.5+ MB\n\n--- Summary Statistics ---\nOut[3]:         country          year  ... gdp_per_capita ($)    generation\ncount     27820  27820.000000  ...       27820.000000         27820\nunique      101           NaN  ...                NaN             6\ntop     Austria           NaN  ...                NaN  Generation X\nfreq        382           NaN  ...                NaN          6408\nmean        NaN   2001.258375  ...       16866.464414           NaN\nstd         NaN      8.469055  ...       18887.576472           NaN\nmin         NaN   1985.000000  ...         251.000000           NaN\n25%         NaN   1995.000000  ...        3447.000000           NaN\n50%         NaN   2002.000000  ...        9372.000000           NaN\n75%         NaN   2008.000000  ...       24874.000000           NaN\nmax         NaN   2016.000000  ...      126352.000000           NaN\n\n[11 rows x 12 columns]",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:23:15.118144"
+    },
+    {
+      "turn_number": 2,
+      "reasoning": "```python\n# 1. Check missing values per column\nmissing_counts = df.isnull().sum()\nprint(\"Missing values per column:\\n\", missing_counts)\n\n# 2. Unique categories for 'sex' and 'age'\nprint(\"\\nUnique values in 'sex':\", df['sex'].unique())\nprint(\"Unique values in 'age':\", df['age'].unique())\n\n# 3. Correlation matrix for numeric variables\nnumeric_cols = df.select_dtypes(include=['int64', 'float64']).columns\ncorr_matrix = df[numeric_cols].corr()\nprint(\"\\nCorrelation matrix:\\n\", corr_matrix)\n\n# 4. Average suicide rate per 100k by generation\ngen_avg = df.groupby('generation')['suicides/100k pop'].mean().sort_values(ascending=False)\nprint(\"\\nAverage suicides/100k pop by generation:\\n\", gen_avg.head())\n```",
+      "code_cells": [
+        "# 1. Check missing values per column\nmissing_counts = df.isnull().sum()\nprint(\"Missing values per column:\\n\", missing_counts)\n\n# 2. Unique categories for 'sex' and 'age'\nprint(\"\\nUnique values in 'sex':\", df['sex'].unique())\nprint(\"Unique values in 'age':\", df['age'].unique())\n\n# 3. Correlation matrix for numeric variables\nnumeric_cols = df.select_dtypes(include=['int64', 'float64']).columns\ncorr_matrix = df[numeric_cols].corr()\nprint(\"\\nCorrelation matrix:\\n\", corr_matrix)\n\n# 4. Average suicide rate per 100k by generation\ngen_avg = df.groupby('generation')['suicides/100k pop'].mean().sort_values(ascending=False)\nprint(\"\\nAverage suicides/100k pop by generation:\\n\", gen_avg.head())"
+      ],
+      "execution_results": [
+        {
+          "code": "# 1. Check missing values per column\nmissing_counts = df.isnull().sum()\nprint(\"Missing values per column:\\n\", missing_counts)\n\n# 2. Unique categories for 'sex' and 'age'\nprint(\"\\nUnique values in 'sex':\", df['sex'].unique())\nprint(\"Unique values in 'age':\", df['age'].unique())\n\n# 3. Correlation matrix for numeric variables\nnumeric_cols = df.select_dtypes(include=['int64', 'float64']).columns\ncorr_matrix = df[numeric_cols].corr()\nprint(\"\\nCorrelation matrix:\\n\", corr_matrix)\n\n# 4. Average suicide rate per 100k by generation\ngen_avg = df.groupby('generation')['suicides/100k pop'].mean().sort_values(ascending=False)\nprint(\"\\nAverage suicides/100k pop by generation:\\n\", gen_avg.head())",
+          "success": true,
+          "stdout": "Missing values per column:\n country                   0\nyear                      0\nsex                       0\nage                       0\nsuicides_no               0\npopulation                0\nsuicides/100k pop         0\ncountry-year              0\nHDI for year          19456\n gdp_for_year ($)         0\ngdp_per_capita ($)        0\ngeneration                0\ndtype: int64\n\nUnique values in 'sex': ['male' 'female']\nUnique values in 'age': ['15-24 years' '35-54 years' '75+ years' '25-34 years' '55-74 years'\n '5-14 years']\n\nCorrelation matrix:\n                         year  suicides_no  ...  HDI for year  gdp_per_capita ($)\nyear                1.000000    -0.004546  ...      0.366786            0.339134\nsuicides_no        -0.004546     1.000000  ...      0.151399            0.061330\npopulation          0.008850     0.616162  ...      0.102943            0.081510\nsuicides/100k pop  -0.039037     0.306604  ...      0.074279            0.001785\nHDI for year        0.366786     0.151399  ...      1.000000            0.771228\ngdp_per_capita ($)  0.339134     0.061330  ...      0.771228            1.000000\n\n[6 rows x 6 columns]\n\nAverage suicides/100k pop by generation:\n generation\nG.I. Generation    23.946378\nSilent             18.418848\nBoomers            14.742094\nGeneration X       10.556874\nMillenials          5.383597\nName: suicides/100k pop, dtype: float64",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:23:18.188996"
+    },
+    {
+      "turn_number": 3,
+      "reasoning": "```python\n# 1. Convert gdp_for_year to numeric (remove commas) and check a few values\ndf['gdp_for_year_clean'] = df['gdp_for_year ($)'].str.replace(',', '').astype(int)\nprint(\"Sample of cleaned GDP for year:\\n\", df[['gdp_for_year ($)', 'gdp_for_year_clean']].head())\n\n# 2. Average suicide rate per 100k by sex\nsex_avg = df.groupby('sex')['suicides/100k pop'].mean()\nprint(\"\\nAverage suicides/100k pop by sex:\\n\", sex_avg)\n\n# 3. Average suicide rate per 100k by age group\nage_avg = df.groupby('age')['suicides/100k pop'].mean().sort_values(ascending=False)\nprint(\"\\nAverage suicides/100k pop by age group (descending):\\n\", age_avg.head())\n\n# 4. Trend of average suicide rate over years\nyear_trend = df.groupby('year')['suicides/100k pop'].mean()\nprint(\"\\nAverage suicides/100k pop by year (first and last 5 years):\\n\", year_trend.head(), \"\\n...\", year_trend.tail())\n```",
+      "code_cells": [
+        "# 1. Convert gdp_for_year to numeric (remove commas) and check a few values\ndf['gdp_for_year_clean'] = df['gdp_for_year ($)'].str.replace(',', '').astype(int)\nprint(\"Sample of cleaned GDP for year:\\n\", df[['gdp_for_year ($)', 'gdp_for_year_clean']].head())\n\n# 2. Average suicide rate per 100k by sex\nsex_avg = df.groupby('sex')['suicides/100k pop'].mean()\nprint(\"\\nAverage suicides/100k pop by sex:\\n\", sex_avg)\n\n# 3. Average suicide rate per 100k by age group\nage_avg = df.groupby('age')['suicides/100k pop'].mean().sort_values(ascending=False)\nprint(\"\\nAverage suicides/100k pop by age group (descending):\\n\", age_avg.head())\n\n# 4. Trend of average suicide rate over years\nyear_trend = df.groupby('year')['suicides/100k pop'].mean()\nprint(\"\\nAverage suicides/100k pop by year (first and last 5 years):\\n\", year_trend.head(), \"\\n...\", year_trend.tail())"
+      ],
+      "execution_results": [
+        {
+          "code": "# 1. Convert gdp_for_year to numeric (remove commas) and check a few values\ndf['gdp_for_year_clean'] = df['gdp_for_year ($)'].str.replace(',', '').astype(int)\nprint(\"Sample of cleaned GDP for year:\\n\", df[['gdp_for_year ($)', 'gdp_for_year_clean']].head())\n\n# 2. Average suicide rate per 100k by sex\nsex_avg = df.groupby('sex')['suicides/100k pop'].mean()\nprint(\"\\nAverage suicides/100k pop by sex:\\n\", sex_avg)\n\n# 3. Average suicide rate per 100k by age group\nage_avg = df.groupby('age')['suicides/100k pop'].mean().sort_values(ascending=False)\nprint(\"\\nAverage suicides/100k pop by age group (descending):\\n\", age_avg.head())\n\n# 4. Trend of average suicide rate over years\nyear_trend = df.groupby('year')['suicides/100k pop'].mean()\nprint(\"\\nAverage suicides/100k pop by year (first and last 5 years):\\n\", year_trend.head(), \"\\n...\", year_trend.tail())",
+          "success": false,
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/site-packages/pandas/core/indexes/base.py\", line 3812, in get_loc\n    return self._engine.get_loc(casted_key)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"pandas/_libs/index.pyx\", line 167, in pandas._libs.index.IndexEngine.get_loc\n  File \"pandas/_libs/index.pyx\", line 196, in pandas._libs.index.IndexEngine.get_loc\n  File \"pandas/_libs/hashtable_class_helper.pxi\", line 7088, in pandas._libs.hashtable.PyObjectHashTable.get_item\n  File \"pandas/_libs/hashtable_class_helper.pxi\", line 7096, in pandas._libs.hashtable.PyObjectHashTable.get_item\nKeyError: 'gdp_for_year ($)'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/tmp/python_worker.py\", line 166, in <module>\n    exec(compile(exec_module, \"<cell>\", \"exec\"), namespace, namespace)\n  File \"<cell>\", line 2, in <module>\n  File \"/usr/local/lib/python3.11/site-packages/pandas/core/frame.py\", line 4113, in __getitem__\n    indexer = self.columns.get_loc(key)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/site-packages/pandas/core/indexes/base.py\", line 3819, in get_loc\n    raise KeyError(key) from err\nKeyError: 'gdp_for_year ($)'",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:24:04.501805"
+    },
+    {
+      "turn_number": 4,
+      "reasoning": "```python\n# Inspect column names to identify any leading/trailing spaces\nprint(\"Column names:\")\nfor col in df.columns:\n    print(repr(col))\n```",
+      "code_cells": [
+        "# Inspect column names to identify any leading/trailing spaces\nprint(\"Column names:\")\nfor col in df.columns:\n    print(repr(col))"
+      ],
+      "execution_results": [
+        {
+          "code": "# Inspect column names to identify any leading/trailing spaces\nprint(\"Column names:\")\nfor col in df.columns:\n    print(repr(col))",
+          "success": true,
+          "stdout": "Column names:\n'country'\n'year'\n'sex'\n'age'\n'suicides_no'\n'population'\n'suicides/100k pop'\n'country-year'\n'HDI for year'\n' gdp_for_year ($) '\n'gdp_per_capita ($)'\n'generation'",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:24:29.717372"
+    },
+    {
+      "turn_number": 5,
+      "reasoning": "```json\n{\n  \"questions\": [\n    {\n      \"question\": \"What is the overall average suicide rate (per 100k population) across all countries and years?\",\n      \"hint\": \"Group all rows and compute the mean of the 'suicides/100k pop' column.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Does the average suicide rate differ between males and females?\",\n      \"hint\": \"Calculate mean suicide rate for each sex and compare using an independent t\u2011test.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which age group has the highest average suicide rate?\",\n      \"hint\": \"Group by 'age' and compute the mean of 'suicides/100k pop'.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a significant linear relationship between a country's GDP per capita and its suicide rate?\",\n      \"hint\": \"Run a simple linear regression with 'gdp_per_capita ($)' as predictor and 'suicides/100k pop' as response.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"How does the average suicide rate change over time (by year)?\",\n      \"hint\": \"Group by 'year' and compute the mean suicide rate; then examine the trend.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Do countries with higher Human Development Index (HDI) tend to have lower suicide rates?\",\n      \"hint\": \"Calculate the Pearson correlation between 'HDI for year' and 'suicides/100k pop'.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which generation (e.g., Boomers, Generation X) exhibits the highest average suicide rate?\",\n      \"hint\": \"Group by 'generation' and compute the mean suicide rate.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is the distribution of suicide rates different across generations?\",\n      \"hint\": \"Perform a one\u2011way ANOVA comparing 'suicides/100k pop' across the 'generation' groups.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the correlation matrix for all numeric variables (year, suicides_no, population, HDI, GDP per capita, suicide rate)?\",\n      \"hint\": \"Select numeric columns and use pandas .corr() to compute pairwise Pearson correlations.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Are suicide rates higher in countries with missing HDI values compared to those with reported HDI?\",\n      \"hint\": \"Create two groups based on HDI missingness and compare their mean suicide rates using a t\u2011test.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does the effect of GDP per capita on suicide rate differ between males and females?\",\n      \"hint\": \"Fit separate linear regressions for each sex and compare slopes, or include an interaction term in a combined model.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the proportion of total suicides contributed by each continent (if continent can be inferred from country names)?\",\n      \"hint\": \"Map countries to continents, aggregate 'suicides_no' per continent, then compute percentages.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is there a statistically significant trend (increase or decrease) in suicide rates over the years after adjusting for population size?\",\n      \"hint\": \"Fit a linear regression of 'suicides/100k pop' on 'year' with population as a weight or covariate.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do suicide rates differ significantly between the '15-24 years' and '75+ years' age groups?\",\n      \"hint\": \"Extract the two age groups, compute means, and run an independent t\u2011test.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the effect size (Cohen's d) for the difference in suicide rates between males and females?\",\n      \"hint\": \"Calculate group means and standard deviations, then compute Cohen's d.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is there a monotonic relationship between HDI and suicide rate across countries?\",\n      \"hint\": \"Compute Spearman rank correlation between 'HDI for year' and 'suicides/100k pop'.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"How much of the variance in suicide rates can be explained by a multiple linear regression model using HDI, GDP per capita, and year as predictors?\",\n      \"hint\": \"Fit an OLS model with the three predictors and report the adjusted R\u00b2.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do suicide rates differ across continents after controlling for GDP per capita?\",\n      \"hint\": \"Encode continent as categorical variable, fit a linear model with GDP per capita and continent, and test continent coefficients.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Is there evidence of heteroscedasticity in the regression of suicide rate on GDP per capita?\",\n      \"hint\": \"After fitting the regression, perform Breusch\u2011Pagan or White test on residuals.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"What are the top 5 countries with the highest average suicide rates, and how do their HDI scores compare to the global average?\",\n      \"hint\": \"Group by country, compute mean suicide rate, select top 5, then join with mean HDI and compare.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does the relationship between year and suicide rate differ before and after the year 2000?\",\n      \"hint\": \"Split the dataset into two periods (<2000, \u22652000), fit separate regressions, and compare slopes.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Are suicide rates associated with economic growth, measured as the yearly change in GDP per capita?\",\n      \"hint\": \"Compute yearly GDP per capita change per country, then correlate that change with suicide rate.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"What is the chi\u2011square statistic for independence between sex and generation regarding high vs. low suicide rate categories?\",\n      \"hint\": \"Create a binary high/low suicide rate variable (e.g., above median), build contingency table of sex vs. generation, then run chi\u2011square test.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Using a bootstrap approach, estimate the 95% confidence interval for the mean suicide rate across all records.\",\n      \"hint\": \"Resample the dataset many times, compute mean each replicate, and derive percentile interval.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Build a predictive model (linear regression) for suicide rate using all available numeric predictors and evaluate its performance using 5\u2011fold cross\u2011validation (random_state=42).\",\n      \"hint\": \"Select numeric features, fit OLS within cross\u2011validation, report average RMSE.\",\n      \"n_steps\": 10,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Assess whether the residuals of the multiple regression model (HDI, GDP per capita, year) are normally distributed.\",\n      \"hint\": \"Obtain residuals, plot QQ\u2011plot or run Shapiro\u2011Wilk test.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Determine if there is a lagged effect: does the HDI of the previous year predict suicide rates in the current year?\",\n      \"hint\": \"Shift HDI values per country by one year, merge with current year suicide data, then regress.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Compare suicide rates between countries with GDP per capita above the global median and those below, using a Mann\u2011Whitney U test.\",\n      \"hint\": \"Split data based on GDP median, then apply non\u2011parametric test.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Identify any interaction between age group and sex on suicide rates using a two\u2011way ANOVA.\",\n      \"hint\": \"Fit ANOVA with factors 'age' and 'sex' and their interaction term.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"What proportion of the total suicides in the dataset is accounted for by the top 10% of country\u2011year entries with the highest suicide rates?\",\n      \"hint\": \"Rank country\u2011year records by suicide rate, select top 10%, sum their suicides_no, divide by total suicides_no.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does the inclusion of the 'generation' variable improve the explanatory power of the regression model for suicide rates beyond HDI and GDP per capita?\",\n      \"hint\": \"Fit nested models (with and without generation as dummy variables) and compare using an F\u2011test or adjusted R\u00b2.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Perform a time\u2011series decomposition of the average suicide rate (by year) to extract trend, seasonal, and residual components.\",\n      \"hint\": \"Compute yearly average series, then apply seasonal_decompose (additive) from statsmodels.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    }\n  ]\n}\n```json\n<DONE>",
+      "code_cells": [],
+      "execution_results": [],
+      "timestamp": "2025-12-23 23:31:08.408475"
+    }
+  ],
+  "questions_generated": [
+    {
+      "hint": "Group all rows and compute the mean of the 'suicides/100k pop' column.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Calculate mean suicide rate for each sex and compare using an independent t\u2011test.",
+      "difficulty": "EASY",
+      "n_steps": 4
+    },
+    {
+      "hint": "Group by 'age' and compute the mean of 'suicides/100k pop'.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Run a simple linear regression with 'gdp_per_capita ($)' as predictor and 'suicides/100k pop' as response.",
+      "difficulty": "EASY",
+      "n_steps": 5
+    },
+    {
+      "hint": "Group by 'year' and compute the mean suicide rate; then examine the trend.",
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "hint": "Calculate the Pearson correlation between 'HDI for year' and 'suicides/100k pop'.",
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "hint": "Group by 'generation' and compute the mean suicide rate.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Perform a one\u2011way ANOVA comparing 'suicides/100k pop' across the 'generation' groups.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Select numeric columns and use pandas .corr() to compute pairwise Pearson correlations.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Create two groups based on HDI missingness and compare their mean suicide rates using a t\u2011test.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Fit separate linear regressions for each sex and compare slopes, or include an interaction term in a combined model.",
+      "difficulty": "MEDIUM",
+      "n_steps": 7
+    },
+    {
+      "hint": "Map countries to continents, aggregate 'suicides_no' per continent, then compute percentages.",
+      "difficulty": "MEDIUM",
+      "n_steps": 6
+    },
+    {
+      "hint": "Fit a linear regression of 'suicides/100k pop' on 'year' with population as a weight or covariate.",
+      "difficulty": "MEDIUM",
+      "n_steps": 6
+    },
+    {
+      "hint": "Extract the two age groups, compute means, and run an independent t\u2011test.",
+      "difficulty": "EASY",
+      "n_steps": 4
+    },
+    {
+      "hint": "Calculate group means and standard deviations, then compute Cohen's d.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Compute Spearman rank correlation between 'HDI for year' and 'suicides/100k pop'.",
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "hint": "Fit an OLS model with the three predictors and report the adjusted R\u00b2.",
+      "difficulty": "MEDIUM",
+      "n_steps": 7
+    },
+    {
+      "hint": "Encode continent as categorical variable, fit a linear model with GDP per capita and continent, and test continent coefficients.",
+      "difficulty": "HARD",
+      "n_steps": 8
+    },
+    {
+      "hint": "After fitting the regression, perform Breusch\u2011Pagan or White test on residuals.",
+      "difficulty": "HARD",
+      "n_steps": 6
+    },
+    {
+      "hint": "Group by country, compute mean suicide rate, select top 5, then join with mean HDI and compare.",
+      "difficulty": "MEDIUM",
+      "n_steps": 6
+    },
+    {
+      "hint": "Split the dataset into two periods (<2000, \u22652000), fit separate regressions, and compare slopes.",
+      "difficulty": "MEDIUM",
+      "n_steps": 7
+    },
+    {
+      "hint": "Compute yearly GDP per capita change per country, then correlate that change with suicide rate.",
+      "difficulty": "HARD",
+      "n_steps": 8
+    },
+    {
+      "hint": "Create a binary high/low suicide rate variable (e.g., above median), build contingency table of sex vs. generation, then run chi\u2011square test.",
+      "difficulty": "HARD",
+      "n_steps": 9
+    },
+    {
+      "hint": "Resample the dataset many times, compute mean each replicate, and derive percentile interval.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 9
+    },
+    {
+      "hint": "Select numeric features, fit OLS within cross\u2011validation, report average RMSE.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 10
+    },
+    {
+      "hint": "Obtain residuals, plot QQ\u2011plot or run Shapiro\u2011Wilk test.",
+      "difficulty": "HARD",
+      "n_steps": 6
+    },
+    {
+      "hint": "Shift HDI values per country by one year, merge with current year suicide data, then regress.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 9
+    },
+    {
+      "hint": "Split data based on GDP median, then apply non\u2011parametric test.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Fit ANOVA with factors 'age' and 'sex' and their interaction term.",
+      "difficulty": "HARD",
+      "n_steps": 7
+    },
+    {
+      "hint": "Rank country\u2011year records by suicide rate, select top 10%, sum their suicides_no, divide by total suicides_no.",
+      "difficulty": "MEDIUM",
+      "n_steps": 6
+    },
+    {
+      "hint": "Fit nested models (with and without generation as dummy variables) and compare using an F\u2011test or adjusted R\u00b2.",
+      "difficulty": "HARD",
+      "n_steps": 8
+    },
+    {
+      "hint": "Compute yearly average series, then apply seasonal_decompose (additive) from statsmodels.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 9
+    }
+  ],
+  "total_turns": 6,
+  "timestamp": "2025-12-23 23:31:18.547604"
+}

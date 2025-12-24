@@ -1,0 +1,20 @@
+{
+  "ref": "uciml/pima-indians-diabetes-database",
+  "owner": "uciml",
+  "name": "pima-indians-diabetes-database",
+  "title": "Pima Indians Diabetes Database",
+  "subtitle": "Predict the onset of diabetes based on diagnostic measures",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"india\", \"name\": \"india\", \"description\": \"This tag will take you to the wonderful land of datasets and kernels related to India. You will find topics that range far and wide. There's education, travel, weather, and crime, too.\", \"fullPath\": \"geography and places > asia > india\", \"competitionCount\": 7, \"datasetCount\": 2708, \"scriptCount\": 996, \"totalCount\": 3711}",
+    "{\"ref\": \"healthcare\", \"name\": \"healthcare\", \"description\": \"AI in healthcare is a growing interest. One of the major problems is simply converting research into an application. Should be easy, right?\", \"fullPath\": \"subject > health and fitness > health > healthcare\", \"competitionCount\": 32, \"datasetCount\": 2354, \"scriptCount\": 2062, \"totalCount\": 4448}",
+    "{\"ref\": \"earth and nature\", \"name\": \"earth and nature\", \"description\": null, \"fullPath\": \"subject > earth and nature\", \"competitionCount\": 21, \"datasetCount\": 79734, \"scriptCount\": 426, \"totalCount\": 80181}",
+    "{\"ref\": \"health\", \"name\": \"health\", \"description\": \"Consider the health tag your data science gym. Get in there and work out those data science muscles on health analytics. Analyze heart disease until you sweat. Then recover with with a nice candy production dataset.\", \"fullPath\": \"subject > health and fitness > health\", \"competitionCount\": 481, \"datasetCount\": 23433, \"scriptCount\": 8258, \"totalCount\": 32172}",
+    "{\"ref\": \"diabetes\", \"name\": \"diabetes\", \"description\": null, \"fullPath\": \"subject > health and fitness > health > health conditions > diabetes\", \"competitionCount\": 1, \"datasetCount\": 6508, \"scriptCount\": 826, \"totalCount\": 7335}",
+    "{\"ref\": \"benchmark dataset\", \"name\": \"benchmark dataset\", \"description\": \"Datasets associated with known benchmarks, whether internal to Kaggle or external (e.g. on OpenML)\", \"fullPath\": \"admin > benchmark dataset\", \"competitionCount\": 0, \"datasetCount\": 60, \"scriptCount\": 0, \"totalCount\": 60}",
+    "{\"ref\": \"benchmark\", \"name\": \"benchmark\", \"description\": \"\", \"fullPath\": \"technique > benchmark\", \"competitionCount\": 9, \"datasetCount\": 234, \"scriptCount\": 94, \"totalCount\": 337}"
+  ],
+  "url": "https://www.kaggle.com/datasets/uciml/pima-indians-diabetes-database",
+  "totalBytes": 9128,
+  "downloadCount": 741023
+}

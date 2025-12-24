@@ -1,0 +1,80 @@
+[
+  {
+    "question": "What is the total number of records in the dataset?",
+    "hint": "Use df.shape[0] to get the row count.",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the average (mean) insurance charge?",
+    "hint": "Calculate df['charges'].mean().",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What proportion of policyholders are smokers?",
+    "hint": "Map smoker column to 0/1, then take the mean.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the median age of all customers?",
+    "hint": "Use df['age'].median().",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which region has the highest average charge?",
+    "hint": "Group by 'region' and compute mean of 'charges', then find the max.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a statistically significant difference in average charges between smokers and non\u2011smokers?",
+    "hint": "Perform an independent two\u2011sample t\u2011test on the 'charges' split by smoker status using scipy.stats.ttest_ind.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the Pearson correlation coefficient and p\u2011value between BMI and charges?",
+    "hint": "Use scipy.stats.pearsonr(df['bmi'], df['charges']).",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Fit a simple linear regression model predicting charges from age. What is the R\u00b2 value?",
+    "hint": "Use sklearn.linear_model.LinearRegression, fit on age (reshaped) \u2192 charges, then call .score().",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Create a multiple linear regression model with age, bmi, children, smoker, and region (one\u2011hot encoded) as predictors. What is the adjusted R\u00b2?",
+    "hint": "Encode categorical variables with pd.get_dummies, fit statsmodels OLS, and read .rsquared_adj.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Using a train\u2011test split (random_state=42, test_size=0.2), train the full multiple regression model from the previous question. What is the RMSE on the test set?",
+    "hint": "Split data, fit sklearn LinearRegression, predict on test, compute sqrt(mean_squared_error).",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Add an interaction term between smoker (encoded 0/1) and bmi to the full regression model. Does the interaction term improve the model according to an F\u2011test?",
+    "hint": "Create bmi*smoker column, fit reduced and full OLS models, compare with sm.stats.anova_lm.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Perform a bootstrap (10,000 resamples) to estimate the standard error of the mean charge for smokers. What is the bootstrap standard error?",
+    "hint": "Resample the smoker subset with replacement, compute the mean each iteration, then calculate the standard deviation of those means.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Check for heteroscedasticity in the full regression model using the Breusch\u2011Pagan test. What are the test statistic and p\u2011value?",
+    "hint": "Use statsmodels.stats.diagnostic.het_breuschpagan on model residuals and exogenous variables.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  }
+]

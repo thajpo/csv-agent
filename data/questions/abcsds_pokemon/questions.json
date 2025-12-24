@@ -1,0 +1,218 @@
+[
+  {
+    "question": "What is the overall average Total stat for all Pok\u00e9mon?",
+    "hint": "Use df['Total'].mean() to compute the mean.",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which primary type has the highest average Attack stat?",
+    "hint": "Group by 'Type 1', compute mean Attack, then select the max.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What proportion of Pok\u00e9mon are legendary?",
+    "hint": "Count True values in 'Legendary' and divide by total rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the median Speed for each primary type?",
+    "hint": "Group by 'Type 1' and calculate the median of Speed.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which primary type shows the lowest average Defense?",
+    "hint": "Group by 'Type 1', compute mean Defense, then find the minimum.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the 90th percentile of the HP stat?",
+    "hint": "Use np.percentile(df['HP'], 90).",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Do Pok\u00e9mon with a secondary type have a higher average Total stat than those without?",
+    "hint": "Create two groups based on whether 'Type 2' is null, then compare means with a t-test.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there a significant difference in mean Speed between legendary and non\u2011legendary Pok\u00e9mon?",
+    "hint": "Perform an independent t-test on Speed for the two Legenday groups.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which primary type has the highest variance in HP?",
+    "hint": "Group by 'Type 1', compute var() of HP, then select the max.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Do the first 200 Pok\u00e9mon (by index) differ in average Attack from the last 200 Pok\u00e9mon?",
+    "hint": "Slice the DataFrame and compare mean Attack with a t-test.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the Pearson correlation coefficient between Attack and Speed?",
+    "hint": "Use scipy.stats.pearsonr(df['Attack'], df['Speed']).",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is the relationship between HP and Total monotonic?",
+    "hint": "Compute Spearman rank correlation between HP and Total.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which primary type has the highest average Total stat?",
+    "hint": "Group by 'Type 1', compute mean Total, then find the max.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Do Water and Fire primary types differ significantly in mean HP?",
+    "hint": "Two\u2011sample t-test comparing HP of Water vs Fire groups.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there a significant difference in variance of Defense between Pok\u00e9mon with and without a secondary type?",
+    "hint": "Apply Levene\u2019s test on Defense for the two groups.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which combination of primary and secondary types yields the highest average Sp. Atk?",
+    "hint": "Group by ['Type 1','Type 2'] and compute mean Sp. Atk, then locate the max.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Do the top three most common primary types differ in mean Attack?",
+    "hint": "Identify top three types by count, then run one\u2011way ANOVA on Attack.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is the distribution of the Total stat normal?",
+    "hint": "Perform a Shapiro\u2011Wilk test on df['Total'].",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the effect size (Cohen\u2019s d) for the Speed difference between legendary and non\u2011legendary Pok\u00e9mon?",
+    "hint": "Compute means, pooled SD, then Cohen\u2019s d = (m1\u2011m2)/SD_pooled.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which primary type shows the strongest positive correlation between Attack and Speed?",
+    "hint": "For each Type 1, compute Pearson r between Attack and Speed; pick the highest.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there a linear relationship between Sp. Atk and Sp. Def after log\u2011transforming both variables?",
+    "hint": "Apply np.log to both columns, fit OLS regression, and examine R\u2011squared.",
+    "n_steps": 6,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Do Pok\u00e9mon introduced in Generation 1 have higher average Speed than those from later generations?",
+    "hint": "Filter Generation == 1, compare mean Speed with others via t-test.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the average Total stat for each Generation?",
+    "hint": "Group by 'Generation' and compute mean of Total.",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant interaction effect between primary type and presence of a secondary type on Defense?",
+    "hint": "Fit a two\u2011way ANOVA with Type 1 and a binary flag for Type 2 on Defense.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Which primary type has the lowest median Sp. Def?",
+    "hint": "Group by 'Type 1', compute median Sp. Def, then select the minimum.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Do Pok\u00e9mon with 'Dragon' as primary type have significantly higher Sp. Atk than those with 'Fairy' as primary type?",
+    "hint": "Two\u2011sample t-test on Sp. Atk between Dragon and Fairy groups.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there a significant trend in average HP across Generations?",
+    "hint": "Run a one\u2011way ANOVA or linear regression of HP on Generation.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the probability that a randomly selected Pok\u00e9mon has Speed greater than 100?",
+    "hint": "Calculate proportion of rows where Speed > 100.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Do Pok\u00e9mon with identical primary and secondary types exist, and if so, what proportion do they represent?",
+    "hint": "Count rows where Type 1 == Type 2 (excluding nulls) and divide by total rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does having a secondary type affect the mean Speed after adjusting for primary type (ANCOVA)?",
+    "hint": "Fit a linear model with Speed as response, primary type as covariate, and secondary\u2011type flag as factor.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Which primary type shows the greatest increase in average Total stat from Generation 1 to Generation 6?",
+    "hint": "Compute mean Total per Generation for each Type 1, then calculate the difference between Gen 6 and Gen 1; pick the max.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Is there a significant difference in the variance of Total stat between legendary and non\u2011legendary Pok\u00e9mon?",
+    "hint": "Apply Levene\u2019s test on Total for the two Legenday groups.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the average Speed for each combination of primary and secondary types, and which combination exceeds 80 on average?",
+    "hint": "Group by ['Type 1','Type 2'] and compute mean Speed; filter where mean > 80.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Do the top five most common primary types have different slopes in the regression of Attack on Total?",
+    "hint": "Fit separate OLS regressions of Attack ~ Total for each of the five types and compare slope coefficients.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Is there a significant correlation between Generation number and Average Total stat?",
+    "hint": "Compute Pearson correlation between Generation and mean Total per Generation.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the effect size (Cohen\u2019s d) for the difference in Attack between Pok\u00e9mon with and without a secondary type?",
+    "hint": "Calculate means and pooled SD for Attack in the two groups, then compute Cohen\u2019s d.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  }
+]

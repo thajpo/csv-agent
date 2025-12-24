@@ -1,0 +1,253 @@
+{
+  "csv_path": "/home/j/Projects/csv-agent/data/kaggle/fedesoriano_heart-failure-prediction/data.csv",
+  "turns": [
+    {
+      "turn_number": 0,
+      "reasoning": "```python\ndf.head()\n```",
+      "code_cells": [
+        "df.head()"
+      ],
+      "execution_results": [
+        {
+          "code": "df.head()",
+          "success": true,
+          "stdout": "Out[2]:    Age Sex ChestPainType  ...  Oldpeak  ST_Slope  HeartDisease\n0   40   M           ATA  ...      0.0        Up             0\n1   49   F           NAP  ...      1.0      Flat             1\n2   37   M           ATA  ...      0.0        Up             0\n3   48   F           ASY  ...      1.5      Flat             1\n4   54   M           NAP  ...      0.0        Up             0\n\n[5 rows x 12 columns]",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:24:24.345524"
+    },
+    {
+      "turn_number": 1,
+      "reasoning": "```python\n(df.describe(include='all'), df.isnull().sum())\n```",
+      "code_cells": [
+        "(df.describe(include='all'), df.isnull().sum())"
+      ],
+      "execution_results": [
+        {
+          "code": "(df.describe(include='all'), df.isnull().sum())",
+          "success": true,
+          "stdout": "Out[3]: (               Age  Sex ChestPainType  ...     Oldpeak  ST_Slope  HeartDisease\ncount   918.000000  918           918  ...  918.000000       918    918.000000\nunique         NaN    2             4  ...         NaN         3           NaN\ntop            NaN    M           ASY  ...         NaN      Flat           NaN\nfreq           NaN  725           496  ...         NaN       460           NaN\nmean     53.510893  NaN           NaN  ...    0.887364       NaN      0.553377\nstd       9.432617  NaN           NaN  ...    1.066570       NaN      0.497414\nmin      28.000000  NaN           NaN  ...   -2.600000       NaN      0.000000\n25%      47.000000  NaN           NaN  ...    0.000000       NaN      0.000000\n50%      54.000000  NaN           NaN  ...    0.600000       NaN      1.000000\n75%      60.000000  NaN           NaN  ...    1.500000       NaN      1.000000\nmax      77.000000  NaN           NaN  ...    6.200000       NaN      1.000000\n\n[11 rows x 12 columns], Age               0\nSex               0\nChestPainType     0\nRestingBP         0\nCholesterol       0\nFastingBS         0\nRestingECG        0\nMaxHR             0\nExerciseAngina    0\nOldpeak           0\nST_Slope          0\nHeartDisease      0\ndtype: int64)",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:24:31.109810"
+    },
+    {
+      "turn_number": 2,
+      "reasoning": "```python\ncategorical_cols = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope', 'HeartDisease']\ncat_counts = {col: df[col].value_counts() for col in categorical_cols}\ncorr_matrix = df.corr()\n(cat_counts, corr_matrix)\n```",
+      "code_cells": [
+        "categorical_cols = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope', 'HeartDisease']\ncat_counts = {col: df[col].value_counts() for col in categorical_cols}\ncorr_matrix = df.corr()\n(cat_counts, corr_matrix)"
+      ],
+      "execution_results": [
+        {
+          "code": "categorical_cols = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope', 'HeartDisease']\ncat_counts = {col: df[col].value_counts() for col in categorical_cols}\ncorr_matrix = df.corr()\n(cat_counts, corr_matrix)",
+          "success": false,
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"/tmp/python_worker.py\", line 166, in <module>\n    exec(compile(exec_module, \"<cell>\", \"exec\"), namespace, namespace)\n  File \"<cell>\", line 3, in <module>\n  File \"/usr/local/lib/python3.11/site-packages/pandas/core/frame.py\", line 11076, in corr\n    mat = data.to_numpy(dtype=float, na_value=np.nan, copy=False)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/site-packages/pandas/core/frame.py\", line 2002, in to_numpy\n    result = self._mgr.as_array(dtype=dtype, copy=copy, na_value=na_value)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/site-packages/pandas/core/internals/managers.py\", line 1713, in as_array\n    arr = self._interleave(dtype=dtype, na_value=na_value)\n          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/site-packages/pandas/core/internals/managers.py\", line 1772, in _interleave\n    result[rl.indexer] = arr\n    ~~~~~~^^^^^^^^^^^^\nValueError: could not convert string to float: 'M'",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:24:33.180614"
+    },
+    {
+      "turn_number": 3,
+      "reasoning": "```python\nnumeric_cols = df.select_dtypes(include=['number']).columns.tolist()\nnumeric_desc = df[numeric_cols].describe()\nnumeric_corr = df[numeric_cols].corr()\nnumeric_desc, numeric_corr\n```",
+      "code_cells": [
+        "numeric_cols = df.select_dtypes(include=['number']).columns.tolist()\nnumeric_desc = df[numeric_cols].describe()\nnumeric_corr = df[numeric_cols].corr()\nnumeric_desc, numeric_corr"
+      ],
+      "execution_results": [
+        {
+          "code": "numeric_cols = df.select_dtypes(include=['number']).columns.tolist()\nnumeric_desc = df[numeric_cols].describe()\nnumeric_corr = df[numeric_cols].corr()\nnumeric_desc, numeric_corr",
+          "success": true,
+          "stdout": "Out[5]: (              Age   RestingBP  ...     Oldpeak  HeartDisease\ncount  918.000000  918.000000  ...  918.000000    918.000000\nmean    53.510893  132.396514  ...    0.887364      0.553377\nstd      9.432617   18.514154  ...    1.066570      0.497414\nmin     28.000000    0.000000  ...   -2.600000      0.000000\n25%     47.000000  120.000000  ...    0.000000      0.000000\n50%     54.000000  130.000000  ...    0.600000      1.000000\n75%     60.000000  140.000000  ...    1.500000      1.000000\nmax     77.000000  200.000000  ...    6.200000      1.000000\n\n[8 rows x 7 columns],                    Age  RestingBP  ...   Oldpeak  HeartDisease\nAge           1.000000   0.254399  ...  0.258612      0.282039\nRestingBP     0.254399   1.000000  ...  0.164803      0.107589\nCholesterol  -0.095282   0.100893  ...  0.050148     -0.232741\nFastingBS     0.198039   0.070193  ...  0.052698      0.267291\nMaxHR        -0.382045  -0.112135  ... -0.160691     -0.400421\nOldpeak       0.258612   0.164803  ...  1.000000      0.403951\nHeartDisease  0.282039   0.107589  ...  0.403951      1.000000\n\n[7 rows x 7 columns])",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:24:35.112933"
+    },
+    {
+      "turn_number": 4,
+      "reasoning": "```json\n{\n  \"questions\": [\n    {\n      \"question\": \"What is the mean age of patients diagnosed with heart disease?\",\n      \"hint\": \"Filter rows where HeartDisease == 1 and compute the average of the Age column.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What proportion of female patients have heart disease?\",\n      \"hint\": \"Filter for Sex == 'F', then calculate the ratio of HeartDisease == 1 to total females.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a significant difference in average cholesterol between patients with and without heart disease?\",\n      \"hint\": \"Perform an independent two\u2011sample t\u2011test on the Cholesterol column split by HeartDisease.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which chest\u2011pain type is most common among patients without heart disease?\",\n      \"hint\": \"Filter HeartDisease == 0 and use value_counts on ChestPainType.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the Pearson correlation coefficient between Age and RestingBP?\",\n      \"hint\": \"Use pandas .corr() or scipy.stats.pearsonr on the two numeric columns.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the median Oldpeak value for patients who experience exercise\u2011induced angina?\",\n      \"hint\": \"Filter ExerciseAngina == 'Y' and compute the median of Oldpeak.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"How many patients have a fasting blood sugar indicator of 1 (FastingBS == 1)?\",\n      \"hint\": \"Count rows where FastingBS equals 1.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the average MaxHR for each sex (male vs female)?\",\n      \"hint\": \"Group by Sex and calculate the mean of MaxHR.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What are the counts of each ST_Slope category in the dataset?\",\n      \"hint\": \"Apply value_counts to the ST_Slope column.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the variance of RestingBP for patients with heart disease?\",\n      \"hint\": \"Filter HeartDisease == 1 and compute the variance of RestingBP.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n\n    {\n      \"question\": \"Is there an association between Sex and HeartDisease status?\",\n      \"hint\": \"Create a contingency table with pd.crosstab and run scipy.stats.chi2_contingency.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Fit a simple linear regression model predicting HeartDisease from Age and Cholesterol. What is the R\u2011squared value?\",\n      \"hint\": \"Use statsmodels OLS with HeartDisease as the dependent variable and Age, Cholesterol as independent variables; extract rsquared.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do average Oldpeak values differ among the four ChestPainType categories?\",\n      \"hint\": \"Perform one\u2011way ANOVA (scipy.stats.f_oneway) on Oldpeak grouped by ChestPainType.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is MaxHR significantly different between patients with and without exercise angina?\",\n      \"hint\": \"Separate MaxHR by ExerciseAngina ('Y' vs 'N') and conduct an independent two\u2011sample t\u2011test.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the Pearson correlation between Oldpeak and HeartDisease, and is it statistically significant?\",\n      \"hint\": \"Use scipy.stats.pearsonr on Oldpeak and HeartDisease columns; report correlation and p\u2011value.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Calculate the average RestingBP for each combination of ChestPainType and Sex.\",\n      \"hint\": \"Group by [ChestPainType, Sex] and compute the mean of RestingBP.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Fit a logistic regression model with HeartDisease as the outcome using Age, Sex, and MaxHR. What is the odds ratio for Age?\",\n      \"hint\": \"Encode Sex, fit statsmodels Logit, exponentiate the Age coefficient to obtain the odds ratio.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do patients with ST_Slope 'Up' have different RestingBP compared to those with 'Down'?\",\n      \"hint\": \"Filter rows for ST_Slope == 'Up' and 'Down', then run an independent two\u2011sample t\u2011test on RestingBP.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Create a pivot table showing the average Cholesterol for each ChestPainType broken down by HeartDisease status.\",\n      \"hint\": \"Use pd.pivot_table with values='Cholesterol', index='ChestPainType', columns='HeartDisease', aggfunc='mean'.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does the proportion of heart disease differ across ST_Slope categories?\",\n      \"hint\": \"Build a contingency table of ST_Slope vs HeartDisease and apply chi\u2011square test.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n\n    {\n      \"question\": \"Fit a multiple linear regression model predicting Oldpeak using Age, RestingBP, Cholesterol, and MaxHR. Interpret the sign of each coefficient.\",\n      \"hint\": \"Use statsmodels OLS with Oldpeak as dependent variable and the four predictors; examine params.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Perform forward stepwise selection (based on AIC) to choose the best subset of predictors for a logistic regression model of HeartDisease.\",\n      \"hint\": \"Iteratively add variables, fit Logit, compute AIC with sm.stats.aic, stop when AIC no longer improves.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Estimate a 95% confidence interval for the mean Age of heart\u2011disease patients using bootstrap (1000 resamples).\",\n      \"hint\": \"Resample the Age values of HeartDisease == 1 with replacement 1000 times, compute mean each iteration, take 2.5th and 97.5th percentiles.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Conduct a permutation test (10,000 permutations) to assess whether MaxHR differs between males and females.\",\n      \"hint\": \"Calculate observed difference in means, shuffle Sex labels 10,000 times, recompute differences, obtain p\u2011value as proportion exceeding observed.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Build a logistic regression model using all numeric predictors (Age, RestingBP, Cholesterol, FastingBS, MaxHR, Oldpeak) to predict HeartDisease. Report the model\u2019s overall accuracy using a 70/30 train\u2011test split (random_state=42).\",\n      \"hint\": \"Split data with train_test_split(test_size=0.3, random_state=42), fit Logit, predict class labels, compute accuracy score.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Perform a likelihood ratio test comparing a full logistic model (all predictors) against a reduced model containing only Age and Sex.\",\n      \"hint\": \"Fit both Logit models, obtain log\u2011likelihoods, compute chi\u2011square statistic = 2*(LL_full\u2011LL_reduced) and compare to chi\u2011square distribution.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Assess multicollinearity among numeric predictors by computing the Variance Inflation Factor (VIF) for each.\",\n      \"hint\": \"For each predictor, regress it on all others using OLS, then calculate VIF = 1/(1\u2011R\u00b2). Use statsmodels.stats.outliers_influence.variance_inflation_factor.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n\n    {\n      \"question\": \"Using nested cross\u2011validation (5 outer folds, 3 inner folds, random_state=42), evaluate a logistic regression model (with L2 regularization) on all features and report the mean AUC across outer folds.\",\n      \"hint\": \"Implement sklearn's StratifiedKFold for outer loop, inner GridSearchCV to tune C, compute roc_auc_score on outer validation sets, average results.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Investigate whether Oldpeak mediates the relationship between Age and HeartDisease by performing a mediation analysis.\",\n      \"hint\": \"Fit three models: (1) Age \u2192 HeartDisease, (2) Age \u2192 Oldpeak, (3) Age + Oldpeak \u2192 HeartDisease; compute indirect effect (Age\u2192Oldpeak\u00d7Oldpeak\u2192HeartDisease) and test significance via bootstrapping.\",\n      \"n_steps\": 10,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Create a calibrated probability model: first fit a logistic regression on all predictors, then calibrate its predicted probabilities using isotonic regression (random_state=42) on a validation set. Report the Brier score on the test set.\",\n      \"hint\": \"Split data into train/validation/test (70/15/15) with random_state=42, fit Logit on train, calibrate with sklearn.calibration.CalibratedClassifierCV(method='isotonic'), predict on test, compute brier_score_loss.\",\n      \"n_steps\": 11,\n      \"difficulty\": \"VERY_HARD\"\n    }\n  ]\n}\n```",
+      "code_cells": [],
+      "execution_results": [],
+      "timestamp": "2025-12-23 23:25:13.324206"
+    },
+    {
+      "turn_number": 5,
+      "reasoning": "```python\n# Distribution of the target variable\ntarget_counts = df['HeartDisease'].value_counts()\ntarget_counts, df['HeartDisease'].mean()\n```",
+      "code_cells": [
+        "# Distribution of the target variable\ntarget_counts = df['HeartDisease'].value_counts()\ntarget_counts, df['HeartDisease'].mean()"
+      ],
+      "execution_results": [
+        {
+          "code": "# Distribution of the target variable\ntarget_counts = df['HeartDisease'].value_counts()\ntarget_counts, df['HeartDisease'].mean()",
+          "success": true,
+          "stdout": "Out[6]: (HeartDisease\n1    508\n0    410\nName: count, dtype: int64, np.float64(0.5533769063180828))",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:25:15.579947"
+    },
+    {
+      "turn_number": 6,
+      "reasoning": "```json\n{\n  \"questions\": [\n    {\n      \"question\": \"What is the overall proportion of patients with heart disease?\",\n      \"hint\": \"Calculate the mean of the HeartDisease column.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the average age of patients without heart disease?\",\n      \"hint\": \"Filter HeartDisease == 0 and compute the mean of Age.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"How many female patients are in the dataset?\",\n      \"hint\": \"Count rows where Sex == 'F'.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the median cholesterol level for male patients?\",\n      \"hint\": \"Filter Sex == 'M' and compute the median of Cholesterol.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which ChestPainType occurs most frequently overall?\",\n      \"hint\": \"Use value_counts on the ChestPainType column.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the average RestingBP for patients with exercise\u2011induced angina (ExerciseAngina == 'Y')?\",\n      \"hint\": \"Filter ExerciseAngina == 'Y' and compute mean RestingBP.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What proportion of patients have fasting blood sugar > 120 (FastingBS == 1)?\",\n      \"hint\": \"Count rows where FastingBS == 1 and divide by total rows.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the standard deviation of MaxHR for all patients?\",\n      \"hint\": \"Use the .std() method on the MaxHR column.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"How many distinct values exist in the ST_Slope column?\",\n      \"hint\": \"Apply .nunique() to ST_Slope.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the minimum Oldpeak value observed?\",\n      \"hint\": \"Use .min() on the Oldpeak column.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a significant difference in mean cholesterol between males and females?\",\n      \"hint\": \"Perform an independent two\u2011sample t\u2011test on Cholesterol split by Sex.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does the distribution of HeartDisease differ by Sex?\",\n      \"hint\": \"Create a contingency table with pd.crosstab and run scipy.stats.chi2_contingency.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the Pearson correlation between Age and Oldpeak?\",\n      \"hint\": \"Use scipy.stats.pearsonr on Age and Oldpeak.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do average RestingBP values differ across ChestPainType categories?\",\n      \"hint\": \"Group by ChestPainType and compute mean RestingBP; optionally run one\u2011way ANOVA.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is MaxHR significantly lower for patients with heart disease?\",\n      \"hint\": \"Separate MaxHR by HeartDisease status and conduct an independent two\u2011sample t\u2011test.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the effect size (Cohen's d) for the difference in Oldpeak between patients with and without heart disease?\",\n      \"hint\": \"Compute means, standard deviations for each group and apply the Cohen's d formula.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Which combination of Sex and ChestPainType has the highest average Age?\",\n      \"hint\": \"Group by [Sex, ChestPainType] and compute mean Age; then identify the max.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Fit a simple linear regression model predicting HeartDisease from Age. What is the R\u2011squared?\",\n      \"hint\": \"Use statsmodels OLS with HeartDisease as dependent and Age as independent; extract rsquared.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Perform a logistic regression with HeartDisease as outcome using Age, Sex, and Cholesterol. What is the odds ratio for Age?\",\n      \"hint\": \"Encode Sex, fit statsmodels Logit, exponentiate the Age coefficient.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Assess multicollinearity among numeric predictors by computing VIF for each.\",\n      \"hint\": \"For each numeric column, regress it on the others using OLS and calculate VIF = 1/(1\u2011R\u00b2).\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Build a multiple linear regression model predicting Oldpeak using Age, RestingBP, Cholesterol, and MaxHR. Which predictor has the largest absolute coefficient?\",\n      \"hint\": \"Fit statsmodels OLS with Oldpeak as dependent; examine the absolute values of params.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Conduct a forward stepwise selection (based on AIC) to choose predictors for a logistic model of HeartDisease.\",\n      \"hint\": \"Iteratively add variables, fit Logit, compute AIC with sm.stats.aic, stop when AIC no longer improves.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Estimate a 95% bootstrap confidence interval for the mean Age of heart\u2011disease patients (1000 resamples).\",\n      \"hint\": \"Resample Age values where HeartDisease == 1, compute mean each iteration, take 2.5th and 97.5th percentiles.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Perform a permutation test (10,000 permutations) to evaluate whether MaxHR differs between sexes.\",\n      \"hint\": \"Compute observed mean difference, shuffle Sex labels repeatedly, recompute differences, calculate p\u2011value.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Fit a logistic regression using all numeric predictors and evaluate accuracy with a 70/30 train\u2011test split (random_state=42).\",\n      \"hint\": \"Use sklearn.model_selection.train_test_split, fit Logit, predict classes, compute accuracy_score.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Compare a full logistic model (all predictors) to a reduced model (Age + Sex) using a likelihood ratio test.\",\n      \"hint\": \"Fit both Logit models, obtain log\u2011likelihoods, compute chi\u2011square = 2*(LL_full\u2011LL_reduced), get p\u2011value.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Using nested cross\u2011validation (5 outer folds, 3 inner folds, random_state=42), evaluate a logistic regression with L2 regularization and report mean AUC.\",\n      \"hint\": \"Implement StratifiedKFold for outer loop, inner GridSearchCV to tune C, compute roc_auc_score on each outer validation set, average.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Investigate whether Oldpeak mediates the relationship between Age and HeartDisease via mediation analysis.\",\n      \"hint\": \"Fit three models: Age \u2192 HeartDisease, Age \u2192 Oldpeak, and Age + Oldpeak \u2192 HeartDisease; compute indirect effect and test with bootstrapping.\",\n      \"n_steps\": 10,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Create a calibrated probability model: fit logistic regression on all features, calibrate with isotonic regression (random_state=42), and report Brier score on a held\u2011out test set.\",\n      \"hint\": \"Split data into train/validation/test (70/15/15), fit Logit, calibrate with CalibratedClassifierCV(method='isotonic'), predict probabilities on test, compute brier_score_loss.\",\n      \"n_steps\": 11,\n      \"difficulty\": \"VERY_HARD\"\n    }\n  ]\n}\n```\n<DONE>",
+      "code_cells": [],
+      "execution_results": [],
+      "timestamp": "2025-12-23 23:30:52.730038"
+    }
+  ],
+  "questions_generated": [
+    {
+      "hint": "Calculate the mean of the HeartDisease column.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Filter HeartDisease == 0 and compute the mean of Age.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Count rows where Sex == 'F'.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Filter Sex == 'M' and compute the median of Cholesterol.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Use value_counts on the ChestPainType column.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Filter ExerciseAngina == 'Y' and compute mean RestingBP.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Count rows where FastingBS == 1 and divide by total rows.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Use the .std() method on the MaxHR column.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Apply .nunique() to ST_Slope.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Use .min() on the Oldpeak column.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Perform an independent two\u2011sample t\u2011test on Cholesterol split by Sex.",
+      "difficulty": "MEDIUM",
+      "n_steps": 3
+    },
+    {
+      "hint": "Create a contingency table with pd.crosstab and run scipy.stats.chi2_contingency.",
+      "difficulty": "MEDIUM",
+      "n_steps": 4
+    },
+    {
+      "hint": "Use scipy.stats.pearsonr on Age and Oldpeak.",
+      "difficulty": "MEDIUM",
+      "n_steps": 2
+    },
+    {
+      "hint": "Group by ChestPainType and compute mean RestingBP; optionally run one\u2011way ANOVA.",
+      "difficulty": "MEDIUM",
+      "n_steps": 4
+    },
+    {
+      "hint": "Separate MaxHR by HeartDisease status and conduct an independent two\u2011sample t\u2011test.",
+      "difficulty": "MEDIUM",
+      "n_steps": 3
+    },
+    {
+      "hint": "Compute means, standard deviations for each group and apply the Cohen's d formula.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Group by [Sex, ChestPainType] and compute mean Age; then identify the max.",
+      "difficulty": "MEDIUM",
+      "n_steps": 3
+    },
+    {
+      "hint": "Use statsmodels OLS with HeartDisease as dependent and Age as independent; extract rsquared.",
+      "difficulty": "MEDIUM",
+      "n_steps": 4
+    },
+    {
+      "hint": "Encode Sex, fit statsmodels Logit, exponentiate the Age coefficient.",
+      "difficulty": "MEDIUM",
+      "n_steps": 6
+    },
+    {
+      "hint": "For each numeric column, regress it on the others using OLS and calculate VIF = 1/(1\u2011R\u00b2).",
+      "difficulty": "HARD",
+      "n_steps": 7
+    },
+    {
+      "hint": "Fit statsmodels OLS with Oldpeak as dependent; examine the absolute values of params.",
+      "difficulty": "HARD",
+      "n_steps": 7
+    },
+    {
+      "hint": "Iteratively add variables, fit Logit, compute AIC with sm.stats.aic, stop when AIC no longer improves.",
+      "difficulty": "HARD",
+      "n_steps": 8
+    },
+    {
+      "hint": "Resample Age values where HeartDisease == 1, compute mean each iteration, take 2.5th and 97.5th percentiles.",
+      "difficulty": "HARD",
+      "n_steps": 7
+    },
+    {
+      "hint": "Compute observed mean difference, shuffle Sex labels repeatedly, recompute differences, calculate p\u2011value.",
+      "difficulty": "HARD",
+      "n_steps": 8
+    },
+    {
+      "hint": "Use sklearn.model_selection.train_test_split, fit Logit, predict classes, compute accuracy_score.",
+      "difficulty": "HARD",
+      "n_steps": 7
+    },
+    {
+      "hint": "Fit both Logit models, obtain log\u2011likelihoods, compute chi\u2011square = 2*(LL_full\u2011LL_reduced), get p\u2011value.",
+      "difficulty": "HARD",
+      "n_steps": 8
+    },
+    {
+      "hint": "Implement StratifiedKFold for outer loop, inner GridSearchCV to tune C, compute roc_auc_score on each outer validation set, average.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 9
+    },
+    {
+      "hint": "Fit three models: Age \u2192 HeartDisease, Age \u2192 Oldpeak, and Age + Oldpeak \u2192 HeartDisease; compute indirect effect and test with bootstrapping.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 10
+    },
+    {
+      "hint": "Split data into train/validation/test (70/15/15), fit Logit, calibrate with CalibratedClassifierCV(method='isotonic'), predict probabilities on test, compute brier_score_loss.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 11
+    }
+  ],
+  "total_turns": 7,
+  "timestamp": "2025-12-23 23:31:02.871361"
+}

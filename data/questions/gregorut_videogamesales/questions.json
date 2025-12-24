@@ -1,0 +1,200 @@
+[
+  {
+    "question": "What is the average global sales for games released in the year 2005?",
+    "hint": "Filter rows where Year == 2005, then compute mean of Global_Sales.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which platform has the highest total North American sales?",
+    "hint": "Group by Platform, sum NA_Sales, then identify the max.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant difference in average global sales between the 'Sports' and 'Shooter' genres?",
+    "hint": "Perform an independent two\u2011sample t\u2011test on Global_Sales for the two genres.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What proportion of total global sales is contributed by Japan?",
+    "hint": "Sum JP_Sales and divide by sum of Global_Sales.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does the correlation between EU_Sales and Global_Sales differ significantly from the correlation between JP_Sales and Global_Sales?",
+    "hint": "Compute both Pearson correlations and use Fisher\u2019s r\u2011to\u2011z transformation to test the difference.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which publisher has the highest average global sales per game?",
+    "hint": "Group by Publisher, calculate mean Global_Sales, then find the maximum.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Do games released before 2000 have lower average NA_Sales than games released from 2000 onward?",
+    "hint": "Create two groups based on Year (<2000 vs \u22652000) and run a two\u2011sample t\u2011test on NA_Sales.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the linear regression equation predicting Global_Sales from NA_Sales and EU_Sales?",
+    "hint": "Fit an OLS regression with Global_Sales as dependent variable and NA_Sales, EU_Sales as independent variables.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there a statistically significant association between Platform (categorical) and whether a game sold more than 1 million units globally (binary)?",
+    "hint": "Create a binary column (Global_Sales > 1), then perform a chi\u2011square test of independence with Platform.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which year had the greatest number of game releases?",
+    "hint": "Count games per Year (ignoring missing) and find the Year with the maximum count.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Do 'Role-Playing' games have significantly higher variance in global sales than 'Racing' games?",
+    "hint": "Compute variance for each genre and run Levene\u2019s test for equal variances.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the Spearman rank correlation between Year of release and Global_Sales?",
+    "hint": "Use scipy.stats.spearmanr on Year (dropping NaNs) and Global_Sales.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "For the top 5 publishers by game count, does the average global sales differ across them?",
+    "hint": "Identify top 5 publishers, then perform one\u2011way ANOVA on Global_Sales across these groups.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the 95% confidence interval for the mean global sales of games on the Wii platform?",
+    "hint": "Select Wii rows, compute mean and standard error, then apply t\u2011distribution critical value.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there evidence that the mean global sales have increased over the decades (1980s, 1990s, 2000s, 2010s)?",
+    "hint": "Create decade groups, compute mean Global_Sales per decade, then run Kruskal\u2011Wallis test.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "How well does a multiple linear regression model using NA_Sales, EU_Sales, JP_Sales, and Other_Sales predict Global_Sales (report R\u00b2)?",
+    "hint": "Fit OLS with all four regional sales as predictors, extract R\u2011squared from the results.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Does the distribution of Global_Sales differ between games published by 'Nintendo' and 'Electronic Arts'?",
+    "hint": "Use a two\u2011sample Kolmogorov\u2011Smirnov test on Global_Sales for the two publishers.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the effect size (Cohen's d) for the difference in mean Global_Sales between 'Platform' = 'PS2' and 'Platform' = 'DS'?",
+    "hint": "Compute means and pooled standard deviation for the two groups, then calculate Cohen's d.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Are there any outliers in Global_Sales for the 'Shooter' genre based on the IQR method?",
+    "hint": "Calculate Q1, Q3, IQR for Shooter Global_Sales, then identify values outside Q1\u20111.5*IQR and Q3+1.5*IQR.",
+    "n_steps": 4,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Using a 70/30 train\u2011test split (random_state=42), how accurate is a linear regression model predicting Global_Sales from NA_Sales and EU_Sales on the test set (report RMSE)?",
+    "hint": "Split data, fit OLS on training, predict on test, compute root mean squared error.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Does the mean global sales differ across the five most common genres?",
+    "hint": "Identify top 5 genres, then perform one\u2011way ANOVA on Global_Sales across these groups.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the probability that a randomly selected game from the dataset sold more than 5 million units globally?",
+    "hint": "Count games with Global_Sales > 5 and divide by total number of games.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a monotonic decreasing trend in average global sales for games released from 2000 to 2020?",
+    "hint": "Group by Year, compute mean Global_Sales, then apply Mann\u2011Kendall trend test.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Compare the median global sales of games on handheld platforms (DS, PSP, GBA) versus home consoles (PS3, Xbox 360, Wii). Is the difference significant?",
+    "hint": "Create two groups (handheld vs home), compute medians, and run a Mann\u2011Whitney U test.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the adjusted R\u00b2 of the regression model predicting Global_Sales from Year, NA_Sales, and EU_Sales?",
+    "hint": "Fit OLS with those three predictors, extract adjusted R\u2011squared.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Do games with a 'Publisher' that starts with the letter 'S' have different average global sales compared to all other publishers?",
+    "hint": "Create a boolean column for publishers starting with 'S', then perform a two\u2011sample t\u2011test on Global_Sales.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using bootstrap resampling (10,000 samples), estimate the 95% confidence interval for the mean global sales of 'Racing' games.",
+    "hint": "Sample with replacement from Racing rows, compute mean each iteration, then take 2.5th and 97.5th percentiles.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Is there a significant interaction effect between Platform and Genre on Global_Sales?",
+    "hint": "Fit a two\u2011way ANOVA model with Platform, Genre, and their interaction term, then evaluate the interaction p\u2011value.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Perform a permutation test (5,000 permutations) to assess whether the observed difference in mean Global_Sales between 'Nintendo' and 'Activision' could arise by chance.",
+    "hint": "Shuffle publisher labels, compute mean difference each permutation, compare to observed difference to get p\u2011value.",
+    "n_steps": 10,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "What is the likelihood ratio test statistic comparing a model with only NA_Sales as predictor to a model with NA_Sales and EU_Sales for predicting Global_Sales?",
+    "hint": "Fit both OLS models, compute their log\u2011likelihoods, then calculate 2*(LL_full - LL_reduced).",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Do games released in even-numbered years have different average global sales than those released in odd-numbered years?",
+    "hint": "Create a parity column (Year % 2), then run a two\u2011sample t\u2011test on Global_Sales.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Estimate the effect of a one\u2011unit increase in JP_Sales on Global_Sales while controlling for NA_Sales and EU_Sales using multiple regression (report coefficient and p\u2011value).",
+    "hint": "Fit OLS with JP_Sales, NA_Sales, EU_Sales as predictors; extract coefficient and its significance for JP_Sales.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using a logistic regression (random_state=42), model the probability that a game sells > 2 million units globally based on Year, Platform (one\u2011hot encoded), and NA_Sales. Report the model's AUC on a 30% test split.",
+    "hint": "Create binary target, one\u2011hot encode Platform, split data, fit LogisticRegression, compute ROC AUC on test set.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  }
+]

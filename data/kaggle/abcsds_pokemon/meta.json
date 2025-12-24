@@ -1,0 +1,17 @@
+{
+  "ref": "abcsds/pokemon",
+  "owner": "abcsds",
+  "name": "pokemon",
+  "title": "Pokemon with stats",
+  "subtitle": "721 Pokemon with stats and types",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"popular culture\", \"name\": \"popular culture\", \"description\": \"Popular culture datasets and kernels are associated with topics like TV shows, movies, music, and video games. The greatest screenwriters come here to train their AI to write movie scripts.\", \"fullPath\": \"subject > culture and humanities > popular culture\", \"competitionCount\": 0, \"datasetCount\": 472, \"scriptCount\": 92, \"totalCount\": 564}",
+    "{\"ref\": \"games\", \"name\": \"games\", \"description\": \"One of the hallmarks of intelligence is the use of games and toys to occupy free time and develop intellectually. Often stored in Mom's basement.\", \"fullPath\": \"subject > culture and humanities > games\", \"competitionCount\": 11, \"datasetCount\": 10791, \"scriptCount\": 34427, \"totalCount\": 45229}",
+    "{\"ref\": \"video games\", \"name\": \"video games\", \"description\": \"Video games were originally created to prevent people from going to college and getting good jobs. That back-fired and now we have data centers full of GPUs training models to tell the difference between cats and dogs. All thanks to gamers.\", \"fullPath\": \"subject > culture and humanities > games > video games\", \"competitionCount\": 45, \"datasetCount\": 8975, \"scriptCount\": 3940, \"totalCount\": 12960}",
+    "{\"ref\": \"anime and manga\", \"name\": \"anime and manga\", \"description\": null, \"fullPath\": \"subject > arts and entertainment > comics and animation > anime and manga\", \"competitionCount\": 8, \"datasetCount\": 3511, \"scriptCount\": 777, \"totalCount\": 4296}"
+  ],
+  "url": "https://www.kaggle.com/datasets/abcsds/pokemon",
+  "totalBytes": 15234,
+  "downloadCount": 152214
+}

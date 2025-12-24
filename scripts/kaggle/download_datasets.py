@@ -2,15 +2,20 @@
 """
 Download CSV datasets from Kaggle with metadata.
 
-Usage:
-    # Download user's liked datasets (default)
-    uv run python kaggle/download_datasets.py
+Downloads to data/kaggle/{slug}/ with standardized structure:
+    data/kaggle/{slug}/
+    ├── data.csv
+    └── meta.json
 
-    # Download from a curated list
-    uv run python kaggle/download_datasets.py --from-list kaggle/curated_datasets.json
+Usage:
+    # Download from curated list (recommended)
+    uv run python scripts/kaggle/download_datasets.py --from-list scripts/kaggle/curated_datasets.json
+
+    # With size limit (default 5MB)
+    uv run python scripts/kaggle/download_datasets.py --from-list scripts/kaggle/curated_datasets.json --max-size 10
 
     # Limit number of datasets
-    uv run python kaggle/download_datasets.py --limit 10
+    uv run python scripts/kaggle/download_datasets.py --from-list scripts/kaggle/curated_datasets.json --limit 10
 """
 
 import argparse
@@ -19,8 +24,13 @@ import os
 import sys
 from pathlib import Path
 
+# Workaround for bug in kaggle 1.8.2 - it tries to delete KAGGLE_API_TOKEN
+# even when reading from file (where the env var doesn't exist)
+_orig_delitem = os.environ.__class__.__delitem__
+os.environ.__class__.__delitem__ = lambda self, key: _orig_delitem(self, key) if key in self else None
+
 try:
-    from kaggle import api as kaggle_api
+    from kaggle.api.kaggle_api_extended import KaggleApi
 except ImportError:
     print("Error: kaggle package not installed.")
     print("Install with: uv sync --extra kaggle")
@@ -30,9 +40,11 @@ except ImportError:
 def get_api():
     """Return authenticated Kaggle API client.
 
-    Uses the new-style import which supports KAGGLE_API_TOKEN env var.
+    Supports KAGGLE_API_TOKEN env var (KGAT_* format).
     """
-    return kaggle_api
+    api = KaggleApi()
+    api.authenticate()
+    return api
 
 
 def get_dataset_metadata(api, dataset_ref: str) -> dict:
@@ -90,48 +102,65 @@ def get_dataset_metadata(api, dataset_ref: str) -> dict:
     }
 
 
-def download_dataset(api, dataset_ref: str, output_dir: Path) -> list[Path]:
+def download_dataset(
+    api,
+    dataset_ref: str,
+    output_dir: Path,
+    max_size_mb: float = 5.0,
+) -> Path | None:
     """
-    Download dataset files to output directory.
-    
-    Returns list of downloaded CSV file paths.
+    Download dataset to output_dir/{slug}/ with standardized structure.
+
+    Filters:
+    - Skips multi-CSV datasets
+    - Skips datasets larger than max_size_mb
+
+    Returns:
+        Path to dataset folder if successful, None if skipped.
     """
-    # Create temp directory for this dataset
+    import shutil
+
+    slug = dataset_ref.replace("/", "_")
     temp_dir = output_dir / "_temp"
     temp_dir.mkdir(exist_ok=True)
-    
+
     try:
-        # Download and unzip
+        # Download and unzip to temp
         api.dataset_download_files(dataset_ref, path=str(temp_dir), unzip=True)
-        
+
         # Find CSV files
         csv_files = list(temp_dir.glob("**/*.csv"))
-        
+
         if not csv_files:
-            print(f"  No CSV files found in {dataset_ref}")
-            return []
-        
-        # Move CSV files to output directory with slug prefix
-        slug = dataset_ref.replace("/", "_")
-        downloaded = []
-        
-        for i, csv_file in enumerate(csv_files):
-            if len(csv_files) == 1:
-                dest_name = f"{slug}.csv"
-            else:
-                # Multiple CSVs: add suffix
-                dest_name = f"{slug}_{csv_file.stem}.csv"
-            
-            dest_path = output_dir / dest_name
-            csv_file.rename(dest_path)
-            downloaded.append(dest_path)
-            print(f"  Saved: {dest_name}")
-        
-        return downloaded
-        
+            print(f"  ⚠ No CSV files found, skipping")
+            return None
+
+        # Filter: single-CSV only
+        if len(csv_files) > 1:
+            print(f"  ⚠ Multi-CSV dataset ({len(csv_files)} files), skipping")
+            return None
+
+        csv_file = csv_files[0]
+        size_mb = csv_file.stat().st_size / (1024 * 1024)
+
+        # Filter: file size
+        if size_mb > max_size_mb:
+            print(f"  ⚠ Too large ({size_mb:.1f} MB > {max_size_mb} MB), skipping")
+            return None
+
+        # Create dataset folder with standardized structure
+        dataset_dir = output_dir / slug
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+
+        # Move CSV as data.csv
+        dest_csv = dataset_dir / "data.csv"
+        shutil.move(str(csv_file), str(dest_csv))
+
+        print(f"  ✓ Saved: {slug}/data.csv ({size_mb:.1f} MB)")
+        return dataset_dir
+
     finally:
         # Cleanup temp directory
-        import shutil
         if temp_dir.exists():
             shutil.rmtree(temp_dir)
 
@@ -200,18 +229,27 @@ def main():
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path(__file__).parent / "downloaded",
-        help="Output directory (default: kaggle/downloaded)"
+        default=Path(__file__).parent.parent.parent / "data" / "kaggle",
+        help="Output directory (default: data/kaggle/)"
+    )
+    parser.add_argument(
+        "--max-size",
+        type=float,
+        default=5.0,
+        help="Maximum CSV size in MB (default: 5.0)"
     )
     args = parser.parse_args()
-    
+
     # Setup
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     api = get_api()
-    print("✓ Kaggle API ready\n")
-    
+    print("✓ Kaggle API ready")
+    print(f"  Output: {output_dir}")
+    print(f"  Max size: {args.max_size} MB")
+    print()
+
     # Get dataset list
     if args.from_list:
         print(f"Loading curated list from {args.from_list}...")
@@ -219,52 +257,56 @@ def main():
     else:
         print("Fetching popular tabular datasets...")
         dataset_refs = get_liked_datasets(api, limit=args.limit)
-    
+
     if args.limit:
         dataset_refs = dataset_refs[:args.limit]
-    
-    print(f"Found {len(dataset_refs)} datasets to download\n")
-    
+
+    print(f"Found {len(dataset_refs)} datasets to process\n")
+
     # Download each dataset
     manifest = []
-    
+    skipped_filter = 0
+    skipped_exists = 0
+
     for i, ref in enumerate(dataset_refs, 1):
         print(f"[{i}/{len(dataset_refs)}] {ref}")
-        
-        # Get metadata
-        metadata = get_dataset_metadata(api, ref)
-        
-        # Download CSVs
-        csv_files = download_dataset(api, ref, output_dir)
-        
-        if not csv_files:
-            continue
-        
-        # Save metadata for each CSV
+
+        # Skip if already downloaded
         slug = ref.replace("/", "_")
-        meta_path = output_dir / f"{slug}.meta.json"
-        
-        metadata["csv_files"] = [f.name for f in csv_files]
-        
+        existing_dir = output_dir / slug
+        if (existing_dir / "data.csv").exists():
+            print(f"  ✓ Already exists, skipping")
+            manifest.append({"ref": ref, "slug": slug})
+            skipped_exists += 1
+            continue
+
+        # Download (filters applied inside)
+        dataset_dir = download_dataset(api, ref, output_dir, max_size_mb=args.max_size)
+
+        if not dataset_dir:
+            skipped_filter += 1
+            continue
+
+        # Get metadata and save inside dataset folder
+        metadata = get_dataset_metadata(api, ref)
+        meta_path = dataset_dir / "meta.json"
         with open(meta_path, "w") as f:
             json.dump(metadata, f, indent=2)
-        
-        manifest.append({
-            "ref": ref,
-            "slug": slug,
-            "csv_files": [f.name for f in csv_files],
-            "meta_file": meta_path.name,
-        })
-        
-        print()
-    
-    # Save manifest
+
+        manifest.append({"ref": ref, "slug": slug})
+
+    # Save manifest at root level
     manifest_path = output_dir / "manifest.json"
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
-    
-    print(f"\n✓ Downloaded {len(manifest)} datasets")
-    print(f"✓ Manifest saved to {manifest_path}")
+
+    newly_downloaded = len(manifest) - skipped_exists
+    print(f"\n{'=' * 40}")
+    print(f"✓ Total: {len(manifest)} datasets in manifest")
+    print(f"  New downloads: {newly_downloaded}")
+    print(f"  Already existed: {skipped_exists}")
+    print(f"  Filtered out: {skipped_filter}")
+    print(f"  Manifest: {manifest_path}")
 
 
 if __name__ == "__main__":

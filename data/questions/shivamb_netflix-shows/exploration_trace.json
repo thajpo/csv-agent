@@ -1,0 +1,254 @@
+{
+  "csv_path": "/home/j/Projects/csv-agent/data/kaggle/shivamb_netflix-shows/data.csv",
+  "turns": [
+    {
+      "turn_number": 0,
+      "reasoning": "```python\n# Show first few rows and summary info\ndisplay(df.head())\ndf.info()\n```",
+      "code_cells": [
+        "# Show first few rows and summary info\ndisplay(df.head())\ndf.info()"
+      ],
+      "execution_results": [
+        {
+          "code": "# Show first few rows and summary info\ndisplay(df.head())\ndf.info()",
+          "success": false,
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"/tmp/python_worker.py\", line 166, in <module>\n    exec(compile(exec_module, \"<cell>\", \"exec\"), namespace, namespace)\n  File \"<cell>\", line 2, in <module>\nNameError: name 'display' is not defined",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:23:09.791746"
+    },
+    {
+      "turn_number": 1,
+      "reasoning": "```python\n# Inspect the dataset\nprint(df.head())\nprint(\"\\n--- DataFrame Info ---\")\ndf.info()\n```",
+      "code_cells": [
+        "# Inspect the dataset\nprint(df.head())\nprint(\"\\n--- DataFrame Info ---\")\ndf.info()"
+      ],
+      "execution_results": [
+        {
+          "code": "# Inspect the dataset\nprint(df.head())\nprint(\"\\n--- DataFrame Info ---\")\ndf.info()",
+          "success": true,
+          "stdout": "  show_id  ...                                        description\n0      s1  ...  As her father nears the end of his life, filmm...\n1      s2  ...  After crossing paths at a party, a Cape Town t...\n2      s3  ...  To protect his family from a powerful drug lor...\n3      s4  ...  Feuds, flirtations and toilet talk go down amo...\n4      s5  ...  In a city of coaching centers known to train I...\n\n[5 rows x 12 columns]\n\n--- DataFrame Info ---\n<class 'pandas.core.frame.DataFrame'>\nRangeIndex: 8807 entries, 0 to 8806\nData columns (total 12 columns):\n #   Column        Non-Null Count  Dtype \n---  ------        --------------  ----- \n 0   show_id       8807 non-null   object\n 1   type          8807 non-null   object\n 2   title         8807 non-null   object\n 3   director      6173 non-null   object\n 4   cast          7982 non-null   object\n 5   country       7976 non-null   object\n 6   date_added    8797 non-null   object\n 7   release_year  8807 non-null   int64 \n 8   rating        8803 non-null   object\n 9   duration      8804 non-null   object\n 10  listed_in     8807 non-null   object\n 11  description   8807 non-null   object\ndtypes: int64(1), object(11)\nmemory usage: 825.8+ KB",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:23:10.969200"
+    },
+    {
+      "turn_number": 2,
+      "reasoning": "```python\n# Basic descriptive stats and unique value counts\nprint(\"Unique types:\", df['type'].unique())\nprint(\"Value counts for 'type':\")\nprint(df['type'].value_counts())\n\nprint(\"\\nUnique ratings (top 10):\")\nprint(df['rating'].value_counts().head(10))\n\n# Parse duration: separate minutes for movies and seasons for TV Shows\ndef parse_duration(val):\n    if pd.isna(val):\n        return np.nan\n    if 'Season' in val:\n        return int(val.split(' ')[0])  # number of seasons\n    else:\n        return int(val.split(' ')[0])  # minutes\n\ndf['duration_num'] = df['duration'].apply(parse_duration)\n\nprint(\"\\nDuration stats (numeric):\")\nprint(df['duration_num'].describe())\n\n# Show sample of parsed duration\nprint(\"\\nSample parsed durations:\")\nprint(df[['title','type','duration','duration_num']].head())\n```",
+      "code_cells": [
+        "# Basic descriptive stats and unique value counts\nprint(\"Unique types:\", df['type'].unique())\nprint(\"Value counts for 'type':\")\nprint(df['type'].value_counts())\n\nprint(\"\\nUnique ratings (top 10):\")\nprint(df['rating'].value_counts().head(10))\n\n# Parse duration: separate minutes for movies and seasons for TV Shows\ndef parse_duration(val):\n    if pd.isna(val):\n        return np.nan\n    if 'Season' in val:\n        return int(val.split(' ')[0])  # number of seasons\n    else:\n        return int(val.split(' ')[0])  # minutes\n\ndf['duration_num'] = df['duration'].apply(parse_duration)\n\nprint(\"\\nDuration stats (numeric):\")\nprint(df['duration_num'].describe())\n\n# Show sample of parsed duration\nprint(\"\\nSample parsed durations:\")\nprint(df[['title','type','duration','duration_num']].head())"
+      ],
+      "execution_results": [
+        {
+          "code": "# Basic descriptive stats and unique value counts\nprint(\"Unique types:\", df['type'].unique())\nprint(\"Value counts for 'type':\")\nprint(df['type'].value_counts())\n\nprint(\"\\nUnique ratings (top 10):\")\nprint(df['rating'].value_counts().head(10))\n\n# Parse duration: separate minutes for movies and seasons for TV Shows\ndef parse_duration(val):\n    if pd.isna(val):\n        return np.nan\n    if 'Season' in val:\n        return int(val.split(' ')[0])  # number of seasons\n    else:\n        return int(val.split(' ')[0])  # minutes\n\ndf['duration_num'] = df['duration'].apply(parse_duration)\n\nprint(\"\\nDuration stats (numeric):\")\nprint(df['duration_num'].describe())\n\n# Show sample of parsed duration\nprint(\"\\nSample parsed durations:\")\nprint(df[['title','type','duration','duration_num']].head())",
+          "success": true,
+          "stdout": "Unique types: ['Movie' 'TV Show']\nValue counts for 'type':\ntype\nMovie      6131\nTV Show    2676\nName: count, dtype: int64\n\nUnique ratings (top 10):\nrating\nTV-MA    3207\nTV-14    2160\nTV-PG     863\nR         799\nPG-13     490\nTV-Y7     334\nTV-Y      307\nPG        287\nTV-G      220\nNR         80\nName: count, dtype: int64\n\nDuration stats (numeric):\ncount    8804.000000\nmean       69.846888\nstd        50.814828\nmin         1.000000\n25%         2.000000\n50%        88.000000\n75%       106.000000\nmax       312.000000\nName: duration_num, dtype: float64\n\nSample parsed durations:\n                   title     type   duration  duration_num\n0   Dick Johnson Is Dead    Movie     90 min          90.0\n1          Blood & Water  TV Show  2 Seasons           2.0\n2              Ganglands  TV Show   1 Season           1.0\n3  Jailbirds New Orleans  TV Show   1 Season           1.0\n4           Kota Factory  TV Show  2 Seasons           2.0",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:23:57.804409"
+    },
+    {
+      "turn_number": 3,
+      "reasoning": "```python\n# Convert date_added to datetime and extract year/month\ndf['date_added_dt'] = pd.to_datetime(df['date_added'], format='%B %d, %Y', errors='coerce')\ndf['added_year'] = df['date_added_dt'].dt.year\ndf['added_month'] = df['date_added_dt'].dt.month\n\nprint(\"Date added year distribution (top 5):\")\nprint(df['added_year'].value_counts().head())\n\n# Top countries\nprint(\"\\nTop 10 countries:\")\nprint(df['country'].value_counts().head(10))\n\n# Extract individual genres from listed_in (comma-separated)\ndef explode_genres(genres):\n    if pd.isna(genres):\n        return []\n    return [g.strip() for g in genres.split(',')]\n\n# Create a exploded series\ngenre_series = df['listed_in'].dropna().apply(explode_genres).explode()\nprint(\"\\nTop 10 genres:\")\nprint(genre_series.value_counts().head(10))\n\n# Correlation between release_year and duration_num\ncorr = df[['release_year', 'duration_num']].corr()\nprint(\"\\nCorrelation matrix:\")\nprint(corr)\n\n# Sample of rows with missing date_added\nprint(\"\\nRows with missing date_added (sample):\")\nprint(df[df['date_added'].isna()][['title','type','release_year']].head())\n```",
+      "code_cells": [
+        "# Convert date_added to datetime and extract year/month\ndf['date_added_dt'] = pd.to_datetime(df['date_added'], format='%B %d, %Y', errors='coerce')\ndf['added_year'] = df['date_added_dt'].dt.year\ndf['added_month'] = df['date_added_dt'].dt.month\n\nprint(\"Date added year distribution (top 5):\")\nprint(df['added_year'].value_counts().head())\n\n# Top countries\nprint(\"\\nTop 10 countries:\")\nprint(df['country'].value_counts().head(10))\n\n# Extract individual genres from listed_in (comma-separated)\ndef explode_genres(genres):\n    if pd.isna(genres):\n        return []\n    return [g.strip() for g in genres.split(',')]\n\n# Create a exploded series\ngenre_series = df['listed_in'].dropna().apply(explode_genres).explode()\nprint(\"\\nTop 10 genres:\")\nprint(genre_series.value_counts().head(10))\n\n# Correlation between release_year and duration_num\ncorr = df[['release_year', 'duration_num']].corr()\nprint(\"\\nCorrelation matrix:\")\nprint(corr)\n\n# Sample of rows with missing date_added\nprint(\"\\nRows with missing date_added (sample):\")\nprint(df[df['date_added'].isna()][['title','type','release_year']].head())"
+      ],
+      "execution_results": [
+        {
+          "code": "# Convert date_added to datetime and extract year/month\ndf['date_added_dt'] = pd.to_datetime(df['date_added'], format='%B %d, %Y', errors='coerce')\ndf['added_year'] = df['date_added_dt'].dt.year\ndf['added_month'] = df['date_added_dt'].dt.month\n\nprint(\"Date added year distribution (top 5):\")\nprint(df['added_year'].value_counts().head())\n\n# Top countries\nprint(\"\\nTop 10 countries:\")\nprint(df['country'].value_counts().head(10))\n\n# Extract individual genres from listed_in (comma-separated)\ndef explode_genres(genres):\n    if pd.isna(genres):\n        return []\n    return [g.strip() for g in genres.split(',')]\n\n# Create a exploded series\ngenre_series = df['listed_in'].dropna().apply(explode_genres).explode()\nprint(\"\\nTop 10 genres:\")\nprint(genre_series.value_counts().head(10))\n\n# Correlation between release_year and duration_num\ncorr = df[['release_year', 'duration_num']].corr()\nprint(\"\\nCorrelation matrix:\")\nprint(corr)\n\n# Sample of rows with missing date_added\nprint(\"\\nRows with missing date_added (sample):\")\nprint(df[df['date_added'].isna()][['title','type','release_year']].head())",
+          "success": true,
+          "stdout": "Date added year distribution (top 5):\nadded_year\n2019.0    1999\n2020.0    1878\n2018.0    1625\n2021.0    1498\n2017.0    1164\nName: count, dtype: int64\n\nTop 10 countries:\ncountry\nUnited States     2818\nIndia              972\nUnited Kingdom     419\nJapan              245\nSouth Korea        199\nCanada             181\nSpain              145\nFrance             124\nMexico             110\nEgypt              106\nName: count, dtype: int64\n\nTop 10 genres:\nlisted_in\nInternational Movies        2752\nDramas                      2427\nComedies                    1674\nInternational TV Shows      1351\nDocumentaries                869\nAction & Adventure           859\nTV Dramas                    763\nIndependent Movies           756\nChildren & Family Movies     641\nRomantic Movies              616\nName: count, dtype: int64\n\nCorrelation matrix:\n              release_year  duration_num\nrelease_year      1.000000     -0.249182\nduration_num     -0.249182      1.000000\n\nRows with missing date_added (sample):\n                                            title     type  release_year\n6066  A Young Doctor's Notebook and Other Stories  TV Show          2013\n6174              Anthony Bourdain: Parts Unknown  TV Show          2018\n6795                                      Frasier  TV Show          2003\n6806                                      Friends  TV Show          2003\n6901                              Gunslinger Girl  TV Show          2008",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-23 23:24:04.004395"
+    },
+    {
+      "turn_number": 4,
+      "reasoning": "```json\n{\n  \"questions\": [\n    {\n      \"question\": \"What is the average duration (in minutes) of titles classified as Movies?\",\n      \"hint\": \"Filter rows where type == 'Movie', then compute mean of duration_num.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which country has the highest count of TV Shows?\",\n      \"hint\": \"Filter for type == 'TV Show', then value_counts on country.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the most frequent rating across all titles?\",\n      \"hint\": \"Use value_counts on rating and select the top entry.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"How many titles were added to Netflix in the year 2020?\",\n      \"hint\": \"Count rows where added_year == 2020.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the median release year of all titles in the dataset?\",\n      \"hint\": \"Compute the median of the release_year column.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which genre (listed_in) appears most frequently across all titles?\",\n      \"hint\": \"Explode the listed_in column into individual genres and use value_counts.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the proportion of Movies versus TV Shows in the dataset?\",\n      \"hint\": \"Calculate value_counts for type and divide each count by the total number of rows.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the average number of seasons for TV Shows?\",\n      \"hint\": \"Filter for type == 'TV Show' and compute mean of duration_num (where duration represents seasons).\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which release year has the highest number of titles?\",\n      \"hint\": \"Use value_counts on release_year and select the year with the maximum count.\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the average number of titles per country?\",\n      \"hint\": \"Group by country, count titles, then compute the mean of those counts.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a statistically significant difference in average duration between Movies and TV Shows?\",\n      \"hint\": \"Perform an independent t\u2011test on duration_num for the two type groups.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the Pearson correlation between release year and numeric duration?\",\n      \"hint\": \"Select release_year and duration_num columns and apply scipy.stats.pearsonr.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do Movies released after 2015 have a higher proportion of the rating 'TV-MA' compared to earlier movies?\",\n      \"hint\": \"Create two groups (release_year > 2015 and \u2264 2015), compute proportion of 'TV-MA' in each, then run a proportion test.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is the distribution of genres independent of the type (Movie vs TV Show)?\",\n      \"hint\": \"Create a contingency table of type vs top\u20115 genres and apply chi\u2011square test of independence.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does country have a significant effect on average duration?\",\n      \"hint\": \"Perform one\u2011way ANOVA with duration_num as the dependent variable and country as the factor (use top 5 countries).\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is there a trend in the number of titles added per year over time?\",\n      \"hint\": \"Group by added_year, count titles, then fit a simple linear regression to assess trend.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do TV Shows with more seasons tend to be added in later years?\",\n      \"hint\": \"Filter for type == 'TV Show', then compute correlation between duration_num (seasons) and added_year.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is the proportion of PG\u201113 movies higher in the United States than in other countries?\",\n      \"hint\": \"Calculate PG\u201113 proportion for US titles versus all non\u2011US titles and perform a two\u2011sample proportion test.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does having a listed director influence the average duration of titles?\",\n      \"hint\": \"Create two groups (director not null vs null) and compare their mean duration_num using a t\u2011test.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Can we predict numeric duration using release year, rating (encoded), and number of genres?\",\n      \"hint\": \"Encode rating, count genres per title, fit an OLS regression, and report R\u00b2.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Is there an interaction effect between type (Movie/TV Show) and country on duration?\",\n      \"hint\": \"Fit a two\u2011way ANOVA with type, country, and their interaction as factors predicting duration_num.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"How well does a multiple linear regression model predict the year a title was added based on release year, duration, and country?\",\n      \"hint\": \"Encode country, fit regression with added_year as target, evaluate adjusted R\u00b2 and RMSE.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Are rating categories independent of the top five genres?\",\n      \"hint\": \"Build a contingency table of rating vs top\u20115 genres and perform a chi\u2011square test.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Does the number of cast members correlate with duration?\",\n      \"hint\": \"Count cast members per title, then compute Spearman correlation with duration_num.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Can a logistic regression model predict whether a title is a Movie using release year, duration, rating, and country?\",\n      \"hint\": \"Encode categorical variables, fit logistic regression with type as binary target, assess accuracy and AUC.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Is the median duration of US titles significantly different from that of Indian titles?\",\n      \"hint\": \"Compute median duration for each country and run a permutation test to compare them.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"What is the estimated causal effect of being a Movie on duration after matching on country, rating, and release year?\",\n      \"hint\": \"Perform propensity score matching, then compare average duration between matched Movie and TV Show groups.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Using a mixed\u2011effects model with random intercepts for country, how does release year affect duration?\",\n      \"hint\": \"Fit a hierarchical linear model (duration ~ release_year + (1|country)) and interpret the fixed effect.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Forecast the number of titles that will be added each month for the next year using an ARIMA model.\",\n      \"hint\": \"Aggregate titles by month, check stationarity, fit ARIMA, and generate 12\u2011month forecasts.\",\n      \"n_steps\": 10,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"What is the average number of genres listed per title, and does it differ between Movies and TV Shows?\",\n      \"hint\": \"Count genres per title, compute group means, and test difference with a t\u2011test.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Which rating category has the highest average duration for Movies?\",\n      \"hint\": \"Filter for type == 'Movie', group by rating, compute mean duration_num, and select max.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Do titles added in later years tend to have higher release years?\",\n      \"hint\": \"Compute correlation between added_year and release_year for all rows.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the distribution of the number of seasons for TV Shows that were added in 2021?\",\n      \"hint\": \"Filter for type == 'TV Show' and added_year == 2021, then describe duration_num.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a significant difference in the proportion of 'TV-MA' ratings between US and non\u2011US titles?\",\n      \"hint\": \"Calculate proportions for each group and run a two\u2011sample proportion test.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    }\n  ]\n}\n```\n<DONE>",
+      "code_cells": [],
+      "execution_results": [],
+      "timestamp": "2025-12-23 23:31:51.674290"
+    }
+  ],
+  "questions_generated": [
+    {
+      "hint": "Filter rows where type == 'Movie', then compute mean of duration_num.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Filter for type == 'TV Show', then value_counts on country.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Use value_counts on rating and select the top entry.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Count rows where added_year == 2020.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Compute the median of the release_year column.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Explode the listed_in column into individual genres and use value_counts.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Calculate value_counts for type and divide each count by the total number of rows.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Filter for type == 'TV Show' and compute mean of duration_num (where duration represents seasons).",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Use value_counts on release_year and select the year with the maximum count.",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Group by country, count titles, then compute the mean of those counts.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Perform an independent t\u2011test on duration_num for the two type groups.",
+      "difficulty": "MEDIUM",
+      "n_steps": 4
+    },
+    {
+      "hint": "Select release_year and duration_num columns and apply scipy.stats.pearsonr.",
+      "difficulty": "MEDIUM",
+      "n_steps": 3
+    },
+    {
+      "hint": "Create two groups (release_year > 2015 and \u2264 2015), compute proportion of 'TV-MA' in each, then run a proportion test.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Create a contingency table of type vs top\u20115 genres and apply chi\u2011square test of independence.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Perform one\u2011way ANOVA with duration_num as the dependent variable and country as the factor (use top 5 countries).",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Group by added_year, count titles, then fit a simple linear regression to assess trend.",
+      "difficulty": "MEDIUM",
+      "n_steps": 4
+    },
+    {
+      "hint": "Filter for type == 'TV Show', then compute correlation between duration_num (seasons) and added_year.",
+      "difficulty": "MEDIUM",
+      "n_steps": 3
+    },
+    {
+      "hint": "Calculate PG\u201113 proportion for US titles versus all non\u2011US titles and perform a two\u2011sample proportion test.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Create two groups (director not null vs null) and compare their mean duration_num using a t\u2011test.",
+      "difficulty": "MEDIUM",
+      "n_steps": 4
+    },
+    {
+      "hint": "Encode rating, count genres per title, fit an OLS regression, and report R\u00b2.",
+      "difficulty": "HARD",
+      "n_steps": 6
+    },
+    {
+      "hint": "Fit a two\u2011way ANOVA with type, country, and their interaction as factors predicting duration_num.",
+      "difficulty": "HARD",
+      "n_steps": 7
+    },
+    {
+      "hint": "Encode country, fit regression with added_year as target, evaluate adjusted R\u00b2 and RMSE.",
+      "difficulty": "HARD",
+      "n_steps": 7
+    },
+    {
+      "hint": "Build a contingency table of rating vs top\u20115 genres and perform a chi\u2011square test.",
+      "difficulty": "HARD",
+      "n_steps": 6
+    },
+    {
+      "hint": "Count cast members per title, then compute Spearman correlation with duration_num.",
+      "difficulty": "HARD",
+      "n_steps": 5
+    },
+    {
+      "hint": "Encode categorical variables, fit logistic regression with type as binary target, assess accuracy and AUC.",
+      "difficulty": "HARD",
+      "n_steps": 7
+    },
+    {
+      "hint": "Compute median duration for each country and run a permutation test to compare them.",
+      "difficulty": "HARD",
+      "n_steps": 8
+    },
+    {
+      "hint": "Perform propensity score matching, then compare average duration between matched Movie and TV Show groups.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 9
+    },
+    {
+      "hint": "Fit a hierarchical linear model (duration ~ release_year + (1|country)) and interpret the fixed effect.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 9
+    },
+    {
+      "hint": "Aggregate titles by month, check stationarity, fit ARIMA, and generate 12\u2011month forecasts.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 10
+    },
+    {
+      "hint": "Count genres per title, compute group means, and test difference with a t\u2011test.",
+      "difficulty": "MEDIUM",
+      "n_steps": 4
+    },
+    {
+      "hint": "Filter for type == 'Movie', group by rating, compute mean duration_num, and select max.",
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "hint": "Compute correlation between added_year and release_year for all rows.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Filter for type == 'TV Show' and added_year == 2021, then describe duration_num.",
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "hint": "Calculate proportions for each group and run a two\u2011sample proportion test.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    }
+  ],
+  "total_turns": 5,
+  "timestamp": "2025-12-23 23:32:01.828981"
+}

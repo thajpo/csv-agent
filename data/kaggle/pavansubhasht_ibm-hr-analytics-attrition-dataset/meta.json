@@ -1,0 +1,16 @@
+{
+  "ref": "pavansubhasht/ibm-hr-analytics-attrition-dataset",
+  "owner": "pavansubhasht",
+  "name": "ibm-hr-analytics-attrition-dataset",
+  "title": "IBM HR Analytics Employee Attrition & Performance",
+  "subtitle": "Predict attrition of your valuable employees",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"employment\", \"name\": \"employment\", \"description\": \"Where does it pay to attend college? What impacts employee satisfaction and what makes them quit their jobs? Explore these questions and others in kernels and datasets with this tag.\", \"fullPath\": \"subject > people and society > jobs and career > employment\", \"competitionCount\": 1, \"datasetCount\": 790, \"scriptCount\": 272, \"totalCount\": 1063}",
+    "{\"ref\": \"business\", \"name\": \"business\", \"description\": \"Businesses are organizational entities that drive economic activity. Explore the inner workings of things like HR practices, product sales, and customer happiness in these competitions, kernels, and datasets.\", \"fullPath\": \"subject > people and society > business\", \"competitionCount\": 42, \"datasetCount\": 114270, \"scriptCount\": 25710, \"totalCount\": 140022}",
+    "{\"ref\": \"software\", \"name\": \"software\", \"description\": null, \"fullPath\": \"subject > science and technology > computer science > software\", \"competitionCount\": 4, \"datasetCount\": 19808, \"scriptCount\": 11237, \"totalCount\": 31049}"
+  ],
+  "url": "https://www.kaggle.com/datasets/pavansubhasht/ibm-hr-analytics-attrition-dataset",
+  "totalBytes": 51314,
+  "downloadCount": 282283
+}

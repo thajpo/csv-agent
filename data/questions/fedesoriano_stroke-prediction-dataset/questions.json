@@ -1,0 +1,182 @@
+[
+  {
+    "question": "What proportion of patients in the dataset suffered a stroke?",
+    "hint": "Sum the 'stroke' column and divide by total number of rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the mean age of patients who suffered a stroke?",
+    "hint": "Filter rows where stroke == 1 and compute the mean of 'age'.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant difference in average glucose level between stroke and non\u2011stroke patients?",
+    "hint": "Create two groups (stroke=1, stroke=0) and run a two\u2011sample t\u2011test on 'avg_glucose_level'.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which gender shows a higher stroke incidence rate?",
+    "hint": "Group by 'gender', compute stroke proportion for each group, then compare.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the median BMI among patients who have hypertension?",
+    "hint": "Filter rows where hypertension == 1 and calculate the median of 'bmi'.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "How many patients are classified as 'never smoked'?",
+    "hint": "Count the occurrences of the value 'never smoked' in the 'smoking_status' column.",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the most common work type among stroke patients?",
+    "hint": "Filter stroke == 1, then find the mode of the 'work_type' column.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the Pearson correlation coefficient between age and average glucose level?",
+    "hint": "Use DataFrame.corr() on 'age' and 'avg_glucose_level'.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the Spearman correlation between BMI and stroke?",
+    "hint": "Apply scipy.stats.spearmanr to 'bmi' and 'stroke'.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What percentage of patients live in Urban areas?",
+    "hint": "Count 'Urban' entries in 'Residence_type' and divide by total rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does smoking status associate with stroke occurrence?",
+    "hint": "Create a contingency table of 'smoking_status' vs 'stroke' and run a chi\u2011square test.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the odds ratio of stroke for patients with hypertension versus those without?",
+    "hint": "Build a 2\u00d72 table (hypertension vs stroke) and compute (a/b)/(c/d).",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using only age and hypertension, how well does a logistic regression predict stroke (report AUC)?",
+    "hint": "Split data (random_state=42), fit LogisticRegression, predict probabilities, compute roc_auc_score.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there a significant difference in BMI between male and female patients?",
+    "hint": "Separate by gender and run an independent two\u2011sample t\u2011test on 'bmi'.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Do average glucose levels differ across work types?",
+    "hint": "Perform one\u2011way ANOVA on 'avg_glucose_level' grouped by 'work_type'.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the Spearman rank correlation between average glucose level and stroke probability?",
+    "hint": "Use scipy.stats.spearmanr on 'avg_glucose_level' and 'stroke'.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "After imputing missing BMI with the median, does BMI become a significant predictor of stroke in a multivariate logistic regression (age, hypertension, BMI)?",
+    "hint": "Impute BMI, fit logistic regression via statsmodels, examine p\u2011values for BMI coefficient.",
+    "n_steps": 7,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Construct a confusion matrix for a logistic regression (all features except id) using a 0.5 probability threshold.",
+    "hint": "Train\u2011test split (random_state=42), predict probabilities, apply threshold, then sklearn.metrics.confusion_matrix.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Are age distributions different between stroke and non\u2011stroke groups (Mann\u2011Whitney U test)?",
+    "hint": "Separate ages by stroke status and run scipy.stats.mannwhitneyu.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "How strongly is marital status associated with stroke (chi\u2011square test and Cram\u00e9r's V)?",
+    "hint": "Create contingency table of 'ever_married' vs 'stroke', run chi2_contingency, compute V = sqrt(\u03c7\u00b2/(n\u00b7(k\u20111))).",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which combination of predictors yields the best AIC using stepwise forward selection?",
+    "hint": "Start with null model, iteratively add variables (age, gender, hypertension, etc.) based on AIC improvement using statsmodels.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Estimate a 95\u202f% bootstrap confidence interval for the odds ratio of heart disease on stroke (1000 resamples).",
+    "hint": "Resample the dataset 1000 times, fit logistic regression each time, store odds ratios, compute percentile interval.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Using propensity\u2011score matching on age, gender, and hypertension, compare stroke outcomes between smokers and non\u2011smokers and report the average treatment effect.",
+    "hint": "Fit logistic model for propensity scores, match nearest neighbors, compute difference in stroke rates.",
+    "n_steps": 9,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Fit a Cox proportional\u2011hazards model with age and BMI to assess stroke risk and report the hazard ratios.",
+    "hint": "Use lifelines.CoxPHFitter on a dataset that includes a synthetic time column, then extract HRs.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Evaluate the mean F1\u2011score of a support vector machine classifier using stratified 5\u2011fold cross\u2011validation (random_state=42).",
+    "hint": "Create StratifiedKFold, train SVC on each fold, predict, compute F1, then average.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Apply PCA to the continuous variables (age, avg_glucose_level, BMI) and report the variance explained by the first two principal components.",
+    "hint": "Standardize the three columns, run sklearn.decomposition.PCA, examine explained_variance_ratio_.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Perform a mediation analysis to test whether average glucose level mediates the relationship between BMI and stroke; report the indirect effect significance.",
+    "hint": "Use statsmodels mediation: regress BMI\u2192glucose, glucose\u2192stroke (controlling BMI), compute indirect effect via bootstrapping.",
+    "n_steps": 9,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Using nested cross\u2011validation (outer 5 folds, inner 3 folds), tune ElasticNet logistic regression hyperparameters (alpha, l1_ratio) and report the best parameters and outer test AUC.",
+    "hint": "Outer loop splits data, inner GridSearchCV searches over alpha & l1_ratio, evaluate AUC on outer hold\u2011out.",
+    "n_steps": 10,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Implement a Bayesian logistic regression to estimate the posterior distribution of the hypertension coefficient and provide a 95\u202f% credible interval.",
+    "hint": "Use PyMC3 (or pymc) to define a logistic model with a prior on the hypertension coefficient, sample posterior, summarize.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Conduct a survival analysis with Kaplan\u2011Meier curves stratified by work type and test differences using the log\u2011rank test.",
+    "hint": "Create a synthetic duration column, fit lifelines.KaplanMeierFitter for each work_type, then lifelines.statistics.logrank_test.",
+    "n_steps": 8,
+    "difficulty": "VERY_HARD"
+  }
+]

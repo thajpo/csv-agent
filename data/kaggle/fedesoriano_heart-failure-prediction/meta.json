@@ -1,0 +1,18 @@
+{
+  "ref": "fedesoriano/heart-failure-prediction",
+  "owner": "fedesoriano",
+  "name": "heart-failure-prediction",
+  "title": "Heart Failure Prediction Dataset",
+  "subtitle": "11 clinical features for predicting heart disease events.",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"healthcare\", \"name\": \"healthcare\", \"description\": \"AI in healthcare is a growing interest. One of the major problems is simply converting research into an application. Should be easy, right?\", \"fullPath\": \"subject > health and fitness > health > healthcare\", \"competitionCount\": 32, \"datasetCount\": 2354, \"scriptCount\": 2062, \"totalCount\": 4448}",
+    "{\"ref\": \"health\", \"name\": \"health\", \"description\": \"Consider the health tag your data science gym. Get in there and work out those data science muscles on health analytics. Analyze heart disease until you sweat. Then recover with with a nice candy production dataset.\", \"fullPath\": \"subject > health and fitness > health\", \"competitionCount\": 481, \"datasetCount\": 23433, \"scriptCount\": 8258, \"totalCount\": 32172}",
+    "{\"ref\": \"classification\", \"name\": \"classification\", \"description\": null, \"fullPath\": \"task > classification\", \"competitionCount\": 207, \"datasetCount\": 47077, \"scriptCount\": 20515, \"totalCount\": 67799}",
+    "{\"ref\": \"health conditions\", \"name\": \"health conditions\", \"description\": null, \"fullPath\": \"subject > health and fitness > health > health conditions\", \"competitionCount\": 45, \"datasetCount\": 11098, \"scriptCount\": 2001, \"totalCount\": 13144}",
+    "{\"ref\": \"heart conditions\", \"name\": \"heart conditions\", \"description\": null, \"fullPath\": \"subject > health and fitness > health > health conditions > heart conditions\", \"competitionCount\": 2, \"datasetCount\": 5923, \"scriptCount\": 2181, \"totalCount\": 8106}"
+  ],
+  "url": "https://www.kaggle.com/datasets/fedesoriano/heart-failure-prediction",
+  "totalBytes": 8762,
+  "downloadCount": 250997
+}

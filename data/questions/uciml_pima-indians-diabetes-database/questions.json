@@ -1,0 +1,212 @@
+[
+  {
+    "question": "What is the overall proportion of patients with diabetes (Outcome = 1) in the dataset?",
+    "hint": "Compute the count of Outcome = 1 divided by total rows.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the mean Glucose level for patients without diabetes (Outcome = 0)?",
+    "hint": "Filter rows where Outcome = 0 and calculate the mean of Glucose.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a statistically significant difference in mean BMI between diabetic and non\u2011diabetic groups?",
+    "hint": "Perform an independent two\u2011sample t\u2011test on BMI for Outcome = 0 vs Outcome = 1.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Which single predictor has the strongest linear relationship with the Outcome?",
+    "hint": "Examine the absolute Pearson correlation values between each feature and Outcome.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the Pearson correlation coefficient between Age and Pregnancies?",
+    "hint": "Use pandas .corr() or scipy.stats.pearsonr on the two columns.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does BloodPressure differ significantly across the two Outcome groups according to a Mann\u2011Whitney U test?",
+    "hint": "Apply scipy.stats.mannwhitneyu on BloodPressure split by Outcome.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Build a simple linear regression model predicting Glucose from Age. What is the slope coefficient?",
+    "hint": "Use statsmodels OLS: Glucose ~ Age, extract the coefficient for Age.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the 95% confidence interval for the mean Insulin level in the whole cohort?",
+    "hint": "Calculate mean, standard error, then use scipy.stats.t.interval with df = n\u20111.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Perform a chi\u2011square test to assess whether the distribution of Outcome differs by Age group (\u226430, 31\u201150, >50). What is the p\u2011value?",
+    "hint": "Create a contingency table of Age groups vs Outcome and apply scipy.stats.chi2_contingency.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Fit a logistic regression model using all predictors to estimate the probability of diabetes. What is the model\u2019s overall accuracy on the training data?",
+    "hint": "Use sklearn.linear_model.LogisticRegression (random_state=42), predict on the same data, compare predictions to true Outcome.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "What is the area under the ROC curve (AUC) for the logistic regression model built with all features?",
+    "hint": "Obtain predicted probabilities, then use sklearn.metrics.roc_auc_score.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Does the DiabetesPedigreeFunction have a monotonic relationship with Outcome? Report the Spearman rank correlation and its significance.",
+    "hint": "Apply scipy.stats.spearmanr on DiabetesPedigreeFunction and Outcome.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Compare the mean Glucose levels between patients with BMI < 25 and BMI \u2265 25. Is the difference significant at \u03b1 = 0.05?",
+    "hint": "Split data by BMI threshold, then perform an independent t\u2011test on Glucose.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What proportion of patients older than 60 have diabetes?",
+    "hint": "Filter rows with Age > 60, then compute the fraction with Outcome = 1.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Create a boxplot of Insulin levels for each Outcome group. Which group shows higher median Insulin?",
+    "hint": "Use seaborn.boxplot or pandas boxplot with Insulin vs Outcome; inspect medians.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using a 70/30 train\u2011test split (random_state=42), train a k\u2011Nearest Neighbors classifier (k=5) on all features. What is the test set accuracy?",
+    "hint": "Apply sklearn.model_selection.train_test_split, then sklearn.neighbors.KNeighborsClassifier.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Perform a stepwise forward selection (based on AIC) starting from an intercept\u2011only logistic model. Which predictors are selected in the final model?",
+    "hint": "Iteratively add predictors that reduce AIC using statsmodels Logit; stop when no improvement.",
+    "n_steps": 12,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Assess multicollinearity among predictors by computing the Variance Inflation Factor (VIF) for each feature. Which variable has the highest VIF?",
+    "hint": "Fit an OLS model for each predictor as dependent on the others and calculate VIF = 1/(1\u2011R\u00b2).",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Does the relationship between Age and Outcome remain significant after adjusting for BMI in a logistic regression? Report the adjusted odds ratio for Age.",
+    "hint": "Fit Logit(Outcome ~ Age + BMI) and exponentiate the Age coefficient.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Compute Cohen's d effect size for the difference in mean Glucose between diabetic and non\u2011diabetic groups.",
+    "hint": "Calculate pooled standard deviation and then (mean1\u2011mean0)/pooled SD.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the proportion of missing or zero values for the Glucose column, and how might this affect analyses?",
+    "hint": "Count rows where Glucose == 0; discuss potential bias.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Standardize all numeric predictors (zero mean, unit variance). After standardization, what is the correlation between standardized BMI and standardized Glucose?",
+    "hint": "Apply sklearn.preprocessing.StandardScaler, then compute correlation.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using bootstrap resampling (1,000 samples), estimate the 95% confidence interval for the mean Age of diabetic patients.",
+    "hint": "Resample the Age values for Outcome = 1 with replacement, compute means, then take the 2.5th and 97.5th percentiles.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Perform a one\u2011way ANOVA to test whether mean BloodPressure differs across the three Age groups (\u226430, 31\u201150, >50). What is the F\u2011statistic and p\u2011value?",
+    "hint": "Create groups by Age thresholds, then use scipy.stats.f_oneway.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Calculate the sensitivity and specificity of the logistic regression model at a probability threshold of 0.5.",
+    "hint": "Derive confusion matrix from predicted labels (prob > 0.5) vs true Outcome; compute rates.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Is there evidence of interaction between Pregnancies and Age in predicting diabetes? Fit a logistic model including an interaction term and report its p\u2011value.",
+    "hint": "Create a new column Pregnancies*Age, fit Logit(Outcome ~ Pregnancies + Age + Pregnancies*Age).",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "What is the median SkinThickness for patients with Insulin levels > 200?",
+    "hint": "Filter rows where Insulin > 200, then compute median of SkinThickness.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Compare the distribution of BMI between diabetic and non\u2011diabetic groups using a Kolmogorov\u2011Smirnov test. What is the test statistic?",
+    "hint": "Use scipy.stats.ks_2samp on BMI split by Outcome.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using principal component analysis (PCA) on standardized predictors, how much cumulative variance is explained by the first two components?",
+    "hint": "Standardize features, apply sklearn.decomposition.PCA(n_components=2), sum explained_variance_ratio_.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Does removing the variable with highest VIF improve the logistic regression model\u2019s AIC? Report the AIC before and after removal.",
+    "hint": "Compute VIF, drop the variable, fit two Logit models, compare AIC values.",
+    "n_steps": 10,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "What is the average number of pregnancies for patients older than 40 who have diabetes?",
+    "hint": "Filter Age > 40 and Outcome = 1, then compute mean of Pregnancies.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a significant linear trend in Outcome prevalence across quartiles of Glucose? Use the Cochran\u2011Armitage test for trend.",
+    "hint": "Create Glucose quartiles, compute proportion of Outcome=1 in each, then apply statsmodels.stats.proportion.trend_test.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Calculate the odds ratio for diabetes comparing patients with BMI \u2265 30 to those with BMI < 30.",
+    "hint": "Construct a 2x2 table of BMI category vs Outcome, then compute (a/b)/(c/d).",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the inter\u2011quartile range (IQR) of the DiabetesPedigreeFunction variable?",
+    "hint": "Use pandas .quantile(0.75) - .quantile(0.25) on the column.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Perform a permutation test (10,000 permutations) to assess whether the observed mean difference in Glucose between Outcome groups could arise by chance. What is the empirical p\u2011value?",
+    "hint": "Shuffle Outcome labels, recompute mean difference each permutation, count how many exceed observed difference.",
+    "n_steps": 11,
+    "difficulty": "VERY_HARD"
+  }
+]

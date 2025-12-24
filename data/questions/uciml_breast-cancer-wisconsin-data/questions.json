@@ -1,0 +1,80 @@
+[
+  {
+    "question": "What is the total number of samples in the dataset?",
+    "hint": "Use df.shape to get the number of rows.",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "How many benign (B) and malignant (M) cases are present?",
+    "hint": "Use df['diagnosis'].value_counts().",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the mean radius_mean for benign tumors?",
+    "hint": "Filter df where diagnosis == 'B' and compute the mean of radius_mean.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Which feature has the highest positive Pearson correlation with the binary diagnosis label?",
+    "hint": "Encode diagnosis as 1/0, then use df.corrwith().",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the standard deviation of area_mean across the whole dataset?",
+    "hint": "Use df['area_mean'].std().",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a statistically significant difference in radius_mean between benign and malignant tumors?",
+    "hint": "Perform an independent two\u2011sample t\u2011test (scipy.stats.ttest_ind) on radius_mean split by diagnosis.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the Pearson correlation coefficient and its p\u2011value between perimeter_worst and diagnosis_binary?",
+    "hint": "Use scipy.stats.pearsonr on the two series.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Build a simple logistic regression model using radius_mean, texture_mean, and perimeter_mean to predict diagnosis_binary.",
+    "hint": "Use sklearn.linear_model.LogisticRegression, fit on the three features, and report training accuracy.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Split the data into training and test sets (80/20) with random_state=42 and evaluate the logistic regression model's accuracy on the test set.",
+    "hint": "Use sklearn.model_selection.train_test_split, then fit and score.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Fit a multiple linear regression model using all mean features (e.g., radius_mean, texture_mean, \u2026, fractal_dimension_mean) to predict diagnosis_binary. Which coefficients are statistically significant at \u03b1 = 0.05?",
+    "hint": "Use statsmodels OLS with all mean columns, examine p-values in the summary.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Investigate multicollinearity among the worst\u2011measurement features by computing the Variance Inflation Factor (VIF) for each.",
+    "hint": "Use statsmodels.stats.outliers_influence.variance_inflation_factor on the worst\u2011features matrix.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Using the features with VIF < 5, retrain the logistic regression model and assess whether test accuracy improves.",
+    "hint": "Select low\u2011VIF features, repeat train_test_split and model fitting, compare accuracies.",
+    "n_steps": 8,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Build a regularized logistic regression (L1 penalty) with hyperparameter C tuned via GridSearchCV (C values: 0.01, 0.1, 1, 10) using 5\u2011fold CV. Which C gives the best ROC AUC?",
+    "hint": "Use sklearn.linear_model.LogisticRegression(penalty='l1', solver='saga'), GridSearchCV with scoring='roc_auc'.",
+    "n_steps": 9,
+    "difficulty": "VERY_HARD"
+  }
+]
