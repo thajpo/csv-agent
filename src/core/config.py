@@ -69,10 +69,7 @@ class Config(BaseModel):
     n_consistency: int = 5
     verified_only: bool = False
     float_tolerance: float = 0.1
-
-    # Container pool settings (for parallel processing)
-    n_containers: int = 2  # Number of Docker containers to create
-    workers_per_container: int = 6  # Worker processes per container (fork-based)
+    max_concurrent_containers: int = 10  # Limit parallel CSV processing to avoid resource exhaustion
 
     # Outputs
     questions_json: str = "data/questions/questions.json"

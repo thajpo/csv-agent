@@ -233,23 +233,27 @@ async def main(legacy_mode: bool = False, parallel: bool = False):
     all_episodes = []
 
     if parallel and len(tasks) > 1:
-        # Parallel mode: process all CSVs concurrently
-        ui.base.print_section(f"🚀 PARALLEL MODE: Processing {len(tasks)} CSVs concurrently")
+        # Parallel mode: process CSVs concurrently with throttling
+        max_concurrent = config.max_concurrent_containers
+        ui.base.print_section(f"🚀 PARALLEL MODE: Processing {len(tasks)} CSVs (max {max_concurrent} concurrent)")
         ui.base.print_info("Note", "Each CSV gets its own container with fork-based workers")
 
-        # Process all CSVs in parallel (no UI output during parallel execution)
+        # Semaphore limits concurrent containers to avoid resource exhaustion
+        semaphore = asyncio.Semaphore(max_concurrent)
+
         async def process_task_wrapper(task: CSVTask) -> tuple[CSVTask, list[EpisodeJSONL]]:
-            episodes = await process_csv_task(
-                task=task,
-                teacher_model=teacher_model,
-                n_consistency=n_consistency,
-                max_turns=max_turns,
-                sampling_args=sampling_args,
-                float_tol=float_tol,
-                verified_only=verified_only,
-                ui=None,  # No UI in parallel mode (avoids interleaved output)
-            )
-            return (task, episodes)
+            async with semaphore:
+                episodes = await process_csv_task(
+                    task=task,
+                    teacher_model=teacher_model,
+                    n_consistency=n_consistency,
+                    max_turns=max_turns,
+                    sampling_args=sampling_args,
+                    float_tol=float_tol,
+                    verified_only=verified_only,
+                    ui=None,  # No UI in parallel mode (avoids interleaved output)
+                )
+                return (task, episodes)
 
         results = await asyncio.gather(*[
             process_task_wrapper(task) for task in tasks
