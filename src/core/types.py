@@ -123,7 +123,7 @@ class Hook(BaseModel):
     variable_name: str | None = None    # e.g., 'df_filtered'
     value_hash: str                     # Hash of the value at this point
     description: str | None = None      # Optional semantic description
-    depends_on: list[str] = []          # Names of hooks this depends on (DAG edges)
+    depends_on: list[str] = Field(default_factory=list)  # Names of hooks this depends on (DAG edges)
 
 
 class ExecutionTrace(BaseModel):
@@ -134,10 +134,10 @@ class ExecutionTrace(BaseModel):
     execution_success: bool
 
     # Intermediate checkpoints for RL dense reward
-    hooks: list[Hook] = []
+    hooks: list[Hook] = Field(default_factory=list)
 
     # Metadata from submit(..., extra=...)
-    submission_metadata: dict[str, Any] = {}
+    submission_metadata: dict[str, Any] = Field(default_factory=dict)
 
     # Optional metadata (for debugging/analysis)
     total_turns: int = 0
@@ -153,7 +153,7 @@ class Episode(BaseModel):
     id: str
     question: Question                              # First-class Question object
     teacher_trace: ExecutionTrace                   # Teacher execution WITH hint
-    consistency_traces: list[ExecutionTrace] = []   # Consistency traces WITHOUT hint (for triangulation)
+    consistency_traces: list[ExecutionTrace] = Field(default_factory=list)  # Consistency traces WITHOUT hint
     verified: bool = False                          # Passed triangulation?
 
     # Student execution (populated during training)

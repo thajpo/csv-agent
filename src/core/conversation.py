@@ -5,7 +5,7 @@ Simplified conversation tracking with automatic context pruning to stay
 within token limits. Uses simple Message objects instead of complex Turn tracking.
 """
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
@@ -47,7 +47,7 @@ class ConversationHistory(BaseModel):
     Manages conversation messages with context pruning.
     """
     system_prompt: str
-    messages: list[MessageDict] = []  # OpenAI format with type hints
+    messages: list[MessageDict] = Field(default_factory=list)  # OpenAI format with type hints
     archived_count: int = 0           # Number of messages archived
 
     # Limits
