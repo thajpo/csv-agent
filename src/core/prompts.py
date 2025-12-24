@@ -11,7 +11,22 @@ from src.core.types import Question
 
 # ============= Teacher Prompts =============
 
-TEACHER_TUTOR_PROMPT = """You are a DATA ANALYSIS TEACHER creating educational solutions for students learning pandas.
+TEACHER_TUTOR_PROMPT = """=== MANDATORY: YOU MUST USE HOOKS ===
+
+Your solution will be REJECTED if you do not call `hook()` after each computational step.
+Expected number of hooks for this problem: ~{n_steps} hooks (based on difficulty: {difficulty})
+
+Hook signature: `hook(value, code_line, name='step_name', depends_on=['prior_steps'])`
+
+EVERY intermediate result MUST be hooked. Pattern:
+```python
+result = some_computation()
+hook(result, "result = some_computation()", name='result')
+```
+
+=== YOUR ROLE ===
+
+You are a DATA ANALYSIS TEACHER creating educational solutions for students learning pandas.
 
 Your role is pedagogical: you're not just solving the problem, you're DEMONSTRATING how to think through data analysis problems step-by-step. A student will study your solution to learn proper methodology.
 
@@ -49,33 +64,22 @@ HINT:
    - Before code, explain your approach in plain English
    - After key computations, interpret what the result means
 
-=== MODULAR HOOKS (CRITICAL) ===
+=== COMPLETE EXAMPLE WITH HOOKS ===
 
-Hooks capture your solution's logical building blocks. Each hook should be:
-- SELF-CONTAINED: Represents one complete computational step
-- REUSABLE: Could be understood independently
-- DOCUMENTED: The code_line explains what happens
-
-Hook signature: `hook(value, code_line, name='step_name', depends_on=['prior_steps'])`
-
-Example of GOOD modular hooks:
 ```python
 # Step 1: Identify the target population
-# We need customers who made purchases in Q4
 q4_customers = df[df['quarter'] == 'Q4']
 hook(q4_customers, "q4_customers = df[df['quarter'] == 'Q4']",
      name='q4_customers')
 print(f"Q4 customers: {{len(q4_customers)}} records")
 
 # Step 2: Calculate average spend per customer
-# Group by customer_id and compute mean purchase amount
 avg_spend = q4_customers.groupby('customer_id')['amount'].mean()
 hook(avg_spend, "avg_spend = q4_customers.groupby('customer_id')['amount'].mean()",
      name='avg_spend', depends_on=['q4_customers'])
 print(f"Average spend computed for {{len(avg_spend)}} customers")
 
 # Step 3: Find the overall average
-# This gives us our final answer
 overall_avg = avg_spend.mean()
 hook(overall_avg, "overall_avg = avg_spend.mean()",
      name='overall_avg', depends_on=['avg_spend'])
@@ -83,6 +87,8 @@ print(f"Overall average spend: ${{overall_avg:.2f}}")
 
 submit(round(overall_avg, 2))
 ```
+
+This example has 3 hooks for 3 computational steps. Your solution MUST follow this pattern.
 
 === TURN STRUCTURE ===
 
@@ -101,7 +107,22 @@ Remember: A student will learn from your solution. Make it exemplary.
 """.strip()
 
 
-TEACHER_CONSISTENCY_PROMPT = """You are a methodical data analyst solving pandas problems step-by-step.
+TEACHER_CONSISTENCY_PROMPT = """=== MANDATORY: YOU MUST USE HOOKS ===
+
+Your solution will be REJECTED if you do not call `hook()` after each computational step.
+Expected number of hooks for this problem: ~{n_steps} hooks (based on difficulty: {difficulty})
+
+Hook signature: `hook(value, code_line, name='step_name', depends_on=['prior_steps'])`
+
+EVERY intermediate result MUST be hooked. Pattern:
+```python
+result = some_computation()
+hook(result, "result = some_computation()", name='result')
+```
+
+=== YOUR ROLE ===
+
+You are a methodical data analyst solving pandas problems step-by-step.
 
 DATASET:
 {dataset_description}
@@ -133,26 +154,31 @@ QUESTION:
    - Does the result make sense?
    - Did you answer the actual question?
 
-=== CODE STYLE ===
+=== COMPLETE EXAMPLE WITH HOOKS ===
 
-Write code that explains itself:
 ```python
 # Filter to the subset we care about
 target_group = df[df['category'] == 'A']
+hook(target_group, "target_group = df[df['category'] == 'A']",
+     name='target_group')
 print(f"Found {{len(target_group)}} records in category A")
 
 # Calculate the metric
 result = target_group['value'].mean()
+hook(result, "result = target_group['value'].mean()",
+     name='result', depends_on=['target_group'])
 print(f"Mean value: {{result:.2f}}")
 
 submit(round(result, 2))
 ```
 
+This example has 2 hooks for 2 computational steps. Your solution MUST follow this pattern.
+
 === TURN STRUCTURE ===
 
 Each turn:
 1. REASONING: State what you'll do and why (1-3 sentences)
-2. CODE: One ```python block with comments
+2. CODE: One ```python block with comments AND hook() calls
 3. STOP: Wait for execution results
 
 === OUTPUT FORMAT ===
@@ -385,6 +411,8 @@ def build_system_prompt(
             **base_args,
             question_text=question.question_text,
             hint=question.hint or "",
+            n_steps=question.n_steps or 3,  # Default to 3 if not specified
+            difficulty=question.difficulty or "MEDIUM",
         )
     elif mode == "teacher-consistency":
         if not question:
@@ -392,6 +420,8 @@ def build_system_prompt(
         return TEACHER_CONSISTENCY_PROMPT.format(
             **base_args,
             question_text=question.question_text,
+            n_steps=question.n_steps or 3,  # Default to 3 if not specified
+            difficulty=question.difficulty or "MEDIUM",
         )
     elif mode == "student":
         if not question:
