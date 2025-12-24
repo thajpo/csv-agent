@@ -84,8 +84,6 @@ class Config(BaseModel):
     max_turns: int = 10
     mode: str = "teacher-tutor"
     question: Optional[str] = "What is the mean TL (total length) for the control group?"
-    hint: Optional[str] = "Filter the data to the control group first, then calculate the mean."
-    target_questions: int = 10
 
     # Models
     teacher_model: str = Field(default="openai/gpt-oss-120b")
@@ -137,7 +135,7 @@ class DataConfig(BaseModel):
 class ModelConfig(BaseModel):
     model_name: str
     temperature: float = 0.7
-    max_tokens: int = 1000
+    max_tokens: int = 6000  # Must match SamplingArgs.max_tokens
     top_p: float = 1.0
 
     def sampling_args_dict(self) -> dict:
@@ -155,7 +153,6 @@ class ExecutionConfig(BaseModel):
 class TaskConfig(BaseModel):
     mode: str = "teacher-tutor"
     question: Optional[Question] = None
-    target_questions: int = Field(default=10, gt=0)
 
 
 # =============================================================================

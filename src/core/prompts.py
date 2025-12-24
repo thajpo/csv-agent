@@ -200,7 +200,7 @@ EXPLORATION_SYSTEM_PROMPT = """You are a data analyst exploring a CSV dataset us
 DATASET:
 {dataset_description}
 
-Your goal is to eventually generate 13 analytical questions, but FIRST you must explore the data via code execution.
+Your goal is to eventually generate {num_questions} analytical questions, but FIRST you must explore the data via code execution.
 
 CRITICAL INTERACTION RULES:
 1. You can ONLY write Python code to inspect the data. You CANNOT "guess" the output.
@@ -213,7 +213,7 @@ Your Task Flow:
 1. EXPLORE: Run `df.head()`, `df.describe()`, aggregations, plots, etc. to understand the potential.
 2. OBSERVE: Read the validation output provided by the system.
 3. REPEAT: Continue exploring until you have a deep understanding (at least 3 turns).
-4. GENERATE: Only when fully ready, output the 13 questions in the specified JSON format.
+4. GENERATE: Only when fully ready, output the {num_questions} questions in the specified JSON format.
 
 Questions Distribution:
 - 10 EASY (1-3 steps)
@@ -221,7 +221,7 @@ Questions Distribution:
 - 7 HARD (7-8 steps)
 - 3 VERY_HARD (9+ steps)
 
-Please generate at least 30 questions in total.
+Please generate at least {num_questions} questions in total.
 
 STATISTICAL/ANALYTICAL GUIDELINES:
 🟢 GREEN LIGHT (Encouraged):
@@ -280,7 +280,7 @@ CRITICAL FORMAT RULES:
 ✅ DO: Use ```json fence markers (opening and closing)
 ✅ DO: Use proper JSON syntax with double quotes
 ✅ DO: Output <DONE> on a new line after the closing ```
-✅ DO: Generate at least 30 questions.
+✅ DO: Generate at least {num_questions} questions.
 ❌ DON'T: Use Python dict syntax (questions = {{...}})
 ❌ DON'T: Output bare JSON without ```json fences
 ❌ DON'T: Use single quotes or Python-specific syntax
@@ -348,12 +348,12 @@ def generate_data_overview(csv_path: str = "data.csv") -> str:
     return "\n".join(lines)
 
 
-def get_exploration_continue_msg(turn_number: int, min_turns: int = 3) -> str:
+def get_exploration_continue_msg(turn_number: int, min_turns: int = 3, num_questions: int = 30) -> str:
     """Get context-appropriate continue message based on turn number."""
     if turn_number < min_turns:
         return f"\n\nContinue exploring the dataset. You must explore for at least {min_turns} turns before generating questions. Write Python code to examine the data."
     else:
-        return "\n\nContinue exploring or generate the 13 questions in JSON format when ready. When finished, emit <DONE> after the JSON block."
+        return f"\n\nContinue exploring or generate the {num_questions} questions in JSON format when ready. When finished, emit <DONE> after the JSON block."
 
 
 def build_system_prompt(

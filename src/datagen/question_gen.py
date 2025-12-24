@@ -104,7 +104,7 @@ def try_parse_questions(response: str) -> list[dict] | None:
     return None
 
 
-async def force_question_generation(llm: APILLM, conversation: ConversationHistory) -> list[dict]:
+async def force_question_generation(llm: APILLM, conversation: ConversationHistory, num_questions: int = 30) -> list[dict]:
     """
     If model hasn't generated questions by max_turns, force it with a direct prompt.
 
@@ -112,7 +112,7 @@ async def force_question_generation(llm: APILLM, conversation: ConversationHisto
         List of question dicts
     """
     conversation.add_user_feedback(
-        "You've explored enough. Now generate the 13 questions in JSON format as specified in the system prompt."
+        f"You've explored enough. Now generate the {num_questions} questions in JSON format as specified in the system prompt."
     )
 
     messages = conversation.to_openai_messages()
@@ -162,10 +162,18 @@ async def explore_and_generate_questions(
     ui.print_status(f"CSVAnalysisEnv initialized with sandbox")
     
     llm = APILLM(model=model, sampling_args={"temperature": temperature, "max_tokens": max_tokens})
+
+    # Import config for num_questions (imported at module level after function defs)
+    from src.core.config import config as cfg
+    num_questions = cfg.num_questions_to_generate
+
     conversation = ConversationHistory(
-        system_prompt=EXPLORATION_SYSTEM_PROMPT.format(dataset_description=dataset_description),
+        system_prompt=EXPLORATION_SYSTEM_PROMPT.format(
+            dataset_description=dataset_description,
+            num_questions=num_questions,
+        ),
         max_messages=100,
-        max_context_tokens=100_000
+        max_context_tokens=cfg.max_context_tokens,
     )
 
     # 2. Multi-turn exploration loop
@@ -236,7 +244,7 @@ async def explore_and_generate_questions(
 
             # Build feedback
             feedback = build_execution_feedback(execution_results)
-            feedback += get_exploration_continue_msg(turn_num, MIN_EXPLORATION_TURNS)
+            feedback += get_exploration_continue_msg(turn_num, MIN_EXPLORATION_TURNS, num_questions)
 
             conversation.add_assistant_response(response)
             conversation.add_user_feedback(feedback)
@@ -250,7 +258,7 @@ async def explore_and_generate_questions(
     # 3. Validate we got questions
     if not questions_generated:
         ui.print_warning("Model didn't generate questions. Forcing...")
-        questions_generated = await force_question_generation(llm, conversation)
+        questions_generated = await force_question_generation(llm, conversation, num_questions)
 
     # 4. Create trace
     trace = ExplorationTrace(
