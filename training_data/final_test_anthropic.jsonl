@@ -1,0 +1,3 @@
+{"system": "You are a CSV analysis agent.", "messages": [{"role": "user", "content": "What is the mean value of column A?"}, {"role": "assistant", "content": "```python\nresult = df['A'].mean()\nsubmit(result)\n```"}]}
+{"system": "You are a CSV analysis agent.", "messages": [{"role": "user", "content": "How many rows have value > 50 in column B?"}, {"role": "assistant", "content": "```python\nfiltered = df[df['B'] > 50]\ncount = len(filtered)\nsubmit(count)\n```"}]}
+{"system": "You are a CSV analysis agent.", "messages": [{"role": "user", "content": "What is the correlation between columns C and D?"}, {"role": "assistant", "content": "```python\ncorr = df[['C', 'D']].corr().iloc[0, 1]\nsubmit(corr)\n```"}]}

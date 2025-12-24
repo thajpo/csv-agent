@@ -1,0 +1,200 @@
+[
+  {
+    "question": "What is the overall mean of the TL (total length) column?",
+    "hint": "Use df['TL'].mean() to compute the average.",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the mean TL for each treatment group (TR)?",
+    "hint": "Group by TR and aggregate the mean of TL.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "How many missing or placeholder values ('?') are present in each INTERNODE column?",
+    "hint": "Use (df[col] == '?').sum() for each INTERNODE column.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the Pearson correlation coefficient between TL and IN (internode count)?",
+    "hint": "Use scipy.stats.pearsonr(df['TL'], df['IN']).",
+    "n_steps": 1,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the average value of INTERNODE_1 for each TREE identifier?",
+    "hint": "Group by TREE and compute the mean of INTERNODE_1 after converting to numeric.",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Is there a statistically significant difference in TL between the 'control' and 'PP_333_20g/L' treatment groups?",
+    "hint": "Filter the two groups, then run scipy.stats.ttest_ind on TL.",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the effect size (Cohen's d) for the TL difference between the 'control' and 'PP_333_20g/L' groups?",
+    "hint": "Compute group means, pooled standard deviation, then calculate d = (mean1-mean2)/pooled_sd.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Fit a simple linear regression model predicting TL from IN. What is the slope coefficient?",
+    "hint": "Use statsmodels OLS: sm.OLS(df['TL'], sm.add_constant(df['IN'])).fit().params['IN'].",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Does TL differ across the different TREE identifiers (ANOVA)?",
+    "hint": "Use statsmodels formula: sm.stats.anova_lm(sm.OLS.from_formula('TL ~ C(TREE)', data=df).fit()).",
+    "n_steps": 3,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the Spearman rank correlation between TL and INTERNODE_5 (after converting to numeric and handling '?')?",
+    "hint": "Replace '?' with NaN, convert column to numeric, then use scipy.stats.spearmanr.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Is there an association between treatment (TR) and the presence of missing values ('?') in INTERNODE_2?",
+    "hint": "Create a contingency table of TR vs missing flag, then run scipy.stats.chi2_contingency.",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Build a multiple linear regression model to predict TL using INTERNODE_1, INTERNODE_5, and IN. What is the adjusted R-squared?",
+    "hint": "Prepare numeric internode columns, fit OLS with three predictors, retrieve model.rsquared_adj.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Perform a two-way ANOVA to test the interaction effect of treatment (TR) and IN on TL.",
+    "hint": "Use statsmodels formula: sm.stats.anova_lm(sm.OLS.from_formula('TL ~ C(TR) * IN', data=df).fit()).",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Apply Principal Component Analysis (PCA) on all numeric INTERNODE columns (excluding '?') and report the proportion of variance explained by the first two components.",
+    "hint": "Replace '?' with NaN, drop rows with NaN, use sklearn.decomposition.PCA with n_components=2, then examine explained_variance_ratio_.",
+    "n_steps": 5,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Split the data into training (80%) and testing (20%) sets using random_state=42, train a linear regression model on the training set to predict TL from IN and INTERNODE_1, and report the RMSE on the test set.",
+    "hint": "Use sklearn.model_selection.train_test_split with random_state=42, fit LinearRegression, compute mean_squared_error on predictions and take sqrt.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using ridge regression with alpha=1.0 and random_state=42, evaluate the model via 5-fold cross\u2011validation and report the average R\u00b2 score.",
+    "hint": "Use sklearn.linear_model.Ridge, sklearn.model_selection.cross_val_score with cv=5, set random_state=42 via the underlying estimator if needed.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "What is the median TL for each branch type (BR)?",
+    "hint": "Group by BR and compute the median of TL.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Calculate the proportion of observations where INTERNODE_1 is greater than 1.0.",
+    "hint": "Use (df['INTERNODE_1'] > 1.0).mean() to get the proportion.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Create a new column \u2018total_internode_sum\u2019 that sums all numeric INTERNODE measurements for each row (treat '?' as NaN). What is its correlation with TL?",
+    "hint": "Convert internode columns to numeric, sum across rows, then use scipy.stats.pearsonr with TL.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Perform a permutation test (10,000 permutations) to assess whether the observed correlation between TL and total_internode_sum is greater than expected by chance.",
+    "hint": "Shuffle TL values, recompute correlation each permutation, calculate p\u2011value as proportion of permuted correlations \u2265 observed.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "Fit a mixed\u2011effects model with TL as the outcome, treatment (TR) and IN as fixed effects, and a random intercept for each TREE. What is the variance component for the random intercept?",
+    "hint": "Use statsmodels MixedLM: MixedLM.from_formula('TL ~ C(TR) + IN', groups='TREE', data=df).fit().random_effects variance.",
+    "n_steps": 8,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Bootstrap the median TL difference between the 'control' and 'PP_333_20g/L' groups with 5,000 resamples and report the 95% confidence interval.",
+    "hint": "Resample each group with replacement, compute median difference each iteration, then take the 2.5th and 97.5th percentiles.",
+    "n_steps": 7,
+    "difficulty": "VERY_HARD"
+  },
+  {
+    "question": "Using a generalized linear model (GLM) with a Gamma family, model TL as a function of IN and treatment (TR). What is the deviance of the fitted model?",
+    "hint": "Use statsmodels GLM: sm.GLM(df['TL'], sm.add_constant(pd.get_dummies(df[['IN','TR']], drop_first=True)), family=sm.families.Gamma()).fit().deviance.",
+    "n_steps": 7,
+    "difficulty": "HARD"
+  },
+  {
+    "question": "What is the pairwise Pearson correlation matrix for the first five numeric INTERNODE columns (INTERNODE_1 to INTERNODE_5) after cleaning?",
+    "hint": "Convert the columns to numeric, replace '?' with NaN, then use df[['INTERNODE_1',...,'INTERNODE_5']].corr().",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Identify the top three treatment groups (TR) with the highest average TL.",
+    "hint": "Group by TR, compute mean TL, sort descending, take head(3).",
+    "n_steps": 3,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does the distribution of IN differ between trees that have any missing internode values and those with complete data? Use a Mann\u2011Whitney U test.",
+    "hint": "Create two groups based on presence of '?', then run scipy.stats.mannwhitneyu on IN.",
+    "n_steps": 5,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Compute the coefficient of variation (CV) for TL across the entire dataset.",
+    "hint": "CV = (standard deviation / mean) * 100 for the TL column.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "What is the proportion of observations where TL exceeds 2.0 meters?",
+    "hint": "Use (df['TL'] > 2.0).mean() to get the proportion.",
+    "n_steps": 2,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Perform a Kruskal\u2011Wallis test to compare TL across all treatment groups (TR).",
+    "hint": "Collect TL arrays for each TR group and use scipy.stats.kruskal(*group_arrays).",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Using the cleaned numeric internode columns, fit a Lasso regression (alpha=0.01) to predict TL and list the features with non\u2011zero coefficients.",
+    "hint": "Replace '?' with NaN, drop rows with NaN, fit sklearn.linear_model.Lasso, then inspect coef_ != 0.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Create a boxplot of TL for each branch type (BR) and describe which branch shows the highest median TL.",
+    "hint": "Use seaborn.boxplot(x='BR', y='TL', data=df) and then compute df.groupby('BR')['TL'].median().",
+    "n_steps": 4,
+    "difficulty": "EASY"
+  },
+  {
+    "question": "Does adding the sum of all internode measurements to the simple linear model (TL ~ IN) significantly improve model fit? Compare adjusted R\u00b2 of both models.",
+    "hint": "Fit Model 1: TL ~ IN; Model 2: TL ~ IN + total_internode_sum; compare rsquared_adj values.",
+    "n_steps": 6,
+    "difficulty": "MEDIUM"
+  },
+  {
+    "question": "Estimate the power of detecting a TL difference of 0.5 meters between two groups (n=150 each, sigma=0.8) at alpha=0.05 using a two\u2011sample t\u2011test.",
+    "hint": "Use statsmodels.stats.power.tt_ind_solve_power(effect_size=0.5/0.8, nobs1=150, alpha=0.05, alternative='two-sided').",
+    "n_steps": 4,
+    "difficulty": "MEDIUM"
+  }
+]
