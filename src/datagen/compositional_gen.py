@@ -1,0 +1,343 @@
+"""
+Compositional Question Generator.
+
+Generates verifiable questions by:
+1. Profiling the dataset
+2. Selecting applicable composition templates
+3. Executing templates to get ground truth answers
+4. Verbalizing code into natural language questions
+
+This approach guarantees:
+- Questions are answerable (we have the ground truth)
+- Questions require exploration (reference properties, not column names)
+- Multi-turn behavior is structural (can't be one-shot)
+"""
+
+import argparse
+import asyncio
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+
+from src.core.config import config
+from src.datagen.profiler import DataProfiler
+from src.datagen.templates import CompositionTemplate, get_applicable_templates
+from src.datagen.verbalizer import QuestionVerbalizer
+from src.envs.csv_env import LocalCSVAnalysisEnv
+from src.utils.hashing import hash_artifact
+
+
+class CompositionalQuestionGenerator:
+    """
+    Generate verified questions via code composition.
+
+    Pipeline:
+    1. Profile dataset -> understand structure
+    2. Select templates -> which patterns apply
+    3. Execute in sandbox -> get ground truth
+    4. Verbalize via LLM -> natural language question
+    """
+
+    def __init__(
+        self,
+        csv_path: str,
+        model: str | None = None,
+        sampling_args: dict | None = None,
+    ):
+        """
+        Initialize the generator.
+
+        Args:
+            csv_path: Path to CSV dataset
+            model: LLM model for verbalization (defaults to config.question_gen_model)
+            sampling_args: LLM sampling args (defaults to config.sampling_args)
+        """
+        self.csv_path = Path(csv_path).resolve()
+        if not self.csv_path.exists():
+            raise FileNotFoundError(f"CSV not found: {csv_path}")
+
+        self.model = model or config.question_gen_model
+        self.sampling_args = sampling_args or config.sampling_args.model_dump()
+
+        self.profiler = DataProfiler()
+        self.verbalizer: QuestionVerbalizer | None = None
+        self.env: LocalCSVAnalysisEnv | None = None
+        self.state: dict | None = None
+
+    async def setup(self) -> None:
+        """Initialize sandbox and verbalizer."""
+        self.verbalizer = QuestionVerbalizer(
+            model=self.model,
+            sampling_args=self.sampling_args,
+        )
+        self.env = LocalCSVAnalysisEnv(csv_path=str(self.csv_path))
+        self.state = await self.env.setup_state({})
+
+    async def cleanup(self) -> None:
+        """Cleanup resources."""
+        if self.env and self.state:
+            await self.env.destroy_sandbox(self.state["sandbox_id"])
+        if self.verbalizer:
+            await self.verbalizer.aclose()
+
+    async def generate(
+        self,
+        n_questions: int | None = None,
+    ) -> dict:
+        """
+        Generate compositional questions for the dataset.
+
+        Args:
+            n_questions: Max questions to generate (None = all applicable templates)
+
+        Returns:
+            Dict with dataset_columns and questions list
+        """
+        # 1. Profile the dataset
+        print(f"Profiling dataset: {self.csv_path.name}")
+        profile = self.profiler.analyze(str(self.csv_path))
+        print(f"  Shape: {profile['shape']['rows']} rows x {profile['shape']['columns']} cols")
+
+        # 2. Get applicable templates
+        templates = get_applicable_templates(profile)
+        print(f"  Applicable templates: {len(templates)}")
+
+        if n_questions and len(templates) > n_questions:
+            templates = templates[:n_questions]
+
+        # 3. Generate questions from each template
+        questions = []
+        for i, template in enumerate(templates):
+            print(f"\n[{i+1}/{len(templates)}] {template.name}")
+
+            try:
+                question_dict = await self._process_template(template, profile)
+                if question_dict:
+                    questions.append(question_dict)
+                    print(f"  OK: {question_dict['question'][:60]}...")
+            except Exception as e:
+                print(f"  FAILED: {e}")
+                continue
+
+        # 4. Format output
+        df = pd.read_csv(self.csv_path, nrows=0)
+        output = {
+            "dataset_columns": df.columns.tolist(),
+            "questions": questions,
+        }
+
+        print(f"\nGenerated {len(questions)} questions")
+        return output
+
+    async def _process_template(
+        self,
+        template: CompositionTemplate,
+        profile: dict,
+    ) -> dict | None:
+        """
+        Process a single template: execute code, verbalize, return question dict.
+
+        Returns:
+            Question dict or None if failed
+        """
+        # Instantiate template with profile data
+        code = template.instantiate(profile)
+
+        # Execute in sandbox
+        result = await self._execute_code(code)
+        if result is None:
+            return None
+
+        ground_truth, answer_hash = result
+
+        # Verbalize via LLM
+        question_text, hint = await self.verbalizer.verbalize(
+            code=code,
+            profile=profile,
+            ground_truth=ground_truth,
+        )
+
+        if not question_text or question_text.startswith("[VERBALIZATION FAILED"):
+            print(f"  Verbalization failed")
+            return None
+
+        return {
+            "question": question_text,
+            "hint": hint,
+            "n_steps": template.n_steps,
+            "difficulty": template.difficulty,
+            "ground_truth_hash": answer_hash,
+            # Store ground truth for debugging (optional, can be removed in production)
+            "_ground_truth": ground_truth,
+            "_template": template.name,
+        }
+
+    async def _execute_code(self, code: str) -> tuple[Any, str] | None:
+        """
+        Execute code in sandbox and extract answer.
+
+        Returns:
+            Tuple of (ground_truth_value, hash) or None if failed
+        """
+        # Reset sandbox state for clean execution
+        await self.env.reset(
+            self.state["sandbox_id"],
+            self.state["python_state"],
+        )
+
+        # Execute the code
+        output = await self.env.python(
+            code=code,
+            sandbox_id=self.state["sandbox_id"],
+            python_state=self.state["python_state"],
+        )
+
+        # Parse the submitted answer
+        answer = self._parse_submission(output)
+        if answer is None:
+            print(f"  No answer submitted. Output: {output[:200]}")
+            return None
+
+        # Hash the answer
+        answer_hash = hash_artifact(answer)
+
+        return answer, answer_hash
+
+    def _parse_submission(self, output: str) -> Any | None:
+        """Extract submitted answer from execution output."""
+        # Look for the submission marker
+        marker = "✓ Submitted: "
+        if marker not in output:
+            return None
+
+        # Extract JSON after marker
+        start = output.index(marker) + len(marker)
+        end = output.find("\n", start)
+        if end == -1:
+            json_str = output[start:]
+        else:
+            json_str = output[start:end]
+
+        try:
+            submission = json.loads(json_str.strip())
+            return submission.get("__csv_agent_answer__")
+        except json.JSONDecodeError:
+            return None
+
+
+async def generate_questions(
+    csv_path: str,
+    output_dir: str | None = None,
+    n_questions: int | None = None,
+    model: str | None = None,
+) -> dict:
+    """
+    Main entry point for generating compositional questions.
+
+    Args:
+        csv_path: Path to CSV dataset
+        output_dir: Directory to save questions.json (defaults to data/questions/{dataset_name}/)
+        n_questions: Max questions to generate
+        model: LLM model for verbalization
+
+    Returns:
+        Generated questions dict
+    """
+    generator = CompositionalQuestionGenerator(
+        csv_path=csv_path,
+        model=model,
+    )
+
+    try:
+        await generator.setup()
+        result = await generator.generate(n_questions=n_questions)
+
+        # Save output
+        if output_dir is None:
+            dataset_name = Path(csv_path).stem
+            output_dir = f"data/questions/{dataset_name}"
+
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        questions_file = output_path / "questions.json"
+
+        with open(questions_file, "w") as f:
+            # Remove internal fields before saving
+            clean_questions = []
+            for q in result["questions"]:
+                clean_q = {k: v for k, v in q.items() if not k.startswith("_")}
+                clean_questions.append(clean_q)
+
+            output = {
+                "dataset_columns": result["dataset_columns"],
+                "questions": clean_questions,
+            }
+            json.dump(output, f, indent=2)
+
+        print(f"\nSaved to: {questions_file}")
+        return result
+
+    finally:
+        await generator.cleanup()
+
+
+def main() -> int:
+    """CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description="Generate compositional questions for a CSV dataset",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--csv",
+        type=str,
+        required=True,
+        help="Path to CSV dataset",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Output directory for questions.json (default: data/questions/{dataset_name}/)",
+    )
+    parser.add_argument(
+        "--n-questions",
+        type=int,
+        default=None,
+        help="Maximum number of questions to generate (default: all applicable)",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help=f"LLM model for verbalization (default: {config.question_gen_model})",
+    )
+
+    args = parser.parse_args()
+
+    try:
+        result = asyncio.run(
+            generate_questions(
+                csv_path=args.csv,
+                output_dir=args.output_dir,
+                n_questions=args.n_questions,
+                model=args.model,
+            )
+        )
+        print(f"\nGenerated {len(result['questions'])} questions successfully")
+        return 0
+
+    except KeyboardInterrupt:
+        print("\nInterrupted")
+        return 1
+    except Exception as e:
+        print(f"\nError: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
