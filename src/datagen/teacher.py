@@ -181,6 +181,8 @@ async def execute_teacher_trace(
     model: str,  # Must come from src.core.config
     *,  # Force remaining args to be keyword-only
     hint: str | None = None,
+    n_steps: int | None = None,  # Expected hook count
+    difficulty: str | None = None,  # EASY, MEDIUM, HARD, VERY_HARD
     mode: str = "teacher-tutor",
     dataset_description: str = "",
     data_overview: str = "",
@@ -189,7 +191,7 @@ async def execute_teacher_trace(
     env=None,  # Optional pre-created env (for pooling)
     state: dict | None = None,  # Optional pre-created state (for pooling)
     reuse_env: bool = False,  # If True, reset instead of destroy
-    ui: Any = None,  # Optional UI instance for Rich output
+    ui: Any,  # UI instance for Rich output (required)
     trace_mode: str = "gold",  # For UI display ("gold" or "1/5", etc.)
 ) -> tuple[ExecutionTrace, list[dict], str, float]:
     """
@@ -209,6 +211,8 @@ async def execute_teacher_trace(
         model=model,
         question=question,
         hint=hint,
+        n_steps=n_steps,
+        difficulty=difficulty,
         mode=mode,
         dataset_description=dataset_description,
         data_overview=data_overview,
@@ -288,14 +292,13 @@ async def execute_teacher_trace(
     # Calculate elapsed time
     elapsed_seconds = time.time() - start_time
 
-    # Display trace completion in UI
-    if ui:
-        ui.print_trace_complete(
-            success=execution_success,
-            final_answer=final_answer,
-            turns=len(assistant_messages),
-            elapsed_seconds=elapsed_seconds,
-        )
+    # Display trace completion
+    ui.print_trace_complete(
+        success=execution_success,
+        final_answer=final_answer,
+        turns=len(assistant_messages),
+        elapsed_seconds=elapsed_seconds,
+    )
 
     # Extract hooks from submission_metadata
     # ENFORCEMENT: Hooks MUST have code_line - this is the critical code that solves the problem
@@ -354,13 +357,15 @@ async def triangulate_teacher(
     hint: str,
     model: str,
     *,
+    n_steps: int | None = None,  # Expected hook count
+    difficulty: str | None = None,  # EASY, MEDIUM, HARD, VERY_HARD
     n_consistency: int = 3,
     dataset_description: str = "",
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
     container_pool: list[tuple] | None = None,  # Docker containers
-    ui: Any = None,  # Optional UI
+    ui: Any,  # UI instance (required)
     float_tol: float = 0.1,
 ) -> tuple[
     ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool, dict
@@ -385,8 +390,7 @@ async def triangulate_teacher(
     use_pool = container_pool is not None
 
     # 1. Run gold trace (with hint)
-    if ui:
-        ui.print_trace_header(mode="gold", hint=hint)
+    ui.print_trace_header(mode="gold", hint=hint)
 
     gold_env, gold_state = container_pool[0] if use_pool else (None, None)
     (
@@ -399,6 +403,8 @@ async def triangulate_teacher(
         question=question,
         model=model,  # Required positional arg (3rd)
         hint=hint,
+        n_steps=n_steps,
+        difficulty=difficulty,
         mode="teacher-tutor",
         dataset_description=dataset_description,
         data_overview=data_overview,
@@ -414,9 +420,7 @@ async def triangulate_teacher(
     # 2. Run consistency traces (without hint) IN PARALLEL
     async def run_consistency_trace(i: int):
         """Helper to run a single consistency trace."""
-
-        if ui:
-            ui.print_trace_header(mode=f"{i + 1}/{n_consistency}", hint=None)
+        ui.print_trace_header(mode=f"{i + 1}/{n_consistency}", hint=None)
 
         # Use pool slot i+1 (slot 0 is for gold trace)
         c_env, c_state = container_pool[i + 1] if use_pool else (None, None)
@@ -425,6 +429,8 @@ async def triangulate_teacher(
             question=question,
             model=model,  # Required positional arg (3rd)
             hint=None,
+            n_steps=n_steps,
+            difficulty=difficulty,
             mode="teacher-consistency",
             dataset_description=dataset_description,
             data_overview=data_overview,
@@ -501,7 +507,7 @@ async def batch_triangulate(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     use_container_pool: bool = True,  # Enable container reuse optimization
-    ui: Any = None,  # Optional UI instance for Rich output
+    ui: Any,  # UI instance for Rich output (required)
     float_tol: float = 0.1,
 ) -> list[
     tuple[
@@ -584,6 +590,8 @@ async def batch_triangulate(
                 csv_path=csv_path,
                 question=q_dict["question"],
                 hint=q_dict.get("hint", ""),
+                n_steps=q_dict.get("n_steps"),
+                difficulty=q_dict.get("difficulty"),
                 n_consistency=n_consistency,
                 model=model,
                 dataset_description=dataset_description,

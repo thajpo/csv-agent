@@ -242,6 +242,8 @@ class Environment:
         *,
         question: str | None = None,
         hint: str | None = None,
+        n_steps: int | None = None,
+        difficulty: str | None = None,
         mode: str = "teacher-tutor",
         dataset_description: str = "",
         data_overview: str = "",
@@ -253,15 +255,17 @@ class Environment:
     ):
         """
         Factory with primitive args - handles config construction internally.
-        
+
         This is the preferred way to create an Environment. Callers pass primitives,
         and this method builds the config objects internally.
-        
+
         Args:
             csv_path: Path to CSV file
             model: Model identifier (e.g., 'openai/gpt-4o')
             question: Question text (optional)
             hint: Hint for the question (optional)
+            n_steps: Expected number of solution steps/hooks
+            difficulty: Question difficulty (EASY, MEDIUM, HARD, VERY_HARD)
             mode: Execution mode (teacher-tutor, teacher-consistency, student)
             dataset_description: Description of the dataset
             data_overview: Generated data overview string
@@ -270,14 +274,19 @@ class Environment:
             env: Optional pre-created LocalCSVAnalysisEnv (for pooling)
             state: Optional pre-created state dict (for pooling)
             reuse_env: If True, reset env after rollout instead of destroying
-        
+
         Returns:
             Initialized Environment ready for rollout
         """
         from src.core.types import Question
-        
+
         # Build question object if provided
-        question_obj = Question(question_text=question, hint=hint) if question else None
+        question_obj = Question(
+            question_text=question,
+            hint=hint,
+            n_steps=n_steps,
+            difficulty=difficulty,
+        ) if question else None
         
         # Build configs from primitives
         data_config = DataConfig(
