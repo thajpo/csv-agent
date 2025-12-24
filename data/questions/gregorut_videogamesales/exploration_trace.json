@@ -1,90 +1,122 @@
 {
-  "csv_path": "/home/j/Projects/csv-agent/data/kaggle/gregorut_videogamesales/data.csv",
+  "csv_path": "/Users/j/Projects/csv-agent/data/kaggle/gregorut_videogamesales/data.csv",
   "turns": [
     {
       "turn_number": 0,
-      "reasoning": "```python\n# Show first few rows and basic info\ndf.head()\n```",
+      "reasoning": "```python\n# Show first few rows and summary info\ndisplay(df.head())\ndisplay(df.info())\n```",
       "code_cells": [
-        "# Show first few rows and basic info\ndf.head()"
+        "# Show first few rows and summary info\ndisplay(df.head())\ndisplay(df.info())"
       ],
       "execution_results": [
         {
-          "code": "# Show first few rows and basic info\ndf.head()",
-          "success": true,
-          "stdout": "Out[2]:    Rank                      Name Platform  ...  JP_Sales Other_Sales Global_Sales\n0     1                Wii Sports      Wii  ...      3.77        8.46        82.74\n1     2         Super Mario Bros.      NES  ...      6.81        0.77        40.24\n2     3            Mario Kart Wii      Wii  ...      3.79        3.31        35.82\n3     4         Wii Sports Resort      Wii  ...      3.28        2.96        33.00\n4     5  Pokemon Red/Pokemon Blue       GB  ...     10.22        1.00        31.37\n\n[5 rows x 11 columns]",
-          "stderr": "",
+          "code": "# Show first few rows and summary info\ndisplay(df.head())\ndisplay(df.info())",
+          "success": false,
+          "stdout": "",
+          "stderr": "Traceback (most recent call last):\n  File \"/tmp/python_worker.py\", line 166, in <module>\n    exec(compile(exec_module, \"<cell>\", \"exec\"), namespace, namespace)\n  File \"<cell>\", line 2, in <module>\nNameError: name 'display' is not defined",
           "submitted_answer": null
         }
       ],
-      "timestamp": "2025-12-23 23:16:55.650817"
+      "timestamp": "2025-12-24 14:02:01.833777"
     },
     {
       "turn_number": 1,
-      "reasoning": "```python\n# Show column names, dtypes, and summary statistics for numeric columns\nprint(\"Columns:\", df.columns.tolist())\nprint(\"\\nData types:\\n\", df.dtypes)\n\n# Summary statistics for numeric columns\nnumeric_cols = df.select_dtypes(include=[np.number]).columns\ndf[numeric_cols].describe()\n```",
+      "reasoning": ".```python\n# Basic inspection: columns, first rows, and summary statistics\nprint(\"Columns:\", df.columns.tolist())\nprint(\"\\nFirst 5 rows:\")\nprint(df.head())\nprint(\"\\nData types and non-null counts:\")\ndf.info()\nprint(\"\\nSummary statistics for numeric columns:\")\nprint(df.describe())\n```",
       "code_cells": [
-        "# Show column names, dtypes, and summary statistics for numeric columns\nprint(\"Columns:\", df.columns.tolist())\nprint(\"\\nData types:\\n\", df.dtypes)\n\n# Summary statistics for numeric columns\nnumeric_cols = df.select_dtypes(include=[np.number]).columns\ndf[numeric_cols].describe()"
+        "# Basic inspection: columns, first rows, and summary statistics\nprint(\"Columns:\", df.columns.tolist())\nprint(\"\\nFirst 5 rows:\")\nprint(df.head())\nprint(\"\\nData types and non-null counts:\")\ndf.info()\nprint(\"\\nSummary statistics for numeric columns:\")\nprint(df.describe())"
       ],
       "execution_results": [
         {
-          "code": "# Show column names, dtypes, and summary statistics for numeric columns\nprint(\"Columns:\", df.columns.tolist())\nprint(\"\\nData types:\\n\", df.dtypes)\n\n# Summary statistics for numeric columns\nnumeric_cols = df.select_dtypes(include=[np.number]).columns\ndf[numeric_cols].describe()",
+          "code": "# Basic inspection: columns, first rows, and summary statistics\nprint(\"Columns:\", df.columns.tolist())\nprint(\"\\nFirst 5 rows:\")\nprint(df.head())\nprint(\"\\nData types and non-null counts:\")\ndf.info()\nprint(\"\\nSummary statistics for numeric columns:\")\nprint(df.describe())",
           "success": true,
-          "stdout": "Columns: ['Rank', 'Name', 'Platform', 'Year', 'Genre', 'Publisher', 'NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']\n\nData types:\n Rank              int64\nName             object\nPlatform         object\nYear            float64\nGenre            object\nPublisher        object\nNA_Sales        float64\nEU_Sales        float64\nJP_Sales        float64\nOther_Sales     float64\nGlobal_Sales    float64\ndtype: object\nOut[3]:                Rank          Year  ...   Other_Sales  Global_Sales\ncount  16598.000000  16327.000000  ...  16598.000000  16598.000000\nmean    8300.605254   2006.406443  ...      0.048063      0.537441\nstd     4791.853933      5.828981  ...      0.188588      1.555028\nmin        1.000000   1980.000000  ...      0.000000      0.010000\n25%     4151.250000   2003.000000  ...      0.000000      0.060000\n50%     8300.500000   2007.000000  ...      0.010000      0.170000\n75%    12449.750000   2010.000000  ...      0.040000      0.470000\nmax    16600.000000   2020.000000  ...     10.570000     82.740000\n\n[8 rows x 7 columns]",
+          "stdout": "Columns: ['Rank', 'Name', 'Platform', 'Year', 'Genre', 'Publisher', 'NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']\n\nFirst 5 rows:\n   Rank                      Name Platform  ...  JP_Sales Other_Sales Global_Sales\n0     1                Wii Sports      Wii  ...      3.77        8.46        82.74\n1     2         Super Mario Bros.      NES  ...      6.81        0.77        40.24\n2     3            Mario Kart Wii      Wii  ...      3.79        3.31        35.82\n3     4         Wii Sports Resort      Wii  ...      3.28        2.96        33.00\n4     5  Pokemon Red/Pokemon Blue       GB  ...     10.22        1.00        31.37\n\n[5 rows x 11 columns]\n\nData types and non-null counts:\n<class 'pandas.core.frame.DataFrame'>\nRangeIndex: 16598 entries, 0 to 16597\nData columns (total 11 columns):\n #   Column        Non-Null Count  Dtype  \n---  ------        --------------  -----  \n 0   Rank          16598 non-null  int64  \n 1   Name          16598 non-null  object \n 2   Platform      16598 non-null  object \n 3   Year          16327 non-null  float64\n 4   Genre         16598 non-null  object \n 5   Publisher     16540 non-null  object \n 6   NA_Sales      16598 non-null  float64\n 7   EU_Sales      16598 non-null  float64\n 8   JP_Sales      16598 non-null  float64\n 9   Other_Sales   16598 non-null  float64\n 10  Global_Sales  16598 non-null  float64\ndtypes: float64(6), int64(1), object(4)\nmemory usage: 1.4+ MB\n\nSummary statistics for numeric columns:\n               Rank          Year  ...   Other_Sales  Global_Sales\ncount  16598.000000  16327.000000  ...  16598.000000  16598.000000\nmean    8300.605254   2006.406443  ...      0.048063      0.537441\nstd     4791.853933      5.828981  ...      0.188588      1.555028\nmin        1.000000   1980.000000  ...      0.000000      0.010000\n25%     4151.250000   2003.000000  ...      0.000000      0.060000\n50%     8300.500000   2007.000000  ...      0.010000      0.170000\n75%    12449.750000   2010.000000  ...      0.040000      0.470000\nmax    16600.000000   2020.000000  ...     10.570000     82.740000\n\n[8 rows x 7 columns]",
           "stderr": "",
           "submitted_answer": null
         }
       ],
-      "timestamp": "2025-12-23 23:16:57.475650"
+      "timestamp": "2025-12-24 14:02:16.906071"
     },
     {
       "turn_number": 2,
-      "reasoning": "```python\n# Check for missing values in each column\nmissing_counts = df.isnull().sum()\nprint(\"Missing values per column:\\n\", missing_counts)\n\n# Frequency of platforms and top 5 publishers\nplatform_counts = df['Platform'].value_counts().head(10)\npublisher_counts = df['Publisher'].value_counts().head(10)\n\nprint(\"\\nTop 10 Platforms:\\n\", platform_counts)\nprint(\"\\nTop 10 Publishers:\\n\", publisher_counts)\n\n# Correlation matrix for numeric sales columns\nsales_cols = ['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']\ncorr_matrix = df[sales_cols].corr()\nprint(\"\\nCorrelation matrix:\\n\", corr_matrix)\n```",
+      "reasoning": "```python\n# Missing values per column\nprint(\"Missing values per column:\")\nprint(df.isnull().sum())\n\n# Top 10 most frequent Genres\nprint(\"\\nTop 10 Genres:\")\nprint(df['Genre'].value_counts().head(10))\n\n# Top 10 Publishers by number of games\nprint(\"\\nTop 10 Publishers (by count of games):\")\nprint(df['Publisher'].value_counts().head(10))\n\n# Correlation matrix for numeric sales columns\nsales_cols = ['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']\ncorr_matrix = df[sales_cols].corr()\nprint(\"\\nCorrelation matrix among sales regions and global sales:\")\nprint(corr_matrix)\n\n# Average Global Sales by Year (excluding missing years)\navg_sales_by_year = df.dropna(subset=['Year']).groupby('Year')['Global_Sales'].mean()\nprint(\"\\nAverage Global Sales by Year (first 10 years):\")\nprint(avg_sales_by_year.head(10))\n```",
       "code_cells": [
-        "# Check for missing values in each column\nmissing_counts = df.isnull().sum()\nprint(\"Missing values per column:\\n\", missing_counts)\n\n# Frequency of platforms and top 5 publishers\nplatform_counts = df['Platform'].value_counts().head(10)\npublisher_counts = df['Publisher'].value_counts().head(10)\n\nprint(\"\\nTop 10 Platforms:\\n\", platform_counts)\nprint(\"\\nTop 10 Publishers:\\n\", publisher_counts)\n\n# Correlation matrix for numeric sales columns\nsales_cols = ['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']\ncorr_matrix = df[sales_cols].corr()\nprint(\"\\nCorrelation matrix:\\n\", corr_matrix)"
+        "# Missing values per column\nprint(\"Missing values per column:\")\nprint(df.isnull().sum())\n\n# Top 10 most frequent Genres\nprint(\"\\nTop 10 Genres:\")\nprint(df['Genre'].value_counts().head(10))\n\n# Top 10 Publishers by number of games\nprint(\"\\nTop 10 Publishers (by count of games):\")\nprint(df['Publisher'].value_counts().head(10))\n\n# Correlation matrix for numeric sales columns\nsales_cols = ['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']\ncorr_matrix = df[sales_cols].corr()\nprint(\"\\nCorrelation matrix among sales regions and global sales:\")\nprint(corr_matrix)\n\n# Average Global Sales by Year (excluding missing years)\navg_sales_by_year = df.dropna(subset=['Year']).groupby('Year')['Global_Sales'].mean()\nprint(\"\\nAverage Global Sales by Year (first 10 years):\")\nprint(avg_sales_by_year.head(10))"
       ],
       "execution_results": [
         {
-          "code": "# Check for missing values in each column\nmissing_counts = df.isnull().sum()\nprint(\"Missing values per column:\\n\", missing_counts)\n\n# Frequency of platforms and top 5 publishers\nplatform_counts = df['Platform'].value_counts().head(10)\npublisher_counts = df['Publisher'].value_counts().head(10)\n\nprint(\"\\nTop 10 Platforms:\\n\", platform_counts)\nprint(\"\\nTop 10 Publishers:\\n\", publisher_counts)\n\n# Correlation matrix for numeric sales columns\nsales_cols = ['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']\ncorr_matrix = df[sales_cols].corr()\nprint(\"\\nCorrelation matrix:\\n\", corr_matrix)",
+          "code": "# Missing values per column\nprint(\"Missing values per column:\")\nprint(df.isnull().sum())\n\n# Top 10 most frequent Genres\nprint(\"\\nTop 10 Genres:\")\nprint(df['Genre'].value_counts().head(10))\n\n# Top 10 Publishers by number of games\nprint(\"\\nTop 10 Publishers (by count of games):\")\nprint(df['Publisher'].value_counts().head(10))\n\n# Correlation matrix for numeric sales columns\nsales_cols = ['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales', 'Global_Sales']\ncorr_matrix = df[sales_cols].corr()\nprint(\"\\nCorrelation matrix among sales regions and global sales:\")\nprint(corr_matrix)\n\n# Average Global Sales by Year (excluding missing years)\navg_sales_by_year = df.dropna(subset=['Year']).groupby('Year')['Global_Sales'].mean()\nprint(\"\\nAverage Global Sales by Year (first 10 years):\")\nprint(avg_sales_by_year.head(10))",
           "success": true,
-          "stdout": "Missing values per column:\n Rank              0\nName              0\nPlatform          0\nYear            271\nGenre             0\nPublisher        58\nNA_Sales          0\nEU_Sales          0\nJP_Sales          0\nOther_Sales       0\nGlobal_Sales      0\ndtype: int64\n\nTop 10 Platforms:\n Platform\nDS      2163\nPS2     2161\nPS3     1329\nWii     1325\nX360    1265\nPSP     1213\nPS      1196\nPC       960\nXB       824\nGBA      822\nName: count, dtype: int64\n\nTop 10 Publishers:\n Publisher\nElectronic Arts                 1351\nActivision                       975\nNamco Bandai Games               932\nUbisoft                          921\nKonami Digital Entertainment     832\nTHQ                              715\nNintendo                         703\nSony Computer Entertainment      683\nSega                             639\nTake-Two Interactive             413\nName: count, dtype: int64\n\nCorrelation matrix:\n               NA_Sales  EU_Sales  JP_Sales  Other_Sales  Global_Sales\nNA_Sales      1.000000  0.767727  0.449787     0.634737      0.941047\nEU_Sales      0.767727  1.000000  0.435584     0.726385      0.902836\nJP_Sales      0.449787  0.435584  1.000000     0.290186      0.611816\nOther_Sales   0.634737  0.726385  0.290186     1.000000      0.748331\nGlobal_Sales  0.941047  0.902836  0.611816     0.748331      1.000000",
+          "stdout": "Missing values per column:\nRank              0\nName              0\nPlatform          0\nYear            271\nGenre             0\nPublisher        58\nNA_Sales          0\nEU_Sales          0\nJP_Sales          0\nOther_Sales       0\nGlobal_Sales      0\ndtype: int64\n\nTop 10 Genres:\nGenre\nAction          3316\nSports          2346\nMisc            1739\nRole-Playing    1488\nShooter         1310\nAdventure       1286\nRacing          1249\nPlatform         886\nSimulation       867\nFighting         848\nName: count, dtype: int64\n\nTop 10 Publishers (by count of games):\nPublisher\nElectronic Arts                 1351\nActivision                       975\nNamco Bandai Games               932\nUbisoft                          921\nKonami Digital Entertainment     832\nTHQ                              715\nNintendo                         703\nSony Computer Entertainment      683\nSega                             639\nTake-Two Interactive             413\nName: count, dtype: int64\n\nCorrelation matrix among sales regions and global sales:\n              NA_Sales  EU_Sales  JP_Sales  Other_Sales  Global_Sales\nNA_Sales      1.000000  0.767727  0.449787     0.634737      0.941047\nEU_Sales      0.767727  1.000000  0.435584     0.726385      0.902836\nJP_Sales      0.449787  0.435584  1.000000     0.290186      0.611816\nOther_Sales   0.634737  0.726385  0.290186     1.000000      0.748331\nGlobal_Sales  0.941047  0.902836  0.611816     0.748331      1.000000\n\nAverage Global Sales by Year (first 10 years):\nYear\n1980.0    1.264444\n1981.0    0.777609\n1982.0    0.801667\n1983.0    0.987647\n1984.0    3.597143\n1985.0    3.852857\n1986.0    1.765238\n1987.0    1.358750\n1988.0    3.148000\n1989.0    4.320588\nName: Global_Sales, dtype: float64",
           "stderr": "",
           "submitted_answer": null
         }
       ],
-      "timestamp": "2025-12-23 23:17:00.313445"
+      "timestamp": "2025-12-24 14:02:21.959385"
     },
     {
       "turn_number": 3,
-      "reasoning": "```python\n# Distribution of release years (ignore missing)\nyear_counts = df['Year'].dropna().astype(int).value_counts().sort_index()\nprint(\"Year range:\", df['Year'].min(), \"to\", df['Year'].max())\nprint(\"\\nNumber of games per year (first 10 years):\")\nprint(year_counts.head(10))\n\n# Top 5 genres by average global sales\ngenre_avg_sales = df.groupby('Genre')['Global_Sales'].mean().sort_values(ascending=False).head(5)\nprint(\"\\nTop 5 genres by average global sales:\")\nprint(genre_avg_sales)\n\n# Proportion of sales by region (total sales)\ntotal_sales = df[['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales']].sum()\ntotal_global = df['Global_Sales'].sum()\nregion_share = total_sales / total_global\nprint(\"\\nProportion of total global sales by region:\")\nprint(region_share)\n\n# Boxplot stats for global sales by platform (show summary for top 3 platforms)\ntop_platforms = df['Platform'].value_counts().head(3).index.tolist()\nfor plat in top_platforms:\n    stats = df.loc[df['Platform'] == plat, 'Global_Sales'].describe()\n    print(f\"\\nGlobal sales stats for platform {plat}:\")\n    print(stats)\n```",
+      "reasoning": ".```python\n# Top 10 games by Global Sales\ntop10_games = df.nlargest(10, 'Global_Sales')[['Name', 'Platform', 'Year', 'Genre', 'Global_Sales']]\nprint(\"Top 10 games by Global Sales:\")\nprint(top10_games)\n\n# Average Global Sales by Genre (only genres with at least 100 games)\ngenre_counts = df['Genre'].value_counts()\nvalid_genres = genre_counts[genre_counts >= 100].index\navg_sales_by_genre = df[df['Genre'].isin(valid_genres)].groupby('Genre')['Global_Sales'].mean().sort_values(ascending=False)\nprint(\"\\nAverage Global Sales by Genre (>=100 games):\")\nprint(avg_sales_by_genre)\n\n# Average Global Sales by Platform (top 10 platforms by game count)\nplatform_counts = df['Platform'].value_counts().head(10).index\navg_sales_by_platform = df[df['Platform'].isin(platform_counts)].groupby('Platform')['Global_Sales'].mean().sort_values(ascending=False)\nprint(\"\\nAverage Global Sales by Platform (top 10 platforms):\")\nprint(avg_sales_by_platform)\n\n# Distribution of Year (games released per year)\ngames_per_year = df['Year'].value_counts().sort_index()\nprint(\"\\nNumber of games released each year (first 15 years):\")\nprint(games_per_year.head(15))\n```",
       "code_cells": [
-        "# Distribution of release years (ignore missing)\nyear_counts = df['Year'].dropna().astype(int).value_counts().sort_index()\nprint(\"Year range:\", df['Year'].min(), \"to\", df['Year'].max())\nprint(\"\\nNumber of games per year (first 10 years):\")\nprint(year_counts.head(10))\n\n# Top 5 genres by average global sales\ngenre_avg_sales = df.groupby('Genre')['Global_Sales'].mean().sort_values(ascending=False).head(5)\nprint(\"\\nTop 5 genres by average global sales:\")\nprint(genre_avg_sales)\n\n# Proportion of sales by region (total sales)\ntotal_sales = df[['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales']].sum()\ntotal_global = df['Global_Sales'].sum()\nregion_share = total_sales / total_global\nprint(\"\\nProportion of total global sales by region:\")\nprint(region_share)\n\n# Boxplot stats for global sales by platform (show summary for top 3 platforms)\ntop_platforms = df['Platform'].value_counts().head(3).index.tolist()\nfor plat in top_platforms:\n    stats = df.loc[df['Platform'] == plat, 'Global_Sales'].describe()\n    print(f\"\\nGlobal sales stats for platform {plat}:\")\n    print(stats)"
+        "# Top 10 games by Global Sales\ntop10_games = df.nlargest(10, 'Global_Sales')[['Name', 'Platform', 'Year', 'Genre', 'Global_Sales']]\nprint(\"Top 10 games by Global Sales:\")\nprint(top10_games)\n\n# Average Global Sales by Genre (only genres with at least 100 games)\ngenre_counts = df['Genre'].value_counts()\nvalid_genres = genre_counts[genre_counts >= 100].index\navg_sales_by_genre = df[df['Genre'].isin(valid_genres)].groupby('Genre')['Global_Sales'].mean().sort_values(ascending=False)\nprint(\"\\nAverage Global Sales by Genre (>=100 games):\")\nprint(avg_sales_by_genre)\n\n# Average Global Sales by Platform (top 10 platforms by game count)\nplatform_counts = df['Platform'].value_counts().head(10).index\navg_sales_by_platform = df[df['Platform'].isin(platform_counts)].groupby('Platform')['Global_Sales'].mean().sort_values(ascending=False)\nprint(\"\\nAverage Global Sales by Platform (top 10 platforms):\")\nprint(avg_sales_by_platform)\n\n# Distribution of Year (games released per year)\ngames_per_year = df['Year'].value_counts().sort_index()\nprint(\"\\nNumber of games released each year (first 15 years):\")\nprint(games_per_year.head(15))"
       ],
       "execution_results": [
         {
-          "code": "# Distribution of release years (ignore missing)\nyear_counts = df['Year'].dropna().astype(int).value_counts().sort_index()\nprint(\"Year range:\", df['Year'].min(), \"to\", df['Year'].max())\nprint(\"\\nNumber of games per year (first 10 years):\")\nprint(year_counts.head(10))\n\n# Top 5 genres by average global sales\ngenre_avg_sales = df.groupby('Genre')['Global_Sales'].mean().sort_values(ascending=False).head(5)\nprint(\"\\nTop 5 genres by average global sales:\")\nprint(genre_avg_sales)\n\n# Proportion of sales by region (total sales)\ntotal_sales = df[['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales']].sum()\ntotal_global = df['Global_Sales'].sum()\nregion_share = total_sales / total_global\nprint(\"\\nProportion of total global sales by region:\")\nprint(region_share)\n\n# Boxplot stats for global sales by platform (show summary for top 3 platforms)\ntop_platforms = df['Platform'].value_counts().head(3).index.tolist()\nfor plat in top_platforms:\n    stats = df.loc[df['Platform'] == plat, 'Global_Sales'].describe()\n    print(f\"\\nGlobal sales stats for platform {plat}:\")\n    print(stats)",
+          "code": "# Top 10 games by Global Sales\ntop10_games = df.nlargest(10, 'Global_Sales')[['Name', 'Platform', 'Year', 'Genre', 'Global_Sales']]\nprint(\"Top 10 games by Global Sales:\")\nprint(top10_games)\n\n# Average Global Sales by Genre (only genres with at least 100 games)\ngenre_counts = df['Genre'].value_counts()\nvalid_genres = genre_counts[genre_counts >= 100].index\navg_sales_by_genre = df[df['Genre'].isin(valid_genres)].groupby('Genre')['Global_Sales'].mean().sort_values(ascending=False)\nprint(\"\\nAverage Global Sales by Genre (>=100 games):\")\nprint(avg_sales_by_genre)\n\n# Average Global Sales by Platform (top 10 platforms by game count)\nplatform_counts = df['Platform'].value_counts().head(10).index\navg_sales_by_platform = df[df['Platform'].isin(platform_counts)].groupby('Platform')['Global_Sales'].mean().sort_values(ascending=False)\nprint(\"\\nAverage Global Sales by Platform (top 10 platforms):\")\nprint(avg_sales_by_platform)\n\n# Distribution of Year (games released per year)\ngames_per_year = df['Year'].value_counts().sort_index()\nprint(\"\\nNumber of games released each year (first 15 years):\")\nprint(games_per_year.head(15))",
           "success": true,
-          "stdout": "Year range: 1980.0 to 2020.0\n\nNumber of games per year (first 10 years):\nYear\n1980     9\n1981    46\n1982    36\n1983    17\n1984    14\n1985    14\n1986    21\n1987    16\n1988    15\n1989    17\nName: count, dtype: int64\n\nTop 5 genres by average global sales:\nGenre\nPlatform        0.938341\nShooter         0.791885\nRole-Playing    0.623233\nRacing          0.586101\nSports          0.567319\nName: Global_Sales, dtype: float64\n\nProportion of total global sales by region:\nNA_Sales       0.492459\nEU_Sales       0.272871\nJP_Sales       0.144726\nOther_Sales    0.089429\ndtype: float64\n\nGlobal sales stats for platform DS:\ncount    2163.000000\nmean        0.380254\nstd         1.434616\nmin         0.010000\n25%         0.050000\n50%         0.110000\n75%         0.280000\nmax        30.010000\nName: Global_Sales, dtype: float64\n\nGlobal sales stats for platform PS2:\ncount    2161.000000\nmean        0.581046\nstd         1.137990\nmin         0.010000\n25%         0.080000\n50%         0.230000\n75%         0.560000\nmax        20.810000\nName: Global_Sales, dtype: float64\n\nGlobal sales stats for platform PS3:\ncount    1329.000000\nmean        0.720722\nstd         1.412850\nmin         0.010000\n25%         0.110000\n50%         0.280000\n75%         0.770000\nmax        21.400000\nName: Global_Sales, dtype: float64",
+          "stdout": "Top 10 games by Global Sales:\n                        Name Platform    Year         Genre  Global_Sales\n0                 Wii Sports      Wii  2006.0        Sports         82.74\n1          Super Mario Bros.      NES  1985.0      Platform         40.24\n2             Mario Kart Wii      Wii  2008.0        Racing         35.82\n3          Wii Sports Resort      Wii  2009.0        Sports         33.00\n4   Pokemon Red/Pokemon Blue       GB  1996.0  Role-Playing         31.37\n5                     Tetris       GB  1989.0        Puzzle         30.26\n6      New Super Mario Bros.       DS  2006.0      Platform         30.01\n7                   Wii Play      Wii  2006.0          Misc         29.02\n8  New Super Mario Bros. Wii      Wii  2009.0      Platform         28.62\n9                  Duck Hunt      NES  1984.0       Shooter         28.31\n\nAverage Global Sales by Genre (>=100 games):\nGenre\nPlatform        0.938341\nShooter         0.791885\nRole-Playing    0.623233\nRacing          0.586101\nSports          0.567319\nFighting        0.529375\nAction          0.528100\nMisc            0.465762\nSimulation      0.452364\nPuzzle          0.420876\nStrategy        0.257151\nAdventure       0.185879\nName: Global_Sales, dtype: float64\n\nAverage Global Sales by Platform (top 10 platforms):\nPlatform\nX360    0.774672\nPS3     0.720722\nWii     0.699404\nPS      0.610920\nPS2     0.581046\nGBA     0.387470\nDS      0.380254\nXB      0.313422\nPC      0.269604\nPSP     0.244254\nName: Global_Sales, dtype: float64\n\nNumber of games released each year (first 15 years):\nYear\n1980.0      9\n1981.0     46\n1982.0     36\n1983.0     17\n1984.0     14\n1985.0     14\n1986.0     21\n1987.0     16\n1988.0     15\n1989.0     17\n1990.0     16\n1991.0     41\n1992.0     43\n1993.0     60\n1994.0    121\nName: count, dtype: int64",
           "stderr": "",
           "submitted_answer": null
         }
       ],
-      "timestamp": "2025-12-23 23:17:04.591274"
+      "timestamp": "2025-12-24 14:02:33.629603"
     },
     {
       "turn_number": 4,
-      "reasoning": "```json\n{\n  \"questions\": [\n    {\n      \"question\": \"What is the average global sales for games released in the year 2005?\",\n      \"hint\": \"Filter rows where Year == 2005, then compute mean of Global_Sales.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which platform has the highest total North American sales?\",\n      \"hint\": \"Group by Platform, sum NA_Sales, then identify the max.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a significant difference in average global sales between the 'Sports' and 'Shooter' genres?\",\n      \"hint\": \"Perform an independent two\u2011sample t\u2011test on Global_Sales for the two genres.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What proportion of total global sales is contributed by Japan?\",\n      \"hint\": \"Sum JP_Sales and divide by sum of Global_Sales.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Does the correlation between EU_Sales and Global_Sales differ significantly from the correlation between JP_Sales and Global_Sales?\",\n      \"hint\": \"Compute both Pearson correlations and use Fisher\u2019s r\u2011to\u2011z transformation to test the difference.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Which publisher has the highest average global sales per game?\",\n      \"hint\": \"Group by Publisher, calculate mean Global_Sales, then find the maximum.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Do games released before 2000 have lower average NA_Sales than games released from 2000 onward?\",\n      \"hint\": \"Create two groups based on Year (<2000 vs \u22652000) and run a two\u2011sample t\u2011test on NA_Sales.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the linear regression equation predicting Global_Sales from NA_Sales and EU_Sales?\",\n      \"hint\": \"Fit an OLS regression with Global_Sales as dependent variable and NA_Sales, EU_Sales as independent variables.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is there a statistically significant association between Platform (categorical) and whether a game sold more than 1 million units globally (binary)?\",\n      \"hint\": \"Create a binary column (Global_Sales > 1), then perform a chi\u2011square test of independence with Platform.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Which year had the greatest number of game releases?\",\n      \"hint\": \"Count games per Year (ignoring missing) and find the Year with the maximum count.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Do 'Role-Playing' games have significantly higher variance in global sales than 'Racing' games?\",\n      \"hint\": \"Compute variance for each genre and run Levene\u2019s test for equal variances.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the Spearman rank correlation between Year of release and Global_Sales?\",\n      \"hint\": \"Use scipy.stats.spearmanr on Year (dropping NaNs) and Global_Sales.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"For the top 5 publishers by game count, does the average global sales differ across them?\",\n      \"hint\": \"Identify top 5 publishers, then perform one\u2011way ANOVA on Global_Sales across these groups.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the 95% confidence interval for the mean global sales of games on the Wii platform?\",\n      \"hint\": \"Select Wii rows, compute mean and standard error, then apply t\u2011distribution critical value.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Is there evidence that the mean global sales have increased over the decades (1980s, 1990s, 2000s, 2010s)?\",\n      \"hint\": \"Create decade groups, compute mean Global_Sales per decade, then run Kruskal\u2011Wallis test.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"How well does a multiple linear regression model using NA_Sales, EU_Sales, JP_Sales, and Other_Sales predict Global_Sales (report R\u00b2)?\",\n      \"hint\": \"Fit OLS with all four regional sales as predictors, extract R\u2011squared from the results.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does the distribution of Global_Sales differ between games published by 'Nintendo' and 'Electronic Arts'?\",\n      \"hint\": \"Use a two\u2011sample Kolmogorov\u2011Smirnov test on Global_Sales for the two publishers.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the effect size (Cohen's d) for the difference in mean Global_Sales between 'Platform' = 'PS2' and 'Platform' = 'DS'?\",\n      \"hint\": \"Compute means and pooled standard deviation for the two groups, then calculate Cohen's d.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Are there any outliers in Global_Sales for the 'Shooter' genre based on the IQR method?\",\n      \"hint\": \"Calculate Q1, Q3, IQR for Shooter Global_Sales, then identify values outside Q1\u20111.5*IQR and Q3+1.5*IQR.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Using a 70/30 train\u2011test split (random_state=42), how accurate is a linear regression model predicting Global_Sales from NA_Sales and EU_Sales on the test set (report RMSE)?\",\n      \"hint\": \"Split data, fit OLS on training, predict on test, compute root mean squared error.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Does the mean global sales differ across the five most common genres?\",\n      \"hint\": \"Identify top 5 genres, then perform one\u2011way ANOVA on Global_Sales across these groups.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the probability that a randomly selected game from the dataset sold more than 5 million units globally?\",\n      \"hint\": \"Count games with Global_Sales > 5 and divide by total number of games.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a monotonic decreasing trend in average global sales for games released from 2000 to 2020?\",\n      \"hint\": \"Group by Year, compute mean Global_Sales, then apply Mann\u2011Kendall trend test.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Compare the median global sales of games on handheld platforms (DS, PSP, GBA) versus home consoles (PS3, Xbox 360, Wii). Is the difference significant?\",\n      \"hint\": \"Create two groups (handheld vs home), compute medians, and run a Mann\u2011Whitney U test.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the adjusted R\u00b2 of the regression model predicting Global_Sales from Year, NA_Sales, and EU_Sales?\",\n      \"hint\": \"Fit OLS with those three predictors, extract adjusted R\u2011squared.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do games with a 'Publisher' that starts with the letter 'S' have different average global sales compared to all other publishers?\",\n      \"hint\": \"Create a boolean column for publishers starting with 'S', then perform a two\u2011sample t\u2011test on Global_Sales.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Using bootstrap resampling (10,000 samples), estimate the 95% confidence interval for the mean global sales of 'Racing' games.\",\n      \"hint\": \"Sample with replacement from Racing rows, compute mean each iteration, then take 2.5th and 97.5th percentiles.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Is there a significant interaction effect between Platform and Genre on Global_Sales?\",\n      \"hint\": \"Fit a two\u2011way ANOVA model with Platform, Genre, and their interaction term, then evaluate the interaction p\u2011value.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Perform a permutation test (5,000 permutations) to assess whether the observed difference in mean Global_Sales between 'Nintendo' and 'Activision' could arise by chance.\",\n      \"hint\": \"Shuffle publisher labels, compute mean difference each permutation, compare to observed difference to get p\u2011value.\",\n      \"n_steps\": 10,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"What is the likelihood ratio test statistic comparing a model with only NA_Sales as predictor to a model with NA_Sales and EU_Sales for predicting Global_Sales?\",\n      \"hint\": \"Fit both OLS models, compute their log\u2011likelihoods, then calculate 2*(LL_full - LL_reduced).\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Do games released in even-numbered years have different average global sales than those released in odd-numbered years?\",\n      \"hint\": \"Create a parity column (Year % 2), then run a two\u2011sample t\u2011test on Global_Sales.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Estimate the effect of a one\u2011unit increase in JP_Sales on Global_Sales while controlling for NA_Sales and EU_Sales using multiple regression (report coefficient and p\u2011value).\",\n      \"hint\": \"Fit OLS with JP_Sales, NA_Sales, EU_Sales as predictors; extract coefficient and its significance for JP_Sales.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Using a logistic regression (random_state=42), model the probability that a game sells > 2 million units globally based on Year, Platform (one\u2011hot encoded), and NA_Sales. Report the model's AUC on a 30% test split.\",\n      \"hint\": \"Create binary target, one\u2011hot encode Platform, split data, fit LogisticRegression, compute ROC AUC on test set.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    }\n  ]\n}\n<DONE>\n",
+      "reasoning": ".```python\n# Average Global Sales by Publisher (top 10 publishers by game count)\ntop10_publishers = df['Publisher'].value_counts().head(10).index\navg_sales_by_publisher = df[df['Publisher'].isin(top10_publishers)].groupby('Publisher')['Global_Sales'].mean().sort_values(ascending=False)\nprint(\"Average Global Sales by Top 10 Publishers:\")\nprint(avg_sales_by_publisher)\n\n# Correlation between Release Year and Global Sales (excluding missing years)\nyear_sales_corr = df.dropna(subset=['Year'])['Year'].corr(df['Global_Sales'])\nprint(\"\\nPearson correlation between Year and Global Sales:\", year_sales_corr)\n\n# Total Global Sales by Region (sum)\nregion_totals = df[['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales']].sum()\nprint(\"\\nTotal Global Sales by Region (sum):\")\nprint(region_totals)\n\n# Proportion of games with Global Sales > 1 million (i.e., >1.0)\nprop_over_1m = (df['Global_Sales'] > 1.0).mean()\nprint(\"\\nProportion of games with Global Sales > 1 million:\", prop_over_1m)\n```",
+      "code_cells": [
+        "# Average Global Sales by Publisher (top 10 publishers by game count)\ntop10_publishers = df['Publisher'].value_counts().head(10).index\navg_sales_by_publisher = df[df['Publisher'].isin(top10_publishers)].groupby('Publisher')['Global_Sales'].mean().sort_values(ascending=False)\nprint(\"Average Global Sales by Top 10 Publishers:\")\nprint(avg_sales_by_publisher)\n\n# Correlation between Release Year and Global Sales (excluding missing years)\nyear_sales_corr = df.dropna(subset=['Year'])['Year'].corr(df['Global_Sales'])\nprint(\"\\nPearson correlation between Year and Global Sales:\", year_sales_corr)\n\n# Total Global Sales by Region (sum)\nregion_totals = df[['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales']].sum()\nprint(\"\\nTotal Global Sales by Region (sum):\")\nprint(region_totals)\n\n# Proportion of games with Global Sales > 1 million (i.e., >1.0)\nprop_over_1m = (df['Global_Sales'] > 1.0).mean()\nprint(\"\\nProportion of games with Global Sales > 1 million:\", prop_over_1m)"
+      ],
+      "execution_results": [
+        {
+          "code": "# Average Global Sales by Publisher (top 10 publishers by game count)\ntop10_publishers = df['Publisher'].value_counts().head(10).index\navg_sales_by_publisher = df[df['Publisher'].isin(top10_publishers)].groupby('Publisher')['Global_Sales'].mean().sort_values(ascending=False)\nprint(\"Average Global Sales by Top 10 Publishers:\")\nprint(avg_sales_by_publisher)\n\n# Correlation between Release Year and Global Sales (excluding missing years)\nyear_sales_corr = df.dropna(subset=['Year'])['Year'].corr(df['Global_Sales'])\nprint(\"\\nPearson correlation between Year and Global Sales:\", year_sales_corr)\n\n# Total Global Sales by Region (sum)\nregion_totals = df[['NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales']].sum()\nprint(\"\\nTotal Global Sales by Region (sum):\")\nprint(region_totals)\n\n# Proportion of games with Global Sales > 1 million (i.e., >1.0)\nprop_over_1m = (df['Global_Sales'] > 1.0).mean()\nprint(\"\\nProportion of games with Global Sales > 1 million:\", prop_over_1m)",
+          "success": true,
+          "stdout": "Average Global Sales by Top 10 Publishers:\nPublisher\nNintendo                        2.541337\nTake-Two Interactive            0.967409\nSony Computer Entertainment     0.889458\nElectronic Arts                 0.821850\nActivision                      0.746113\nUbisoft                         0.515440\nTHQ                             0.476601\nSega                            0.427214\nKonami Digital Entertainment    0.340913\nNamco Bandai Games              0.272629\nName: Global_Sales, dtype: float64\n\nPearson correlation between Year and Global Sales: -0.07473479761568626\n\nTotal Global Sales by Region (sum):\nNA_Sales       4392.95\nEU_Sales       2434.13\nJP_Sales       1291.02\nOther_Sales     797.75\ndtype: float64\n\nProportion of games with Global Sales > 1 million: 0.1237498493794433",
+          "stderr": "",
+          "submitted_answer": null
+        }
+      ],
+      "timestamp": "2025-12-24 14:02:42.731446"
+    },
+    {
+      "turn_number": 5,
+      "reasoning": ".```json\n{\n  \"questions\": [\n    {\n      \"question\": \"What is the average Global Sales for each Genre?\",\n      \"hint\": \"Group by Genre and compute mean of Global_Sales.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What proportion of games have Global Sales greater than 1 million units?\",\n      \"hint\": \"Calculate the mean of the boolean condition Global_Sales > 1.0.\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which Platform has the highest average Global Sales among the top 10 platforms by game count?\",\n      \"hint\": \"Filter to the 10 most frequent platforms, group by Platform, compute mean Global_Sales, then select the max.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"What is the Pearson correlation between NA_Sales and EU_Sales?\",\n      \"hint\": \"Use df[['NA_Sales','EU_Sales']].corr().loc['NA_Sales','EU_Sales'].\",\n      \"n_steps\": 1,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Which Year has the highest total Global Sales (sum of Global_Sales per Year)?\",\n      \"hint\": \"Group by Year, sum Global_Sales, then find the Year with max total.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a significant difference in average Global Sales between Action and Sports genres?\",\n      \"hint\": \"Perform an independent two\u2011sample t\u2011test on Global_Sales for the two genres.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does the Year of release predict Global Sales? Fit a simple linear regression (Global_Sales ~ Year) and report the slope and p\u2011value.\",\n      \"hint\": \"Use statsmodels OLS: sm.OLS(df['Global_Sales'], sm.add_constant(df['Year'])).fit().\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Are sales distributions across regions (NA, EU, JP, Other) independent of the Genre? Conduct a chi\u2011square test on a contingency table of Genre vs dominant region (region with highest sales for each game).\",\n      \"hint\": \"Create a column with the region having max sales per row, then pd.crosstab(Genre, dominant_region) and scipy.stats.chi2_contingency.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the average Global Sales for the top 5 Publishers by game count?\",\n      \"hint\": \"Identify top 5 publishers, filter, group by Publisher, compute mean Global_Sales.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Does the correlation between Year and Global Sales differ across Genres? Compute Pearson correlation between Year and Global_Sales for each Genre with at least 200 games.\",\n      \"hint\": \"Filter Genres with count >=200, then for each compute df_genre['Year'].corr(df_genre['Global_Sales']).\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Build a multiple linear regression model to predict Global Sales using NA, EU, JP, and Other regional sales. Report R\u2011squared and the most influential predictor.\",\n      \"hint\": \"Use sm.OLS(Global_Sales, sm.add_constant(df[['NA_Sales','EU_Sales','JP_Sales','Other_Sales']])).fit().\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Perform a one\u2011way ANOVA to test whether mean Global Sales differ among the top 4 Genres (Action, Sports, Role\u2011Playing, Shooter).\",\n      \"hint\": \"Use scipy.stats.f_oneway on the Global_Sales arrays of each selected Genre.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Is there a significant interaction effect between Platform and Genre on Global Sales? Fit a two\u2011way ANOVA with interaction.\",\n      \"hint\": \"Create a model: Global_Sales ~ C(Platform) * C(Genre) using statsmodels.formula.api.ols.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Using a train\u2011test split (80/20, random_state=42), train a linear regression model to predict Global Sales from Year and Platform (one\u2011hot encoded). Report test RMSE.\",\n      \"hint\": \"Split with sklearn.model_selection.train_test_split, OneHotEncoder for Platform, fit LinearRegression, compute mean_squared_error on test set.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Build a ridge regression model (alpha=1.0) to predict Global Sales from all numeric features (Year, NA_Sales, EU_Sales, JP_Sales, Other_Sales). Use 5\u2011fold cross\u2011validation (random_state=42). Report average CV R\u2011squared.\",\n      \"hint\": \"Use sklearn.linear_model.Ridge with cross_val_score, cv=5, scoring='r2'.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Create a bootstrap confidence interval (95%) for the mean Global Sales of games released after 2010.\",\n      \"hint\": \"Resample the subset df[df['Year']>2010]['Global_Sales'] 1000 times, compute mean each, take 2.5th and 97.5th percentiles.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Does the distribution of Global Sales differ between games published by Nintendo and Electronic Arts? Use a Kolmogorov\u2011Smirnov test.\",\n      \"hint\": \"Extract Global_Sales for each publisher and apply scipy.stats.ks_2samp.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the median Global Sales for each Year? Identify any year where the median exceeds 1.0.\",\n      \"hint\": \"Group by Year and compute median of Global_Sales, then filter where median > 1.0.\",\n      \"n_steps\": 4,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Calculate the share of total Global Sales contributed by the top 10 games.\",\n      \"hint\": \"Sum Global_Sales of the 10 highest\u2011selling games and divide by total Global_Sales.\",\n      \"n_steps\": 3,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"Is there a monotonic relationship between Year and Global Sales? Compute Spearman rank correlation.\",\n      \"hint\": \"Use df['Year'].corr(df['Global_Sales'], method='spearman').\",\n      \"n_steps\": 2,\n      \"difficulty\": \"EASY\"\n    },\n    {\n      \"question\": \"For each Platform, what proportion of its games have Global Sales above the overall mean Global Sales?\",\n      \"hint\": \"Compute overall mean, then group by Platform and calculate mean of (Global_Sales > overall_mean).\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Do games released in the 1990s have higher average NA Sales than those released in the 2000s? Perform an independent t\u2011test.\",\n      \"hint\": \"Create two subsets (1990\u20111999, 2000\u20112009) and run scipy.stats.ttest_ind on NA_Sales.\",\n      \"n_steps\": 5,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"What is the variance inflation factor (VIF) for each predictor in the multiple regression model (NA, EU, JP, Other) predicting Global Sales?\",\n      \"hint\": \"Fit OLS, then use statsmodels.stats.outliers_influence.variance_inflation_factor on the design matrix.\",\n      \"n_steps\": 7,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Identify the top 3 Genres with the greatest increase in average Global Sales from the 1990s to the 2000s.\",\n      \"hint\": \"Compute mean Global_Sales per Genre for 1990\u20111999 and 2000\u20112009, calculate difference, sort descending.\",\n      \"n_steps\": 6,\n      \"difficulty\": \"MEDIUM\"\n    },\n    {\n      \"question\": \"Using hierarchical clustering (Ward linkage) on regional sales columns, how many clusters best separate the games? Determine using the dendrogram cutoff at distance 1.5.\",\n      \"hint\": \"Apply scipy.cluster.hierarchy.linkage on df[['NA_Sales','EU_Sales','JP_Sales','Other_Sales']], then fcluster with t=1.5, method='distance'.\",\n      \"n_steps\": 8,\n      \"difficulty\": \"HARD\"\n    },\n    {\n      \"question\": \"Predict whether a game will achieve Global Sales > 1 million using a logistic regression model with Year, Platform (one\u2011hot), and Genre (one\u2011hot) as features. Report test accuracy (random_state=42).\",\n      \"hint\": \"Create binary target, split data, encode categoricals, fit sklearn.linear_model.LogisticRegression, compute accuracy_score.\",\n      \"n_steps\": 10,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Perform a permutation test (10,000 permutations) to assess if the mean Global Sales of Nintendo games differs from the overall mean.\",\n      \"hint\": \"Compute observed difference, repeatedly shuffle the Nintendo label, recalculate difference, estimate p\u2011value.\",\n      \"n_steps\": 9,\n      \"difficulty\": \"VERY_HARD\"\n    },\n    {\n      \"question\": \"Using a random forest regressor (n_estimators=200, random_state=42), predict Global Sales from all features (including one\u2011hot encoded categorical variables). Report the top 5 most important features.\",\n      \"hint\": \"Encode categoricals, fit RandomForestRegressor, access feature_importances_, sort.\",\n      \"n_steps\": 10,\n      \"difficulty\": \"VERY_HARD\"\n    }\n  ]\n}\n```\n<DONE>",
       "code_cells": [],
       "execution_results": [],
-      "timestamp": "2025-12-23 23:17:35.233206"
+      "timestamp": "2025-12-24 14:02:56.464731"
     }
   ],
   "questions_generated": [
     {
-      "hint": "Filter rows where Year == 2005, then compute mean of Global_Sales.",
+      "hint": "Group by Genre and compute mean of Global_Sales.",
       "difficulty": "EASY",
       "n_steps": 2
     },
     {
-      "hint": "Group by Platform, sum NA_Sales, then identify the max.",
+      "hint": "Calculate the mean of the boolean condition Global_Sales > 1.0.",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Filter to the 10 most frequent platforms, group by Platform, compute mean Global_Sales, then select the max.",
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "hint": "Use df[['NA_Sales','EU_Sales']].corr().loc['NA_Sales','EU_Sales'].",
+      "difficulty": "EASY",
+      "n_steps": 1
+    },
+    {
+      "hint": "Group by Year, sum Global_Sales, then find the Year with max total.",
       "difficulty": "EASY",
       "n_steps": 3
     },
@@ -94,156 +126,116 @@
       "n_steps": 4
     },
     {
-      "hint": "Sum JP_Sales and divide by sum of Global_Sales.",
-      "difficulty": "EASY",
-      "n_steps": 2
-    },
-    {
-      "hint": "Compute both Pearson correlations and use Fisher\u2019s r\u2011to\u2011z transformation to test the difference.",
-      "difficulty": "MEDIUM",
-      "n_steps": 6
-    },
-    {
-      "hint": "Group by Publisher, calculate mean Global_Sales, then find the maximum.",
-      "difficulty": "EASY",
-      "n_steps": 3
-    },
-    {
-      "hint": "Create two groups based on Year (<2000 vs \u22652000) and run a two\u2011sample t\u2011test on NA_Sales.",
+      "hint": "Use statsmodels OLS: sm.OLS(df['Global_Sales'], sm.add_constant(df['Year'])).fit().",
       "difficulty": "MEDIUM",
       "n_steps": 5
     },
     {
-      "hint": "Fit an OLS regression with Global_Sales as dependent variable and NA_Sales, EU_Sales as independent variables.",
-      "difficulty": "MEDIUM",
-      "n_steps": 4
-    },
-    {
-      "hint": "Create a binary column (Global_Sales > 1), then perform a chi\u2011square test of independence with Platform.",
+      "hint": "Create a column with the region having max sales per row, then pd.crosstab(Genre, dominant_region) and scipy.stats.chi2_contingency.",
       "difficulty": "MEDIUM",
       "n_steps": 6
     },
     {
-      "hint": "Count games per Year (ignoring missing) and find the Year with the maximum count.",
-      "difficulty": "EASY",
-      "n_steps": 2
-    },
-    {
-      "hint": "Compute variance for each genre and run Levene\u2019s test for equal variances.",
-      "difficulty": "MEDIUM",
-      "n_steps": 5
-    },
-    {
-      "hint": "Use scipy.stats.spearmanr on Year (dropping NaNs) and Global_Sales.",
-      "difficulty": "EASY",
-      "n_steps": 3
-    },
-    {
-      "hint": "Identify top 5 publishers, then perform one\u2011way ANOVA on Global_Sales across these groups.",
-      "difficulty": "MEDIUM",
-      "n_steps": 6
-    },
-    {
-      "hint": "Select Wii rows, compute mean and standard error, then apply t\u2011distribution critical value.",
+      "hint": "Identify top 5 publishers, filter, group by Publisher, compute mean Global_Sales.",
       "difficulty": "MEDIUM",
       "n_steps": 4
     },
     {
-      "hint": "Create decade groups, compute mean Global_Sales per decade, then run Kruskal\u2011Wallis test.",
+      "hint": "Filter Genres with count >=200, then for each compute df_genre['Year'].corr(df_genre['Global_Sales']).",
+      "difficulty": "MEDIUM",
+      "n_steps": 6
+    },
+    {
+      "hint": "Use sm.OLS(Global_Sales, sm.add_constant(df[['NA_Sales','EU_Sales','JP_Sales','Other_Sales']])).fit().",
       "difficulty": "HARD",
       "n_steps": 7
     },
     {
-      "hint": "Fit OLS with all four regional sales as predictors, extract R\u2011squared from the results.",
-      "difficulty": "MEDIUM",
-      "n_steps": 5
+      "hint": "Use scipy.stats.f_oneway on the Global_Sales arrays of each selected Genre.",
+      "difficulty": "HARD",
+      "n_steps": 7
     },
     {
-      "hint": "Use a two\u2011sample Kolmogorov\u2011Smirnov test on Global_Sales for the two publishers.",
-      "difficulty": "MEDIUM",
-      "n_steps": 5
-    },
-    {
-      "hint": "Compute means and pooled standard deviation for the two groups, then calculate Cohen's d.",
-      "difficulty": "MEDIUM",
-      "n_steps": 6
-    },
-    {
-      "hint": "Calculate Q1, Q3, IQR for Shooter Global_Sales, then identify values outside Q1\u20111.5*IQR and Q3+1.5*IQR.",
-      "difficulty": "EASY",
-      "n_steps": 4
-    },
-    {
-      "hint": "Split data, fit OLS on training, predict on test, compute root mean squared error.",
+      "hint": "Create a model: Global_Sales ~ C(Platform) * C(Genre) using statsmodels.formula.api.ols.",
       "difficulty": "HARD",
       "n_steps": 8
     },
     {
-      "hint": "Identify top 5 genres, then perform one\u2011way ANOVA on Global_Sales across these groups.",
-      "difficulty": "MEDIUM",
-      "n_steps": 6
-    },
-    {
-      "hint": "Count games with Global_Sales > 5 and divide by total number of games.",
-      "difficulty": "EASY",
-      "n_steps": 2
-    },
-    {
-      "hint": "Group by Year, compute mean Global_Sales, then apply Mann\u2011Kendall trend test.",
-      "difficulty": "HARD",
-      "n_steps": 7
-    },
-    {
-      "hint": "Create two groups (handheld vs home), compute medians, and run a Mann\u2011Whitney U test.",
-      "difficulty": "MEDIUM",
-      "n_steps": 6
-    },
-    {
-      "hint": "Fit OLS with those three predictors, extract adjusted R\u2011squared.",
-      "difficulty": "MEDIUM",
-      "n_steps": 5
-    },
-    {
-      "hint": "Create a boolean column for publishers starting with 'S', then perform a two\u2011sample t\u2011test on Global_Sales.",
-      "difficulty": "MEDIUM",
-      "n_steps": 5
-    },
-    {
-      "hint": "Sample with replacement from Racing rows, compute mean each iteration, then take 2.5th and 97.5th percentiles.",
+      "hint": "Split with sklearn.model_selection.train_test_split, OneHotEncoder for Platform, fit LinearRegression, compute mean_squared_error on test set.",
       "difficulty": "VERY_HARD",
       "n_steps": 9
     },
     {
-      "hint": "Fit a two\u2011way ANOVA model with Platform, Genre, and their interaction term, then evaluate the interaction p\u2011value.",
+      "hint": "Use sklearn.linear_model.Ridge with cross_val_score, cv=5, scoring='r2'.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 9
+    },
+    {
+      "hint": "Resample the subset df[df['Year']>2010]['Global_Sales'] 1000 times, compute mean each, take 2.5th and 97.5th percentiles.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 9
+    },
+    {
+      "hint": "Extract Global_Sales for each publisher and apply scipy.stats.ks_2samp.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Group by Year and compute median of Global_Sales, then filter where median > 1.0.",
+      "difficulty": "EASY",
+      "n_steps": 4
+    },
+    {
+      "hint": "Sum Global_Sales of the 10 highest\u2011selling games and divide by total Global_Sales.",
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "hint": "Use df['Year'].corr(df['Global_Sales'], method='spearman').",
+      "difficulty": "EASY",
+      "n_steps": 2
+    },
+    {
+      "hint": "Compute overall mean, then group by Platform and calculate mean of (Global_Sales > overall_mean).",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Create two subsets (1990\u20111999, 2000\u20112009) and run scipy.stats.ttest_ind on NA_Sales.",
+      "difficulty": "MEDIUM",
+      "n_steps": 5
+    },
+    {
+      "hint": "Fit OLS, then use statsmodels.stats.outliers_influence.variance_inflation_factor on the design matrix.",
+      "difficulty": "HARD",
+      "n_steps": 7
+    },
+    {
+      "hint": "Compute mean Global_Sales per Genre for 1990\u20111999 and 2000\u20112009, calculate difference, sort descending.",
+      "difficulty": "MEDIUM",
+      "n_steps": 6
+    },
+    {
+      "hint": "Apply scipy.cluster.hierarchy.linkage on df[['NA_Sales','EU_Sales','JP_Sales','Other_Sales']], then fcluster with t=1.5, method='distance'.",
       "difficulty": "HARD",
       "n_steps": 8
     },
     {
-      "hint": "Shuffle publisher labels, compute mean difference each permutation, compare to observed difference to get p\u2011value.",
+      "hint": "Create binary target, split data, encode categoricals, fit sklearn.linear_model.LogisticRegression, compute accuracy_score.",
       "difficulty": "VERY_HARD",
       "n_steps": 10
     },
     {
-      "hint": "Fit both OLS models, compute their log\u2011likelihoods, then calculate 2*(LL_full - LL_reduced).",
-      "difficulty": "HARD",
-      "n_steps": 7
-    },
-    {
-      "hint": "Create a parity column (Year % 2), then run a two\u2011sample t\u2011test on Global_Sales.",
-      "difficulty": "MEDIUM",
-      "n_steps": 5
-    },
-    {
-      "hint": "Fit OLS with JP_Sales, NA_Sales, EU_Sales as predictors; extract coefficient and its significance for JP_Sales.",
-      "difficulty": "MEDIUM",
-      "n_steps": 5
-    },
-    {
-      "hint": "Create binary target, one\u2011hot encode Platform, split data, fit LogisticRegression, compute ROC AUC on test set.",
+      "hint": "Compute observed difference, repeatedly shuffle the Nintendo label, recalculate difference, estimate p\u2011value.",
       "difficulty": "VERY_HARD",
       "n_steps": 9
+    },
+    {
+      "hint": "Encode categoricals, fit RandomForestRegressor, access feature_importances_, sort.",
+      "difficulty": "VERY_HARD",
+      "n_steps": 10
     }
   ],
-  "total_turns": 5,
-  "timestamp": "2025-12-23 23:17:45.437522"
+  "total_turns": 6,
+  "timestamp": "2025-12-24 14:02:57.623665"
 }

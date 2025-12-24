@@ -1,80 +1,182 @@
-[
-  {
-    "question": "What is the overall average math score?",
-    "hint": "Use df['math score'].mean().",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the median reading score for female students?",
-    "hint": "Filter df where gender == 'female' and compute median of reading score.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which race/ethnicity group has the highest average math score?",
-    "hint": "Group by 'race/ethnicity' and calculate mean of math score.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What proportion of students scored above 90 in all three subjects?",
-    "hint": "Filter rows where math, reading, and writing scores > 90 and compute proportion.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Is there a significant difference in average writing scores between male and female students?",
-    "hint": "Perform an independent two\u2011sample t\u2011test on writing scores grouped by gender.",
-    "n_steps": 3,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Do students who completed the test preparation course have higher average reading scores than those who did not?",
-    "hint": "Compare group means with an independent t\u2011test.",
-    "n_steps": 3,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Does lunch type (standard vs. free/reduced) affect reading scores?",
-    "hint": "Use an independent t\u2011test to compare reading scores between lunch categories.",
-    "n_steps": 3,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Is there an association between race/ethnicity and test preparation course completion?",
-    "hint": "Construct a contingency table and run a chi\u2011square test of independence.",
-    "n_steps": 3,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "What is the effect size (Cohen's d) for the difference in math scores between students who completed test preparation and those who did not?",
-    "hint": "Calculate group means, pooled standard deviation, then compute Cohen's d.",
-    "n_steps": 4,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Is there a linear relationship between reading and writing scores after controlling for gender?",
-    "hint": "Fit an OLS regression: writing ~ reading + gender and inspect the coefficient for reading.",
-    "n_steps": 4,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Does the relationship between math and writing scores differ by race/ethnicity?",
-    "hint": "Fit separate linear regressions (writing ~ math) for each race/ethnicity group and compare slopes.",
-    "n_steps": 5,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "What is the adjusted R\u2011squared of a multiple linear regression predicting writing score from math score, reading score, gender, and test preparation?",
-    "hint": "Fit OLS with those predictors and extract adjusted R\u2011squared from the model summary.",
-    "n_steps": 5,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Using random_state=42, split the data (80% train, 20% test) and report the RMSE of a linear model predicting reading score from math score.",
-    "hint": "Apply train_test_split with random_state=42, fit OLS on training, predict on test, compute RMSE.",
-    "n_steps": 6,
-    "difficulty": "VERY_HARD"
-  }
-]
+{
+  "dataset_columns": [
+    "gender",
+    "race/ethnicity",
+    "parental level of education",
+    "lunch",
+    "test preparation course",
+    "math score",
+    "reading score",
+    "writing score"
+  ],
+  "questions": [
+    {
+      "question": "What is the overall average math score?",
+      "hint": "Use mean() on the 'math score' column.",
+      "n_steps": 1,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the average reading score for female students?",
+      "hint": "Filter gender == 'female', then compute mean of 'reading score'.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Which race/ethnicity group has the highest average writing score?",
+      "hint": "Group by 'race/ethnicity' and compute mean of 'writing score', then find max.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Is there a difference in average math scores between students who completed test preparation and those who did not?",
+      "hint": "Compute group means for 'test preparation course' and compare.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What proportion of students receive free/reduced lunch?",
+      "hint": "Count 'free/reduced' in 'lunch' column and divide by total rows.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the median reading score across all students?",
+      "hint": "Use median() on the 'reading score' column.",
+      "n_steps": 1,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the standard deviation of writing scores for students whose parents have a bachelor's degree?",
+      "hint": "Filter 'parental level of education' == \"bachelor's degree\" then std() on 'writing score'.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "How many male students scored above 90 in math?",
+      "hint": "Filter gender == 'male' and 'math score' > 90, then count rows.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the correlation coefficient between reading and writing scores?",
+      "hint": "Use pandas .corr() on the two columns.",
+      "n_steps": 1,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Which parental education level yields the highest average total score (math + reading + writing)?",
+      "hint": "Create a total score column, group by education, compute mean, then find max.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Is the mean math score significantly different between students who completed test preparation and those who did not?",
+      "hint": "Perform an independent two-sample t\u2011test on 'math score' for the two groups.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Do reading scores differ across the five race/ethnicity groups?",
+      "hint": "Run a one\u2011way ANOVA (stats.f_oneway) on 'reading score' for each group.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the effect size (Cohen's d) for the difference in writing scores between lunch types?",
+      "hint": "Compute group means and pooled standard deviation, then calculate d.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Is there a significant association between gender and test preparation completion?",
+      "hint": "Create a contingency table and run chi\u2011square test of independence.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the Pearson correlation between total score and parental education level (encoded ordinally)?",
+      "hint": "Map education levels to an ordinal scale, compute total score, then pearsonr.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Build a simple linear regression model predicting math score from reading and writing scores.",
+      "hint": "Fit OLS with statsmodels: dependent = math, independents = reading, writing.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Does adding lunch type as a predictor improve the regression model for math score?",
+      "hint": "Encode lunch as dummy variable, refit OLS, compare R\u00b2 or use an F\u2011test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the adjusted R\u00b2 of the model that predicts reading score from math score, writing score, gender, and test preparation?",
+      "hint": "Encode categorical variables, fit OLS, extract adjusted R\u00b2.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Perform a two\u2011way ANOVA to examine the interaction effect of lunch and test preparation on math scores.",
+      "hint": "Use statsmodels formula API: 'math score ~ C(lunch) * C(test preparation course)'.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Using a linear regression, test whether the slope relating reading score to math score differs by gender (interaction term).",
+      "hint": "Create interaction term reading_score * gender_dummy, fit model, inspect coefficient significance.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Apply a Bonferroni correction to the set of five pairwise t\u2011tests comparing math scores across each pair of race/ethnicity groups.",
+      "hint": "Run t\u2011tests for each pair, adjust p\u2011values by multiplying by number of tests (5).",
+      "n_steps": 6,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Estimate the probability that a randomly selected student with free/reduced lunch and no test preparation scores above 80 in math.",
+      "hint": "Filter for lunch and test prep, then compute proportion with math > 80.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Create a logistic regression model to predict whether a student completed test preparation (yes/no) using parental education, lunch, and total score as predictors.",
+      "hint": "Encode target as binary, fit Logit with statsmodels, evaluate coefficients.",
+      "n_steps": 6,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Assess the model's classification performance using AUC\u2011ROC.",
+      "hint": "Obtain predicted probabilities from logistic model, compute roc_auc_score.",
+      "n_steps": 2,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Perform a Mann\u2011Whitney U test to compare writing scores between students whose parents have a master's degree vs. those with a high school education.",
+      "hint": "Filter two groups, use scipy.stats.mannwhitneyu.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Calculate the 95% confidence interval for the mean difference in math scores between lunch types using bootstrapping (1000 resamples).",
+      "hint": "Resample each group, compute mean differences, take 2.5th and 97.5th percentiles.",
+      "n_steps": 7,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Using hierarchical linear modeling, estimate the variance components of math scores nested within race/ethnicity groups.",
+      "hint": "Fit a mixed\u2011effects model with random intercepts for race/ethnicity.",
+      "n_steps": 8,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Conduct a permutation test (10,000 permutations) to evaluate if the observed correlation between total score and reading score is greater than expected by chance.",
+      "hint": "Shuffle reading scores, recompute correlation each permutation, calculate p\u2011value.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    }
+  ]
+}

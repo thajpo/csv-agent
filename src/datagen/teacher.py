@@ -236,10 +236,9 @@ async def execute_teacher_trace(
         msg for msg in conversation_messages if msg.get("role") == "assistant"
     ]
 
-    # Display trace in UI if provided
     # Show full details for gold trace and consistency trace 1 (for visibility)
     # Other consistency traces just show summary to avoid clutter
-    show_turns = ui and (trace_mode == "gold" or trace_mode.startswith("1/"))
+    show_turns = trace_mode == "gold" or trace_mode.startswith("1/")
 
     if show_turns:
         import re
@@ -276,7 +275,7 @@ async def execute_teacher_trace(
                 code_cells=turn_code_cells,
                 execution_results=execution_results,
             )
-    elif ui and trace_mode != "gold" and not trace_mode.startswith("1/"):
+    else:
         # For consistency traces 2-5, just show summary
         ui.console.print(f"[dim]    Executed {len(assistant_messages)} turn(s)[/dim]")
 
@@ -483,15 +482,14 @@ async def triangulate_teacher(
         None, None, gold_trace.final_answer, majority_value, float_tol=float_tol
     )
 
-    # Display triangulation result in UI
-    if ui:
-        consistency_traces = [trace for trace, _ in consistency_results]
-        ui.print_triangulation_result(
-            gold_trace=gold_trace,
-            consistency_traces=consistency_traces,
-            verified=verified,
-            float_tol=float_tol,
-        )
+    # Display triangulation result
+    consistency_traces = [trace for trace, _ in consistency_results]
+    ui.print_triangulation_result(
+        gold_trace=gold_trace,
+        consistency_traces=consistency_traces,
+        verified=verified,
+        float_tol=float_tol,
+    )
 
     return gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata
 
@@ -552,14 +550,12 @@ async def batch_triangulate(
         n_workers = 1 + n_consistency  # 1 gold + N consistency traces
 
         # Cleanup existing containers first
-        if ui:
-            ui.base.print_status("Cleaning up old containers...")
+        ui.base.print_status("Cleaning up old containers...")
         from src.utils.docker import cleanup_csv_sandbox_containers
 
         cleanup_csv_sandbox_containers()
 
-        if ui:
-            ui.base.print_status(f"Creating multi-tenant container ({n_workers} workers)...")
+        ui.base.print_status(f"Creating multi-tenant container ({n_workers} workers)...")
 
         # Create single container with multiple workers (fork-based, memory shared)
         container = MultiTenantContainer(csv_path=csv_path, n_workers=n_workers)
@@ -571,13 +567,11 @@ async def batch_triangulate(
             for i in range(n_workers)
         ]
 
-        if ui:
-            ui.base.print_success(f"✓ Container ready ({n_workers} workers)")
+        ui.base.print_success(f"✓ Container ready ({n_workers} workers)")
 
     try:
         for i, q_dict in enumerate(questions, 1):
-            if ui:
-                ui.print_question_header(q_num=i, total=len(questions), question=q_dict)
+            ui.print_question_header(q_num=i, total=len(questions), question=q_dict)
 
             (
                 gold_trace,
@@ -618,10 +612,9 @@ async def batch_triangulate(
             if verified:
                 verified_count += 1
 
-            if ui:
-                ui.print_progress_summary(
-                    current=i, total=len(questions), verified_count=verified_count
-                )
+            ui.print_progress_summary(
+                current=i, total=len(questions), verified_count=verified_count
+            )
 
             # Reset all workers between questions (faster than recreate)
             if container:
@@ -630,8 +623,7 @@ async def batch_triangulate(
     finally:
         # Clean up container
         if container:
-            if ui:
-                ui.base.print_status("Cleaning up container...")
+            ui.base.print_status("Cleaning up container...")
             await container.stop()
 
     return results

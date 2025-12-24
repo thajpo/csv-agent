@@ -1,182 +1,80 @@
-[
-  {
-    "question": "What is the overall average price of avocados in the dataset?",
-    "hint": "Use df['AveragePrice'].mean() to compute the mean.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which region has the highest total volume sold across all dates?",
-    "hint": "Group by 'region', sum 'Total Volume', then use idxmax to find the region.",
-    "n_steps": 3,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the average price for conventional avocados versus organic avocados?",
-    "hint": "Group by 'type' and take the mean of 'AveragePrice'.",
-    "n_steps": 3,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the total number of small bags sold in the entire dataset?",
-    "hint": "Sum the 'Small Bags' column with df['Small Bags'].sum().",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the median of the total volume of avocados sold?",
-    "hint": "Use df['Total Volume'].median() to obtain the median.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "How many unique regions are represented in the data?",
-    "hint": "Apply df['region'].nunique() to count distinct regions.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the average number of large bags per transaction?",
-    "hint": "Calculate the mean of the 'Large Bags' column.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What proportion of the observations correspond to organic avocados?",
-    "hint": "Use df['type'].value_counts(normalize=True) and select the organic share.",
-    "n_steps": 3,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the average avocado price for each year in the dataset?",
-    "hint": "Group by 'year' and compute the mean of 'AveragePrice'.",
-    "n_steps": 3,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which year recorded the highest average avocado price?",
-    "hint": "After grouping by 'year' and computing the mean price, use idxmax to find the year.",
-    "n_steps": 3,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Is there a statistically significant difference in average price between conventional and organic avocados?",
-    "hint": "Perform an independent two\u2011sample t\u2011test on 'AveragePrice' for the two 'type' groups using scipy.stats.ttest_ind.",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "What is the Pearson correlation coefficient between average price and total volume?",
-    "hint": "Use df[['AveragePrice','Total Volume']].corr(method='pearson') and extract the off\u2011diagonal value.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Do total volumes differ across regions?",
-    "hint": "Apply one\u2011way ANOVA with scipy.stats.f_oneway on the 'Total Volume' series split by each region.",
-    "n_steps": 6,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Build a simple linear regression model predicting average price from total volume and year.",
-    "hint": "Use statsmodels OLS: sm.OLS(df['AveragePrice'], sm.add_constant(df[['Total Volume','year']])).fit().",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "For each region, compute the year\u2011over\u2011year percent change in total volume.",
-    "hint": "Group by ['region','year'], sum 'Total Volume', then apply pct_change() within each region.",
-    "n_steps": 6,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Which three PLU codes (4046, 4225, 4770) contribute the most to total volume?",
-    "hint": "Sum each PLU column, create a Series, sort descending, and take the top three.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Does the proportion of organic avocados differ between the regions 'Albany' and 'Los Angeles'?",
-    "hint": "Create a contingency table of 'type' vs 'region' for the two regions and run scipy.stats.chi2_contingency.",
-    "n_steps": 6,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Calculate the 4\u2011week rolling average price for each region.",
-    "hint": "Set Date as index, sort, then use df.groupby('region')['AveragePrice'].rolling(4).mean().reset_index().",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Is the average price different across calendar months?",
-    "hint": "Extract month from the Date column, group by month, compute mean price, then run ANOVA across months.",
-    "n_steps": 6,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "What is the Spearman rank correlation between small bag count and average price?",
-    "hint": "Use scipy.stats.spearmanr on df['Small Bags'] and df['AveragePrice'].",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Fit a multiple linear regression with average price as the response and all bag types, total volume, and avocado type (encoded) as predictors; report the adjusted R\u2011squared.",
-    "hint": "One\u2011hot encode 'type', combine predictors, run sm.OLS with add_constant, then access model.rsquared_adj.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Decompose the time series of average price for the whole dataset into trend, seasonal, and residual components.",
-    "hint": "Resample to weekly frequency, then apply statsmodels.tsa.seasonal_decompose on the series.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Conduct a two\u2011way ANOVA to examine the effects of avocado type and region on average price.",
-    "hint": "Use statsmodels.formula.api ols with formula 'AveragePrice ~ C(type) + C(region) + C(type):C(region)' and then sm.stats.anova_lm.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Perform a paired t\u2011test comparing average prices of organic vs conventional avocados within the same region\u2011month pairs.",
-    "hint": "Create a pivot table indexed by region and month, then apply scipy.stats.ttest_rel on the two columns.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Build an OLS model to forecast average price for the next quarter using lagged average price features (previous 4 weeks).",
-    "hint": "Create lag features with shift(1\u20114), drop NaNs, fit sm.OLS on current price vs lags, then predict future weeks.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Assess whether there is a lagged effect of total volume on average price using cross\u2011correlation analysis.",
-    "hint": "Compute cross\u2011correlation between 'Total Volume' and 'AveragePrice' series at multiple lags with numpy.correlate or pandas.Series.ccf.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Estimate a 95\u202f% confidence interval for the mean total volume using bootstrap resampling.",
-    "hint": "Resample the 'Total Volume' column many times (e.g., 10\u202f000), compute the mean each time, then take the 2.5 and 97.5 percentiles.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Implement a difference\u2011in\u2011differences analysis to evaluate the impact of a 2017 policy change on organic avocado prices across regions.",
-    "hint": "Create a treatment indicator (post\u20112017\u202f\u2227\u202forganic), a region indicator, then run OLS with interaction term and interpret the DID coefficient.",
-    "n_steps": 9,
-    "difficulty": "VERY_HARD"
-  },
-  {
-    "question": "Fit a hierarchical linear (mixed\u2011effects) model with random intercepts for region and fixed effects for type and year on average price.",
-    "hint": "Use statsmodels MixedLM: MixedLM(df['AveragePrice'], sm.add_constant(df[['type_encoded','year']]), groups=df['region']).fit().",
-    "n_steps": 9,
-    "difficulty": "VERY_HARD"
-  },
-  {
-    "question": "Estimate the causal effect of being organic on avocado price using propensity score matching, controlling for region, year, and total volume.",
-    "hint": "Compute propensity scores with logistic regression (organic\u202f~\u202fregion\u202f+\u202fyear\u202f+\u202fTotal Volume), match units, then compare mean prices between matched groups.",
-    "n_steps": 9,
-    "difficulty": "VERY_HARD"
-  }
-]
+{
+  "dataset_columns": [
+    "Unnamed: 0",
+    "Date",
+    "AveragePrice",
+    "Total Volume",
+    "4046",
+    "4225",
+    "4770",
+    "Total Bags",
+    "Small Bags",
+    "Large Bags",
+    "XLarge Bags",
+    "type",
+    "year",
+    "region"
+  ],
+  "questions": [
+    {
+      "question": "What is the average price of conventional avocados in 2017?",
+      "hint": "Filter rows where type == 'conventional' and year == 2017, then compute the mean of AveragePrice.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the Pearson correlation coefficient between Total Volume and AveragePrice for the entire dataset?",
+      "hint": "Use the pandas Series.corr method on the two columns.",
+      "n_steps": 1,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Is there a statistically significant difference in average price between organic and conventional avocados across all years?",
+      "hint": "Perform an independent two\u2011sample t\u2011test on AveragePrice grouped by type.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Which region has the highest average number of Total Bags per week?",
+      "hint": "Group by region, compute mean of Total Bags, then identify the region with the maximum value.",
+      "n_steps": 2,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Do organic and conventional avocados exhibit different price trends over time?",
+      "hint": "Fit separate linear regressions of AveragePrice on numeric week index for each type and compare slopes.",
+      "n_steps": 5,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Is there a seasonal effect on avocado prices (e.g., higher prices in summer months)?",
+      "hint": "Extract month from Date, then run a one\u2011way ANOVA of AveragePrice across months.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Can Total Volume be predicted from Total Bags, Small Bags, Large Bags, XLarge Bags, and avocado type?",
+      "hint": "Encode the categorical type, split data (random_state=42), fit an OLS regression, and evaluate R\u00b2.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "How did the proportion of XLarge Bags to Total Bags change between 2015 and 2018?",
+      "hint": "For each year compute (XLarge Bags / Total Bags), then compare the two proportions.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Does the distribution of avocado types differ by region?",
+      "hint": "Create a contingency table of type vs. region and run a chi\u2011square test of independence.",
+      "n_steps": 5,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Build a multivariate regression model to predict AveragePrice using all numeric features, avocado type, and region (train\u2011test split with random_state=42). Report the test RMSE.",
+      "hint": "One\u2011hot encode categorical columns, split the data, fit a linear model, and compute RMSE on the test set.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    }
+  ]
+}

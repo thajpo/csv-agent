@@ -570,16 +570,13 @@ class Environment:
         finally:
             # Cleanup or reset sandbox
             if self.state and "sandbox_id" in self.state:
-                try:
-                    if self.reuse_env:
-                        # Reset for reuse instead of destroying
-                        await self.env.reset(
-                            self.state["sandbox_id"],
-                            self.state.get("python_state")
-                        )
-                    else:
-                        await self.env.destroy_sandbox(self.state["sandbox_id"])
-                except Exception as e:
-                    pass  # Silently ignore cleanup failures
+                if self.reuse_env:
+                    # Reset for reuse instead of destroying
+                    await self.env.reset(
+                        self.state["sandbox_id"],
+                        self.state.get("python_state")
+                    )
+                else:
+                    await self.env.destroy_sandbox(self.state["sandbox_id"])
 
         return self

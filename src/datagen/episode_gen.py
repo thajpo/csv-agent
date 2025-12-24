@@ -193,7 +193,7 @@ async def process_csv_task(
     sampling_args: dict,
     float_tol: float,
     verified_only: bool,
-    ui: EpisodeGenUI | None = None,
+    ui: EpisodeGenUI,
 ) -> list[EpisodeJSONL]:
     """
     Process a single CSV task and return generated episodes.
@@ -326,7 +326,7 @@ async def main(legacy_mode: bool = False, parallel: bool = False):
                     sampling_args=sampling_args,
                     float_tol=float_tol,
                     verified_only=verified_only,
-                    ui=None,  # No UI in parallel mode (avoids interleaved output)
+                    ui=ui,  # Output may interleave in parallel mode
                 )
                 return (task, episodes)
 

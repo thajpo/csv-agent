@@ -1,206 +1,186 @@
-[
-  {
-    "question": "What is the average duration (in minutes) of titles classified as Movies?",
-    "hint": "Filter rows where type == 'Movie', then compute mean of duration_num.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which country has the highest count of TV Shows?",
-    "hint": "Filter for type == 'TV Show', then value_counts on country.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the most frequent rating across all titles?",
-    "hint": "Use value_counts on rating and select the top entry.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "How many titles were added to Netflix in the year 2020?",
-    "hint": "Count rows where added_year == 2020.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the median release year of all titles in the dataset?",
-    "hint": "Compute the median of the release_year column.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which genre (listed_in) appears most frequently across all titles?",
-    "hint": "Explode the listed_in column into individual genres and use value_counts.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the proportion of Movies versus TV Shows in the dataset?",
-    "hint": "Calculate value_counts for type and divide each count by the total number of rows.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the average number of seasons for TV Shows?",
-    "hint": "Filter for type == 'TV Show' and compute mean of duration_num (where duration represents seasons).",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which release year has the highest number of titles?",
-    "hint": "Use value_counts on release_year and select the year with the maximum count.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the average number of titles per country?",
-    "hint": "Group by country, count titles, then compute the mean of those counts.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Is there a statistically significant difference in average duration between Movies and TV Shows?",
-    "hint": "Perform an independent t\u2011test on duration_num for the two type groups.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "What is the Pearson correlation between release year and numeric duration?",
-    "hint": "Select release_year and duration_num columns and apply scipy.stats.pearsonr.",
-    "n_steps": 3,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Do Movies released after 2015 have a higher proportion of the rating 'TV-MA' compared to earlier movies?",
-    "hint": "Create two groups (release_year > 2015 and \u2264 2015), compute proportion of 'TV-MA' in each, then run a proportion test.",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Is the distribution of genres independent of the type (Movie vs TV Show)?",
-    "hint": "Create a contingency table of type vs top\u20115 genres and apply chi\u2011square test of independence.",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Does country have a significant effect on average duration?",
-    "hint": "Perform one\u2011way ANOVA with duration_num as the dependent variable and country as the factor (use top 5 countries).",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Is there a trend in the number of titles added per year over time?",
-    "hint": "Group by added_year, count titles, then fit a simple linear regression to assess trend.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Do TV Shows with more seasons tend to be added in later years?",
-    "hint": "Filter for type == 'TV Show', then compute correlation between duration_num (seasons) and added_year.",
-    "n_steps": 3,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Is the proportion of PG\u201113 movies higher in the United States than in other countries?",
-    "hint": "Calculate PG\u201113 proportion for US titles versus all non\u2011US titles and perform a two\u2011sample proportion test.",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Does having a listed director influence the average duration of titles?",
-    "hint": "Create two groups (director not null vs null) and compare their mean duration_num using a t\u2011test.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Can we predict numeric duration using release year, rating (encoded), and number of genres?",
-    "hint": "Encode rating, count genres per title, fit an OLS regression, and report R\u00b2.",
-    "n_steps": 6,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Is there an interaction effect between type (Movie/TV Show) and country on duration?",
-    "hint": "Fit a two\u2011way ANOVA with type, country, and their interaction as factors predicting duration_num.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "How well does a multiple linear regression model predict the year a title was added based on release year, duration, and country?",
-    "hint": "Encode country, fit regression with added_year as target, evaluate adjusted R\u00b2 and RMSE.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Are rating categories independent of the top five genres?",
-    "hint": "Build a contingency table of rating vs top\u20115 genres and perform a chi\u2011square test.",
-    "n_steps": 6,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Does the number of cast members correlate with duration?",
-    "hint": "Count cast members per title, then compute Spearman correlation with duration_num.",
-    "n_steps": 5,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Can a logistic regression model predict whether a title is a Movie using release year, duration, rating, and country?",
-    "hint": "Encode categorical variables, fit logistic regression with type as binary target, assess accuracy and AUC.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Is the median duration of US titles significantly different from that of Indian titles?",
-    "hint": "Compute median duration for each country and run a permutation test to compare them.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "What is the estimated causal effect of being a Movie on duration after matching on country, rating, and release year?",
-    "hint": "Perform propensity score matching, then compare average duration between matched Movie and TV Show groups.",
-    "n_steps": 9,
-    "difficulty": "VERY_HARD"
-  },
-  {
-    "question": "Using a mixed\u2011effects model with random intercepts for country, how does release year affect duration?",
-    "hint": "Fit a hierarchical linear model (duration ~ release_year + (1|country)) and interpret the fixed effect.",
-    "n_steps": 9,
-    "difficulty": "VERY_HARD"
-  },
-  {
-    "question": "Forecast the number of titles that will be added each month for the next year using an ARIMA model.",
-    "hint": "Aggregate titles by month, check stationarity, fit ARIMA, and generate 12\u2011month forecasts.",
-    "n_steps": 10,
-    "difficulty": "VERY_HARD"
-  },
-  {
-    "question": "What is the average number of genres listed per title, and does it differ between Movies and TV Shows?",
-    "hint": "Count genres per title, compute group means, and test difference with a t\u2011test.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Which rating category has the highest average duration for Movies?",
-    "hint": "Filter for type == 'Movie', group by rating, compute mean duration_num, and select max.",
-    "n_steps": 3,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Do titles added in later years tend to have higher release years?",
-    "hint": "Compute correlation between added_year and release_year for all rows.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the distribution of the number of seasons for TV Shows that were added in 2021?",
-    "hint": "Filter for type == 'TV Show' and added_year == 2021, then describe duration_num.",
-    "n_steps": 3,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Is there a significant difference in the proportion of 'TV-MA' ratings between US and non\u2011US titles?",
-    "hint": "Calculate proportions for each group and run a two\u2011sample proportion test.",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  }
-]
+{
+  "dataset_columns": [
+    "show_id",
+    "type",
+    "title",
+    "director",
+    "cast",
+    "country",
+    "date_added",
+    "release_year",
+    "rating",
+    "duration",
+    "listed_in",
+    "description"
+  ],
+  "questions": [
+    {
+      "question": "What is the total number of titles in the dataset?",
+      "hint": "Use df.shape or len(df).",
+      "n_steps": 1,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "How many movies versus TV Shows are present?",
+      "hint": "Group by the 'type' column and count.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the most common rating category?",
+      "hint": "Use value_counts on the 'rating' column and take the top value.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Which country contributes the highest number of titles?",
+      "hint": "Count occurrences in the 'country' column and find the max.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the average movie duration in minutes?",
+      "hint": "Filter rows where type='Movie' and duration_unit='min', then mean of duration_value.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the average number of seasons for TV Shows?",
+      "hint": "Filter type='TV Show' and duration_unit in ['Season','Seasons'], then mean of duration_value.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "How many titles were added to Netflix in 2020?",
+      "hint": "Use the 'added_year' column and count rows equal to 2020.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What proportion of titles are rated 'TV-MA'?",
+      "hint": "Count 'TV-MA' in rating column and divide by total number of rows.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Which genre (listed_in) appears most frequently?",
+      "hint": "Split the 'listed_in' strings by commas, explode, then value_counts.",
+      "n_steps": 4,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the median release year for movies?",
+      "hint": "Filter type='Movie' and compute median of release_year.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Is there a significant difference in average duration (minutes) between movies released before 2000 and those released in/after 2000?",
+      "hint": "Create two groups based on release_year, compute means, then perform an independent t\u2011test (scipy.stats.ttest_ind).",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the Pearson correlation between release_year and added_year for all titles?",
+      "hint": "Drop rows with missing added_year, then use scipy.stats.pearsonr on release_year and added_year.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Do movies and TV Shows differ in their rating distributions?",
+      "hint": "Create a contingency table of type vs rating and run a chi\u2011square test (scipy.stats.chi2_contingency).",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Which top\u20115 countries have the highest average movie duration?",
+      "hint": "Group by country for movies, compute mean duration_value, sort descending, select top 5.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Is the number of titles released each year increasing over time?",
+      "hint": "Aggregate counts per release_year, then compute Spearman rank correlation between year and count.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Do titles added in 2020 have a different average rating (numeric conversion) than those added in 2019?",
+      "hint": "Map rating categories to numeric scores (e.g., TV-MA=5, TV-14=4, \u2026), create two groups by added_year, then t\u2011test.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the relationship between the number of cast members listed and the duration of movies?",
+      "hint": "Count commas in the 'cast' column to estimate cast size, then compute Pearson correlation with duration_value for movies.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Which genre has the longest average movie duration?",
+      "hint": "Explode 'listed_in' for movies, group by genre, compute mean duration_value, then identify the max.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Are Indian titles more likely to be TV Shows than movies compared to US titles?",
+      "hint": "Create a 2x2 table (country: India vs United States) x (type: Movie vs TV Show) and run a chi\u2011square test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Build a linear regression model to predict movie duration (minutes) from release_year and number of listed genres.",
+      "hint": "Create numeric features: release_year, genre_count (split listed_in), then fit OLS using statsmodels.api.OLS.",
+      "n_steps": 8,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Does director experience (number of titles directed) affect average movie rating?",
+      "hint": "Count titles per director, merge with average rating per director (numeric conversion), then compute correlation or fit simple regression.",
+      "n_steps": 8,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Perform a two\u2011way ANOVA to test if release_year and rating category jointly affect movie duration.",
+      "hint": "Convert rating to categorical, use statsmodels.formula.api.ols('duration_value ~ C(release_year) + C(rating) + C(release_year):C(rating)') and then sm.stats.anova_lm.",
+      "n_steps": 9,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Identify the top 3 directors whose movies have the highest average IMDb\u2011style rating (using the provided rating conversion).",
+      "hint": "Map rating to numeric scores, group by director, compute mean, sort descending, take top 3.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Does the number of seasons for TV Shows correlate with the year they were added to Netflix?",
+      "hint": "Filter TV Shows, ensure duration_unit in ['Season','Seasons'], then compute Spearman correlation between duration_value and added_year.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Using a multiple linear regression, predict the added_year of a title based on release_year, duration_value, and whether it is a Movie or TV Show.",
+      "hint": "Create a binary feature for type, drop rows with missing added_year, fit OLS with those three predictors.",
+      "n_steps": 9,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "What are the most influential predictors of a title being rated 'TV-MA' according to a logistic regression model?",
+      "hint": "Encode target as binary (TV-MA=1 else 0), use features: release_year, duration_value, type (binary), number of genres; fit sklearn.linear_model.LogisticRegression (use random_state=42).",
+      "n_steps": 10,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Construct a decision tree (max_depth=4, random_state=42) to classify whether a title is a Movie or TV Show based on country, rating, release_year, and duration_value. Report the most important feature.",
+      "hint": "Prepare features, encode categorical variables, fit sklearn.tree.DecisionTreeClassifier, then inspect feature_importances_.",
+      "n_steps": 11,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Perform a propensity score matching analysis to estimate the effect of being a TV Show (vs Movie) on average duration, controlling for release_year and rating.",
+      "hint": "Estimate propensity scores with logistic regression (TV Show=1), match on nearest neighbor, then compare mean duration_value between matched groups.",
+      "n_steps": 12,
+      "difficulty": "VERY_HARD"
+    }
+  ]
+}

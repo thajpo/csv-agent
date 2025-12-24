@@ -1,80 +1,193 @@
-[
-  {
-    "question": "What is the total number of records in the dataset?",
-    "hint": "Use df.shape[0] to get the row count.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the average (mean) insurance charge?",
-    "hint": "Calculate df['charges'].mean().",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What proportion of policyholders are smokers?",
-    "hint": "Map smoker column to 0/1, then take the mean.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the median age of all customers?",
-    "hint": "Use df['age'].median().",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which region has the highest average charge?",
-    "hint": "Group by 'region' and compute mean of 'charges', then find the max.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Is there a statistically significant difference in average charges between smokers and non\u2011smokers?",
-    "hint": "Perform an independent two\u2011sample t\u2011test on the 'charges' split by smoker status using scipy.stats.ttest_ind.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "What is the Pearson correlation coefficient and p\u2011value between BMI and charges?",
-    "hint": "Use scipy.stats.pearsonr(df['bmi'], df['charges']).",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Fit a simple linear regression model predicting charges from age. What is the R\u00b2 value?",
-    "hint": "Use sklearn.linear_model.LinearRegression, fit on age (reshaped) \u2192 charges, then call .score().",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Create a multiple linear regression model with age, bmi, children, smoker, and region (one\u2011hot encoded) as predictors. What is the adjusted R\u00b2?",
-    "hint": "Encode categorical variables with pd.get_dummies, fit statsmodels OLS, and read .rsquared_adj.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Using a train\u2011test split (random_state=42, test_size=0.2), train the full multiple regression model from the previous question. What is the RMSE on the test set?",
-    "hint": "Split data, fit sklearn LinearRegression, predict on test, compute sqrt(mean_squared_error).",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Add an interaction term between smoker (encoded 0/1) and bmi to the full regression model. Does the interaction term improve the model according to an F\u2011test?",
-    "hint": "Create bmi*smoker column, fit reduced and full OLS models, compare with sm.stats.anova_lm.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Perform a bootstrap (10,000 resamples) to estimate the standard error of the mean charge for smokers. What is the bootstrap standard error?",
-    "hint": "Resample the smoker subset with replacement, compute the mean each iteration, then calculate the standard deviation of those means.",
-    "n_steps": 9,
-    "difficulty": "VERY_HARD"
-  },
-  {
-    "question": "Check for heteroscedasticity in the full regression model using the Breusch\u2011Pagan test. What are the test statistic and p\u2011value?",
-    "hint": "Use statsmodels.stats.diagnostic.het_breuschpagan on model residuals and exogenous variables.",
-    "n_steps": 9,
-    "difficulty": "VERY_HARD"
-  }
-]
+{
+  "dataset_columns": [
+    "age",
+    "sex",
+    "bmi",
+    "children",
+    "smoker",
+    "region",
+    "charges"
+  ],
+  "questions": [
+    {
+      "question": "What is the average age of the policyholders?",
+      "hint": "Use df['age'].mean() to compute the mean.",
+      "n_steps": 1,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "How many policyholders are smokers?",
+      "hint": "Filter df where smoker == 'yes' and count rows.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the median charge across all policies?",
+      "hint": "Use df['charges'].median().",
+      "n_steps": 1,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Which region has the highest average charge?",
+      "hint": "Group by 'region', compute mean of 'charges', then find max.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What proportion of policyholders are female?",
+      "hint": "Count rows where sex == 'female' and divide by total rows.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Is there a significant difference in average charges between smokers and non\u2011smokers?",
+      "hint": "Perform an independent t\u2011test on charges for smoker == 'yes' vs 'no'.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the Pearson correlation coefficient between age and charges?",
+      "hint": "Use scipy.stats.pearsonr on df['age'] and df['charges'].",
+      "n_steps": 3,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Build a simple linear regression model to predict charges from BMI. What is the R\u00b2 score on the training data?",
+      "hint": "Use sklearn.linear_model.LinearRegression, fit on BMI vs charges, then .score().",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Do charges differ across the four regions after controlling for smoker status?",
+      "hint": "Run a two\u2011way ANOVA with 'region' and 'smoker' as factors on charges.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the average number of children for policyholders who are smokers?",
+      "hint": "Filter smoker == 'yes' then compute mean of 'children'.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Create a multiple linear regression model using age, bmi, children, and smoker (encoded as 0/1) to predict charges. What are the coefficients?",
+      "hint": "Encode smoker, fit LinearRegression on the four predictors, retrieve .coef_.",
+      "n_steps": 6,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Is there multicollinearity between age and BMI in the dataset?",
+      "hint": "Calculate VIF for age and bmi using statsmodels.stats.outliers_influence.variance_inflation_factor.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Perform a stepwise forward selection (using p\u2011values) to choose the best subset of predictors for charges. Which variables are selected?",
+      "hint": "Iteratively add predictors based on lowest p\u2011value from OLS until none are below 0.05.",
+      "n_steps": 8,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Using 5\u2011fold cross\u2011validation, what is the average RMSE of a linear model that predicts charges from age, bmi, children, smoker, and region (one\u2011hot encoded)?",
+      "hint": "Encode categorical variables, use sklearn.model_selection.KFold(n_splits=5, random_state=42), compute RMSE for each fold, then average.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Assess the residuals of the multiple regression model (age, bmi, children, smoker, region). Do they appear normally distributed?",
+      "hint": "Obtain residuals, plot a histogram or perform a Shapiro\u2011Wilk test via scipy.stats.shapiro.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "What is the effect size (Cohen's d) for the difference in charges between smokers and non\u2011smokers?",
+      "hint": "Compute mean and std for each group, then apply Cohen's d formula.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Does the interaction between smoker status and BMI significantly improve the prediction of charges?",
+      "hint": "Add an interaction term (BMI * smoker) to the multiple regression and compare model fit via an F\u2011test.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "What is the adjusted R\u00b2 of the model that includes all predictors (age, sex, bmi, children, smoker, region)?",
+      "hint": "One\u2011hot encode sex and region, fit OLS with statsmodels, read .rsquared_adj.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Identify any outliers in charges using the IQR method. How many records are flagged as outliers?",
+      "hint": "Compute Q1, Q3, IQR, then count rows where charges < Q1 - 1.5*IQR or > Q3 + 1.5*IQR.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Is there a statistically significant association between region and smoker status?",
+      "hint": "Create a contingency table and run a chi\u2011square test via scipy.stats.chi2_contingency.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the mean absolute error (MAE) of the simple regression model that predicts charges from age only?",
+      "hint": "Fit LinearRegression on age, predict, then compute MAE with sklearn.metrics.mean_absolute_error.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Using bootstrapping (1000 resamples), estimate the 95% confidence interval for the correlation between BMI and charges.",
+      "hint": "Resample the data with replacement, compute Pearson correlation each time, then take 2.5th and 97.5th percentiles.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Compare the predictive performance (R\u00b2) of three models: (1) age only, (2) age + bmi, (3) age + bmi + children. Which model performs best?",
+      "hint": "Fit three LinearRegression models with the specified predictors, compute .score() for each.",
+      "n_steps": 8,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Does adding the categorical variable 'sex' (one\u2011hot encoded) improve model fit for predicting charges beyond numeric variables alone?",
+      "hint": "Fit a model with numeric predictors, then another with numeric + sex, compare adjusted R\u00b2 or perform an ANOVA.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "What is the distribution of charges for each number of children? Provide the mean and standard deviation per group.",
+      "hint": "Group by 'children', aggregate 'charges' with ['mean', 'std'].",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Calculate the proportion of total charges contributed by smokers versus non\u2011smokers.",
+      "hint": "Sum charges for each smoker group and divide by overall sum.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Perform a log\u2011transformation of charges and re\u2011evaluate the correlation between log(charges) and BMI. How does it change?",
+      "hint": "Create a new column np.log(df['charges']), then compute Pearson correlation with BMI.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Using the full dataset, train a linear regression model with random_state=42 for reproducibility (split 80/20). What is the test set RMSE?",
+      "hint": "Use train_test_split with random_state=42, fit LinearRegression, predict on test, compute RMSE.",
+      "n_steps": 7,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Does the number of children have a statistically significant linear relationship with charges after adjusting for age and smoker status?",
+      "hint": "Fit an OLS model with children, age, smoker (encoded) as predictors, check p\u2011value for children coefficient.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Create a partial dependence plot for BMI in the full linear model (all predictors). What trend is observed?",
+      "hint": "After fitting the model, vary BMI while holding other features at their mean, compute predicted charges, plot.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    }
+  ]
+}

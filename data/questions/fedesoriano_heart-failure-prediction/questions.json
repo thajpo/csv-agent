@@ -1,176 +1,78 @@
-[
-  {
-    "question": "What is the overall proportion of patients with heart disease?",
-    "hint": "Calculate the mean of the HeartDisease column.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the average age of patients without heart disease?",
-    "hint": "Filter HeartDisease == 0 and compute the mean of Age.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "How many female patients are in the dataset?",
-    "hint": "Count rows where Sex == 'F'.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the median cholesterol level for male patients?",
-    "hint": "Filter Sex == 'M' and compute the median of Cholesterol.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which ChestPainType occurs most frequently overall?",
-    "hint": "Use value_counts on the ChestPainType column.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the average RestingBP for patients with exercise\u2011induced angina (ExerciseAngina == 'Y')?",
-    "hint": "Filter ExerciseAngina == 'Y' and compute mean RestingBP.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What proportion of patients have fasting blood sugar > 120 (FastingBS == 1)?",
-    "hint": "Count rows where FastingBS == 1 and divide by total rows.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the standard deviation of MaxHR for all patients?",
-    "hint": "Use the .std() method on the MaxHR column.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "How many distinct values exist in the ST_Slope column?",
-    "hint": "Apply .nunique() to ST_Slope.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the minimum Oldpeak value observed?",
-    "hint": "Use .min() on the Oldpeak column.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Is there a significant difference in mean cholesterol between males and females?",
-    "hint": "Perform an independent two\u2011sample t\u2011test on Cholesterol split by Sex.",
-    "n_steps": 3,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Does the distribution of HeartDisease differ by Sex?",
-    "hint": "Create a contingency table with pd.crosstab and run scipy.stats.chi2_contingency.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "What is the Pearson correlation between Age and Oldpeak?",
-    "hint": "Use scipy.stats.pearsonr on Age and Oldpeak.",
-    "n_steps": 2,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Do average RestingBP values differ across ChestPainType categories?",
-    "hint": "Group by ChestPainType and compute mean RestingBP; optionally run one\u2011way ANOVA.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Is MaxHR significantly lower for patients with heart disease?",
-    "hint": "Separate MaxHR by HeartDisease status and conduct an independent two\u2011sample t\u2011test.",
-    "n_steps": 3,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "What is the effect size (Cohen's d) for the difference in Oldpeak between patients with and without heart disease?",
-    "hint": "Compute means, standard deviations for each group and apply the Cohen's d formula.",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Which combination of Sex and ChestPainType has the highest average Age?",
-    "hint": "Group by [Sex, ChestPainType] and compute mean Age; then identify the max.",
-    "n_steps": 3,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Fit a simple linear regression model predicting HeartDisease from Age. What is the R\u2011squared?",
-    "hint": "Use statsmodels OLS with HeartDisease as dependent and Age as independent; extract rsquared.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Perform a logistic regression with HeartDisease as outcome using Age, Sex, and Cholesterol. What is the odds ratio for Age?",
-    "hint": "Encode Sex, fit statsmodels Logit, exponentiate the Age coefficient.",
-    "n_steps": 6,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Assess multicollinearity among numeric predictors by computing VIF for each.",
-    "hint": "For each numeric column, regress it on the others using OLS and calculate VIF = 1/(1\u2011R\u00b2).",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Build a multiple linear regression model predicting Oldpeak using Age, RestingBP, Cholesterol, and MaxHR. Which predictor has the largest absolute coefficient?",
-    "hint": "Fit statsmodels OLS with Oldpeak as dependent; examine the absolute values of params.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Conduct a forward stepwise selection (based on AIC) to choose predictors for a logistic model of HeartDisease.",
-    "hint": "Iteratively add variables, fit Logit, compute AIC with sm.stats.aic, stop when AIC no longer improves.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Estimate a 95% bootstrap confidence interval for the mean Age of heart\u2011disease patients (1000 resamples).",
-    "hint": "Resample Age values where HeartDisease == 1, compute mean each iteration, take 2.5th and 97.5th percentiles.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Perform a permutation test (10,000 permutations) to evaluate whether MaxHR differs between sexes.",
-    "hint": "Compute observed mean difference, shuffle Sex labels repeatedly, recompute differences, calculate p\u2011value.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Fit a logistic regression using all numeric predictors and evaluate accuracy with a 70/30 train\u2011test split (random_state=42).",
-    "hint": "Use sklearn.model_selection.train_test_split, fit Logit, predict classes, compute accuracy_score.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Compare a full logistic model (all predictors) to a reduced model (Age + Sex) using a likelihood ratio test.",
-    "hint": "Fit both Logit models, obtain log\u2011likelihoods, compute chi\u2011square = 2*(LL_full\u2011LL_reduced), get p\u2011value.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Using nested cross\u2011validation (5 outer folds, 3 inner folds, random_state=42), evaluate a logistic regression with L2 regularization and report mean AUC.",
-    "hint": "Implement StratifiedKFold for outer loop, inner GridSearchCV to tune C, compute roc_auc_score on each outer validation set, average.",
-    "n_steps": 9,
-    "difficulty": "VERY_HARD"
-  },
-  {
-    "question": "Investigate whether Oldpeak mediates the relationship between Age and HeartDisease via mediation analysis.",
-    "hint": "Fit three models: Age \u2192 HeartDisease, Age \u2192 Oldpeak, and Age + Oldpeak \u2192 HeartDisease; compute indirect effect and test with bootstrapping.",
-    "n_steps": 10,
-    "difficulty": "VERY_HARD"
-  },
-  {
-    "question": "Create a calibrated probability model: fit logistic regression on all features, calibrate with isotonic regression (random_state=42), and report Brier score on a held\u2011out test set.",
-    "hint": "Split data into train/validation/test (70/15/15), fit Logit, calibrate with CalibratedClassifierCV(method='isotonic'), predict probabilities on test, compute brier_score_loss.",
-    "n_steps": 11,
-    "difficulty": "VERY_HARD"
-  }
-]
+{
+  "dataset_columns": [
+    "Age",
+    "Sex",
+    "ChestPainType",
+    "RestingBP",
+    "Cholesterol",
+    "FastingBS",
+    "RestingECG",
+    "MaxHR",
+    "ExerciseAngina",
+    "Oldpeak",
+    "ST_Slope",
+    "HeartDisease"
+  ],
+  "questions": [
+    {
+      "question": "What is the average age of patients with heart disease compared to those without?",
+      "hint": "Group by HeartDisease and compute the mean of Age.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Is there a significant difference in average cholesterol levels between male and female patients?",
+      "hint": "Use a two\u2011sample t\u2011test on Cholesterol for Sex = 'M' vs Sex = 'F'.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the Pearson correlation coefficient between Age and Maximum Heart Rate (MaxHR)?",
+      "hint": "Apply scipy.stats.pearsonr on the two numeric columns.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Do patients with exercise\u2011induced angina (ExerciseAngina = 'Y') have a higher proportion of heart disease than those without?",
+      "hint": "Create a contingency table of ExerciseAngina vs HeartDisease and compare proportions.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Is there an association between ChestPainType and HeartDisease?",
+      "hint": "Build a contingency table and run scipy.stats.chi2_contingency.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Can a simple linear regression model predict HeartDisease status from Age?",
+      "hint": "Fit an OLS model with HeartDisease as the dependent variable and Age as the predictor; report the coefficient and p\u2011value.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the Spearman rank correlation between Oldpeak (ST depression) and HeartDisease?",
+      "hint": "Use scipy.stats.spearmanr on Oldpeak and HeartDisease.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Do resting blood pressure (RestingBP) values differ significantly between patients with and without heart disease?",
+      "hint": "Conduct a two\u2011sample t\u2011test on RestingBP grouped by HeartDisease.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Is there a difference in the distribution of ST_Slope categories across HeartDisease groups?",
+      "hint": "Create a cross\u2011tab of ST_Slope vs HeartDisease and perform a chi\u2011square test.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "What is the adjusted R\u2011squared of a multiple linear regression model predicting HeartDisease using Age, RestingBP, Cholesterol, MaxHR, and Oldpeak?",
+      "hint": "Fit an OLS model with the listed predictors; extract the adjusted R\u2011squared from the results.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    }
+  ]
+}

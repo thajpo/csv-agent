@@ -71,6 +71,14 @@ class TriangulationMetadataDict(TypedDict):
     gold_matches_majority: bool
 
 
+class TimingMetadataDict(TypedDict):
+    """Execution timing for episode generation."""
+    gold_elapsed: float
+    consistency_elapsed: list[float]
+    total_elapsed: float
+    avg_elapsed: float
+
+
 # ============= Core Types =============
 
 class Question(BaseModel):
@@ -182,6 +190,7 @@ class EpisodeJSONL(BaseModel):
 
     # Metadata
     triangulation_metadata: TriangulationMetadataDict
+    timing_metadata: TimingMetadataDict
 
     @classmethod
     def from_episode(
@@ -190,7 +199,8 @@ class EpisodeJSONL(BaseModel):
         gold_conversation: list[dict],
         system_prompt: str,
         consistency_conversations: list[list[dict]],
-        csv_source: str = "",
+        csv_source: str,
+        timing_metadata: TimingMetadataDict,
     ) -> "EpisodeJSONL":
         """Convert Episode to JSONL format."""
         from collections import Counter
@@ -233,6 +243,7 @@ class EpisodeJSONL(BaseModel):
                 "majority_count": majority_count,
                 "gold_matches_majority": episode.verified,
             },
+            timing_metadata=timing_metadata,
         )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

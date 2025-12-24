@@ -1,80 +1,213 @@
-[
-  {
-    "question": "What is the total number of samples in the dataset?",
-    "hint": "Use df.shape to get the number of rows.",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "How many benign (B) and malignant (M) cases are present?",
-    "hint": "Use df['diagnosis'].value_counts().",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the mean radius_mean for benign tumors?",
-    "hint": "Filter df where diagnosis == 'B' and compute the mean of radius_mean.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Which feature has the highest positive Pearson correlation with the binary diagnosis label?",
-    "hint": "Encode diagnosis as 1/0, then use df.corrwith().",
-    "n_steps": 3,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "What is the standard deviation of area_mean across the whole dataset?",
-    "hint": "Use df['area_mean'].std().",
-    "n_steps": 1,
-    "difficulty": "EASY"
-  },
-  {
-    "question": "Is there a statistically significant difference in radius_mean between benign and malignant tumors?",
-    "hint": "Perform an independent two\u2011sample t\u2011test (scipy.stats.ttest_ind) on radius_mean split by diagnosis.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "What is the Pearson correlation coefficient and its p\u2011value between perimeter_worst and diagnosis_binary?",
-    "hint": "Use scipy.stats.pearsonr on the two series.",
-    "n_steps": 4,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Build a simple logistic regression model using radius_mean, texture_mean, and perimeter_mean to predict diagnosis_binary.",
-    "hint": "Use sklearn.linear_model.LogisticRegression, fit on the three features, and report training accuracy.",
-    "n_steps": 5,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Split the data into training and test sets (80/20) with random_state=42 and evaluate the logistic regression model's accuracy on the test set.",
-    "hint": "Use sklearn.model_selection.train_test_split, then fit and score.",
-    "n_steps": 6,
-    "difficulty": "MEDIUM"
-  },
-  {
-    "question": "Fit a multiple linear regression model using all mean features (e.g., radius_mean, texture_mean, \u2026, fractal_dimension_mean) to predict diagnosis_binary. Which coefficients are statistically significant at \u03b1 = 0.05?",
-    "hint": "Use statsmodels OLS with all mean columns, examine p-values in the summary.",
-    "n_steps": 7,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Investigate multicollinearity among the worst\u2011measurement features by computing the Variance Inflation Factor (VIF) for each.",
-    "hint": "Use statsmodels.stats.outliers_influence.variance_inflation_factor on the worst\u2011features matrix.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Using the features with VIF < 5, retrain the logistic regression model and assess whether test accuracy improves.",
-    "hint": "Select low\u2011VIF features, repeat train_test_split and model fitting, compare accuracies.",
-    "n_steps": 8,
-    "difficulty": "HARD"
-  },
-  {
-    "question": "Build a regularized logistic regression (L1 penalty) with hyperparameter C tuned via GridSearchCV (C values: 0.01, 0.1, 1, 10) using 5\u2011fold CV. Which C gives the best ROC AUC?",
-    "hint": "Use sklearn.linear_model.LogisticRegression(penalty='l1', solver='saga'), GridSearchCV with scoring='roc_auc'.",
-    "n_steps": 9,
-    "difficulty": "VERY_HARD"
-  }
-]
+{
+  "dataset_columns": [
+    "id",
+    "diagnosis",
+    "radius_mean",
+    "texture_mean",
+    "perimeter_mean",
+    "area_mean",
+    "smoothness_mean",
+    "compactness_mean",
+    "concavity_mean",
+    "concave points_mean",
+    "symmetry_mean",
+    "fractal_dimension_mean",
+    "radius_se",
+    "texture_se",
+    "perimeter_se",
+    "area_se",
+    "smoothness_se",
+    "compactness_se",
+    "concavity_se",
+    "concave points_se",
+    "symmetry_se",
+    "fractal_dimension_se",
+    "radius_worst",
+    "texture_worst",
+    "perimeter_worst",
+    "area_worst",
+    "smoothness_worst",
+    "compactness_worst",
+    "concavity_worst",
+    "concave points_worst",
+    "symmetry_worst",
+    "fractal_dimension_worst",
+    "Unnamed: 32"
+  ],
+  "questions": [
+    {
+      "question": "What is the overall proportion of malignant (M) cases in the dataset?",
+      "hint": "Count the 'M' diagnosis and divide by total number of records.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the mean radius_mean for benign (B) tumors?",
+      "hint": "Filter rows where diagnosis == 'B' and compute the mean of radius_mean.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Is there a statistically significant difference in texture_mean between benign and malignant tumors?",
+      "hint": "Perform an independent two\u2011sample t\u2011test on texture_mean grouped by diagnosis.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the Pearson correlation coefficient between area_mean and perimeter_mean?",
+      "hint": "Use pandas .corr() or scipy.stats.pearsonr on the two columns.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Which single feature has the highest absolute correlation with the diagnosis label (encoded as 0 for B, 1 for M)?",
+      "hint": "Encode diagnosis to numeric, compute correlations with all numeric features, and identify the max absolute value.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "What is the average smoothness_worst for each diagnosis group?",
+      "hint": "Group by diagnosis and calculate the mean of smoothness_worst.",
+      "n_steps": 2,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Create a box plot of concavity_mean grouped by diagnosis. Which group shows higher median concavity?",
+      "hint": "Use seaborn.boxplot (or pandas boxplot) with x=diagnosis, y=concavity_mean.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Perform a chi\u2011square test to assess whether the distribution of diagnosis differs across the categorical variable obtained by binning radius_mean into three equal\u2011frequency bins.",
+      "hint": "Bin radius_mean with pd.qcut, create a contingency table with diagnosis, then run scipy.stats.chi2_contingency.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Fit a simple linear regression model predicting area_mean from radius_mean. Report the slope, intercept, and R\u00b2.",
+      "hint": "Use statsmodels OLS: sm.OLS(df['area_mean'], sm.add_constant(df['radius_mean'])).fit().",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Compare the mean values of all 'worst' features (e.g., radius_worst, texture_worst, \u2026) between benign and malignant tumors using multivariate analysis of variance (MANOVA).",
+      "hint": "Encode diagnosis, select the worst columns, and apply statsmodels.multivariate.manova.MANOVA.from_formula.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Build a logistic regression classifier using radius_mean, texture_mean, and smoothness_mean as predictors. What is the accuracy on a hold\u2011out test set (20% of data) using random_state=42?",
+      "hint": "Encode diagnosis to 0/1, split with train_test_split(test_size=0.2, random_state=42), fit sklearn.linear_model.LogisticRegression, evaluate accuracy.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Perform a 5\u2011fold cross\u2011validated ROC AUC evaluation of the logistic regression model from the previous question.",
+      "hint": "Use sklearn.model_selection.cross_val_score with scoring='roc_auc' and cv=5.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Identify the top three features (among all numeric columns) that most improve the logistic regression model's AUC when added sequentially (forward selection).",
+      "hint": "Iteratively add features, compute cross\u2011validated AUC, keep the feature that yields the highest increase at each step.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Construct a multiple linear regression model predicting perimeter_mean from all other mean\u2011type features (radius_mean, texture_mean, smoothness_mean, etc.). Report the adjusted R\u00b2 and list any features with p\u2011value > 0.05.",
+      "hint": "Select columns ending with '_mean' except perimeter_mean, fit OLS with statsmodels, examine summary.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Apply Principal Component Analysis (PCA) on the standardized set of all 'mean' features and determine how many components are needed to explain at least 90% of the variance.",
+      "hint": "Standardize with StandardScaler, run sklearn.decomposition.PCA, compute cumulative explained variance.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Using the PCA components that explain 90% variance, train a logistic regression classifier (random_state=42) and report its test accuracy (20% hold\u2011out).",
+      "hint": "Transform data with selected PCA components, split, fit LogisticRegression, evaluate accuracy.",
+      "n_steps": 8,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Perform a permutation importance analysis on the logistic regression model (using all features) to rank feature importance. Which feature ranks highest?",
+      "hint": "Use sklearn.inspection.permutation_importance on the fitted model with a validation set.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Create a stratified 10\u2011fold cross\u2011validation procedure (random_state=42) to evaluate a Support Vector Machine (linear kernel) classifier on the full feature set. Report the mean F1\u2011score.",
+      "hint": "Use sklearn.model_selection.StratifiedKFold and sklearn.svm.SVC with kernel='linear'.",
+      "n_steps": 8,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Investigate whether the standard error features (e.g., radius_se, texture_se) provide any predictive power beyond the mean features by comparing two logistic regression models (mean\u2011only vs. mean\u2011plus\u2011se) using a likelihood ratio test.",
+      "hint": "Fit both models with statsmodels Logit, compute 2*(LL_full - LL_reduced) and compare to chi\u2011square distribution.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Implement a nested cross\u2011validation pipeline (outer 5\u2011fold, inner 3\u2011fold) to tune the regularization strength (C) of a logistic regression model using grid search (C values: 0.01, 0.1, 1, 10). Report the best C and the corresponding outer\u2011fold mean AUC.",
+      "hint": "Use sklearn.model_selection.GridSearchCV with cv=3 inside a cross_val_score loop of outer cv=5.",
+      "n_steps": 10,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Perform a bootstrapped estimation (1000 resamples) of the difference in mean concavity_worst between benign and malignant tumors. Provide the 95% confidence interval.",
+      "hint": "Resample the dataset with replacement, compute mean difference each iteration, then take the 2.5th and 97.5th percentiles.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Using the entire dataset, fit a regularized (L1) logistic regression model with C=0.1 (random_state=42). Which features receive zero coefficients?",
+      "hint": "Fit sklearn.linear_model.LogisticRegression(penalty='l1', solver='saga', C=0.1). Inspect coef_ array for zeros.",
+      "n_steps": 5,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Calculate the effect size (Cohen's d) for the difference in fractal_dimension_mean between benign and malignant tumors.",
+      "hint": "Compute means and pooled standard deviation for each group, then apply Cohen's d formula.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Generate a heatmap of the correlation matrix for all numeric features. Which pair of features shows the highest absolute correlation (excluding self\u2011correlation)?",
+      "hint": "Use df.corr(), mask the diagonal, and find the max absolute value.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Test whether the variance of area_worst differs between benign and malignant groups using Levene's test.",
+      "hint": "Use scipy.stats.levene on area_worst split by diagnosis.",
+      "n_steps": 3,
+      "difficulty": "EASY"
+    },
+    {
+      "question": "Create a new feature called 'texture_to_smoothness' defined as texture_mean / smoothness_mean. Does this feature improve logistic regression accuracy compared to using only radius_mean?",
+      "hint": "Add the feature, split data, fit two LogisticRegression models (one with radius_mean only, one with both), compare test accuracies.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM"
+    },
+    {
+      "question": "Perform a backward elimination process starting from all 'mean' features to identify a minimal subset that retains at least 95% of the full model's AUC (logistic regression, random_state=42). List the final selected features.",
+      "hint": "Iteratively remove the least significant feature, recompute cross\u2011validated AUC, stop when AUC drops below 95% of baseline.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD"
+    },
+    {
+      "question": "Assess the calibration of the logistic regression model (using all features) by plotting a calibration curve and reporting the Brier score.",
+      "hint": "Use sklearn.calibration.calibration_curve and sklearn.metrics.brier_score_loss on a validation set.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    },
+    {
+      "question": "Determine whether there is a significant interaction effect between radius_mean and texture_mean on the probability of malignancy using a logistic regression model with an interaction term.",
+      "hint": "Create a new column radius_mean * texture_mean, fit Logit with both main effects and interaction, examine the interaction coefficient's p\u2011value.",
+      "n_steps": 7,
+      "difficulty": "HARD"
+    }
+  ]
+}
