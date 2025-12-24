@@ -20,72 +20,77 @@ import sys
 from pathlib import Path
 
 try:
-    from kaggle.api.kaggle_api_extended import KaggleApi
+    from kaggle import api as kaggle_api
 except ImportError:
     print("Error: kaggle package not installed.")
-    print("Install with: uv add kaggle")
+    print("Install with: uv sync --extra kaggle")
     sys.exit(1)
 
 
-def get_api() -> KaggleApi:
-    """Authenticate and return Kaggle API client."""
-    api = KaggleApi()
-    api.authenticate()
-    return api
+def get_api():
+    """Return authenticated Kaggle API client.
+
+    Uses the new-style import which supports KAGGLE_API_TOKEN env var.
+    """
+    return kaggle_api
 
 
-def get_dataset_metadata(api: KaggleApi, dataset_ref: str) -> dict:
+def get_dataset_metadata(api, dataset_ref: str) -> dict:
     """
     Fetch metadata for a dataset.
-    
+
     Args:
-        api: Authenticated KaggleApi instance
+        api: Authenticated Kaggle API instance
         dataset_ref: Dataset reference in format "owner/dataset-name"
-    
+
     Returns:
         Dict with title, description, subtitle, tags, url, etc.
     """
     owner, dataset_name = dataset_ref.split("/")
-    
+
     try:
-        # Get detailed metadata
-        metadata = api.metadata_get(owner, dataset_name)
-        
-        # Also get basic dataset info
-        dataset_list = api.dataset_list(search=dataset_ref)
+        # Search for the dataset to get its metadata
+        datasets = api.dataset_list(search=dataset_ref)
         dataset_info = None
-        for d in dataset_list:
+        for d in datasets:
             if d.ref == dataset_ref:
                 dataset_info = d
                 break
-        
-        return {
-            "ref": dataset_ref,
-            "owner": owner,
-            "name": dataset_name,
-            "title": metadata.get("title", dataset_name),
-            "subtitle": metadata.get("subtitle", ""),
-            "description": metadata.get("description", ""),
-            "keywords": metadata.get("keywords", []),
-            "url": f"https://www.kaggle.com/datasets/{dataset_ref}",
-            "totalBytes": getattr(dataset_info, "totalBytes", None) if dataset_info else None,
-            "downloadCount": getattr(dataset_info, "downloadCount", None) if dataset_info else None,
-        }
+
+        if dataset_info:
+            # Extract tag names from tag objects
+            tags = getattr(dataset_info, "tags", [])
+            keywords = [t.get("name", t) if isinstance(t, dict) else str(t) for t in tags]
+
+            return {
+                "ref": dataset_ref,
+                "owner": owner,
+                "name": dataset_name,
+                "title": getattr(dataset_info, "title", dataset_name),
+                "subtitle": getattr(dataset_info, "subtitle", ""),
+                "description": getattr(dataset_info, "description", ""),
+                "keywords": keywords,
+                "url": getattr(dataset_info, "url", f"https://www.kaggle.com/datasets/{dataset_ref}"),
+                "totalBytes": getattr(dataset_info, "total_bytes", None),
+                "downloadCount": getattr(dataset_info, "download_count", None),
+            }
     except Exception as e:
         print(f"  Warning: Could not fetch metadata for {dataset_ref}: {e}")
-        return {
-            "ref": dataset_ref,
-            "owner": owner,
-            "name": dataset_name,
-            "title": dataset_name,
-            "subtitle": "",
-            "description": "",
-            "keywords": [],
-            "url": f"https://www.kaggle.com/datasets/{dataset_ref}",
-        }
+
+    # Fallback with minimal info
+    return {
+        "ref": dataset_ref,
+        "owner": owner,
+        "name": dataset_name,
+        "title": dataset_name,
+        "subtitle": "",
+        "description": "",
+        "keywords": [],
+        "url": f"https://www.kaggle.com/datasets/{dataset_ref}",
+    }
 
 
-def download_dataset(api: KaggleApi, dataset_ref: str, output_dir: Path) -> list[Path]:
+def download_dataset(api, dataset_ref: str, output_dir: Path) -> list[Path]:
     """
     Download dataset files to output directory.
     
@@ -131,7 +136,7 @@ def download_dataset(api: KaggleApi, dataset_ref: str, output_dir: Path) -> list
             shutil.rmtree(temp_dir)
 
 
-def get_liked_datasets(api: KaggleApi, limit: int | None = None) -> list[str]:
+def get_liked_datasets(api, limit: int | None = None) -> list[str]:
     """
     Get user's liked/favorited datasets that are tabular.
     
@@ -204,9 +209,8 @@ def main():
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    print("Authenticating with Kaggle API...")
     api = get_api()
-    print("✓ Authenticated\n")
+    print("✓ Kaggle API ready\n")
     
     # Get dataset list
     if args.from_list:

@@ -14,14 +14,27 @@ uv sync --extra kaggle
 
 ### 2. Configure API Credentials
 
+**Option A: Environment Variable (recommended)**
+
 1. Go to [Kaggle Account Settings](https://www.kaggle.com/settings/account)
 2. Scroll to "API" section and click **"Create New API Token"**
-3. This downloads `kaggle.json` - move it to the right location:
+3. Copy the token and add to your shell config:
 
 ```bash
-mkdir -p ~/.kaggle
-mv ~/Downloads/kaggle.json ~/.kaggle/
-chmod 600 ~/.kaggle/kaggle.json
+echo 'export KAGGLE_API_TOKEN=your_token_here' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Option B: Config File**
+
+1. Go to [Kaggle Account Settings](https://www.kaggle.com/settings/account)
+2. Click **"Create New API Token"** - downloads `kaggle.json`
+3. Move to config directory:
+
+```bash
+mkdir -p ~/.config/kaggle
+mv ~/Downloads/kaggle.json ~/.config/kaggle/
+chmod 600 ~/.config/kaggle/kaggle.json
 ```
 
 ## Usage
