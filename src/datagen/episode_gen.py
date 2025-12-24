@@ -63,6 +63,33 @@ def load_questions(questions_path: str) -> tuple[list[dict], list[str] | None]:
     return data, None
 
 
+def filter_by_difficulty(
+    questions: list[dict],
+    distribution: dict[str, float],
+    total_target: int,
+) -> tuple[list[dict], bool]:
+    """
+    Select questions matching target difficulty distribution.
+
+    Args:
+        questions: All questions from questions.json
+        distribution: {difficulty: fraction} e.g., {"EASY": 0.30, ...}
+        total_target: Total questions desired
+
+    Returns:
+        (filtered_questions, success)
+        success=False if any difficulty has insufficient questions
+    """
+    result = []
+    for difficulty, fraction in distribution.items():
+        count_needed = round(total_target * fraction)
+        matching = [q for q in questions if q.get("difficulty") == difficulty]
+        if len(matching) < count_needed:
+            return [], False  # Insufficient questions for this difficulty
+        result.extend(matching[:count_needed])  # First N (deterministic)
+    return result, True
+
+
 def gather_csv_tasks(
     csv_sources: list[str],
     base_questions_dir: Path,
@@ -132,6 +159,20 @@ def gather_csv_tasks(
                     ui.base.print_warning(f"  Extra columns: {sorted(extra)}")
                 ui.base.print_info("Hint", "Regenerate questions with: uv run python -m src.datagen.question_gen")
                 continue
+
+        # Filter by difficulty distribution
+        filtered_questions, filter_ok = filter_by_difficulty(
+            questions,
+            config.question_difficulty_distribution,
+            config.num_questions_to_generate,
+        )
+        if not filter_ok:
+            ui.base.print_warning(
+                f"Skipping {dataset_name}: insufficient questions for difficulty distribution "
+                f"(need {config.num_questions_to_generate} total with distribution {config.question_difficulty_distribution})"
+            )
+            continue
+        questions = filtered_questions
 
         tasks.append(CSVTask(
             csv_path=csv_path,

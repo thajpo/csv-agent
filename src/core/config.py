@@ -103,6 +103,9 @@ class Config(BaseModel):
     question_gen_max_turns: int = 20
     num_questions_to_generate: int = 10
     min_exploration_turns: int = 3  # Minimum turns before allowing question generation
+    question_difficulty_distribution: Dict[str, float] = Field(
+        default={"EASY": 0.30, "MEDIUM": 0.30, "HARD": 0.20, "VERY_HARD": 0.20}
+    )
 
     # pipelines: episode generation / triangulation
     n_consistency: int = 5
