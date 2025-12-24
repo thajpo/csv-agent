@@ -48,7 +48,7 @@ class APILLM:
         base_url: str = "https://openrouter.ai/api/v1",
         api_key: str | None = None,  # Falls back to OPENROUTER_API_KEY env var
         timeout: float = 120.0,
-        sampling_args: dict | None = None,
+        sampling_args: dict,
     ):
         if api_key is None:
             api_key = os.environ.get("OPENROUTER_API_KEY", "")
@@ -56,7 +56,7 @@ class APILLM:
         self.model = model
         self.api_key = api_key
         self.client = httpx.AsyncClient(timeout=timeout)
-        self.sampling_args = sampling_args or {}
+        self.sampling_args = sampling_args
     
     async def __call__(
         self,

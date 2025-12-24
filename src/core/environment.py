@@ -248,7 +248,7 @@ class Environment:
         dataset_description: str = "",
         data_overview: str = "",
         max_turns: int = 10,
-        sampling_args: dict | None = None,
+        sampling_args: dict,
         env: CSVAnalysisEnv | None = None,
         state: dict | None = None,
         reuse_env: bool = False,
@@ -297,7 +297,7 @@ class Environment:
         
         model_config = ModelConfig(
             model_name=model,
-            **(sampling_args or {})
+            **sampling_args
         )
         
         execution_config = ExecutionConfig(

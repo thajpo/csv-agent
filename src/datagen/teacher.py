@@ -246,7 +246,7 @@ async def execute_teacher_trace(
         code_pattern = r"```python\n(.*?)```"
 
         # Get execution results from final_state (stored during rollout)
-        stored_results = getattr(final_state, "execution_results_per_turn", [])
+        stored_results = final_state.execution_results_per_turn
 
         for i, msg in enumerate(assistant_messages, 1):
             response = msg["content"]
@@ -301,7 +301,7 @@ async def execute_teacher_trace(
 
     # Extract hooks from submission_metadata
     # ENFORCEMENT: Hooks MUST have code_line - this is the critical code that solves the problem
-    submission_metadata = getattr(final_state, "submission_metadata", {})
+    submission_metadata = final_state.submission_metadata
     raw_hooks = submission_metadata.get("hooks", [])
 
     import logging
@@ -319,9 +319,9 @@ async def execute_teacher_trace(
             logging.warning(f"Hook missing required code_line: {h.get('variable_name', 'unnamed')}")
             continue
         valid_hooks.append(Hook(
-            code_line=h.get("code_line"),
+            code_line=h["code_line"],
             variable_name=h.get("variable_name") or "",
-            value_hash=h.get("value_hash"),
+            value_hash=h["value_hash"],
             description=h.get("description") or "",
             depends_on=h.get("depends_on") or [],
         ))

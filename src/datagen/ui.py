@@ -122,10 +122,10 @@ class EpisodeGenUI:
 
     def print_question_header(self, q_num: int, total: int, question: dict) -> None:
         """Print question section header."""
-        difficulty = question.get("difficulty", "UNKNOWN")
-        n_steps = question.get("n_steps", "?")
-        q_text = question.get("question", "")
-        hint = question.get("hint", "")
+        difficulty = question["difficulty"]
+        n_steps = question["n_steps"]
+        q_text = question["question"]
+        hint = question["hint"]
 
         self.console.print("\n[bold magenta]" + "┌" + "─" * 58 + "┐[/bold magenta]")
         self.console.print(f"[bold magenta]│ QUESTION {q_num}/{total} - {difficulty} ({n_steps} steps)" + " " * (58 - len(f" QUESTION {q_num}/{total} - {difficulty} ({n_steps} steps)")) + "│[/bold magenta]")
@@ -201,14 +201,14 @@ class EpisodeGenUI:
             )
             self.console.print(panel)
 
-            if result.get("success"):
+            if result["success"]:
                 self.base.print_success("Code executed successfully")
-                stdout = result.get("stdout", "")
+                stdout = result["stdout"]
                 if stdout.strip():
                     self.console.print(f"[green]  Output:[/green] {stdout.strip()}")
             else:
                 self.base.print_error("Execution failed")
-                stderr = result.get("stderr", "")
+                stderr = result["stderr"]
                 if stderr.strip():
                     self.console.print(f"[red]  Error:[/red] {stderr.strip()}")
 
