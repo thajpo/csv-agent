@@ -200,10 +200,6 @@ def load_environment(csv_path: str, **kwargs: Any) -> VerifiersCSVAnalysisEnv:
     return VerifiersCSVAnalysisEnv(csv_path=csv_path, **kwargs)
 
 
-# Backward-compatible alias
-CSVAnalysisEnv = VerifiersCSVAnalysisEnv
-
-
 class LocalCSVAnalysisEnv:
     """
     Local Docker-based Python environment with persistent REPL.

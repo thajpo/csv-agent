@@ -93,7 +93,6 @@ def filter_by_difficulty(
 def gather_csv_tasks(
     csv_sources: list[str],
     base_questions_dir: Path,
-    legacy_mode: bool,
     ui: EpisodeGenUI,
 ) -> list[CSVTask]:
     """
@@ -129,15 +128,8 @@ def gather_csv_tasks(
             ui.base.print_info("Hint", f"Create {dataset_name}.meta.json with a 'description' field.")
             continue
 
-        # Locate questions (Modern structure: question/[dataset_name]/questions.json)
+        # Locate questions (structure: questions/[dataset_name]/questions.json)
         questions_file = base_questions_dir / dataset_name / "questions.json"
-
-        # Legacy fallback only if --legacy flag is provided
-        if not questions_file.exists() and legacy_mode and len(csv_sources) == 1:
-            legacy_path = Path(config.questions_json)
-            if legacy_path.exists():
-                questions_file = legacy_path
-                ui.base.print_status(f"Using legacy flat file: {questions_file}")
 
         if not questions_file.exists():
             ui.base.print_warning(f"Skipping {dataset_name}: No questions found at {questions_file}")
@@ -257,7 +249,7 @@ async def process_csv_task(
     return episodes
 
 
-async def main(legacy_mode: bool = False, parallel: bool = False):
+async def main(parallel: bool = False):
     # Create global UI instance
     ui = EpisodeGenUI()
     # Register signal handler for Ctrl+C
@@ -295,7 +287,7 @@ async def main(legacy_mode: bool = False, parallel: bool = False):
     }
 
     # Gather all valid CSV tasks
-    tasks = gather_csv_tasks(csv_sources, base_questions_dir, legacy_mode, ui)
+    tasks = gather_csv_tasks(csv_sources, base_questions_dir, ui)
 
     if not tasks:
         ui.base.print_error("No valid CSV tasks found. Check questions and metadata files.")
@@ -392,7 +384,6 @@ async def main(legacy_mode: bool = False, parallel: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Episode generation pipeline.")
-    parser.add_argument("--legacy", action="store_true", help="Allow fallback to legacy flat questions file")
     parser.add_argument(
         "--parallel",
         action="store_true",
@@ -401,7 +392,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        sys.exit(asyncio.run(main(legacy_mode=args.legacy, parallel=args.parallel)))
+        sys.exit(asyncio.run(main(parallel=args.parallel)))
     except KeyboardInterrupt:
         # Already handled in signal_handler, but just in case
         sys.exit(0)

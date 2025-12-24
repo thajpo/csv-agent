@@ -648,7 +648,3 @@ class WorkerAdapter:
         The container should be stopped via container.stop() after all work.
         """
         pass
-
-
-# Backwards compatibility alias
-ContainerPool = MultiTenantContainer

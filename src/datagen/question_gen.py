@@ -342,7 +342,6 @@ async def process_single_dataset(
 
 async def run_parallel_generation(
     csv_sources: list[str],
-    legacy_mode: bool = False,
     max_concurrent: int = 10,
 ) -> tuple[int, int]:
     """
@@ -388,11 +387,8 @@ async def run_parallel_generation(
         else:
             dataset_name = csv_path.stem
 
-        # Output directory
-        if legacy_mode:
-            output_dir = base_output_dir
-        else:
-            output_dir = base_output_dir / dataset_name
+        # Output directory (per-dataset subfolder)
+        output_dir = base_output_dir / dataset_name
 
         tasks.append(
             process_single_dataset(
@@ -423,8 +419,7 @@ async def run_parallel_generation(
     return success_count, failure_count
 
 
-def main(legacy_mode: bool = False):
-    # Handle single csv (legacy) or csv_sources (new)
+def main():
     csv_sources = config.csv_sources
     if isinstance(csv_sources, str):
         csv_sources = [csv_sources]
@@ -439,7 +434,7 @@ def main(legacy_mode: bool = False):
     ui.print_empty_line()
 
     success_count, failure_count = asyncio.run(
-        run_parallel_generation(csv_sources, legacy_mode, max_concurrent)
+        run_parallel_generation(csv_sources, max_concurrent)
     )
 
     # Final summary
@@ -451,11 +446,10 @@ def main(legacy_mode: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LLM-based question generator for CSV datasets.")
-    parser.add_argument("--legacy", action="store_true", help="Save questions to a single flat file instead of subfolders")
-    args = parser.parse_args()
+    parser.parse_args()
 
     try:
-        sys.exit(main(legacy_mode=args.legacy))
+        sys.exit(main())
     except KeyboardInterrupt:
         print("\n\n🛑 Interrupted by user")
         sys.exit(0)
