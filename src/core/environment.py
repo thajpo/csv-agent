@@ -29,6 +29,68 @@ def truncate_output(text: str, max_length: int = 500) -> str:
     return text[:max_length] + f"\n... (truncated {len(text) - max_length} chars)"
 
 
+def validate_hooks_grounded(hooks: list[dict], code_cells: list[str]) -> tuple[list[dict], list[dict]]:
+    """
+    Validate that each hook's code_line is grounded in the executed code.
+
+    A hook is "grounded" if its code_line appears as a substring in any executed code cell.
+    This prevents the model from hallucinating code_lines that weren't actually run.
+
+    Args:
+        hooks: List of hook dicts with code_line field
+        code_cells: List of executed code strings
+
+    Returns:
+        Tuple of (grounded_hooks, ungrounded_hooks)
+    """
+    # Concatenate all code cells for searching
+    all_code = "\n".join(code_cells)
+
+    grounded = []
+    ungrounded = []
+
+    for hook in hooks:
+        code_line = hook.get("code_line", "")
+        if not code_line:
+            ungrounded.append(hook)
+            continue
+
+        # Normalize whitespace for matching (strip leading/trailing, collapse internal)
+        normalized_code_line = " ".join(code_line.split())
+        normalized_all_code = " ".join(all_code.split())
+
+        if normalized_code_line in normalized_all_code:
+            grounded.append(hook)
+        else:
+            ungrounded.append(hook)
+
+    return grounded, ungrounded
+
+
+HOOK_REPROMPT_MSG = """
+⚠️ YOUR SOLUTION WAS REJECTED - HOOKS ARE MISSING OR INVALID
+
+Your submission must include hook() calls that document each computational step.
+Each hook's code_line MUST be the EXACT code that was executed.
+
+REQUIRED PATTERN:
+```python
+# Step 1: Filter data
+filtered = df[df['col'] == 'value']
+hook(filtered, "filtered = df[df['col'] == 'value']", name='filtered')
+
+# Step 2: Compute result
+result = filtered['amount'].mean()
+hook(result, "result = filtered['amount'].mean()", name='result', depends_on=['filtered'])
+
+submit(result)
+```
+
+Please re-do your solution with proper hook() calls after EVERY computational step.
+The code_line argument must EXACTLY match the code you wrote.
+"""
+
+
 def parse_submitted_answer(output: str) -> str | None:
     """
     Extract submitted answer from execution output.
@@ -284,6 +346,7 @@ class Environment:
         self.code_cells = []  # Track all executed code cells
         self.execution_results_per_turn = []  # Track execution results per turn
         self.format_reprompt_count = 0  # Track format re-prompts (force-accept after 3)
+        self.hook_reprompt_count = 0  # Track hook re-prompts (force-accept after 3)
 
     def extract_python_cells(self, response: str) -> list[str]:
         """Extract ```python...``` code blocks from response."""
@@ -412,6 +475,44 @@ class Environment:
                 done_signal = False
                 self.submitted_answer = None  # Clear so they can re-submit
             # else: force-accept after 3 retries
+
+        # 5b. Hook validation: hooks must be grounded and sufficient
+        if done_signal and self.hook_reprompt_count < 3:
+            hooks = self.submission_metadata.get("hooks", [])
+
+            # Check grounding: code_line must be substring of executed code
+            grounded_hooks, ungrounded_hooks = validate_hooks_grounded(hooks, self.code_cells)
+
+            # Get expected hook count from question if available
+            expected_hooks = 2  # Minimum default
+            if self.task and self.task.question and self.task.question.n_steps:
+                expected_hooks = self.task.question.n_steps
+
+            # Fail conditions: ungrounded hooks OR insufficient hook count
+            has_ungrounded = len(ungrounded_hooks) > 0
+            insufficient_hooks = len(grounded_hooks) < expected_hooks
+
+            if has_ungrounded or insufficient_hooks:
+                self.hook_reprompt_count += 1
+                if self.hook_reprompt_count < 3:
+                    # Build specific feedback
+                    feedback_parts = [HOOK_REPROMPT_MSG]
+                    if has_ungrounded:
+                        feedback_parts.append(
+                            f"\n❌ Found {len(ungrounded_hooks)} ungrounded hook(s) - "
+                            f"code_line does not match any executed code."
+                        )
+                    if insufficient_hooks:
+                        feedback_parts.append(
+                            f"\n❌ Expected ~{expected_hooks} hooks but found only {len(grounded_hooks)} valid hook(s)."
+                        )
+                    feedback = "".join(feedback_parts)
+                    done_signal = False
+                    self.submitted_answer = None
+                    self.submission_metadata = {}
+                    # Clear code_cells so model must re-run everything with hooks
+                    self.code_cells = []
+                # else: force-accept after 3 retries
 
         # 6. Store execution results for this turn
         self.execution_results_per_turn.append(execution_results)
