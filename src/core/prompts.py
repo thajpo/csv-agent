@@ -305,7 +305,6 @@ FINAL_MSG = "Turn limit reached. Please call submit() with your final answer."
 
 # Exploration-specific messages
 EXPLORATION_CONTINUE_MSG = "\n\nContinue exploring the dataset. Write Python code to examine the data."
-MIN_EXPLORATION_TURNS = 3
 
 
 # ============= Helper Functions =============

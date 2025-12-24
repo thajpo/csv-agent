@@ -47,18 +47,17 @@ def discover_kaggle_datasets(kaggle_dir: str = "data/kaggle") -> list[str]:
         ]
 
     # Fallback: scan directories
-    return [
-        str(p.resolve())
-        for p in sorted(kaggle_path.glob("*/data.csv"))
-    ]
+    return [str(p.resolve()) for p in sorted(kaggle_path.glob("*/data.csv"))]
 
 
 # =============================================================================
 # 1. Base Components (Used globally)
 # =============================================================================
 
+
 class SamplingArgs(BaseModel):
     """Configuration for LLM sampling parameters."""
+
     temperature: float = 0.7
     max_tokens: int = 6000
     top_p: float = 1.0
@@ -68,22 +67,28 @@ class SamplingArgs(BaseModel):
 # 2. Main Application Configuration (Source of Truth)
 # =============================================================================
 
+
 class Config(BaseModel):
     """
     Main application configuration.
     This class defines the schema and default values for the entire project.
     Values are managed here in Python.
     """
-    model_config = ConfigDict(extra='ignore')
+
+    model_config = ConfigDict(extra="ignore")
 
     # Data - auto-discovers from kaggle_dir by default
     kaggle_dir: str = "data/kaggle"
-    csv_sources: Union[str, List[str]] = Field(default_factory=lambda: discover_kaggle_datasets())
+    csv_sources: Union[str, List[str]] = Field(
+        default_factory=lambda: discover_kaggle_datasets()
+    )
 
     # Execution / Policy
     max_turns: int = 10
     mode: str = "teacher-tutor"
-    question: Optional[str] = "What is the mean TL (total length) for the control group?"
+    question: Optional[str] = (
+        "What is the mean TL (total length) for the control group?"
+    )
 
     # Models
     teacher_model: str = Field(default="openai/gpt-oss-120b")
@@ -96,13 +101,16 @@ class Config(BaseModel):
 
     # pipelines: question generation
     question_gen_max_turns: int = 20
-    num_questions_to_generate: int = 30
+    num_questions_to_generate: int = 10
+    min_exploration_turns: int = 3  # Minimum turns before allowing question generation
 
     # pipelines: episode generation / triangulation
     n_consistency: int = 5
     verified_only: bool = False
     float_tolerance: float = 0.1
-    max_concurrent_containers: int = 10  # Limit parallel CSV processing to avoid resource exhaustion
+    max_concurrent_containers: int = (
+        10  # Limit parallel CSV processing to avoid resource exhaustion
+    )
 
     # Outputs
     questions_json: str = "data/questions/questions.json"
@@ -127,10 +135,12 @@ class Config(BaseModel):
 # 3. Environment Sub-configs (Internal use for src.core.environment)
 # =============================================================================
 
+
 class DataConfig(BaseModel):
     csv_path: str = "data.csv"
     dataset_description: str = ""
     data_overview: str = ""
+
 
 class ModelConfig(BaseModel):
     model_name: str
@@ -145,10 +155,12 @@ class ModelConfig(BaseModel):
             "top_p": self.top_p,
         }
 
+
 class ExecutionConfig(BaseModel):
     max_turns: int = Field(default=10, gt=0)
     max_active_turns: int = Field(default=5, gt=0)
     max_context_tokens: int = Field(default=80_000, gt=0)
+
 
 class TaskConfig(BaseModel):
     mode: str = "teacher-tutor"

@@ -23,7 +23,7 @@ from src.envs.csv_env import LocalCSVAnalysisEnv
 from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
 from src.core.types import ExplorationTurn, ExplorationTrace
-from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, MIN_EXPLORATION_TURNS, get_exploration_continue_msg
+from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, get_exploration_continue_msg
 from src.utils.interaction import parse_execution_result, extract_python_cells
 
 # Rebuild Pydantic model to resolve forward reference to CodeCellResult
@@ -163,9 +163,10 @@ async def explore_and_generate_questions(
     
     llm = APILLM(model=model, sampling_args={"temperature": temperature, "max_tokens": max_tokens})
 
-    # Import config for num_questions (imported at module level after function defs)
+    # Import config for pipeline parameters
     from src.core.config import config as cfg
     num_questions = cfg.num_questions_to_generate
+    min_exploration_turns = cfg.min_exploration_turns
 
     conversation = ConversationHistory(
         system_prompt=EXPLORATION_SYSTEM_PROMPT.format(
@@ -230,8 +231,8 @@ async def explore_and_generate_questions(
 
             # Check for completion
             if "<DONE>" in response or "</DONE>" in response:
-                if turn_num < MIN_EXPLORATION_TURNS:
-                    ui.print_warning(f"Model tried to finish too early (turn {turn_num + 1}/{MIN_EXPLORATION_TURNS} minimum)")
+                if turn_num < min_exploration_turns:
+                    ui.print_warning(f"Model tried to finish too early (turn {turn_num + 1}/{min_exploration_turns} minimum)")
                     ui.print_status("Rejecting early completion - continuing exploration")
                 else:
                     ui.print_success("Model signaled completion with <DONE>")
@@ -244,7 +245,7 @@ async def explore_and_generate_questions(
 
             # Build feedback
             feedback = build_execution_feedback(execution_results)
-            feedback += get_exploration_continue_msg(turn_num, MIN_EXPLORATION_TURNS, num_questions)
+            feedback += get_exploration_continue_msg(turn_num, min_exploration_turns, num_questions)
 
             conversation.add_assistant_response(response)
             conversation.add_user_feedback(feedback)
