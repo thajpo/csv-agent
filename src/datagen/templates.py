@@ -423,27 +423,396 @@ submit({
 
 
 # =============================================================================
+# COMPLEX TEMPLATES - Statistical tests & ML (7-10 steps)
+# =============================================================================
+
+REGRESSION_MOST_PREDICTIVE = CompositionTemplate(
+    name="regression_most_predictive",
+    description="Find the most predictive feature via correlation, build regression, report R-squared",
+    code_template='''
+# Step 1: Identify numeric columns
+numeric_cols = df.select_dtypes('number').columns.tolist()
+hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
+print(f"Numeric columns: {len(numeric_cols)}")
+
+# Step 2: Use the column with highest variance as target
+variances = df[numeric_cols].var()
+target_col = variances.idxmax()
+hook(target_col, "target column (highest variance)", name='target_col')
+print(f"Target column: {target_col}")
+
+# Step 3: Compute correlations with target
+other_cols = [c for c in numeric_cols if c != target_col]
+correlations = df[other_cols].corrwith(df[target_col]).abs()
+hook(correlations.to_dict(), "correlations with target", name='correlations', depends_on=['target_col'])
+print(f"Top correlations:\\n{correlations.sort_values(ascending=False).head()}")
+
+# Step 4: Identify most predictive feature
+best_predictor = correlations.idxmax()
+best_corr = correlations.max()
+hook(best_predictor, "most predictive feature", name='best_predictor', depends_on=['correlations'])
+print(f"Best predictor: {best_predictor} (r={best_corr:.4f})")
+
+# Step 5: Prepare data for regression (drop NaN)
+reg_data = df[[best_predictor, target_col]].dropna()
+X = reg_data[[best_predictor]]
+y = reg_data[target_col]
+hook(len(reg_data), "samples for regression", name='n_samples', depends_on=['best_predictor'])
+
+# Step 6: Fit OLS regression
+X_with_const = sm.add_constant(X)
+model = sm.OLS(y, X_with_const).fit()
+r_squared = model.rsquared
+hook(r_squared, "R-squared from OLS", name='r_squared', depends_on=['n_samples'])
+print(f"R-squared: {r_squared:.4f}")
+
+# Step 7: Get coefficient and p-value
+coef = model.params[best_predictor]
+p_value = model.pvalues[best_predictor]
+hook({"coef": float(coef), "p_value": float(p_value)}, "regression stats", name='reg_stats', depends_on=['r_squared'])
+
+submit({
+    "target": target_col,
+    "best_predictor": best_predictor,
+    "correlation": round(float(best_corr), 3),
+    "r_squared": round(float(r_squared), 4),
+    "coefficient": round(float(coef), 4),
+    "p_value": round(float(p_value), 6)
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 3,
+    n_steps=8,
+    difficulty="HARD",
+)
+
+TTEST_DISCOVERED_GROUPS = CompositionTemplate(
+    name="ttest_discovered_groups",
+    description="Find binary categorical column, perform t-test on highest-variance numeric column",
+    code_template='''
+# Step 1: Find numeric column with highest variance
+numeric_cols = df.select_dtypes('number').columns.tolist()
+variances = df[numeric_cols].var()
+target_col = variances.idxmax()
+hook(target_col, "target column (highest variance)", name='target_col')
+print(f"Target: {target_col}")
+
+# Step 2: Find a binary categorical column
+cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+binary_col = None
+for col in cat_cols:
+    if df[col].nunique() == 2:
+        binary_col = col
+        break
+
+if binary_col is None:
+    # Create binary from numeric if no categorical
+    for col in numeric_cols:
+        if col != target_col:
+            median_val = df[col].median()
+            df['_binary_group'] = (df[col] > median_val).map({True: 'high', False: 'low'})
+            binary_col = '_binary_group'
+            break
+
+hook(binary_col, "binary grouping column", name='binary_col')
+print(f"Grouping by: {binary_col}")
+
+# Step 3: Get the two groups
+groups = df[binary_col].dropna().unique()
+group1_name, group2_name = groups[0], groups[1]
+hook([str(group1_name), str(group2_name)], "group names", name='group_names', depends_on=['binary_col'])
+
+# Step 4: Extract data for each group
+group1_data = df[df[binary_col] == group1_name][target_col].dropna()
+group2_data = df[df[binary_col] == group2_name][target_col].dropna()
+hook({"group1_n": len(group1_data), "group2_n": len(group2_data)}, "group sizes", name='group_sizes', depends_on=['group_names'])
+print(f"Group sizes: {len(group1_data)} vs {len(group2_data)}")
+
+# Step 5: Compute group means
+mean1, mean2 = group1_data.mean(), group2_data.mean()
+hook({"mean1": float(mean1), "mean2": float(mean2)}, "group means", name='group_means', depends_on=['group_sizes'])
+print(f"Means: {mean1:.4f} vs {mean2:.4f}")
+
+# Step 6: Perform t-test
+t_stat, p_value = scipy.stats.ttest_ind(group1_data, group2_data)
+hook({"t_stat": float(t_stat), "p_value": float(p_value)}, "t-test results", name='ttest', depends_on=['group_means'])
+print(f"T-test: t={t_stat:.4f}, p={p_value:.6f}")
+
+# Step 7: Determine significance
+is_significant = p_value < 0.05
+hook(is_significant, "significance at alpha=0.05", name='is_significant', depends_on=['ttest'])
+
+submit({
+    "target_column": target_col,
+    "grouping_column": binary_col,
+    "group1": str(group1_name),
+    "group2": str(group2_name),
+    "mean1": round(float(mean1), 4),
+    "mean2": round(float(mean2), 4),
+    "t_statistic": round(float(t_stat), 4),
+    "p_value": round(float(p_value), 6),
+    "significant": is_significant
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 2,
+    n_steps=8,
+    difficulty="HARD",
+)
+
+BOOTSTRAP_CI_DISCOVERED = CompositionTemplate(
+    name="bootstrap_ci_discovered",
+    description="Bootstrap 95% CI for the mean of the column with highest skewness",
+    code_template='''
+# Step 1: Identify numeric columns
+numeric_cols = df.select_dtypes('number').columns.tolist()
+hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
+
+# Step 2: Compute skewness for each column
+skewness = {}
+for col in numeric_cols:
+    skew_val = df[col].skew()
+    if not np.isnan(skew_val):
+        skewness[col] = abs(skew_val)
+
+hook(skewness, "absolute skewness per column", name='skewness')
+print(f"Skewness values:\\n{sorted(skewness.items(), key=lambda x: -x[1])[:5]}")
+
+# Step 3: Find column with highest absolute skewness
+target_col = max(skewness, key=skewness.get)
+hook(target_col, "most skewed column", name='target_col', depends_on=['skewness'])
+print(f"Most skewed: {target_col} (skewness={skewness[target_col]:.4f})")
+
+# Step 4: Get clean data
+data = df[target_col].dropna().values
+n = len(data)
+hook(n, "sample size", name='sample_size', depends_on=['target_col'])
+print(f"Sample size: {n}")
+
+# Step 5: Compute original mean
+original_mean = data.mean()
+hook(original_mean, "original mean", name='original_mean', depends_on=['sample_size'])
+print(f"Original mean: {original_mean:.4f}")
+
+# Step 6: Bootstrap resampling (1000 iterations)
+np.random.seed(42)
+n_bootstrap = 1000
+bootstrap_means = []
+for _ in range(n_bootstrap):
+    sample = np.random.choice(data, size=n, replace=True)
+    bootstrap_means.append(sample.mean())
+
+bootstrap_means = np.array(bootstrap_means)
+hook({"n_bootstrap": n_bootstrap, "mean_of_means": float(bootstrap_means.mean())}, "bootstrap info", name='bootstrap_info', depends_on=['original_mean'])
+
+# Step 7: Compute 95% CI
+ci_lower = np.percentile(bootstrap_means, 2.5)
+ci_upper = np.percentile(bootstrap_means, 97.5)
+hook({"ci_lower": float(ci_lower), "ci_upper": float(ci_upper)}, "95% CI", name='confidence_interval', depends_on=['bootstrap_info'])
+print(f"95% CI: [{ci_lower:.4f}, {ci_upper:.4f}]")
+
+# Step 8: Compute standard error
+se = bootstrap_means.std()
+hook(se, "bootstrap standard error", name='std_error', depends_on=['confidence_interval'])
+
+submit({
+    "column": target_col,
+    "skewness": round(float(skewness[target_col]), 4),
+    "mean": round(float(original_mean), 4),
+    "ci_lower": round(float(ci_lower), 4),
+    "ci_upper": round(float(ci_upper), 4),
+    "std_error": round(float(se), 4),
+    "n_bootstrap": n_bootstrap
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 2,
+    n_steps=9,
+    difficulty="VERY_HARD",
+)
+
+ANOVA_DISCOVERED_GROUPS = CompositionTemplate(
+    name="anova_discovered_groups",
+    description="Find categorical column with 3+ groups, perform ANOVA on highest-variance numeric",
+    code_template='''
+# Step 1: Find numeric column with highest variance
+numeric_cols = df.select_dtypes('number').columns.tolist()
+variances = df[numeric_cols].var()
+target_col = variances.idxmax()
+hook(target_col, "target column (highest variance)", name='target_col')
+print(f"Target: {target_col}")
+
+# Step 2: Find categorical column with 3-10 unique values
+cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+group_col = None
+for col in cat_cols:
+    n_unique = df[col].nunique()
+    if 3 <= n_unique <= 10:
+        group_col = col
+        break
+
+if group_col is None:
+    submit({"error": "No suitable categorical column found (need 3-10 groups)"})
+else:
+    hook(group_col, "grouping column", name='group_col')
+    print(f"Grouping by: {group_col}")
+
+    # Step 3: Get group names and sizes
+    group_counts = df[group_col].value_counts()
+    n_groups = len(group_counts)
+    hook({"n_groups": n_groups, "counts": group_counts.to_dict()}, "group info", name='group_info', depends_on=['group_col'])
+    print(f"Groups: {n_groups}")
+
+    # Step 4: Compute group means
+    group_means = df.groupby(group_col)[target_col].mean()
+    hook(group_means.to_dict(), "group means", name='group_means', depends_on=['group_info'])
+    print(f"Group means:\\n{group_means.sort_values(ascending=False)}")
+
+    # Step 5: Prepare data for ANOVA
+    groups_data = [df[df[group_col] == g][target_col].dropna().values for g in group_counts.index]
+    min_group_size = min(len(g) for g in groups_data)
+    hook(min_group_size, "minimum group size", name='min_size', depends_on=['group_means'])
+
+    # Step 6: Perform one-way ANOVA
+    f_stat, p_value = scipy.stats.f_oneway(*groups_data)
+    hook({"f_stat": float(f_stat), "p_value": float(p_value)}, "ANOVA results", name='anova', depends_on=['min_size'])
+    print(f"ANOVA: F={f_stat:.4f}, p={p_value:.6f}")
+
+    # Step 7: Identify best and worst groups
+    best_group = group_means.idxmax()
+    worst_group = group_means.idxmin()
+    hook({"best": str(best_group), "worst": str(worst_group)}, "extreme groups", name='extremes', depends_on=['anova'])
+
+    # Step 8: Effect size (eta-squared)
+    ss_between = sum(len(g) * (g.mean() - df[target_col].mean())**2 for g in groups_data)
+    ss_total = ((df[target_col] - df[target_col].mean())**2).sum()
+    eta_squared = ss_between / ss_total if ss_total > 0 else 0
+    hook(eta_squared, "eta-squared effect size", name='effect_size', depends_on=['extremes'])
+
+    submit({
+        "target_column": target_col,
+        "grouping_column": group_col,
+        "n_groups": n_groups,
+        "f_statistic": round(float(f_stat), 4),
+        "p_value": round(float(p_value), 6),
+        "significant": p_value < 0.05,
+        "best_group": str(best_group),
+        "best_mean": round(float(group_means[best_group]), 4),
+        "worst_group": str(worst_group),
+        "worst_mean": round(float(group_means[worst_group]), 4),
+        "eta_squared": round(float(eta_squared), 4)
+    })
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 1 and _has_categorical_cols(p),
+    n_steps=9,
+    difficulty="VERY_HARD",
+)
+
+MULTIPLE_REGRESSION_TOP_PREDICTORS = CompositionTemplate(
+    name="multiple_regression_top_predictors",
+    description="Find top 3 predictors via correlation, build multiple regression, report adjusted R-squared",
+    code_template='''
+# Step 1: Identify numeric columns
+numeric_cols = df.select_dtypes('number').columns.tolist()
+hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
+print(f"Numeric columns: {len(numeric_cols)}")
+
+if len(numeric_cols) < 4:
+    submit({"error": "Need at least 4 numeric columns for multiple regression"})
+else:
+    # Step 2: Use the column with highest variance as target
+    variances = df[numeric_cols].var()
+    target_col = variances.idxmax()
+    hook(target_col, "target column (highest variance)", name='target_col')
+    print(f"Target: {target_col}")
+
+    # Step 3: Compute correlations with target
+    other_cols = [c for c in numeric_cols if c != target_col]
+    correlations = df[other_cols].corrwith(df[target_col]).abs()
+    hook(correlations.to_dict(), "correlations with target", name='correlations', depends_on=['target_col'])
+
+    # Step 4: Select top 3 predictors
+    top_3 = correlations.nlargest(3).index.tolist()
+    hook(top_3, "top 3 predictors", name='top_predictors', depends_on=['correlations'])
+    print(f"Top 3 predictors: {top_3}")
+
+    # Step 5: Check for multicollinearity
+    predictor_corr = df[top_3].corr()
+    max_predictor_corr = predictor_corr.where(np.triu(np.ones(predictor_corr.shape), k=1).astype(bool)).stack().abs().max()
+    hook(float(max_predictor_corr), "max predictor intercorrelation", name='multicollinearity', depends_on=['top_predictors'])
+    print(f"Max predictor intercorrelation: {max_predictor_corr:.4f}")
+
+    # Step 6: Prepare regression data
+    reg_data = df[[target_col] + top_3].dropna()
+    X = reg_data[top_3]
+    y = reg_data[target_col]
+    hook(len(reg_data), "samples for regression", name='n_samples', depends_on=['multicollinearity'])
+    print(f"Samples: {len(reg_data)}")
+
+    # Step 7: Fit OLS regression
+    X_with_const = sm.add_constant(X)
+    model = sm.OLS(y, X_with_const).fit()
+    hook({"r_squared": float(model.rsquared), "adj_r_squared": float(model.rsquared_adj)}, "model fit", name='model_fit', depends_on=['n_samples'])
+    print(f"R-squared: {model.rsquared:.4f}, Adjusted: {model.rsquared_adj:.4f}")
+
+    # Step 8: Extract coefficients and p-values
+    coefs = {col: {"coef": float(model.params[col]), "p_value": float(model.pvalues[col])} for col in top_3}
+    hook(coefs, "coefficients and p-values", name='coefficients', depends_on=['model_fit'])
+
+    # Step 9: Count significant predictors
+    n_significant = sum(1 for col in top_3 if model.pvalues[col] < 0.05)
+    hook(n_significant, "significant predictors at alpha=0.05", name='n_significant', depends_on=['coefficients'])
+
+    submit({
+        "target": target_col,
+        "predictors": top_3,
+        "r_squared": round(float(model.rsquared), 4),
+        "adj_r_squared": round(float(model.rsquared_adj), 4),
+        "n_significant": n_significant,
+        "coefficients": {col: round(coefs[col]["coef"], 4) for col in top_3},
+        "p_values": {col: round(coefs[col]["p_value"], 6) for col in top_3}
+    })
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 4,
+    n_steps=10,
+    difficulty="VERY_HARD",
+)
+
+
+# =============================================================================
 # ALL TEMPLATES REGISTRY
 # =============================================================================
 
 ALL_TEMPLATES = [
-    # Superlative (2)
+    # Superlative (2) - 3 steps
     MAX_VARIANCE_MEAN,
     MIN_MEAN_COLUMN_STD,
-    # Cross-column (2)
+    # Cross-column (2) - 4 steps
     STRONGEST_CORRELATION,
     WEAKEST_CORRELATION,
-    # Conditional (1)
+    # Conditional (1) - 5 steps
     CONDITIONAL_NORMALITY,
-    # Threshold (2)
+    # Threshold (2) - 3-4 steps
     COUNT_HIGH_MISSING_COLUMNS,
     COUNT_OUTLIER_COLUMNS,
-    # Multi-stage (2)
+    # Multi-stage (2) - 5 steps
     CATEGORY_WITH_HIGHEST_TARGET_MEAN,
     CORRELATION_AFTER_OUTLIER_REMOVAL,
+    # Complex statistical (5) - 8-10 steps
+    REGRESSION_MOST_PREDICTIVE,
+    TTEST_DISCOVERED_GROUPS,
+    BOOTSTRAP_CI_DISCOVERED,
+    ANOVA_DISCOVERED_GROUPS,
+    MULTIPLE_REGRESSION_TOP_PREDICTORS,
 ]
 
 
 def get_applicable_templates(profile: dict) -> list[CompositionTemplate]:
-    """Return templates that are applicable to the given dataset profile."""
-    return [t for t in ALL_TEMPLATES if t.is_applicable(profile)]
+    """Return templates that are applicable to the given dataset profile.
+
+    Returns templates sorted by n_steps descending (hardest first).
+    """
+    applicable = [t for t in ALL_TEMPLATES if t.is_applicable(profile)]
+    return sorted(applicable, key=lambda t: t.n_steps, reverse=True)
