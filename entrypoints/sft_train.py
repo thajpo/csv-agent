@@ -91,7 +91,7 @@ def main():
     # Step 1: Split episodes
     if not args.skip_split:
         split_cmd = [
-            "uv", "run", "python", "-m", "src.datagen.split_episodes",
+            "uv", "run", "python", "-m", "src.training.split_episodes",
             "--input", str(episodes_path),
             "--output-dir", str(output_dir),
         ]

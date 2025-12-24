@@ -94,7 +94,7 @@ uv run python -m src.training.prepare_finetune_data --help
 uv run python -m src.datagen.episode_gen
 
 # 2. (Optional) Split into train/val/test
-# uv run python -m src.datagen.split_episodes
+# uv run python -m src.training.split_episodes
 
 # 3. Prepare training data
 uv run python -m src.training.prepare_finetune_data \

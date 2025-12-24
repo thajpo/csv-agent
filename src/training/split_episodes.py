@@ -214,8 +214,8 @@ def main():
     CLI entry point for splitting episodes.
     
     Usage:
-        python -m src.datagen.split_episodes
-        python -m src.datagen.split_episodes --input episodes/episodes.jsonl
+        python -m src.training.split_episodes
+        python -m src.training.split_episodes --input episodes/episodes.jsonl
     """
     import argparse
     

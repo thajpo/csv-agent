@@ -78,7 +78,7 @@ uv run python -m src.training.prepare_finetune_data \
 uv run python -m src.datagen.episode_gen
 
 # 2. Split into train/val/test (if using split_episodes.py)
-# uv run python -m src.datagen.split_episodes --input episodes/episodes.jsonl
+# uv run python -m src.training.split_episodes --input episodes/episodes.jsonl
 
 # 3. Prepare for OpenAI fine-tuning
 uv run python -m src.training.prepare_finetune_data \
