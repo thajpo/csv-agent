@@ -65,11 +65,15 @@ def gather_csv_tasks(
     tasks = []
 
     for csv_path in csv_sources:
-        dataset_name = Path(csv_path).stem
+        # Derive dataset name (must match question_gen.py logic)
+        csv_path_obj = Path(csv_path)
+        if csv_path_obj.name == "data.csv":
+            dataset_name = csv_path_obj.parent.name
+        else:
+            dataset_name = csv_path_obj.stem
 
         # Determine dataset description (sibling meta.json or sidecar {name}.meta.json)
         dataset_description = None
-        csv_path_obj = Path(csv_path)
         meta_path = csv_path_obj.parent / "meta.json"
         if not meta_path.exists():
             meta_path = csv_path_obj.with_suffix(".meta.json")
