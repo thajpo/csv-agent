@@ -517,6 +517,9 @@ async def batch_triangulate(
     """
     Run triangulation on a batch of questions.
 
+    Uses MultiTenantContainer for memory-efficient parallel execution.
+    Workers share memory via fork() and copy-on-write semantics.
+
     Args:
         csv_path: Path to CSV file
         questions: List of question dicts (from question_gen.py)
@@ -526,20 +529,21 @@ async def batch_triangulate(
         data_overview: Data overview
         max_turns: Max turns per trace
         sampling_args: Model sampling args
-        use_container_pool: If True, create containers once and reuse (much faster)
+        use_container_pool: If True, use multi-tenant container (much faster)
 
     Returns:
         List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata)
     """
-    from src.envs.csv_env import LocalCSVAnalysisEnv
+    from src.envs.container_pool import MultiTenantContainer, WorkerAdapter
 
     results = []
     verified_count = 0
+    container = None
     container_pool = None
 
-    # Create container pool if enabled
+    # Create multi-tenant container if enabled
     if use_container_pool:
-        pool_size = 1 + n_consistency  # 1 gold + N consistency traces
+        n_workers = 1 + n_consistency  # 1 gold + N consistency traces
 
         # Cleanup existing containers first
         if ui:
@@ -549,24 +553,20 @@ async def batch_triangulate(
         cleanup_csv_sandbox_containers()
 
         if ui:
-            ui.base.print_status(f"Creating container pool ({pool_size} containers)...")
-            ui.console.print(f"[dim]  → Creating container 1/{pool_size}...[/dim]")
+            ui.base.print_status(f"Creating multi-tenant container ({n_workers} workers)...")
 
-        # Create containers in parallel for speed
-        async def create_container(i: int):
-            """Helper to create a single container."""
-            env = LocalCSVAnalysisEnv(csv_path=csv_path)
-            state = {}
-            state = await env.setup_state(state)
-            return (env, state)
+        # Create single container with multiple workers (fork-based, memory shared)
+        container = MultiTenantContainer(csv_path=csv_path, n_workers=n_workers)
+        await container.start()
 
-        # Create all containers in parallel
-        container_pool = await asyncio.gather(
-            *[create_container(i) for i in range(pool_size)]
-        )
+        # Create WorkerAdapters for triangulate_teacher compatibility
+        container_pool = [
+            (WorkerAdapter(container, i), WorkerAdapter.create_state(i))
+            for i in range(n_workers)
+        ]
 
         if ui:
-            ui.base.print_success(f"✓ Container pool ready ({pool_size} containers)")
+            ui.base.print_success(f"✓ Container ready ({n_workers} workers)")
 
     try:
         for i, q_dict in enumerate(questions, 1):
@@ -615,17 +615,15 @@ async def batch_triangulate(
                     current=i, total=len(questions), verified_count=verified_count
                 )
 
-    finally:
-        # Clean up container pool
-        if container_pool:
-            if ui:
-                ui.base.print_status("Cleaning up container pool...")
-            for env, state in container_pool:
-                try:
-                    await env.destroy_sandbox(state["sandbox_id"])
-                except Exception:
-                    pass  # Ignore cleanup failures
+            # Reset all workers between questions (faster than recreate)
+            if container:
+                await container.reset_all_workers()
 
-    n_verified = sum(1 for result in results if result[-1])  # verified is last element
+    finally:
+        # Clean up container
+        if container:
+            if ui:
+                ui.base.print_status("Cleaning up container...")
+            await container.stop()
 
     return results

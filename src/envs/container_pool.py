@@ -1,38 +1,33 @@
 """
-Multi-tenant container pool for efficient parallel processing.
+Multi-tenant container for efficient parallel processing.
 
-This module provides a pool of Docker containers, each running multiple
-worker processes via fork(). Workers share memory (copy-on-write) for
-loaded packages, significantly reducing memory usage.
+A single Docker container running multiple worker processes via fork().
+Workers share memory (copy-on-write) for loaded packages, significantly
+reducing memory usage compared to separate containers.
 
 Architecture:
-    Container Pool Manager
-        └── Container 0
-            └── Parent (loads packages)
-                ├── Worker 0 (FIFO pair 0)
-                ├── Worker 1 (FIFO pair 1)
-                └── ... (workers_per_container)
-        └── Container 1
-            └── ...
-        └── ... (n_containers)
+    MultiTenantContainer (one container per CSV)
+        └── Parent process (loads packages + CSV)
+            ├── Worker 0 (FIFO pair 0) - for gold trace
+            ├── Worker 1 (FIFO pair 1) - for consistency trace 1
+            ├── Worker 2 (FIFO pair 2) - for consistency trace 2
+            └── ... (n_workers total)
 
 Usage:
-    pool = ContainerPool(csv_path, n_containers=2, workers_per_container=6)
-    await pool.start()
+    # One container per CSV, with 6 workers for triangulation
+    container = MultiTenantContainer(csv_path, n_workers=6)
+    await container.start()
 
-    # Acquire slots for parallel work
-    slots = await pool.acquire_slots(6)  # Get 6 available slots
-
-    # Run code on slots
+    # Run code on workers in parallel
     results = await asyncio.gather(*[
-        pool.run_code(slot, "df.shape") for slot in slots
+        container.run_on_worker(i, "df.shape") for i in range(6)
     ])
 
-    # Release slots
-    await pool.release_slots(slots)
+    # Reset workers for next question
+    await container.reset_all_workers()
 
     # Cleanup
-    await pool.stop()
+    await container.stop()
 """
 
 import asyncio
@@ -68,22 +63,14 @@ class Slot:
         return f"/tmp/worker_{self.worker_id}_res"
 
 
-@dataclass
-class Container:
-    """Represents a Docker container with multiple workers."""
-    container_id: str
-    csv_path: str
-    n_workers: int
-    slots: list[Slot] = field(default_factory=list)
-    ready: bool = False
-
-
-class ContainerPool:
+class MultiTenantContainer:
     """
-    Pool of multi-tenant Docker containers for parallel code execution.
+    A single Docker container with multiple worker processes.
 
-    Each container runs multiple worker processes that share memory via
-    fork() and copy-on-write semantics.
+    Workers share memory via fork() and copy-on-write semantics,
+    significantly reducing memory usage compared to separate containers.
+
+    Use one MultiTenantContainer per CSV file for parallel triangulation.
     """
 
     IMAGE_NAME = "csv-agent-sandbox"
@@ -336,22 +323,24 @@ for pid in children:
     def __init__(
         self,
         csv_path: str,
-        n_containers: int = 2,
-        workers_per_container: int = 6,
+        n_workers: int = 6,
     ):
+        """
+        Initialize a multi-tenant container.
+
+        Args:
+            csv_path: Path to CSV file to load
+            n_workers: Number of worker processes (default: 6 for 1 gold + 5 consistency)
+        """
         self.csv_path = Path(csv_path).resolve()
         if not self.csv_path.exists():
             raise FileNotFoundError(f"CSV not found: {csv_path}")
 
-        self.n_containers = n_containers
-        self.workers_per_container = workers_per_container
-        self.containers: list[Container] = []
+        self.n_workers = n_workers
+        self.container_id: str | None = None
+        self.workers: list[Slot] = []
         self._lock = asyncio.Lock()
         self._started = False
-
-    @property
-    def total_slots(self) -> int:
-        return self.n_containers * self.workers_per_container
 
     async def _run_docker(self, *args: str, check: bool = True) -> tuple[str, str]:
         """Run a docker command."""
@@ -394,130 +383,107 @@ for pid in children:
 
             cls._image_checked = True
 
-    async def _create_container(self, container_idx: int) -> Container:
-        """Create and start a single container with multiple workers."""
-        container_id = f"csv-pool-{uuid.uuid4().hex[:8]}"
+    async def _setup_container(self) -> None:
+        """Create and start the container with multiple workers."""
+        self.container_id = f"csv-mt-{uuid.uuid4().hex[:8]}"
 
         # Create container
         await self._run_docker(
             "run", "-d",
-            "--name", container_id,
+            "--name", self.container_id,
             self.IMAGE_NAME,
             "tail", "-f", "/dev/null"
         )
 
         # Copy CSV
         await self._run_docker(
-            "cp", str(self.csv_path), f"{container_id}:/data.csv"
+            "cp", str(self.csv_path), f"{self.container_id}:/data.csv"
         )
 
         # Write setup code as separate file (avoids escaping issues)
         setup_b64 = base64.b64encode(SETUP_CODE.encode()).decode()
         await self._run_docker(
-            "exec", container_id,
+            "exec", self.container_id,
             "python", "-c",
             f"import base64; open('/tmp/setup_code.py', 'w').write(base64.b64decode('{setup_b64}').decode())"
         )
 
         # Generate worker script
-        worker_script = self._WORKER_SCRIPT.format(n_workers=self.workers_per_container)
+        worker_script = self._WORKER_SCRIPT.format(n_workers=self.n_workers)
 
         # Write worker script
         script_b64 = base64.b64encode(worker_script.encode()).decode()
         await self._run_docker(
-            "exec", container_id,
+            "exec", self.container_id,
             "python", "-c",
             f"import base64; open('/tmp/pool_worker.py', 'w').write(base64.b64decode('{script_b64}').decode())"
         )
 
         # Start worker (runs in background, forks children)
         await self._run_docker(
-            "exec", "-d", container_id,
+            "exec", "-d", self.container_id,
             "python", "-u", "/tmp/pool_worker.py"
         )
 
         # Wait for ready
         ready_flag = "/tmp/pool_ready"
-        start = asyncio.get_event_loop().time()
+        start_time = asyncio.get_event_loop().time()
         timeout = 60
 
-        while asyncio.get_event_loop().time() - start < timeout:
+        while asyncio.get_event_loop().time() - start_time < timeout:
             stdout, _ = await self._run_docker(
-                "exec", container_id, "cat", ready_flag,
+                "exec", self.container_id, "cat", ready_flag,
                 check=False
             )
             if "ready" in stdout:
                 break
             await asyncio.sleep(0.5)
         else:
-            raise TimeoutError(f"Container {container_id} workers did not become ready")
+            raise TimeoutError(f"Container {self.container_id} workers did not become ready")
 
-        # Create slot objects
-        container = Container(
-            container_id=container_id,
-            csv_path=str(self.csv_path),
-            n_workers=self.workers_per_container,
-            ready=True
-        )
-        for i in range(self.workers_per_container):
-            container.slots.append(Slot(container_id=container_id, worker_id=i))
-
-        return container
+        # Create worker slot objects
+        self.workers = [
+            Slot(container_id=self.container_id, worker_id=i)
+            for i in range(self.n_workers)
+        ]
 
     async def start(self):
-        """Start the container pool."""
+        """Start the container and workers."""
         if self._started:
             return
 
         # Ensure Docker image exists
         await self._ensure_image()
 
-        print(f"Starting container pool: {self.n_containers} containers × {self.workers_per_container} workers = {self.total_slots} slots")
+        print(f"Starting multi-tenant container: {self.n_workers} workers for {self.csv_path.name}")
 
-        # Create containers in parallel
-        tasks = [self._create_container(i) for i in range(self.n_containers)]
-        self.containers = await asyncio.gather(*tasks)
+        await self._setup_container()
 
         self._started = True
-        print(f"Container pool ready: {self.total_slots} slots available")
+        print(f"✓ Container ready: {self.container_id} ({self.n_workers} workers)")
 
     async def stop(self):
-        """Stop and remove all containers."""
-        for container in self.containers:
-            await self._run_docker("stop", container.container_id, check=False)
-            await self._run_docker("rm", container.container_id, check=False)
-        self.containers = []
+        """Stop and remove the container."""
+        if self.container_id:
+            await self._run_docker("stop", self.container_id, check=False)
+            await self._run_docker("rm", self.container_id, check=False)
+        self.container_id = None
+        self.workers = []
         self._started = False
 
-    async def acquire_slots(self, n: int) -> list[Slot]:
-        """Acquire n available slots. Blocks if not enough available."""
-        async with self._lock:
-            available = []
-            for container in self.containers:
-                for slot in container.slots:
-                    if not slot.in_use:
-                        available.append(slot)
-                    if len(available) >= n:
-                        break
-                if len(available) >= n:
-                    break
+    def get_worker(self, worker_id: int) -> Slot:
+        """Get worker by index."""
+        if worker_id < 0 or worker_id >= len(self.workers):
+            raise IndexError(f"Worker {worker_id} not found (have {len(self.workers)} workers)")
+        return self.workers[worker_id]
 
-            if len(available) < n:
-                raise RuntimeError(f"Not enough slots: requested {n}, available {len(available)}")
+    async def run_on_worker(self, worker_id: int, code: str) -> str:
+        """Run code on a specific worker by index."""
+        worker = self.get_worker(worker_id)
+        return await self._run_code_on_slot(worker, code)
 
-            slots = available[:n]
-            for slot in slots:
-                slot.in_use = True
-            return slots
-
-    async def release_slots(self, slots: list[Slot]):
-        """Release slots back to the pool."""
-        async with self._lock:
-            for slot in slots:
-                slot.in_use = False
-
-    async def run_code(self, slot: Slot, code: str) -> str:
-        """Run code on a specific slot."""
+    async def _run_code_on_slot(self, slot: Slot, code: str) -> str:
+        """Run code on a specific slot (internal)."""
         payload = json.dumps({"code": code})
         payload_b64 = base64.b64encode(payload.encode()).decode()
 
@@ -553,8 +519,19 @@ with open('{slot.res_fifo}', 'r') as f:
 
         return "\n".join(parts) if parts else ""
 
-    async def reset_slot(self, slot: Slot):
-        """Reset a slot's namespace for reuse."""
+    async def reset_worker(self, worker_id: int):
+        """Reset a worker's namespace for reuse."""
+        worker = self.get_worker(worker_id)
+        await self._reset_slot(worker)
+
+    async def reset_all_workers(self):
+        """Reset all workers' namespaces for reuse (e.g., between questions)."""
+        await asyncio.gather(*[
+            self._reset_slot(worker) for worker in self.workers
+        ])
+
+    async def _reset_slot(self, slot: Slot):
+        """Reset a slot's namespace (internal)."""
         payload = json.dumps({"reset": True})
         payload_b64 = base64.b64encode(payload.encode()).decode()
 
@@ -572,18 +549,106 @@ with open('{slot.res_fifo}', 'r') as f:
         )
 
     def get_stats(self) -> dict:
-        """Get pool statistics."""
-        total = 0
-        in_use = 0
-        for container in self.containers:
-            for slot in container.slots:
-                total += 1
-                if slot.in_use:
-                    in_use += 1
+        """Get container statistics."""
         return {
-            "containers": len(self.containers),
-            "workers_per_container": self.workers_per_container,
-            "total_slots": total,
-            "in_use": in_use,
-            "available": total - in_use,
+            "container_id": self.container_id,
+            "csv_path": str(self.csv_path),
+            "n_workers": self.n_workers,
+            "started": self._started,
         }
+
+
+class WorkerAdapter:
+    """
+    Adapts a MultiTenantContainer worker to the LocalCSVAnalysisEnv interface.
+
+    This allows MultiTenantContainer workers to be used in places that expect
+    LocalCSVAnalysisEnv instances (e.g., triangulate_teacher's container_pool).
+
+    Usage:
+        container = MultiTenantContainer(csv_path, n_workers=6)
+        await container.start()
+
+        # Create adapters for each worker
+        container_pool = [
+            (WorkerAdapter(container, i), WorkerAdapter.create_state(i))
+            for i in range(container.n_workers)
+        ]
+
+        # Use with triangulate_teacher
+        result = await triangulate_teacher(..., container_pool=container_pool)
+    """
+
+    def __init__(self, container: MultiTenantContainer, worker_id: int):
+        """
+        Create an adapter for a specific worker in the container.
+
+        Args:
+            container: The MultiTenantContainer instance
+            worker_id: The worker index (0 to n_workers-1)
+        """
+        self.container = container
+        self.worker_id = worker_id
+
+    @staticmethod
+    def create_state(worker_id: int) -> dict:
+        """Create a state dict compatible with the env interface."""
+        return {
+            "sandbox_id": f"worker-{worker_id}",
+            "python_state": {"ready": True, "execution_count": 0},
+        }
+
+    async def setup_state(self, state: dict, **kwargs) -> dict:
+        """
+        Initialize state for this worker.
+
+        Note: The container is already started, so this just returns the state.
+        """
+        state["sandbox_id"] = f"worker-{self.worker_id}"
+        state["python_state"] = {"ready": True, "execution_count": 0}
+        return state
+
+    async def python(
+        self,
+        code: str,
+        sandbox_id: str = None,
+        python_state: dict = None,
+        **kwargs,
+    ) -> str:
+        """
+        Execute code on this worker.
+
+        Args:
+            code: Python code to execute
+            sandbox_id: Ignored (worker_id is used instead)
+            python_state: Optional state dict for execution count tracking
+            **kwargs: Ignored for compatibility
+
+        Returns:
+            Formatted output string
+        """
+        result = await self.container.run_on_worker(self.worker_id, code)
+
+        # Update execution count if state provided
+        if python_state:
+            python_state["execution_count"] = python_state.get("execution_count", 0) + 1
+
+        return result
+
+    async def reset_state(self, state: dict, **kwargs) -> dict:
+        """Reset this worker's namespace for reuse between questions."""
+        await self.container.reset_worker(self.worker_id)
+        state["python_state"] = {"ready": True, "execution_count": 0}
+        return state
+
+    async def destroy_sandbox(self, sandbox_id: str) -> None:
+        """
+        No-op for adapter - the container manages its own lifecycle.
+
+        The container should be stopped via container.stop() after all work.
+        """
+        pass
+
+
+# Backwards compatibility alias
+ContainerPool = MultiTenantContainer

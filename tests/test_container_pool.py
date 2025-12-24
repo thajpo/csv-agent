@@ -1,163 +1,209 @@
 """
-Test the multi-tenant container pool.
+Test the multi-tenant container.
 
 Tests:
-- Pool creation and startup
-- Slot acquisition and release
-- Code execution on slots
+- Container creation and startup
+- Code execution on workers
 - Parallel execution
-- Security restrictions in pool workers
+- Worker isolation and reset
+- Security restrictions
 """
 
 import asyncio
 import pytest
 import pytest_asyncio
-from src.envs.container_pool import ContainerPool, Slot
+from src.envs.container_pool import MultiTenantContainer, Slot, WorkerAdapter
 
 
 @pytest_asyncio.fixture
-async def pool():
-    """Create a small container pool for testing."""
-    p = ContainerPool(
+async def container():
+    """Create a multi-tenant container for testing."""
+    c = MultiTenantContainer(
         csv_path="data/csv/data.csv",
-        n_containers=1,
-        workers_per_container=3,
+        n_workers=3,
     )
-    await p.start()
-    yield p
-    await p.stop()
+    await c.start()
+    yield c
+    await c.stop()
 
 
-class TestContainerPool:
-    """Test container pool functionality."""
-
-    @pytest.mark.asyncio
-    async def test_pool_starts(self, pool):
-        """Pool should start and report correct stats."""
-        stats = pool.get_stats()
-        assert stats["containers"] == 1
-        assert stats["workers_per_container"] == 3
-        assert stats["total_slots"] == 3
-        assert stats["available"] == 3
-        assert stats["in_use"] == 0
+class TestMultiTenantContainer:
+    """Test multi-tenant container functionality."""
 
     @pytest.mark.asyncio
-    async def test_acquire_slots(self, pool):
-        """Should be able to acquire slots."""
-        slots = await pool.acquire_slots(2)
-        assert len(slots) == 2
-        assert all(isinstance(s, Slot) for s in slots)
-
-        stats = pool.get_stats()
-        assert stats["in_use"] == 2
-        assert stats["available"] == 1
+    async def test_container_starts(self, container):
+        """Container should start and report correct stats."""
+        stats = container.get_stats()
+        assert stats["n_workers"] == 3
+        assert stats["started"] is True
+        assert container.container_id is not None
 
     @pytest.mark.asyncio
-    async def test_release_slots(self, pool):
-        """Should be able to release slots."""
-        slots = await pool.acquire_slots(2)
-        await pool.release_slots(slots)
-
-        stats = pool.get_stats()
-        assert stats["in_use"] == 0
-        assert stats["available"] == 3
-
-    @pytest.mark.asyncio
-    async def test_run_code(self, pool):
-        """Should execute code on a slot."""
-        slots = await pool.acquire_slots(1)
-        slot = slots[0]
-
-        result = await pool.run_code(slot, "df.shape")
+    async def test_run_on_worker(self, container):
+        """Should execute code on a worker."""
+        result = await container.run_on_worker(0, "df.shape")
         assert "(" in result  # Tuple output
 
-        await pool.release_slots(slots)
-
     @pytest.mark.asyncio
-    async def test_parallel_execution(self, pool):
-        """Should execute code in parallel on multiple slots."""
-        slots = await pool.acquire_slots(3)
-
-        # Run different code on each slot in parallel
+    async def test_parallel_execution(self, container):
+        """Should execute code in parallel on multiple workers."""
+        # Run different code on each worker in parallel
         results = await asyncio.gather(*[
-            pool.run_code(slot, f"df.shape[{i}]")
-            for i, slot in enumerate(slots)
+            container.run_on_worker(i, f"df.shape[{i % 2}]")
+            for i in range(3)
         ])
 
-        # Should get results from all slots
+        # Should get results from all workers
         assert len(results) == 3
         assert all(r for r in results)  # All should have output
 
-        await pool.release_slots(slots)
-
     @pytest.mark.asyncio
-    async def test_slot_isolation(self, pool):
-        """Variables in one slot should not affect another."""
-        slots = await pool.acquire_slots(2)
-
-        # Set variable in slot 0
-        await pool.run_code(slots[0], "my_var = 42")
-        result0 = await pool.run_code(slots[0], "my_var")
+    async def test_worker_isolation(self, container):
+        """Variables in one worker should not affect another."""
+        # Set variable in worker 0
+        await container.run_on_worker(0, "my_var = 42")
+        result0 = await container.run_on_worker(0, "my_var")
         assert "42" in result0
 
-        # Should not exist in slot 1
-        result1 = await pool.run_code(slots[1], "my_var")
+        # Should not exist in worker 1
+        result1 = await container.run_on_worker(1, "my_var")
         assert "NameError" in result1 or "not defined" in result1.lower()
 
-        await pool.release_slots(slots)
-
     @pytest.mark.asyncio
-    async def test_reset_slot(self, pool):
-        """Reset should clear slot namespace."""
-        slots = await pool.acquire_slots(1)
-        slot = slots[0]
-
+    async def test_reset_worker(self, container):
+        """Reset should clear worker namespace."""
         # Set a variable
-        await pool.run_code(slot, "test_var = 123")
-        result1 = await pool.run_code(slot, "test_var")
+        await container.run_on_worker(0, "test_var = 123")
+        result1 = await container.run_on_worker(0, "test_var")
         assert "123" in result1
 
         # Reset
-        await pool.reset_slot(slot)
+        await container.reset_worker(0)
 
         # Variable should be gone
-        result2 = await pool.run_code(slot, "test_var")
+        result2 = await container.run_on_worker(0, "test_var")
         assert "NameError" in result2 or "not defined" in result2.lower()
 
-        await pool.release_slots(slots)
+    @pytest.mark.asyncio
+    async def test_reset_all_workers(self, container):
+        """Reset all should clear all worker namespaces."""
+        # Set variables in all workers
+        for i in range(3):
+            await container.run_on_worker(i, f"worker_var_{i} = {i}")
+
+        # Reset all
+        await container.reset_all_workers()
+
+        # All variables should be gone
+        for i in range(3):
+            result = await container.run_on_worker(i, f"worker_var_{i}")
+            assert "NameError" in result or "not defined" in result.lower()
 
     @pytest.mark.asyncio
-    async def test_security_blocks_os(self, pool):
+    async def test_security_blocks_os(self, container):
         """Security: os module should be blocked."""
-        slots = await pool.acquire_slots(1)
-        slot = slots[0]
-
-        result = await pool.run_code(slot, "import os")
+        result = await container.run_on_worker(0, "import os")
         assert "not allowed" in result.lower() or "ImportError" in result
 
-        await pool.release_slots(slots)
-
     @pytest.mark.asyncio
-    async def test_security_blocks_open(self, pool):
+    async def test_security_blocks_open(self, container):
         """Security: open() should not be available."""
-        slots = await pool.acquire_slots(1)
-        slot = slots[0]
-
-        result = await pool.run_code(slot, "open('/etc/passwd')")
+        result = await container.run_on_worker(0, "open('/etc/passwd')")
         assert "NameError" in result or "not defined" in result.lower()
 
-        await pool.release_slots(slots)
-
     @pytest.mark.asyncio
-    async def test_submit_works(self, pool):
-        """submit() function should work in pool workers."""
-        slots = await pool.acquire_slots(1)
-        slot = slots[0]
-
-        result = await pool.run_code(slot, "submit(df.shape[0])")
+    async def test_submit_works(self, container):
+        """submit() function should work in workers."""
+        result = await container.run_on_worker(0, "submit(df.shape[0])")
         assert "Submitted" in result
 
-        await pool.release_slots(slots)
+    @pytest.mark.asyncio
+    async def test_hook_works(self, container):
+        """hook() function should work in workers."""
+        result = await container.run_on_worker(0, "hook(df.shape[0], 'df.shape[0]', name='row_count')")
+        assert "Hook" in result
+
+
+class TestWorkerAdapter:
+    """Test WorkerAdapter interface compatibility."""
+
+    @pytest.mark.asyncio
+    async def test_adapter_python_method(self, container):
+        """WorkerAdapter.python() should work like LocalCSVAnalysisEnv."""
+        adapter = WorkerAdapter(container, worker_id=0)
+        state = WorkerAdapter.create_state(0)
+
+        result = await adapter.python(
+            "df.shape",
+            sandbox_id=state["sandbox_id"],
+            python_state=state["python_state"],
+        )
+        assert "(" in result  # Tuple output
+
+    @pytest.mark.asyncio
+    async def test_adapter_state_tracking(self, container):
+        """WorkerAdapter should track execution count."""
+        adapter = WorkerAdapter(container, worker_id=0)
+        state = WorkerAdapter.create_state(0)
+
+        assert state["python_state"]["execution_count"] == 0
+
+        await adapter.python("1+1", python_state=state["python_state"])
+        assert state["python_state"]["execution_count"] == 1
+
+        await adapter.python("2+2", python_state=state["python_state"])
+        assert state["python_state"]["execution_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_adapter_reset_state(self, container):
+        """WorkerAdapter.reset_state() should reset worker namespace."""
+        adapter = WorkerAdapter(container, worker_id=1)
+        state = WorkerAdapter.create_state(1)
+
+        # Set a variable
+        await adapter.python("adapter_var = 999", python_state=state["python_state"])
+        result1 = await adapter.python("adapter_var", python_state=state["python_state"])
+        assert "999" in result1
+
+        # Reset
+        await adapter.reset_state(state)
+
+        # Variable should be gone
+        result2 = await adapter.python("adapter_var", python_state=state["python_state"])
+        assert "NameError" in result2 or "not defined" in result2.lower()
+
+    @pytest.mark.asyncio
+    async def test_adapter_destroy_is_noop(self, container):
+        """WorkerAdapter.destroy_sandbox() should be a no-op."""
+        adapter = WorkerAdapter(container, worker_id=0)
+
+        # Should not raise or affect container
+        await adapter.destroy_sandbox("worker-0")
+
+        # Container should still work
+        result = await container.run_on_worker(0, "1+1")
+        assert "2" in result
+
+    @pytest.mark.asyncio
+    async def test_adapter_as_container_pool(self, container):
+        """WorkerAdapters should work as container_pool for triangulation."""
+        # Create adapters like we would for triangulation
+        container_pool = [
+            (WorkerAdapter(container, i), WorkerAdapter.create_state(i))
+            for i in range(container.n_workers)
+        ]
+
+        assert len(container_pool) == 3
+
+        # Each adapter should execute independently
+        results = await asyncio.gather(*[
+            adapter.python(f"'worker_{i}'", python_state=state["python_state"])
+            for i, (adapter, state) in enumerate(container_pool)
+        ])
+
+        assert len(results) == 3
+        for i, result in enumerate(results):
+            assert f"worker_{i}" in result
 
 
 if __name__ == "__main__":
