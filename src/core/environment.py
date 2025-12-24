@@ -14,7 +14,6 @@ import re
 import pandas as pd
 
 from src.core.model import APILLM
-from src.core.model import APILLM
 from src.utils.interaction import get_turn_validation_feedback, parse_execution_result, extract_python_cells
 from src.core.prompts import generate_data_overview, build_system_prompt, CONTINUE_MSG, FINAL_MSG
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
@@ -348,7 +347,6 @@ class Environment:
         self.conversation = conversation
         self.current_turn = 0
         self.is_completed = False
-        self.data_overview = data_overview
         self.data_overview = data_overview
         self.submitted_answer = None  # Reset for new episode
         self.submission_metadata = {}  # Metadata (key_lines, etc.)
