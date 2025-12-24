@@ -180,7 +180,7 @@ if __name__ == "__main__":
     # Test on data.csv if run directly
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", default="csv/data.csv")
+    parser.add_argument("--csv", default="data/csv/data.csv")
     args = parser.parse_args()
     
     profiler = DataProfiler()

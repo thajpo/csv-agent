@@ -7,7 +7,7 @@ Usage:
     uv run python -m src.training.prepare_finetune_data \
         --input episodes/train.jsonl \
         --provider openai \
-        --output training_data/train_openai.jsonl
+        --output data/episodes/train_openai.jsonl
 """
 
 import argparse
@@ -159,7 +159,7 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        help="Path to output JSONL file (defaults to training_data/train_{provider}.jsonl)"
+        help="Path to output JSONL file (defaults to data/episodes/train_{provider}.jsonl)"
     )
     parser.add_argument(
         "--include-unverified",
@@ -171,7 +171,7 @@ def main():
 
     # Set default output path if not specified
     if args.output is None:
-        args.output = f"training_data/train_{args.provider}.jsonl"
+        args.output = f"data/episodes/train_{args.provider}.jsonl"
 
     print(f"Loading episodes from {args.input}...")
     episodes = load_episodes(args.input, verified_only=not args.include_unverified)

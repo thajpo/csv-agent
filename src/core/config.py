@@ -43,7 +43,7 @@ class Config(BaseModel):
     model_config = ConfigDict(extra='ignore')
 
     # Data
-    csv_sources: Union[str, List[str]] = Field(default="csv/data.csv")
+    csv_sources: Union[str, List[str]] = Field(default="data/csv/data.csv")
 
     # Execution / Policy
     max_turns: int = 10
@@ -71,8 +71,8 @@ class Config(BaseModel):
     float_tolerance: float = 0.1
 
     # Outputs
-    questions_json: str = "question/questions.json"
-    episodes_jsonl: str = "episodes/episodes.jsonl"
+    questions_json: str = "data/questions/questions.json"
+    episodes_jsonl: str = "data/episodes/episodes.jsonl"
 
     # Train/Test/Val Splitting
     split_seed: int = 42

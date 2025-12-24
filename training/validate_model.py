@@ -7,7 +7,7 @@ Usage:
     # From csv-agent/training directory:
     uv run python validate_model.py \
         --model ./checkpoints \
-        --episodes ../training_data/final_test_openai.jsonl
+        --episodes ../data/episodes/final_test_openai.jsonl
 """
 
 import argparse

@@ -94,7 +94,7 @@ class CSVAgentRLEnv(MultiTurnEnv):
     def __init__(
         self,
         episodes_path: str,
-        csv_path: str = "csv/data.csv",
+        csv_path: str = "data/csv/data.csv",
         dataset_description: str = "",
         max_turns: int = 10,
         include_unverified: bool = False,
@@ -175,7 +175,7 @@ class CSVAgentRLEnv(MultiTurnEnv):
 
 def load_environment(
     episodes_path: str,
-    csv_path: str = "csv/data.csv",
+    csv_path: str = "data/csv/data.csv",
     **kwargs,
 ) -> CSVAgentRLEnv:
     """

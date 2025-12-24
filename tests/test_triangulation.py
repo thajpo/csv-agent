@@ -14,7 +14,7 @@ async def main():
     hint = "Filter the data to the control group first, then calculate the mean."
 
     # Generate data overview
-    data_overview = generate_data_overview("csv/data.csv")
+    data_overview = generate_data_overview("data/csv/data.csv")
 
     # Run triangulation (just 2 consistency traces for quick test)
     print("Running teacher triangulation...")
@@ -22,7 +22,7 @@ async def main():
     print(f"Hint: {hint}\n")
 
     gold_trace, _, _, consistency_results, verified = await triangulate_teacher(
-        csv_path="csv/data.csv",
+        csv_path="data/csv/data.csv",
         question=question,
         hint=hint,
         model="openai/gpt-oss-120b",  # Required positional arg (4th)

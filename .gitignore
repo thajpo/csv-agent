@@ -11,3 +11,4 @@ wheels/
 
 # Downloaded Kaggle datasets
 kaggle/downloaded/
+scripts/kaggle/downloaded/

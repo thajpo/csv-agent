@@ -163,9 +163,25 @@ For batch processing, containers are created once and reused (`batch_triangulate
 - Comments describing future code instead of current line
 - Defensive checks for variables that should always exist (check control flow exhaustiveness instead)
 
-## Output Directories
+## Directory Structure
 
-- `question/` - Generated questions (questions.json)
-- `episodes/` - Training episodes (episodes.jsonl)
-- `answer/` - Exploration traces from question generation
-- `outputs/<dataset>/` - Per-dataset outputs when using `--csv` override
+```
+csv-agent/
+├── src/                    # Main source code
+├── tests/                  # Tests
+├── training/               # Standalone SFT training package (separate venv)
+├── data/                   # All data directories
+│   ├── csv/                # Input CSV datasets
+│   ├── questions/          # Generated questions
+│   ├── episodes/           # Training episodes (JSONL)
+│   ├── outputs/            # Per-dataset outputs
+│   ├── fixtures/           # Test fixtures
+│   ├── traces/             # Exploration traces
+│   └── mock/               # Mock data for testing
+├── docs/                   # Documentation
+├── configs/                # Configuration files
+├── scripts/                # Utility scripts (incl. kaggle/)
+├── README.md
+├── CLAUDE.md
+└── pyproject.toml
+```

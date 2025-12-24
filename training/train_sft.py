@@ -9,7 +9,7 @@ Usage:
     uv sync
     uv run python train_sft.py \
         --model Qwen/Qwen2.5-3B-Instruct \
-        --data ../training_data/train_openai.jsonl \
+        --data ../data/episodes/train_openai.jsonl \
         --output ./checkpoints
 
     # NVIDIA/CUDA:
@@ -17,7 +17,7 @@ Usage:
     uv sync --extra cuda
     uv run python train_sft.py \
         --model Qwen/Qwen2.5-3B-Instruct \
-        --data ../training_data/train_openai.jsonl \
+        --data ../data/episodes/train_openai.jsonl \
         --output ./checkpoints
 """
 
@@ -65,7 +65,7 @@ def create_chat_formatter(tokenizer):
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune a model with LoRA on CSV agent episodes")
     parser.add_argument("--model", default="Qwen/Qwen2.5-3B-Instruct", help="Base model to fine-tune")
-    parser.add_argument("--data", default="../training_data/train_openai.jsonl", help="Training data JSONL")
+    parser.add_argument("--data", default="../data/episodes/train_openai.jsonl", help="Training data JSONL")
     parser.add_argument("--output", default="./checkpoints", help="Output directory for checkpoints")
     parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
     parser.add_argument("--batch-size", type=int, default=2, help="Per-device batch size")

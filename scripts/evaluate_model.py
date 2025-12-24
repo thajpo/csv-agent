@@ -9,8 +9,8 @@ Usage:
 
     uv run python -m scripts.evaluate_model \\
         --model openai/gpt-4o-mini \\
-        --episodes test_fixtures/mock_episodes.jsonl \\
-        --csv mock/data.csv \\
+        --episodes data/fixtures/mock_episodes.jsonl \\
+        --csv data/mock/data.csv \\
         --format json \\
         --output eval_results/report.json
 """
