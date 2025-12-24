@@ -1,6 +1,0 @@
-[{
-  "question": "What is the overall mean of the TL column?",
-  "hint": "Use the DataFrame's mean() method on the TL column.",
-  "n_steps": 1,
-  "difficulty": "EASY"
-}]

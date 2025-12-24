@@ -1,8 +1,0 @@
-[
-  {
-    "question": "What is the average TL (total length) for each TR group (e.g., control vs treatment)?",
-    "hint": "Group by the 'TR' column and compute the mean of 'TL'.",
-    "n_steps": 2,
-    "difficulty": "EASY"
-  }
-]
