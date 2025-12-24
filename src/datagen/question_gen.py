@@ -265,9 +265,17 @@ async def explore_and_generate_questions(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
+    # Read column names for fingerprinting (validates questions match dataset)
+    import pandas as pd
+    df_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
+
     questions_file = output_path / "questions.json"
+    questions_payload = {
+        "dataset_columns": df_columns,
+        "questions": questions_generated,
+    }
     with open(questions_file, 'w') as f:
-        json.dump(questions_generated, f, indent=2)
+        json.dump(questions_payload, f, indent=2)
     ui.print_saved_file(questions_file)
 
     trace_file = output_path / "exploration_trace.json"

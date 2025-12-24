@@ -45,10 +45,22 @@ def signal_handler(signum, frame):
     print("✓ Cleanup complete")
     sys.exit(0)
 
-def load_questions(questions_path: str) -> list[dict]:
-    """Load questions from JSON file."""
+def load_questions(questions_path: str) -> tuple[list[dict], list[str] | None]:
+    """
+    Load questions from JSON file.
+
+    Returns:
+        (questions, expected_columns) - expected_columns is None for legacy format
+    """
     with open(questions_path) as f:
-        return json.load(f)
+        data = json.load(f)
+
+    # New format: {"dataset_columns": [...], "questions": [...]}
+    if isinstance(data, dict) and "questions" in data:
+        return data["questions"], data.get("dataset_columns")
+
+    # Legacy format: plain list of questions
+    return data, None
 
 
 def gather_csv_tasks(
@@ -104,7 +116,22 @@ def gather_csv_tasks(
             ui.base.print_warning(f"Skipping {dataset_name}: No questions found at {questions_file}")
             continue
 
-        questions = load_questions(str(questions_file))
+        questions, expected_columns = load_questions(str(questions_file))
+
+        # Validate dataset columns match (prevents running questions against wrong dataset)
+        if expected_columns is not None:
+            import pandas as pd
+            actual_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
+            if set(expected_columns) != set(actual_columns):
+                missing = set(expected_columns) - set(actual_columns)
+                extra = set(actual_columns) - set(expected_columns)
+                ui.base.print_error(f"ERROR: Column mismatch for {dataset_name}")
+                if missing:
+                    ui.base.print_error(f"  Missing columns: {sorted(missing)}")
+                if extra:
+                    ui.base.print_warning(f"  Extra columns: {sorted(extra)}")
+                ui.base.print_info("Hint", "Regenerate questions with: uv run python -m src.datagen.question_gen")
+                continue
 
         tasks.append(CSVTask(
             csv_path=csv_path,
