@@ -21,13 +21,6 @@ from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
 
 
-def truncate_output(text: str, max_length: int = 500) -> str:
-    """Truncate execution output to max_length chars."""
-    if len(text) <= max_length:
-        return text
-    return text[:max_length] + f"\n... (truncated {len(text) - max_length} chars)"
-
-
 def validate_hooks_grounded(hooks: list[dict], code_cells: list[str]) -> tuple[list[dict], list[dict]]:
     """
     Validate that each hook's code_line is grounded in the executed code.
@@ -438,12 +431,8 @@ class Environment:
             for cell_code in code_cells:
                 result = await self.execute_code_cell(cell_code)
 
-                # Truncate outputs to save memory
-                result.stdout = truncate_output(result.stdout, max_length=500)
-                result.stderr = truncate_output(result.stderr, max_length=500)
-
                 execution_results.append(result)
-                self.code_cells.append(cell_code)  # Track executed code
+                self.code_cells.append(cell_code)
 
                 # Log execution
 
