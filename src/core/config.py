@@ -70,6 +70,10 @@ class Config(BaseModel):
     verified_only: bool = False
     float_tolerance: float = 0.1
 
+    # Container pool settings (for parallel processing)
+    n_containers: int = 2  # Number of Docker containers to create
+    workers_per_container: int = 6  # Worker processes per container (fork-based)
+
     # Outputs
     questions_json: str = "data/questions/questions.json"
     episodes_jsonl: str = "data/episodes/episodes.jsonl"
