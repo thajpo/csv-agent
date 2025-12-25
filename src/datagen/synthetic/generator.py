@@ -105,16 +105,22 @@ class CompositionalQuestionGenerator:
         templates = get_applicable_templates(profile)
         print(f"  Applicable templates: {len(templates)}")
 
-        if n_questions and len(templates) > n_questions:
-            templates = templates[:n_questions]
+        expanded_templates: list[tuple[CompositionTemplate, dict[str, Any]]] = []
+        for template in templates:
+            for params in template.iter_param_sets():
+                expanded_templates.append((template, params))
 
-        # 3. Generate questions from each template
+        if n_questions and len(expanded_templates) > n_questions:
+            expanded_templates = expanded_templates[:n_questions]
+
+        # 3. Generate questions from each template + parameter set
         questions = []
-        for i, template in enumerate(templates):
-            print(f"\n[{i+1}/{len(templates)}] {template.name}")
+        for i, (template, params) in enumerate(expanded_templates):
+            params_label = ", ".join(f"{k}={v}" for k, v in params.items()) if params else "default"
+            print(f"\n[{i+1}/{len(expanded_templates)}] {template.name} ({params_label})")
 
             try:
-                question_dict = await self._process_template(template, profile)
+                question_dict = await self._process_template(template, profile, params)
                 if question_dict:
                     questions.append(question_dict)
                     print(f"  OK: {question_dict['question'][:60]}...")
@@ -136,6 +142,7 @@ class CompositionalQuestionGenerator:
         self,
         template: CompositionTemplate,
         profile: dict,
+        params: dict[str, Any],
     ) -> dict | None:
         """
         Process a single template: execute code, verbalize, return question dict.
@@ -144,7 +151,7 @@ class CompositionalQuestionGenerator:
             Question dict or None if failed
         """
         # Instantiate template with profile data
-        code = template.instantiate(profile)
+        code = template.instantiate(profile, params=params)
 
         # Execute in sandbox
         result = await self._execute_code(code)
@@ -170,6 +177,10 @@ class CompositionalQuestionGenerator:
             "hint": hint,
             "n_steps": template.n_steps,
             "difficulty": template.difficulty,
+            "template_name": template.name,
+            "template_params": params or None,
+            "output_type": template.output_type,
+            "output_schema": template.output_schema,
             "ground_truth_hash": answer_hash,
             # Store ground truth for debugging (optional, can be removed in production)
             "_ground_truth": ground_truth,

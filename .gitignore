@@ -12,3 +12,4 @@ wheels/
 # Downloaded Kaggle datasets
 kaggle/downloaded/
 scripts/kaggle/downloaded/
+.DS_Store
