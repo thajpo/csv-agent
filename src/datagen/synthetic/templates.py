@@ -23,6 +23,7 @@ class CompositionTemplate:
     applicable_when: Callable[[dict], bool]  # Profile -> bool
     n_steps: int
     difficulty: str  # EASY, MEDIUM, HARD, VERY_HARD
+    param_sets: list[dict[str, Any]] | None = None
 
     def is_applicable(self, profile: dict) -> bool:
         """Check if this template can be used with the given dataset profile."""
@@ -31,7 +32,7 @@ class CompositionTemplate:
         except Exception:
             return False
 
-    def instantiate(self, profile: dict) -> str:
+    def instantiate(self, profile: dict, params: dict[str, Any] | None = None) -> str:
         """Fill in template placeholders with profile data."""
         # Get numeric columns
         numeric_cols = [
@@ -56,8 +57,15 @@ class CompositionTemplate:
             code = code.replace("{numeric_cols}", str(numeric_cols))
         if categorical_cols:
             code = code.replace("{categorical_cols}", str(categorical_cols))
+        if params:
+            for key, value in params.items():
+                code = code.replace(f"{{{key}}}", repr(value))
 
         return code
+
+    def iter_param_sets(self) -> list[dict[str, Any]]:
+        """Return all parameter sets for this template."""
+        return self.param_sets or [{}]
 
 
 def _count_numeric_cols(profile: dict) -> int:
@@ -272,7 +280,7 @@ print("Missing percentages:")
 print(missing_pct.sort_values(ascending=False).head(10))
 
 # Step 2: Count columns above threshold
-threshold = 5.0
+threshold = {missing_threshold}
 high_missing_cols = (missing_pct > threshold).sum()
 hook(high_missing_cols, f"count of columns with >{threshold}% missing", name='high_missing_count', depends_on=['missing_pct'])
 print(f"Columns with >{threshold}% missing: {high_missing_cols}")
@@ -287,6 +295,10 @@ submit({"count": int(high_missing_cols), "columns": sorted(high_missing_names)})
     applicable_when=lambda p: True,  # Always applicable
     n_steps=3,
     difficulty="EASY",
+    param_sets=[
+        {"missing_threshold": 5.0},
+        {"missing_threshold": 10.0},
+    ],
 )
 
 COUNT_OUTLIER_COLUMNS = CompositionTemplate(
@@ -302,7 +314,7 @@ for col in numeric_cols:
     mean = df[col].mean()
     std = df[col].std()
     if std > 0:
-        outliers = ((df[col] - mean).abs() > 3 * std).sum()
+        outliers = ((df[col] - mean).abs() > {z_threshold} * std).sum()
         outlier_counts[col] = int(outliers)
 
 hook(outlier_counts, "outlier counts per column", name='outlier_counts')
@@ -325,6 +337,10 @@ submit({"columns_with_outliers": cols_with_outliers, "total_outliers": total_out
     applicable_when=lambda p: _count_numeric_cols(p) >= 1,
     n_steps=4,
     difficulty="MEDIUM",
+    param_sets=[
+        {"z_threshold": 3.0},
+        {"z_threshold": 2.5},
+    ],
 )
 
 

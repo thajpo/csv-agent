@@ -26,6 +26,11 @@ class QuestionDict(TypedDict, total=False):
     difficulty: str | None
     n_steps: int | None
     created_at: str | None
+    template_name: str | None
+    template_params: dict[str, Any] | None
+    output_type: str | None
+    output_schema: str | None
+    ground_truth_hash: str | None
 
 
 class HookDict(TypedDict, total=False):
@@ -87,6 +92,15 @@ class Question(BaseModel):
     hint: str | None = None
     difficulty: str | None = None  # EASY, MEDIUM, HARD, VERY_HARD
     n_steps: int | None = None     # Expected step count
+    template_name: str | None = None
+    template_params: dict[str, Any] | None = None
+    output_type: str | None = None
+    output_schema: str | None = None
+    ground_truth_hash: str | None = None
+
+    # Synthetic question evaluation fields
+    ground_truth: Any | None = None  # Actual ground truth value (for synthetic)
+    template: str | None = None  # Template name that generated this question
 
     # For tracking/versioning
     id: str | None = None
@@ -101,11 +115,18 @@ class Question(BaseModel):
     @classmethod
     def from_dict(cls, d: dict) -> "Question":
         """Create Question from dict, auto-generating ID if missing."""
-        # Map 'question' key to 'question_text' if needed
         data = dict(d)
+
+        # Map 'question' key to 'question_text' if needed
         if "question" in data and "question_text" not in data:
             data["question_text"] = data.pop("question")
-        
+
+        # Map internal fields to public fields (synthetic questions)
+        if "_ground_truth" in data:
+            data["ground_truth"] = data.pop("_ground_truth")
+        if "_template" in data:
+            data["template"] = data.pop("_template")
+
         q = cls(**data)
         if q.id is None:
             q.id = q.generate_id()

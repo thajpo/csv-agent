@@ -266,10 +266,13 @@ async def generate_questions(
         questions_file = output_path / "questions.json"
 
         with open(questions_file, "w") as f:
-            # Remove internal fields before saving
+            # Keep ground_truth and template for evaluation, but mark as internal
             clean_questions = []
             for q in result["questions"]:
-                clean_q = {k: v for k, v in q.items() if not k.startswith("_")}
+                clean_q = {
+                    k: v for k, v in q.items()
+                    if k in ("_ground_truth", "_template") or not k.startswith("_")
+                }
                 clean_questions.append(clean_q)
 
             output = {
