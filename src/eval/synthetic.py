@@ -5,12 +5,41 @@ Synthetic questions have known ground truth from template execution.
 This evaluator compares teacher answers against that ground truth.
 """
 
+import asyncio
 import json
-import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from src.datagen.teacher import answers_match
+from src.datagen.synthetic.profiler import DataProfiler
+from src.datagen.synthetic.templates import ALL_TEMPLATES, CompositionTemplate
+from src.envs.csv_env import LocalCSVAnalysisEnv
+from src.utils.hashing import hash_artifact
+
+
+_KEY_ALIASES: dict[str, list[str]] = {
+    "target": ["target_column", "target_col"],
+    "predictor": ["predictor_column", "best_predictor", "most_correlated_column"],
+    "correlation": ["absolute_correlation", "abs_correlation", "corr"],
+    "columns": ["pair"],
+    "grouping_column": ["group_col", "group_column"],
+    "t_statistic": ["t_stat", "t"],
+    "f_statistic": ["f_stat", "f"],
+    "mean1": ["group1_mean", "mean_low_group"],
+    "mean2": ["group2_mean", "mean_high_group"],
+    "significant": ["significant_at_0.05", "is_significant"],
+}
+
+_SORTED_LIST_KEYS = {"columns", "predictors", "pair"}
+
+
+@dataclass
+class TemplateExecutionResult:
+    answer: Any
+    answer_hash: str | None
+    hooks: list[dict]
 
 
 @dataclass
@@ -20,10 +49,18 @@ class SyntheticEvalResult:
     question_text: str
     template: str
     difficulty: str
+    dataset: str
 
     # Match results
     matched: bool
     mismatch_reason: str | None = None
+
+    # Hook metrics
+    hook_matches: int = 0
+    hook_expected: int = 0
+    hook_teacher: int = 0
+    hook_recall: float = 0.0
+    hook_precision: float = 0.0
 
     # Raw values
     expected: Any = None
@@ -38,6 +75,10 @@ class SyntheticEvalMetrics:
     total: int
     correct: int
 
+    # Hook metrics
+    avg_hook_recall: float
+    avg_hook_precision: float
+
     # By difficulty
     accuracy_by_difficulty: dict[str, float] = field(default_factory=dict)
     total_by_difficulty: dict[str, int] = field(default_factory=dict)
@@ -50,170 +91,353 @@ class SyntheticEvalMetrics:
     mismatches: list[SyntheticEvalResult] = field(default_factory=list)
 
 
-def normalize_key(k: str) -> str:
-    """Normalize key for comparison."""
-    return k.lower().replace("-", "_").replace("‑", "_")
+class TemplateExecutionSession:
+    """Executes templates in a shared sandbox for a single dataset."""
+
+    def __init__(self, csv_path: str):
+        self.csv_path = Path(csv_path).resolve()
+        self.profiler = DataProfiler()
+        self.profile: dict[str, Any] | None = None
+        self.env: LocalCSVAnalysisEnv | None = None
+        self.state: dict | None = None
+        self._cache: dict[str, TemplateExecutionResult] = {}
+
+    async def setup(self) -> None:
+        self.profile = self.profiler.analyze(str(self.csv_path))
+        self.env = LocalCSVAnalysisEnv(csv_path=str(self.csv_path))
+        self.state = await self.env.setup_state({})
+
+    async def cleanup(self) -> None:
+        if self.env and self.state:
+            await self.env.destroy_sandbox(self.state["sandbox_id"])
+
+    async def execute(
+        self,
+        template: CompositionTemplate,
+        params: dict[str, Any] | None,
+    ) -> TemplateExecutionResult | None:
+        params = params or {}
+        cache_key = json.dumps({"template": template.name, **params}, sort_keys=True)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
+        code = template.instantiate(self.profile or {}, params=params)
+
+        await self.env.reset(
+            self.state["sandbox_id"],
+            self.state["python_state"],
+        )
+
+        output = await self.env.python(
+            code=code,
+            sandbox_id=self.state["sandbox_id"],
+            python_state=self.state["python_state"],
+        )
+
+        submission = _parse_submission(output)
+        if submission is None:
+            return None
+
+        answer = submission.get("__csv_agent_answer__")
+        hooks = submission.get("hooks", [])
+        answer_hash = hash_artifact(answer) if answer is not None else None
+
+        result = TemplateExecutionResult(
+            answer=answer,
+            answer_hash=answer_hash,
+            hooks=hooks,
+        )
+        self._cache[cache_key] = result
+        return result
 
 
-def normalize_value(v: Any) -> Any:
-    """Normalize value for comparison."""
-    if isinstance(v, str):
-        return v.lower().replace("‑", "-")
-    if isinstance(v, list):
-        return [normalize_value(x) for x in v]
-    if isinstance(v, dict):
-        return {normalize_key(k): normalize_value(val) for k, val in v.items()}
-    return v
+def _parse_submission(output: str) -> dict | None:
+    marker = "✓ Submitted: "
+    if marker not in output:
+        return None
+
+    start = output.index(marker) + len(marker)
+    end = output.find("\n", start)
+    json_str = output[start:] if end == -1 else output[start:end]
+
+    try:
+        return json.loads(json_str.strip())
+    except json.JSONDecodeError:
+        return None
 
 
-def values_match(expected: Any, actual: Any, tol: float = 0.01) -> bool:
-    """Check if two values match semantically."""
-    expected = normalize_value(expected)
-    actual = normalize_value(actual)
-
-    if type(expected) != type(actual):
-        if isinstance(expected, bool) and isinstance(actual, str):
-            return str(expected).lower() == actual.lower()
-        if isinstance(actual, bool) and isinstance(expected, str):
-            return str(actual).lower() == expected.lower()
-        return False
-
-    if isinstance(expected, (int, float)) and isinstance(actual, (int, float)):
-        if math.isnan(expected) or math.isnan(actual):
-            return math.isnan(expected) and math.isnan(actual)
-        if expected == 0:
-            return abs(actual) < tol
-        return abs(expected - actual) / abs(expected) < tol
-
-    if isinstance(expected, str):
-        return expected == actual
-
-    if isinstance(expected, list):
-        if len(expected) != len(actual):
-            return False
-        return all(values_match(e, a, tol) for e, a in zip(expected, actual))
-
-    if isinstance(expected, dict):
-        for k, v in expected.items():
-            if k not in actual:
-                return False
-            if not values_match(v, actual[k], tol):
-                return False
-        return True
-
-    return expected == actual
+def _normalize_key(key: str) -> str:
+    return key.lower().replace("-", "_").replace("‑", "_")
 
 
-def dicts_match_semantic(
-    expected: dict, actual: dict, tol: float = 0.01
-) -> tuple[bool, str]:
-    """
-    Check if teacher answer matches ground truth semantically.
+def _normalize_value(value: Any) -> Any:
+    if isinstance(value, str):
+        stripped = value.strip()
+        lowered = stripped.lower()
+        if lowered in {"true", "false"}:
+            return lowered == "true"
+        return stripped
+    if isinstance(value, list):
+        return [_normalize_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _normalize_value(v) for k, v in value.items()}
+    return value
 
-    Returns (match, reason)
-    """
-    if not isinstance(expected, dict) or not isinstance(actual, dict):
-        if values_match(expected, actual, tol):
-            return True, "exact match"
-        return False, f"value mismatch: expected {expected}, got {actual}"
 
-    expected_norm = {normalize_key(k): v for k, v in expected.items()}
-    actual_norm = {normalize_key(k): v for k, v in actual.items()}
+def _canonicalize_teacher_dict(
+    teacher: dict,
+    expected: dict,
+) -> tuple[dict, list[str]]:
+    teacher_norm = {_normalize_key(k): _normalize_value(v) for k, v in teacher.items()}
+    expected_norm = {_normalize_key(k): _normalize_value(v) for k, v in expected.items()}
 
-    for k, v in expected_norm.items():
-        if k not in actual_norm:
-            aliases = {
-                "iqr": ["interquartile_range", "iqr_range"],
-                "distribution": ["normal", "is_normal"],
-                "std": ["standard_deviation", "sd"],
-            }
-            found = False
-            for alias in aliases.get(k, []):
-                if alias in actual_norm:
-                    if values_match(v, actual_norm[alias], tol):
-                        found = True
-                        break
-            if not found:
-                return False, f"missing key: {k}"
+    canonical: dict[str, Any] = {}
+    missing: list[str] = []
+
+    for key, expected_value in expected_norm.items():
+        if key in teacher_norm:
+            value = teacher_norm[key]
         else:
-            if not values_match(v, actual_norm[k], tol):
-                return False, f"value mismatch for {k}: expected {v}, got {actual_norm[k]}"
+            value = None
+            for alias in _KEY_ALIASES.get(key, []):
+                alias_key = _normalize_key(alias)
+                if alias_key in teacher_norm:
+                    value = teacher_norm[alias_key]
+                    break
 
-    return True, "semantic match"
+        if value is None:
+            missing.append(key)
+            continue
+
+        if key in _SORTED_LIST_KEYS and isinstance(value, list):
+            value = sorted(value, key=lambda v: str(v))
+            expected_value = sorted(expected_value, key=lambda v: str(v))
+            expected_norm[key] = expected_value
+
+        canonical[key] = value
+
+    return canonical, missing
+
+
+def _compare_answers(
+    expected: Any,
+    actual: Any,
+    float_tol: float,
+    p_value_tol: float,
+) -> tuple[bool, str]:
+    if isinstance(expected, dict):
+        if not isinstance(actual, dict):
+            return False, "actual answer is not a dict"
+
+        canonical, missing = _canonicalize_teacher_dict(actual, expected)
+        if missing:
+            return False, f"missing keys: {', '.join(sorted(missing))}"
+
+        expected_norm = {_normalize_key(k): _normalize_value(v) for k, v in expected.items()}
+        matched = answers_match(
+            None,
+            None,
+            expected_norm,
+            canonical,
+            float_tol=float_tol,
+            p_value_tol=p_value_tol,
+        )
+        return matched, "match" if matched else "value mismatch"
+
+    expected_norm = _normalize_value(expected)
+    actual_norm = _normalize_value(actual)
+    matched = answers_match(
+        None,
+        None,
+        expected_norm,
+        actual_norm,
+        float_tol=float_tol,
+        p_value_tol=p_value_tol,
+    )
+    return matched, "match" if matched else "value mismatch"
+
+
+def _compute_hook_metrics(
+    teacher_hooks: list[dict] | None,
+    expected_hooks: list[dict] | None,
+) -> tuple[int, int, int, float, float]:
+    teacher_hooks = teacher_hooks or []
+    expected_hooks = expected_hooks or []
+
+    teacher_hashes = {h.get("value_hash") for h in teacher_hooks if h.get("value_hash")}
+    expected_hashes = {h.get("value_hash") for h in expected_hooks if h.get("value_hash")}
+
+    matches = len(teacher_hashes & expected_hashes)
+    expected_count = len(expected_hashes)
+    teacher_count = len(teacher_hashes)
+
+    recall = matches / expected_count if expected_count else 0.0
+    precision = matches / teacher_count if teacher_count else 0.0
+
+    return matches, expected_count, teacher_count, recall, precision
+
+
+def _get_template_by_name(name: str) -> CompositionTemplate | None:
+    for template in ALL_TEMPLATES:
+        if template.name == name:
+            return template
+    return None
+
+
+def _template_label(template_name: str, params: dict[str, Any] | None) -> str:
+    if not params:
+        return template_name
+    params_str = ", ".join(f"{k}={v}" for k, v in sorted(params.items()))
+    return f"{template_name} [{params_str}]"
 
 
 class SyntheticEvaluator:
     """Evaluates teacher performance on synthetic questions."""
 
-    def __init__(self, episodes_path: str, tolerance: float = 0.01):
+    def __init__(
+        self,
+        episodes_path: str,
+        float_tol: float = 0.02,
+        p_value_tol: float = 0.002,
+    ):
         """
         Initialize evaluator.
 
         Args:
             episodes_path: Path to episodes.jsonl
-            tolerance: Relative tolerance for float comparison (default 1%)
+            float_tol: Absolute tolerance for float comparison
+            p_value_tol: Absolute tolerance for p-value comparison
         """
         self.episodes_path = Path(episodes_path)
-        self.tolerance = tolerance
+        self.float_tol = float_tol
+        self.p_value_tol = p_value_tol
 
-    def evaluate(self) -> SyntheticEvalMetrics:
-        """Run evaluation and return metrics."""
+    async def evaluate_async(self) -> SyntheticEvalMetrics:
         results: list[SyntheticEvalResult] = []
 
         by_difficulty: dict[str, list[bool]] = defaultdict(list)
         by_template: dict[str, list[bool]] = defaultdict(list)
+        hook_recalls: list[float] = []
+        hook_precisions: list[float] = []
+
+        episodes_by_dataset: dict[str, list[dict]] = defaultdict(list)
+        dataset_csv_map: dict[str, str] = {}
 
         with open(self.episodes_path) as f:
             for line in f:
                 ep = json.loads(line)
-
-                # Skip non-synthetic episodes
-                question = ep.get("question", {})
-                ground_truth = question.get("ground_truth")
-                if ground_truth is None:
+                csv_source = ep.get("csv_source")
+                if not csv_source:
                     continue
+                dataset = Path(csv_source).parent.name
+                episodes_by_dataset[dataset].append(ep)
+                dataset_csv_map[dataset] = csv_source
 
-                template = question.get("template", "unknown")
-                difficulty = question.get("difficulty", "unknown")
-                question_text = question.get("question_text", "")
+        for dataset, episodes in episodes_by_dataset.items():
+            session = TemplateExecutionSession(dataset_csv_map[dataset])
+            await session.setup()
 
-                # Get teacher answer
-                teacher_trace = ep.get("teacher_gold_trace", {})
-                teacher_answer = teacher_trace.get("final_answer")
+            try:
+                for ep in episodes:
+                    question = ep.get("question", {})
+                    template_name = question.get("template_name") or question.get("_template")
+                    template_params = question.get("template_params")
+                    difficulty = question.get("difficulty", "unknown")
+                    question_text = question.get("question_text", "")
 
-                # Compare
-                matched, reason = dicts_match_semantic(
-                    ground_truth, teacher_answer, self.tolerance
-                )
+                    teacher_trace = ep.get("teacher_gold_trace", {})
+                    teacher_answer = teacher_trace.get("final_answer")
+                    teacher_hooks = teacher_trace.get("hooks", [])
 
-                result = SyntheticEvalResult(
-                    question_text=question_text[:100],
-                    template=template,
-                    difficulty=difficulty,
-                    matched=matched,
-                    mismatch_reason=None if matched else reason,
-                    expected=ground_truth,
-                    actual=teacher_answer,
-                )
-                results.append(result)
+                    expected_answer = None
+                    expected_hooks = []
 
-                by_difficulty[difficulty].append(matched)
-                by_template[template].append(matched)
+                    if template_name:
+                        template = _get_template_by_name(template_name)
+                        if template is None:
+                            matched = False
+                            reason = "template not found"
+                        else:
+                            exec_result = await session.execute(template, template_params)
+                            if exec_result is None:
+                                matched = False
+                                reason = "template execution failed"
+                            else:
+                                expected_answer = exec_result.answer
+                                expected_hooks = exec_result.hooks
+                                matched, reason = _compare_answers(
+                                    expected_answer,
+                                    teacher_answer,
+                                    self.float_tol,
+                                    self.p_value_tol,
+                                )
+                    else:
+                        expected_answer = question.get("_ground_truth")
+                        if expected_answer is None:
+                            continue
+                        matched, reason = _compare_answers(
+                            expected_answer,
+                            teacher_answer,
+                            self.float_tol,
+                            self.p_value_tol,
+                        )
 
-        # Compute metrics
+                    (matches,
+                     expected_count,
+                     teacher_count,
+                     recall,
+                     precision) = _compute_hook_metrics(teacher_hooks, expected_hooks)
+
+                    hook_recalls.append(recall)
+                    hook_precisions.append(precision)
+
+                    template_label = _template_label(template_name or "unknown", template_params)
+                    result = SyntheticEvalResult(
+                        question_text=question_text[:100],
+                        template=template_label,
+                        difficulty=difficulty,
+                        dataset=dataset,
+                        matched=matched,
+                        mismatch_reason=None if matched else reason,
+                        hook_matches=matches,
+                        hook_expected=expected_count,
+                        hook_teacher=teacher_count,
+                        hook_recall=recall,
+                        hook_precision=precision,
+                        expected=expected_answer,
+                        actual=teacher_answer,
+                    )
+                    results.append(result)
+
+                    by_difficulty[difficulty].append(matched)
+                    by_template[template_label].append(matched)
+
+            finally:
+                await session.cleanup()
+
         if not results:
             return SyntheticEvalMetrics(
-                accuracy=0.0, total=0, correct=0, mismatches=[]
+                accuracy=0.0,
+                total=0,
+                correct=0,
+                avg_hook_recall=0.0,
+                avg_hook_precision=0.0,
+                mismatches=[],
             )
 
         total = len(results)
         correct = sum(1 for r in results if r.matched)
         mismatches = [r for r in results if not r.matched]
 
+        avg_hook_recall = sum(hook_recalls) / len(hook_recalls) if hook_recalls else 0.0
+        avg_hook_precision = sum(hook_precisions) / len(hook_precisions) if hook_precisions else 0.0
+
         return SyntheticEvalMetrics(
             accuracy=correct / total,
             total=total,
             correct=correct,
+            avg_hook_recall=avg_hook_recall,
+            avg_hook_precision=avg_hook_precision,
             accuracy_by_difficulty={
                 k: sum(v) / len(v) for k, v in by_difficulty.items()
             },
@@ -225,6 +449,9 @@ class SyntheticEvaluator:
             mismatches=mismatches,
         )
 
+    def evaluate(self) -> SyntheticEvalMetrics:
+        return asyncio.run(self.evaluate_async())
+
     def print_report(self, metrics: SyntheticEvalMetrics) -> None:
         """Print formatted evaluation report."""
         print("=" * 60)
@@ -232,6 +459,8 @@ class SyntheticEvaluator:
         print("=" * 60)
         print()
         print(f"Overall Accuracy: {metrics.accuracy:.1%} ({metrics.correct}/{metrics.total})")
+        print(f"Avg Hook Recall:  {metrics.avg_hook_recall:.1%}")
+        print(f"Avg Hook Precision: {metrics.avg_hook_precision:.1%}")
         print()
 
         print("By Difficulty:")
@@ -245,7 +474,7 @@ class SyntheticEvaluator:
 
         print("By Template:")
         for template, acc in sorted(metrics.accuracy_by_template.items()):
-            print(f"  {template:40} {acc:.1%}")
+            print(f"  {template:55} {acc:.1%}")
         print()
 
         if metrics.mismatches:
@@ -269,14 +498,24 @@ def main():
         help="Path to episodes.jsonl",
     )
     parser.add_argument(
-        "--tolerance",
+        "--float-tol",
         type=float,
-        default=0.01,
-        help="Relative tolerance for float comparison (default 1%%)",
+        default=0.02,
+        help="Absolute tolerance for float comparison (default 0.02)",
+    )
+    parser.add_argument(
+        "--p-value-tol",
+        type=float,
+        default=0.002,
+        help="Absolute tolerance for p-value comparison (default 0.002)",
     )
     args = parser.parse_args()
 
-    evaluator = SyntheticEvaluator(args.episodes, args.tolerance)
+    evaluator = SyntheticEvaluator(
+        args.episodes,
+        float_tol=args.float_tol,
+        p_value_tol=args.p_value_tol,
+    )
     metrics = evaluator.evaluate()
     evaluator.print_report(metrics)
 
