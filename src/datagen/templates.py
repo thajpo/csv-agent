@@ -19,6 +19,7 @@ class CompositionTemplate:
     description: str  # Human-readable description of what this computes
     code_template: str  # Python code with {placeholders}
     output_type: str  # "scalar", "dict", "list"
+    output_schema: str  # Exact format description for the answer
     applicable_when: Callable[[dict], bool]  # Profile -> bool
     n_steps: int
     difficulty: str  # EASY, MEDIUM, HARD, VERY_HARD
@@ -90,6 +91,7 @@ def _has_categorical_cols(profile: dict) -> bool:
 MAX_VARIANCE_MEAN = CompositionTemplate(
     name="max_variance_mean",
     description="Find the numeric column with highest variance, then compute its mean",
+    output_schema="A single number (the mean), rounded to 3 decimal places",
     code_template='''
 # Step 1: Find the column with maximum variance
 numeric_cols = df.select_dtypes('number')
@@ -114,6 +116,7 @@ submit(round(result, 3))
 MIN_MEAN_COLUMN_STD = CompositionTemplate(
     name="min_mean_column_std",
     description="Find the numeric column with lowest mean, then compute its standard deviation",
+    output_schema="A single number (the standard deviation), rounded to 3 decimal places",
     code_template='''
 # Step 1: Find the column with minimum mean
 numeric_cols = df.select_dtypes('number')
@@ -143,6 +146,7 @@ submit(round(result, 3))
 STRONGEST_CORRELATION = CompositionTemplate(
     name="strongest_correlation",
     description="Find the pair of numeric columns with the strongest correlation",
+    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "correlation" (the correlation coefficient rounded to 3 decimal places). Example: {"columns": ["col_a", "col_b"], "correlation": 0.847}',
     code_template='''
 # Step 1: Compute correlation matrix
 numeric_cols = df.select_dtypes('number')
@@ -161,7 +165,7 @@ correlation_value = corr_matrix.loc[max_corr_idx[0], max_corr_idx[1]]
 hook(correlation_value, "correlation_value extracted", name='correlation_value', depends_on=['max_corr_idx'])
 print(f"Correlation: {correlation_value:.4f}")
 
-submit({"columns": list(max_corr_idx), "correlation": round(float(correlation_value), 3)})
+submit({"columns": sorted(list(max_corr_idx)), "correlation": round(float(correlation_value), 3)})
 '''.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 3,
@@ -172,6 +176,7 @@ submit({"columns": list(max_corr_idx), "correlation": round(float(correlation_va
 WEAKEST_CORRELATION = CompositionTemplate(
     name="weakest_correlation",
     description="Find the pair of numeric columns with the weakest (closest to zero) correlation",
+    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "correlation" (the absolute correlation value rounded to 3 decimal places). Example: {"columns": ["col_a", "col_b"], "correlation": 0.012}',
     code_template='''
 # Step 1: Compute correlation matrix
 numeric_cols = df.select_dtypes('number')
@@ -189,7 +194,7 @@ correlation_value = corr_matrix.loc[min_corr_idx[0], min_corr_idx[1]]
 hook(correlation_value, "correlation_value extracted", name='correlation_value', depends_on=['min_corr_idx'])
 print(f"Correlation: {correlation_value:.4f}")
 
-submit({"columns": list(min_corr_idx), "correlation": round(float(correlation_value), 3)})
+submit({"columns": sorted(list(min_corr_idx)), "correlation": round(float(correlation_value), 3)})
 '''.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 3,
@@ -205,6 +210,7 @@ submit({"columns": list(min_corr_idx), "correlation": round(float(correlation_va
 CONDITIONAL_NORMALITY = CompositionTemplate(
     name="conditional_normality",
     description="Test if column is normally distributed; report mean±std if yes, median+IQR if no",
+    output_schema='A JSON object with exactly 3 keys. If normal: {"distribution": "normal", "mean": <number>, "std": <number>}. If non-normal: {"distribution": "non-normal", "median": <number>, "iqr": <number>}. The "iqr" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.',
     code_template='''
 # Step 1: Get the target column (highest variance numeric column)
 numeric_cols = df.select_dtypes('number')
@@ -257,6 +263,7 @@ submit(result)
 COUNT_HIGH_MISSING_COLUMNS = CompositionTemplate(
     name="count_high_missing_columns",
     description="Count how many columns have more than 5% missing values",
+    output_schema='A JSON object with exactly 2 keys: "count" (integer) and "columns" (list of column names, alphabetically sorted). Example: {"count": 3, "columns": ["col_a", "col_b", "col_c"]}',
     code_template='''
 # Step 1: Calculate missing percentage for each column
 missing_pct = df.isnull().mean() * 100
@@ -274,7 +281,7 @@ print(f"Columns with >{threshold}% missing: {high_missing_cols}")
 high_missing_names = missing_pct[missing_pct > threshold].index.tolist()
 hook(high_missing_names, "names of high-missing columns", name='high_missing_names', depends_on=['missing_pct'])
 
-submit({"count": int(high_missing_cols), "columns": high_missing_names})
+submit({"count": int(high_missing_cols), "columns": sorted(high_missing_names)})
 '''.strip(),
     output_type="dict",
     applicable_when=lambda p: True,  # Always applicable
@@ -285,6 +292,7 @@ submit({"count": int(high_missing_cols), "columns": high_missing_names})
 COUNT_OUTLIER_COLUMNS = CompositionTemplate(
     name="count_outlier_columns",
     description="Count how many numeric columns contain outliers (beyond 3 std from mean)",
+    output_schema='A JSON object with exactly 2 keys: "columns_with_outliers" (integer count of columns containing at least one outlier) and "total_outliers" (integer total count of outlier values across all columns). Example: {"columns_with_outliers": 3, "total_outliers": 47}',
     code_template='''
 # Step 1: For each numeric column, check for outliers
 numeric_cols = df.select_dtypes('number').columns
@@ -327,6 +335,7 @@ submit({"columns_with_outliers": cols_with_outliers, "total_outliers": total_out
 CATEGORY_WITH_HIGHEST_TARGET_MEAN = CompositionTemplate(
     name="category_highest_target_mean",
     description="Find which category has the highest mean for the most variable numeric column",
+    output_schema='A JSON object with exactly 4 keys: "category_column" (the grouping column name), "best_category" (the category value with highest mean), "target_column" (the numeric column analyzed), and "mean_value" (rounded to 3 decimal places). Example: {"category_column": "region", "best_category": "West", "target_column": "sales", "mean_value": 1234.567}',
     code_template='''
 # Step 1: Identify the target (most variable numeric column)
 numeric_cols = df.select_dtypes('number')
@@ -380,6 +389,7 @@ else:
 CORRELATION_AFTER_OUTLIER_REMOVAL = CompositionTemplate(
     name="correlation_after_outlier_removal",
     description="Find strongest correlation, remove outliers from those columns, recompute correlation",
+    output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "original_correlation" (rounded to 3 decimals), "outliers_removed" (integer count), and "clean_correlation" (rounded to 3 decimals). Example: {"columns": ["col_a", "col_b"], "original_correlation": 0.847, "outliers_removed": 12, "clean_correlation": 0.891}',
     code_template='''
 # Step 1: Find the strongest correlation pair
 numeric_cols = df.select_dtypes('number')
@@ -409,7 +419,7 @@ hook(clean_corr, "correlation after outlier removal", name='clean_corr', depends
 print(f"Correlation after cleaning: {clean_corr:.4f}")
 
 submit({
-    "columns": [col1, col2],
+    "columns": sorted([col1, col2]),
     "original_correlation": round(float(original_corr), 3),
     "outliers_removed": int(rows_removed),
     "clean_correlation": round(float(clean_corr), 3)
@@ -429,6 +439,7 @@ submit({
 REGRESSION_MOST_PREDICTIVE = CompositionTemplate(
     name="regression_most_predictive",
     description="Find the most predictive feature via correlation, build regression, report R-squared",
+    output_schema='A JSON object with exactly 6 keys: "target" (column name), "best_predictor" (column name), "correlation" (rounded to 3 decimals), "r_squared" (rounded to 4 decimals), "coefficient" (rounded to 4 decimals), and "p_value" (rounded to 6 decimals). Example: {"target": "price", "best_predictor": "sqft", "correlation": 0.834, "r_squared": 0.6956, "coefficient": 135.2847, "p_value": 0.000001}',
     code_template='''
 # Step 1: Identify numeric columns
 numeric_cols = df.select_dtypes('number').columns.tolist()
@@ -489,6 +500,7 @@ submit({
 TTEST_DISCOVERED_GROUPS = CompositionTemplate(
     name="ttest_discovered_groups",
     description="Find binary categorical column, perform t-test on highest-variance numeric column",
+    output_schema='A JSON object with exactly 9 keys: "target_column", "grouping_column", "group1", "group2", "mean1" (rounded to 4 decimals), "mean2" (rounded to 4 decimals), "t_statistic" (rounded to 4 decimals), "p_value" (rounded to 6 decimals), and "significant" (boolean, true if p < 0.05). Example: {"target_column": "score", "grouping_column": "gender", "group1": "M", "group2": "F", "mean1": 75.4321, "mean2": 78.1234, "t_statistic": -2.3456, "p_value": 0.019234, "significant": true}',
     code_template='''
 # Step 1: Find numeric column with highest variance
 numeric_cols = df.select_dtypes('number').columns.tolist()
@@ -563,6 +575,7 @@ submit({
 BOOTSTRAP_CI_DISCOVERED = CompositionTemplate(
     name="bootstrap_ci_discovered",
     description="Bootstrap 95% CI for the mean of the column with highest skewness",
+    output_schema='A JSON object with exactly 7 keys: "column" (name of most skewed column), "skewness" (rounded to 4 decimals), "mean" (rounded to 4 decimals), "ci_lower" (lower bound of 95% CI, rounded to 4 decimals), "ci_upper" (upper bound, rounded to 4 decimals), "std_error" (bootstrap standard error, rounded to 4 decimals), and "n_bootstrap" (integer, the number of bootstrap samples). Example: {"column": "income", "skewness": 2.3456, "mean": 50000.1234, "ci_lower": 48500.5678, "ci_upper": 51500.9012, "std_error": 750.3456, "n_bootstrap": 1000}',
     code_template='''
 # Step 1: Identify numeric columns
 numeric_cols = df.select_dtypes('number').columns.tolist()
@@ -634,6 +647,7 @@ submit({
 ANOVA_DISCOVERED_GROUPS = CompositionTemplate(
     name="anova_discovered_groups",
     description="Find categorical column with 3+ groups, perform ANOVA on highest-variance numeric",
+    output_schema='A JSON object with exactly 11 keys: "target_column", "grouping_column", "n_groups" (integer), "f_statistic" (rounded to 4 decimals), "p_value" (rounded to 6 decimals), "significant" (boolean), "best_group" (category with highest mean), "best_mean" (rounded to 4 decimals), "worst_group" (category with lowest mean), "worst_mean" (rounded to 4 decimals), and "eta_squared" (effect size, rounded to 4 decimals). Example: {"target_column": "sales", "grouping_column": "region", "n_groups": 4, "f_statistic": 15.2345, "p_value": 0.000012, "significant": true, "best_group": "West", "best_mean": 1234.5678, "worst_group": "East", "worst_mean": 890.1234, "eta_squared": 0.1523}',
     code_template='''
 # Step 1: Find numeric column with highest variance
 numeric_cols = df.select_dtypes('number').columns.tolist()
@@ -712,6 +726,7 @@ else:
 MULTIPLE_REGRESSION_TOP_PREDICTORS = CompositionTemplate(
     name="multiple_regression_top_predictors",
     description="Find top 3 predictors via correlation, build multiple regression, report adjusted R-squared",
+    output_schema='A JSON object with exactly 6 keys: "target" (column name), "predictors" (list of 3 column names), "r_squared" (rounded to 4 decimals), "adj_r_squared" (rounded to 4 decimals), "n_significant" (integer count of predictors with p < 0.05), "coefficients" (dict mapping predictor names to coefficients rounded to 4 decimals), and "p_values" (dict mapping predictor names to p-values rounded to 6 decimals). Example: {"target": "price", "predictors": ["sqft", "bedrooms", "age"], "r_squared": 0.7234, "adj_r_squared": 0.7156, "n_significant": 2, "coefficients": {"sqft": 123.45, "bedrooms": 5000.12, "age": -200.34}, "p_values": {"sqft": 0.000001, "bedrooms": 0.023456, "age": 0.156789}}',
     code_template='''
 # Step 1: Identify numeric columns
 numeric_cols = df.select_dtypes('number').columns.tolist()

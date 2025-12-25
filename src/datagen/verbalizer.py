@@ -30,6 +30,9 @@ VERBALIZATION_PROMPT = '''You are converting a data analysis code snippet into a
 ## GROUND TRUTH ANSWER:
 {ground_truth}
 
+## REQUIRED OUTPUT FORMAT:
+{output_schema}
+
 ## YOUR TASK:
 Generate a question that describes WHAT to find, WITHOUT revealing HOW to find it.
 
@@ -38,20 +41,22 @@ CRITICAL RULES:
 2. Reference columns by their PROPERTIES (e.g., "the column with highest variance", "numeric columns", "the most correlated pair")
 3. The question should require EXPLORATION to answer - the solver must discover which columns to use
 4. The hint should guide the approach without giving away the solution
+5. **IMPORTANT**: The question MUST specify the exact output format from the REQUIRED OUTPUT FORMAT section above. Include this as part of the question itself.
 
 GOOD EXAMPLES:
-- "What is the mean of the numeric column with the highest variance?"
-- "Which pair of numeric columns has the strongest correlation, and what is that correlation value?"
-- "How many columns have more than 5% missing values?"
+- "What is the mean of the numeric column with the highest variance? Provide your answer as a single number rounded to 3 decimal places."
+- "Which pair of numeric columns has the strongest correlation? Provide your answer as a JSON object with keys 'columns' (list of two column names, alphabetically sorted) and 'correlation' (rounded to 3 decimal places)."
+- "How many columns have more than 5% missing values? Provide your answer as a JSON object with keys 'count' (integer) and 'columns' (list of column names, alphabetically sorted)."
 
 BAD EXAMPLES (DO NOT DO THIS):
 - "What is the mean of the 'alcohol' column?" (names specific column)
 - "Calculate df.var().idxmax()" (reveals the code)
 - "The answer is 10.5" (gives away the answer)
+- "What is the correlation?" (doesn't specify output format)
 
 OUTPUT FORMAT (respond with ONLY this JSON, no other text):
 {{
-    "question": "Your natural language question here",
+    "question": "Your natural language question here, INCLUDING the required answer format",
     "hint": "A brief hint that guides exploration without revealing the solution"
 }}'''
 
@@ -74,6 +79,7 @@ class QuestionVerbalizer:
         code: str,
         profile: dict,
         ground_truth: Any,
+        output_schema: str = "",
     ) -> tuple[str, str]:
         """
         Convert code into a natural language question.
@@ -82,6 +88,7 @@ class QuestionVerbalizer:
             code: The Python code that was executed
             profile: Dataset profile from DataProfiler
             ground_truth: The actual answer from executing the code
+            output_schema: Description of the exact expected output format
 
         Returns:
             Tuple of (question_text, hint)
@@ -105,6 +112,7 @@ class QuestionVerbalizer:
             numeric_cols=", ".join(numeric_cols[:10]) if numeric_cols else "none",
             categorical_cols=", ".join(categorical_cols[:10]) if categorical_cols else "none",
             ground_truth=gt_str,
+            output_schema=output_schema or "Not specified",
         )
 
         # Call LLM

@@ -201,6 +201,8 @@ class EpisodeJSONL(BaseModel):
         consistency_conversations: list[list[dict]],
         csv_source: str,
         timing_metadata: TimingMetadataDict,
+        majority_answer_hash: str | None = None,
+        majority_count: int | None = None,
     ) -> "EpisodeJSONL":
         """Convert Episode to JSONL format."""
         from collections import Counter
@@ -213,9 +215,22 @@ class EpisodeJSONL(BaseModel):
         ]
 
         if consistency_hashes:
-            majority_hash, majority_count = Counter(consistency_hashes).most_common(1)[0]
+            fallback_majority_hash, fallback_majority_count = (
+                Counter(consistency_hashes).most_common(1)[0]
+            )
         else:
-            majority_hash, majority_count = None, 0
+            fallback_majority_hash, fallback_majority_count = None, 0
+
+        majority_hash = (
+            majority_answer_hash
+            if majority_answer_hash is not None
+            else fallback_majority_hash
+        )
+        majority_votes = (
+            majority_count
+            if majority_count is not None
+            else fallback_majority_count
+        )
 
         # Extract messages (skip system prompt - it's separated)
         messages_without_system = gold_conversation[1:] if gold_conversation else []
@@ -240,7 +255,7 @@ class EpisodeJSONL(BaseModel):
                 "n_consistency_runs": len(consistency_traces),
                 "n_consistency_succeeded": len(consistency_hashes),
                 "majority_answer_hash": majority_hash,
-                "majority_count": majority_count,
+                "majority_count": majority_votes,
                 "gold_matches_majority": episode.verified,
             },
             timing_metadata=timing_metadata,
@@ -271,4 +286,3 @@ class ExplorationTrace(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
-

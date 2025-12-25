@@ -87,43 +87,55 @@ def answers_match(
 
         # Both dicts: compare keys exactly, values with float tolerance
         if isinstance(v1, dict) and isinstance(v2, dict):
-            # Special case for structured statistical answers
-            # If both have 'answer' and/or 'p_value', focus on those
-            if ("answer" in v1 and "answer" in v2) or (
-                "p_value" in v1 and "p_value" in v2
-            ):
-                # 1. Compare 'answer' (categorical conclusion) if present in both
-                if "answer" in v1 and "answer" in v2:
+            def _values_match(a: Any, b: Any) -> bool:
+                if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                    return abs(float(a) - float(b)) <= float_tol
+                return answers_match(
+                    None,
+                    None,
+                    a,
+                    b,
+                    float_tol=float_tol,
+                    p_value_tol=p_value_tol,
+                )
+
+            special_keys = {"answer", "p_value"}
+            has_special = any(k in v1 or k in v2 for k in special_keys)
+
+            # Structured statistical answers: compare required keys AND all other fields
+            if has_special:
+                if set(v1.keys()) != set(v2.keys()):
+                    return False
+
+                if "answer" in v1:
                     if (
                         str(v1["answer"]).lower().strip()
                         != str(v2["answer"]).lower().strip()
                     ):
                         return False
 
-                # 2. Compare 'p_value' (numeric evidence) if present in both
-                if "p_value" in v1 and "p_value" in v2:
+                if "p_value" in v1:
                     try:
                         p1 = float(v1["p_value"])
                         p2 = float(v2["p_value"])
                         if abs(p1 - p2) > p_value_tol:
                             return False
                     except (ValueError, TypeError):
-                        # Not convertible to float - compare as strings
                         if str(v1["p_value"]) != str(v2["p_value"]):
                             return False
 
-                # If we verified the core keys, we accept the match (ignore extra keys like 'decision')
+                for k in v1.keys():
+                    if k in special_keys:
+                        continue
+                    if not _values_match(v1[k], v2[k]):
+                        return False
                 return True
 
             # Standard exact key match for other dicts
             if set(v1.keys()) != set(v2.keys()):
                 return False
             for k in v1.keys():
-                a, b = v1[k], v2[k]
-                if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-                    if abs(float(a) - float(b)) > float_tol:
-                        return False
-                elif a != b:
+                if not _values_match(v1[k], v2[k]):
                     return False
             return True
 
@@ -367,7 +379,14 @@ async def triangulate_teacher(
     ui: Any,  # UI instance (required)
     float_tol: float = 0.1,
 ) -> tuple[
-    ExecutionTrace, list[dict], str, list[tuple[ExecutionTrace, list[dict]]], bool, dict
+    ExecutionTrace,
+    list[dict],
+    str,
+    list[tuple[ExecutionTrace, list[dict]]],
+    bool,
+    dict,
+    str | None,
+    int,
 ]:
     """
     Run teacher triangulation: gold trace + consistency traces.
@@ -385,6 +404,8 @@ async def triangulate_teacher(
         - consistency_results: list of (ExecutionTrace, conversation) tuples
         - verified: True if gold matches majority of consistency traces
         - timing_metadata: dict with gold_elapsed, consistency_elapsed, total_elapsed, avg_elapsed
+        - majority_answer_hash: hash of tolerance-based majority answer (if any)
+        - majority_count: number of consistency traces in majority cluster
     """
     use_pool = container_pool is not None
 
@@ -470,11 +491,23 @@ async def triangulate_teacher(
     ]
 
     if not submitted_answers:
-        return gold_trace, gold_conversation, system_prompt, consistency_results, False, timing_metadata
+        return (
+            gold_trace,
+            gold_conversation,
+            system_prompt,
+            consistency_results,
+            False,
+            timing_metadata,
+            None,
+            0,
+        )
 
     # Find majority answer by clustering (handles float tolerance and formatting differences)
     majority_value, majority_count = get_majority_answer(
         submitted_answers, float_tol=float_tol
+    )
+    majority_answer_hash = (
+        hash_artifact(majority_value) if majority_value is not None else None
     )
 
     # Check if gold matches majority (with tolerance for floats and formats)
@@ -491,7 +524,16 @@ async def triangulate_teacher(
         float_tol=float_tol,
     )
 
-    return gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata
+    return (
+        gold_trace,
+        gold_conversation,
+        system_prompt,
+        consistency_results,
+        verified,
+        timing_metadata,
+        majority_answer_hash,
+        majority_count,
+    )
 
 
 async def batch_triangulate(
@@ -516,6 +558,8 @@ async def batch_triangulate(
         list[tuple[ExecutionTrace, list[dict]]],
         bool,
         dict,
+        str | None,
+        int,
     ]
 ]:
     """
@@ -536,7 +580,7 @@ async def batch_triangulate(
         use_container_pool: If True, use multi-tenant container (much faster)
 
     Returns:
-        List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata)
+        List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata, majority_answer_hash, majority_count)
     """
     from src.envs.container_pool import MultiTenantContainer, WorkerAdapter
 
@@ -580,6 +624,8 @@ async def batch_triangulate(
                 consistency_results,
                 verified,
                 timing_metadata,
+                majority_answer_hash,
+                majority_count,
             ) = await triangulate_teacher(
                 csv_path=csv_path,
                 question=q_dict["question"],
@@ -606,6 +652,8 @@ async def batch_triangulate(
                     consistency_results,
                     verified,
                     timing_metadata,
+                    majority_answer_hash,
+                    majority_count,
                 )
             )
 

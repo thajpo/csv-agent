@@ -641,6 +641,14 @@ class WorkerAdapter:
         state["python_state"] = {"ready": True, "execution_count": 0}
         return state
 
+    async def reset(self, sandbox_id: str, python_state: dict = None) -> None:
+        """
+        Reset this worker's namespace for reuse between questions.
+
+        Matches the LocalCSVAnalysisEnv.reset() interface.
+        """
+        await self.container.reset_worker(self.worker_id)
+
     async def destroy_sandbox(self, sandbox_id: str) -> None:
         """
         No-op for adapter - the container manages its own lifecycle.

@@ -158,6 +158,7 @@ class CompositionalQuestionGenerator:
             code=code,
             profile=profile,
             ground_truth=ground_truth,
+            output_schema=template.output_schema,
         )
 
         if not question_text or question_text.startswith("[VERBALIZATION FAILED"):

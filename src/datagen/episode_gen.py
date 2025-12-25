@@ -94,6 +94,7 @@ def gather_csv_tasks(
     csv_sources: list[str],
     base_questions_dir: Path,
     ui: EpisodeGenUI,
+    skip_difficulty_filter: bool = False,
 ) -> list[CSVTask]:
     """
     Gather all valid CSV tasks with their questions and metadata.
@@ -152,19 +153,20 @@ def gather_csv_tasks(
                 ui.base.print_info("Hint", "Regenerate questions with: uv run python -m src.datagen.question_gen")
                 continue
 
-        # Filter by difficulty distribution
-        filtered_questions, filter_ok = filter_by_difficulty(
-            questions,
-            config.question_difficulty_distribution,
-            config.num_questions_to_generate,
-        )
-        if not filter_ok:
-            ui.base.print_warning(
-                f"Skipping {dataset_name}: insufficient questions for difficulty distribution "
-                f"(need {config.num_questions_to_generate} total with distribution {config.question_difficulty_distribution})"
+        # Filter by difficulty distribution (unless skipped)
+        if not skip_difficulty_filter:
+            filtered_questions, filter_ok = filter_by_difficulty(
+                questions,
+                config.question_difficulty_distribution,
+                config.num_questions_to_generate,
             )
-            continue
-        questions = filtered_questions
+            if not filter_ok:
+                ui.base.print_warning(
+                    f"Skipping {dataset_name}: insufficient questions for difficulty distribution "
+                    f"(need {config.num_questions_to_generate} total with distribution {config.question_difficulty_distribution})"
+                )
+                continue
+            questions = filtered_questions
 
         tasks.append(CSVTask(
             csv_path=csv_path,
@@ -212,7 +214,17 @@ async def process_csv_task(
 
     # Convert results to EpisodeJSONL objects
     episodes = []
-    for q_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata in results:
+    for (
+        q_dict,
+        gold_trace,
+        gold_conversation,
+        system_prompt,
+        consistency_results,
+        verified,
+        timing_metadata,
+        majority_answer_hash,
+        majority_count,
+    ) in results:
         # Skip unverified if verified_only is True
         if verified_only and not verified:
             continue
@@ -242,6 +254,8 @@ async def process_csv_task(
             consistency_conversations=consistency_conversations,
             csv_source=task.csv_path,
             timing_metadata=timing_metadata,
+            majority_answer_hash=majority_answer_hash,
+            majority_count=majority_count,
         )
 
         episodes.append(episode_jsonl)
@@ -249,7 +263,14 @@ async def process_csv_task(
     return episodes
 
 
-async def main(parallel: bool = False):
+async def main(
+    parallel: bool = False,
+    questions_dir: str | None = None,
+    output_path: str | None = None,
+    n_consistency: int | None = None,
+    max_questions: int | None = None,
+    skip_difficulty_filter: bool = False,
+):
     # Create global UI instance
     ui = EpisodeGenUI()
     # Register signal handler for Ctrl+C
@@ -258,7 +279,7 @@ async def main(parallel: bool = False):
 
     # config is already imported from src.core.config
     teacher_model = config.teacher_model
-    n_consistency = config.n_consistency
+    n_consistency = n_consistency if n_consistency is not None else config.n_consistency
     max_turns = config.max_turns
     float_tol = config.float_tolerance
     verified_only = config.verified_only
@@ -271,14 +292,14 @@ async def main(parallel: bool = False):
         csv_sources = [csv_sources]
 
     # Output as single JSONL file
-    output_jsonl = Path(config.episodes_jsonl)
+    output_jsonl = Path(output_path) if output_path else Path(config.episodes_jsonl)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
     if output_jsonl.exists():
         output_jsonl.unlink()
 
     # Get parent directory of questions
-    base_questions_dir = Path(config.questions_json).parent
+    base_questions_dir = Path(questions_dir) if questions_dir else Path(config.questions_json).parent
 
     # Sampling args
     sampling_args = {
@@ -287,7 +308,13 @@ async def main(parallel: bool = False):
     }
 
     # Gather all valid CSV tasks
-    tasks = gather_csv_tasks(csv_sources, base_questions_dir, ui)
+    tasks = gather_csv_tasks(csv_sources, base_questions_dir, ui, skip_difficulty_filter)
+
+    # Limit questions per dataset if specified
+    if max_questions is not None:
+        for task in tasks:
+            if len(task.questions) > max_questions:
+                task.questions = task.questions[:max_questions]
 
     if not tasks:
         ui.base.print_error("No valid CSV tasks found. Check questions and metadata files.")
@@ -389,10 +416,46 @@ if __name__ == "__main__":
         action="store_true",
         help="Process multiple CSVs in parallel (one container per CSV)"
     )
+    parser.add_argument(
+        "--questions-dir",
+        type=str,
+        default=None,
+        help="Base directory for questions (default: from config)"
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Output JSONL file path (default: from config)"
+    )
+    parser.add_argument(
+        "--n-consistency",
+        type=int,
+        default=None,
+        help="Number of consistency traces (default: from config)"
+    )
+    parser.add_argument(
+        "--max-questions",
+        type=int,
+        default=None,
+        help="Max questions per dataset (default: all)"
+    )
+    parser.add_argument(
+        "--skip-difficulty-filter",
+        action="store_true",
+        help="Skip difficulty distribution filtering (use all questions)"
+    )
     args = parser.parse_args()
 
     try:
-        sys.exit(asyncio.run(main(parallel=args.parallel)))
+        sys.exit(asyncio.run(main(
+            parallel=args.parallel,
+            questions_dir=args.questions_dir,
+            output_path=args.output,
+            n_consistency=args.n_consistency,
+            max_questions=args.max_questions,
+            skip_difficulty_filter=args.skip_difficulty_filter,
+        )))
     except KeyboardInterrupt:
         # Already handled in signal_handler, but just in case
         sys.exit(0)
