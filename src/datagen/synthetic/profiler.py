@@ -79,8 +79,12 @@ class DataProfiler:
             except (ValueError, TypeError):
                 pass
 
-            # Try Datetime
+            # Try Datetime (skip if column looks boolean-like)
             try:
+                # Skip columns that are boolean-like to avoid numpy subtract issues
+                unique_vals = df[col].dropna().unique()
+                if len(unique_vals) <= 2 and all(str(v).lower() in ('true', 'false', '0', '1', 'yes', 'no') for v in unique_vals):
+                    continue
                 datetime_col = pd.to_datetime(df[col], errors='raise')
                 df[col] = datetime_col
                 continue
@@ -117,14 +121,18 @@ class DataProfiler:
         
         # Datetime Stats
         elif pd.api.types.is_datetime64_any_dtype(series):
-             clean_series = series.dropna()
-             if not clean_series.empty:
-                 stats_dict.update({
-                     "min": str(clean_series.min()),
-                     "max": str(clean_series.max()),
-                     "range_days": (clean_series.max() - clean_series.min()).days,
-                     "type": "datetime"
-                 })
+            clean_series = series.dropna()
+            if not clean_series.empty:
+                try:
+                    stats_dict.update({
+                        "min": str(clean_series.min()),
+                        "max": str(clean_series.max()),
+                        "range_days": (clean_series.max() - clean_series.min()).days,
+                        "type": "datetime"
+                    })
+                except TypeError:
+                    # numpy boolean subtract error - treat as categorical
+                    stats_dict["type"] = "categorical"
 
         # Categorical/Text Stats
         else:

@@ -1,0 +1,146 @@
+{
+  "dataset_columns": [
+    "show_id",
+    "type",
+    "title",
+    "director",
+    "cast",
+    "country",
+    "date_added",
+    "release_year",
+    "rating",
+    "duration",
+    "listed_in",
+    "description"
+  ],
+  "questions": [
+    {
+      "question": "Identify the numeric column that exhibits the highest variance among all numeric columns. Then, locate a categorical column that contains between three and ten distinct categories. Using the selected numeric column as the response variable and the selected categorical column as the grouping factor, perform a one\u2011way ANOVA. Report the results as a JSON object with exactly the following 11 keys: \"target_column\" (the name of the numeric column with highest variance), \"grouping_column\" (the name of the categorical column with 3\u201110 groups), \"n_groups\" (integer count of groups), \"f_statistic\" (ANOVA F\u2011statistic rounded to 4 decimal places), \"p_value\" (p\u2011value rounded to 6 decimal places), \"significant\" (true if p\u202f<\u202f0.05, otherwise false), \"best_group\" (the group with the highest mean of the numeric variable), \"best_mean\" (that mean rounded to 4 decimal places), \"worst_group\" (the group with the lowest mean), \"worst_mean\" (that mean rounded to 4 decimal places), and \"eta_squared\" (effect size rounded to 4 decimal places).",
+      "hint": "Start by computing variances for all numeric columns to pick the one with the maximum. Then examine each categorical column's number of unique values to find one with 3\u201110 categories. Use these two columns for the ANOVA and derive the requested statistics.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "anova_discovered_groups",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 11 keys: \"target_column\", \"grouping_column\", \"n_groups\" (integer), \"f_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"significant\" (boolean), \"best_group\" (category with highest mean), \"best_mean\" (rounded to 4 decimals), \"worst_group\" (category with lowest mean), \"worst_mean\" (rounded to 4 decimals), and \"eta_squared\" (effect size, rounded to 4 decimals). Example: {\"target_column\": \"sales\", \"grouping_column\": \"region\", \"n_groups\": 4, \"f_statistic\": 15.2345, \"p_value\": 0.000012, \"significant\": true, \"best_group\": \"West\", \"best_mean\": 1234.5678, \"worst_group\": \"East\", \"worst_mean\": 890.1234, \"eta_squared\": 0.1523}",
+      "ground_truth_hash": "f34d87df8f73ee91",
+      "_ground_truth": {
+        "error": "No suitable categorical column found (need 3-10 groups)"
+      },
+      "_template": "anova_discovered_groups"
+    },
+    {
+      "question": "Identify the numeric column that has the highest variance in the dataset. Test whether the values in this column are normally distributed using a Shapiro\u2011Wilk test (treat the distribution as normal if the p\u2011value > 0.05). If the distribution is normal, report its mean and standard deviation; if it is not normal, report its median and inter\u2011quartile range (IQR = Q3 \u2212 Q1). Provide your answer as a JSON object with exactly three keys: \n- If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}\n- If non\u2011normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}\nAll numeric values must be rounded to three decimal places.",
+      "hint": "First compute variances of all numeric columns to find the one with the largest variance, then apply the Shapiro\u2011Wilk test (sample if the column has many rows) to decide which summary statistics to report.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "conditional_normality",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 3 keys. If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}. If non-normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}. The \"iqr\" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.",
+      "ground_truth_hash": "778a9600b1a3f172",
+      "_ground_truth": {
+        "distribution": "non-normal",
+        "median": 2017.0,
+        "iqr": 6.0
+      },
+      "_template": "conditional_normality"
+    },
+    {
+      "question": "Find the categorical column (with a moderate number of distinct values, e.g., between 2 and 20) that produces the highest average value for the numeric column that has the greatest variance across all numeric columns. Return your answer as a JSON object with exactly four keys: \"category_column\" (the name of the categorical column you selected), \"best_category\" (the category value with the highest mean), \"target_column\" (the name of the numeric column with the highest variance), and \"mean_value\" (the corresponding mean rounded to three decimal places).",
+      "hint": "First determine which numeric column varies the most, then evaluate the mean of that column for each possible category in each categorical column with reasonable cardinality, and finally pick the category with the largest mean.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "category_highest_target_mean",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"category_column\" (the grouping column name), \"best_category\" (the category value with highest mean), \"target_column\" (the numeric column analyzed), and \"mean_value\" (rounded to 3 decimal places). Example: {\"category_column\": \"region\", \"best_category\": \"West\", \"target_column\": \"sales\", \"mean_value\": 1234.567}",
+      "ground_truth_hash": "916e4e6e0a318645",
+      "_ground_truth": {
+        "category_column": "type",
+        "best_category": "TV Show",
+        "target_column": "release_year",
+        "mean_value": 2016.606
+      },
+      "_template": "category_highest_target_mean"
+    },
+    {
+      "question": "How many numeric columns contain at least one outlier and what is the total number of outlier values across all numeric columns? Provide your answer as a JSON object with keys \"columns_with_outliers\" (integer) and \"total_outliers\" (integer).",
+      "hint": "For each numeric column, compare values to its mean and standard deviation, treating points farther than 3\u202f\u00d7\u202fstd from the mean as outliers, then aggregate the counts.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "6c597984441af56d",
+      "_ground_truth": {
+        "columns_with_outliers": 1,
+        "total_outliers": 217
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Determine how many numeric columns in the dataset have at least one outlier, and compute the total number of outlier values across all numeric columns. Provide your answer as a JSON object with exactly two keys: \"columns_with_outliers\" (the count of numeric columns containing outliers) and \"total_outliers\" (the total count of outlier observations).",
+      "hint": "Identify extreme values in each numeric column using a distance from the mean measured in multiples of the column's standard deviation.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "9382c09345712639",
+      "_ground_truth": {
+        "columns_with_outliers": 1,
+        "total_outliers": 313
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Identify all columns whose proportion of missing (null) values exceeds 5%. Provide your answer as a JSON object with exactly two keys: \"count\" (an integer) and \"columns\" (an alphabetically sorted list of the column names).",
+      "hint": "Calculate the percentage of missing values for each column and count those above the 5% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "d9adfff12278f02b",
+      "_ground_truth": {
+        "count": 3,
+        "columns": [
+          "cast",
+          "country",
+          "director"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Identify how many columns in the dataset have more than 10% missing values, and list those column names in alphabetical order. Provide your answer as a JSON object with exactly two keys: \"count\" (an integer) and \"columns\" (a list of the column names sorted alphabetically).",
+      "hint": "Calculate the percentage of missing entries for each column, then filter for those exceeding the 10% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "710dbc9cd0c34df6",
+      "_ground_truth": {
+        "count": 1,
+        "columns": [
+          "director"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    }
+  ]
+}

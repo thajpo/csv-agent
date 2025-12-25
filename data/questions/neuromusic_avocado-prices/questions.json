@@ -1,0 +1,324 @@
+{
+  "dataset_columns": [
+    "Unnamed: 0",
+    "Date",
+    "AveragePrice",
+    "Total Volume",
+    "4046",
+    "4225",
+    "4770",
+    "Total Bags",
+    "Small Bags",
+    "Large Bags",
+    "XLarge Bags",
+    "type",
+    "year",
+    "region"
+  ],
+  "questions": [
+    {
+      "question": "Identify the numeric column that has the highest variance and treat it as the response variable. Then, among the remaining numeric columns, select the three that have the largest absolute correlation with this response variable. Fit an ordinary least squares regression using these three predictors (after confirming that their inter\u2011correlation is not excessive). Report the regression results in the following JSON format with exactly six keys: \"target\" (the name of the response column), \"predictors\" (a list of the three predictor column names in any order), \"r_squared\" (the model R\u2011squared rounded to 4 decimal places), \"adj_r_squared\" (the adjusted R\u2011squared rounded to 4 decimal places), \"n_significant\" (the count of predictors whose p\u2011value is less than 0.05), \"coefficients\" (a dictionary mapping each predictor name to its regression coefficient rounded to 4 decimals), and \"p_values\" (a dictionary mapping each predictor name to its p\u2011value rounded to 6 decimals). Example: {\"target\": \"price\", \"predictors\": [\"sqft\", \"bedrooms\", \"age\"], \"r_squared\": 0.7234, \"adj_r_squared\": 0.7156, \"n_significant\": 2, \"coefficients\": {\"sqft\": 123.45, \"bedrooms\": 5000.12, \"age\": -200.34}, \"p_values\": {\"sqft\": 0.000001, \"bedrooms\": 0.023456, \"age\": 0.156789}}",
+      "hint": "First compute variances of all numeric columns to find the target. Then compute absolute correlations of the remaining numeric columns with that target to pick the top three. Check that the predictors aren't highly correlated with each other before fitting the OLS model.",
+      "n_steps": 10,
+      "difficulty": "VERY_HARD",
+      "template_name": "multiple_regression_top_predictors",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"predictors\" (list of 3 column names), \"r_squared\" (rounded to 4 decimals), \"adj_r_squared\" (rounded to 4 decimals), \"n_significant\" (integer count of predictors with p < 0.05), \"coefficients\" (dict mapping predictor names to coefficients rounded to 4 decimals), and \"p_values\" (dict mapping predictor names to p-values rounded to 6 decimals). Example: {\"target\": \"price\", \"predictors\": [\"sqft\", \"bedrooms\", \"age\"], \"r_squared\": 0.7234, \"adj_r_squared\": 0.7156, \"n_significant\": 2, \"coefficients\": {\"sqft\": 123.45, \"bedrooms\": 5000.12, \"age\": -200.34}, \"p_values\": {\"sqft\": 0.000001, \"bedrooms\": 0.023456, \"age\": 0.156789}}",
+      "ground_truth_hash": "8c850b90397160e7",
+      "_ground_truth": {
+        "target": "Total Volume",
+        "predictors": [
+          "4046",
+          "4225",
+          "Small Bags"
+        ],
+        "r_squared": 0.9989,
+        "adj_r_squared": 0.9989,
+        "n_significant": 3,
+        "coefficients": {
+          "4046": 1.0314,
+          "4225": 1.0428,
+          "Small Bags": 1.3174
+        },
+        "p_values": {
+          "4046": 0.0,
+          "4225": 0.0,
+          "Small Bags": 0.0
+        }
+      },
+      "_template": "multiple_regression_top_predictors"
+    },
+    {
+      "question": "Among the numeric columns in the dataset, identify the column that has the highest absolute skewness. For that column, compute the following values, rounding each to four decimal places: the absolute skewness, the sample mean, the lower bound of a 95% confidence interval for the mean obtained via 1000 bootstrap resamples, the upper bound of that interval, and the bootstrap standard error. Also report the number of bootstrap samples used. Provide your answer as a JSON object with exactly these keys: \"column\" (the name of the most skewed column), \"skewness\", \"mean\", \"ci_lower\", \"ci_upper\", \"std_error\", and \"n_bootstrap\" (integer). Example format: {\"column\": \"income\", \"skewness\": 2.3456, \"mean\": 50000.1234, \"ci_lower\": 48500.5678, \"ci_upper\": 51500.9012, \"std_error\": 750.3456, \"n_bootstrap\": 1000}",
+      "hint": "First compute the skewness of each numeric column and pick the one with the largest absolute value; then apply bootstrap resampling (1000 draws) on that column to estimate the mean's confidence interval and standard error.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "bootstrap_ci_discovered",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (name of most skewed column), \"skewness\" (rounded to 4 decimals), \"mean\" (rounded to 4 decimals), \"ci_lower\" (lower bound of 95% CI, rounded to 4 decimals), \"ci_upper\" (upper bound, rounded to 4 decimals), \"std_error\" (bootstrap standard error, rounded to 4 decimals), and \"n_bootstrap\" (integer, the number of bootstrap samples). Example: {\"column\": \"income\", \"skewness\": 2.3456, \"mean\": 50000.1234, \"ci_lower\": 48500.5678, \"ci_upper\": 51500.9012, \"std_error\": 750.3456, \"n_bootstrap\": 1000}",
+      "ground_truth_hash": "31829346c025ab8d",
+      "_ground_truth": {
+        "column": "XLarge Bags",
+        "skewness": 13.1398,
+        "mean": 3106.4265,
+        "ci_lower": 2852.7252,
+        "ci_upper": 3369.7188,
+        "std_error": 130.1328,
+        "n_bootstrap": 1000
+      },
+      "_template": "bootstrap_ci_discovered"
+    },
+    {
+      "question": "In the given dataset, first identify the numeric column that exhibits the highest variance. Next, locate a categorical column that contains between three and ten distinct categories. Using these two columns, conduct a one\u2011way ANOVA to assess whether the mean of the selected numeric column differs across the groups defined by the selected categorical column. Report the results as a JSON object with exactly the following keys:\n- \"target_column\": name of the numeric column with highest variance\n- \"grouping_column\": name of the categorical column used for grouping\n- \"n_groups\": number of distinct groups (integer)\n- \"f_statistic\": ANOVA F\u2011statistic rounded to 4 decimal places\n- \"p_value\": ANOVA p\u2011value rounded to 6 decimal places\n- \"significant\": true if p_value < 0.05, otherwise false\n- \"best_group\": the group with the highest mean of the numeric column\n- \"best_mean\": that highest mean rounded to 4 decimal places\n- \"worst_group\": the group with the lowest mean of the numeric column\n- \"worst_mean\": that lowest mean rounded to 4 decimal places\n- \"eta_squared\": effect size (eta\u2011squared) rounded to 4 decimal places\nProvide the answer exactly in this JSON format.",
+      "hint": "Compute variance for each numeric column to pick the target, then count unique values for each categorical column to find a suitable grouping variable before running the ANOVA.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "anova_discovered_groups",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 11 keys: \"target_column\", \"grouping_column\", \"n_groups\" (integer), \"f_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"significant\" (boolean), \"best_group\" (category with highest mean), \"best_mean\" (rounded to 4 decimals), \"worst_group\" (category with lowest mean), \"worst_mean\" (rounded to 4 decimals), and \"eta_squared\" (effect size, rounded to 4 decimals). Example: {\"target_column\": \"sales\", \"grouping_column\": \"region\", \"n_groups\": 4, \"f_statistic\": 15.2345, \"p_value\": 0.000012, \"significant\": true, \"best_group\": \"West\", \"best_mean\": 1234.5678, \"worst_group\": \"East\", \"worst_mean\": 890.1234, \"eta_squared\": 0.1523}",
+      "ground_truth_hash": "f34d87df8f73ee91",
+      "_ground_truth": {
+        "error": "No suitable categorical column found (need 3-10 groups)"
+      },
+      "_template": "anova_discovered_groups"
+    },
+    {
+      "question": "Determine which numeric column has the highest variance and treat it as the target variable. Among the remaining numeric columns, identify the one that exhibits the strongest absolute correlation with this target. Fit an ordinary least squares regression using the identified predictor to model the target (include an intercept). Report the target column name, the predictor column name, the absolute correlation between them (rounded to three decimal places), the regression R\u2011squared (rounded to four decimal places), the predictor\u2019s regression coefficient (rounded to four decimal places), and the predictor\u2019s p\u2011value (rounded to six decimal places). Provide your answer as a JSON object with exactly six keys: \"target\" (string), \"best_predictor\" (string), \"correlation\" (number), \"r_squared\" (number), \"coefficient\" (number), and \"p_value\" (number).",
+      "hint": "First compute variances of all numeric columns to find the one with maximum variance. Then calculate absolute correlations of the other numeric columns with this target to locate the most correlated predictor. Use the two columns (dropping any missing rows) to fit a simple OLS model and extract R\u2011squared, coefficient, and p\u2011value.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "regression_most_predictive",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"best_predictor\" (column name), \"correlation\" (rounded to 3 decimals), \"r_squared\" (rounded to 4 decimals), \"coefficient\" (rounded to 4 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target\": \"price\", \"best_predictor\": \"sqft\", \"correlation\": 0.834, \"r_squared\": 0.6956, \"coefficient\": 135.2847, \"p_value\": 0.000001}",
+      "ground_truth_hash": "57753e677ed6cc64",
+      "_ground_truth": {
+        "target": "Total Volume",
+        "best_predictor": "4046",
+        "correlation": 0.978,
+        "r_squared": 0.9562,
+        "coefficient": 2.6697,
+        "p_value": 0.0
+      },
+      "_template": "regression_most_predictive"
+    },
+    {
+      "question": "Identify the numeric column that exhibits the highest variance among all numeric columns in the dataset. Then locate a categorical column that contains exactly two distinct categories. Using the two categories as groups, calculate the mean of the high\u2011variance numeric column for each group, perform an independent two\u2011sample t\u2011test between the groups, and determine whether the difference is statistically significant at the 0.05 significance level. Provide your answer as a JSON object with exactly the following keys: \"target_column\" (the name of the numeric column with highest variance), \"grouping_column\" (the name of the binary categorical column), \"group1\" (the name of the first category), \"group2\" (the name of the second category), \"mean1\" (mean for group1 rounded to 4 decimals), \"mean2\" (mean for group2 rounded to 4 decimals), \"t_statistic\" (t\u2011statistic rounded to 4 decimals), \"p_value\" (p\u2011value rounded to 6 decimals), and \"significant\" (boolean true if p\u202f<\u202f0.05).",
+      "hint": "First compute variances of all numeric columns to find the one with the largest value. Then inspect categorical columns for those with exactly two unique values to serve as the grouping variable. Use those groups to compute means and run scipy.stats.ttest_ind.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "ttest_discovered_groups",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"mean1\" (rounded to 4 decimals), \"mean2\" (rounded to 4 decimals), \"t_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), and \"significant\" (boolean, true if p < 0.05). Example: {\"target_column\": \"score\", \"grouping_column\": \"gender\", \"group1\": \"M\", \"group2\": \"F\", \"mean1\": 75.4321, \"mean2\": 78.1234, \"t_statistic\": -2.3456, \"p_value\": 0.019234, \"significant\": true}",
+      "ground_truth_hash": "3331403e8f358e87",
+      "_ground_truth": {
+        "target_column": "Total Volume",
+        "grouping_column": "type",
+        "group1": "conventional",
+        "group2": "organic",
+        "mean1": 1653212.8985,
+        "mean2": 47811.2115,
+        "t_statistic": 32.2817,
+        "p_value": 0.0,
+        "significant": "True"
+      },
+      "_template": "ttest_discovered_groups"
+    },
+    {
+      "question": "Identify the numeric column that has the highest variance in the dataset. Test whether the values in this column follow a normal distribution (using a standard normality test with a significance level of 0.05). If the column is normal, report its mean and standard deviation; otherwise, report its median and inter\u2011quartile range (Q3\u2011Q1). Provide the result as a JSON object in exactly one of the following formats (rounded to three decimal places):\n\nIf normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}\nIf non\u2011normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}",
+      "hint": "Compute variances for all numeric columns to find the one with the greatest variance, then perform a Shapiro\u2011Wilk test (or equivalent) and compare the p\u2011value to 0.05 before calculating the appropriate summary statistics.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "conditional_normality",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 3 keys. If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}. If non-normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}. The \"iqr\" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.",
+      "ground_truth_hash": "5820df5f4b9c5d7a",
+      "_ground_truth": {
+        "distribution": "non-normal",
+        "median": 107376.76,
+        "iqr": 422123.71
+      },
+      "_template": "conditional_normality"
+    },
+    {
+      "question": "Identify the categorical column that has a moderate number of distinct values (between 2 and 20). Then, find the numeric column with the highest variance among all numeric columns. Compute the mean of this numeric column for each category of the selected categorical column, and determine which category has the highest mean. Provide your answer as a JSON object with exactly four keys: \"category_column\" (the name of the categorical column used), \"best_category\" (the category value with the highest mean), \"target_column\" (the name of the numeric column with the highest variance), and \"mean_value\" (the mean value rounded to three decimal places).",
+      "hint": "First calculate variance for each numeric column to pick the target column, then look for a categorical column with a reasonable number of unique values, group by it and compare the category means.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "category_highest_target_mean",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"category_column\" (the grouping column name), \"best_category\" (the category value with highest mean), \"target_column\" (the numeric column analyzed), and \"mean_value\" (rounded to 3 decimal places). Example: {\"category_column\": \"region\", \"best_category\": \"West\", \"target_column\": \"sales\", \"mean_value\": 1234.567}",
+      "ground_truth_hash": "e02c2aabeced8593",
+      "_ground_truth": {
+        "category_column": "type",
+        "best_category": "conventional",
+        "target_column": "Total Volume",
+        "mean_value": 1653212.898
+      },
+      "_template": "category_highest_target_mean"
+    },
+    {
+      "question": "Identify the pair of numeric columns that exhibit the strongest absolute correlation. Then, determine the original correlation between this pair, count how many rows are removed as outliers (where a value in either column lies more than 3 standard deviations from its mean), and compute the correlation after removing those outlier rows. Provide your answer as a JSON object with exactly 4 keys: \"columns\" (a list of the two column names, alphabetically sorted), \"original_correlation\" (the original correlation rounded to 3 decimal places), \"outliers_removed\" (the integer count of rows removed), and \"clean_correlation\" (the correlation after outlier removal rounded to 3 decimal places).",
+      "hint": "Start by calculating the absolute correlation matrix for all numeric columns to find the most correlated pair, then apply a 3\u2011standard\u2011deviation filter on both columns to drop outlier rows before recomputing the correlation.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "correlation_after_outlier_removal",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"original_correlation\" (rounded to 3 decimals), \"outliers_removed\" (integer count), and \"clean_correlation\" (rounded to 3 decimals). Example: {\"columns\": [\"col_a\", \"col_b\"], \"original_correlation\": 0.847, \"outliers_removed\": 12, \"clean_correlation\": 0.891}",
+      "ground_truth_hash": "f76e909877900634",
+      "_ground_truth": {
+        "columns": [
+          "Small Bags",
+          "Total Bags"
+        ],
+        "original_correlation": 0.994,
+        "outliers_removed": 190,
+        "clean_correlation": 0.971
+      },
+      "_template": "correlation_after_outlier_removal"
+    },
+    {
+      "question": "Which pair of numeric columns has the strongest absolute correlation? Provide your answer as a JSON object with keys \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the correlation coefficient rounded to 3 decimal places).",
+      "hint": "Calculate the correlation matrix for all numeric columns and identify the largest off\u2011diagonal correlation value.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "strongest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the correlation coefficient rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.847}",
+      "ground_truth_hash": "83042f808bd445bd",
+      "_ground_truth": {
+        "columns": [
+          "Small Bags",
+          "Total Bags"
+        ],
+        "correlation": 0.994
+      },
+      "_template": "strongest_correlation"
+    },
+    {
+      "question": "Among all numeric columns, which pair has the smallest non\u2011zero absolute correlation? Provide your answer as a JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the absolute correlation value rounded to 3 decimal places).",
+      "hint": "Compute the absolute correlation matrix for numeric columns, mask the diagonal and any zero correlations, then find the minimum value and its column pair.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "weakest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the absolute correlation value rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.012}",
+      "ground_truth_hash": "093a542139cbeaf0",
+      "_ground_truth": {
+        "columns": [
+          "Small Bags",
+          "Unnamed: 0"
+        ],
+        "correlation": 0.0
+      },
+      "_template": "weakest_correlation"
+    },
+    {
+      "question": "For the dataset, consider any value in a numeric column that lies more than three standard deviations away from that column's mean to be an outlier. Determine (i) how many numeric columns contain at least one outlier, and (ii) the total number of outlier values across all numeric columns. Provide your answer as a JSON object with exactly two keys: \"columns_with_outliers\" (integer) and \"total_outliers\" (integer).",
+      "hint": "Compute the mean and standard deviation for each numeric column, then count values whose absolute deviation from the mean exceeds 3\u202f\u00d7\u202fstd; sum these counts per column and across all columns.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "d830567564ebf3ba",
+      "_ground_truth": {
+        "columns_with_outliers": 9,
+        "total_outliers": 1773
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Among the numeric columns, treat a value as an outlier if it lies more than 2.5 standard deviations away from its column's mean. How many numeric columns contain at least one outlier, and what is the total number of outlier values across all numeric columns? Provide your answer as a JSON object with keys \"columns_with_outliers\" (integer) and \"total_outliers\" (integer).",
+      "hint": "For each numeric column compute its mean and standard deviation, count rows where the absolute deviation exceeds 2.5\u202f\u00d7\u202fstd, then summarize the counts.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "4ade2632f940e4a6",
+      "_ground_truth": {
+        "columns_with_outliers": 9,
+        "total_outliers": 2215
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "What is the mean of the numeric column with the highest variance? Provide your answer as a single number rounded to 3 decimal places.",
+      "hint": "Calculate the variance for each numeric column, identify the column with the largest variance, and then compute the average of its values.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "max_variance_mean",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the mean), rounded to 3 decimal places",
+      "ground_truth_hash": "2565a9a113d9dfbe",
+      "_ground_truth": 850644.013,
+      "_template": "max_variance_mean"
+    },
+    {
+      "question": "What is the standard deviation of the numeric column that has the smallest mean? Provide your answer as a single number rounded to 3 decimal places.",
+      "hint": "Calculate the mean of each numeric column, find the column with the lowest mean, and then compute its standard deviation.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "min_mean_column_std",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the standard deviation), rounded to 3 decimal places",
+      "ground_truth_hash": "e9f515cd3d546694",
+      "_ground_truth": 0.403,
+      "_template": "min_mean_column_std"
+    },
+    {
+      "question": "How many columns in the dataset have more than 5% missing values, and which columns are they? Provide your answer as a JSON object with exactly two keys: \"count\" (an integer) and \"columns\" (an alphabetically sorted list of column names). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "hint": "Calculate the percentage of missing values for each column, then identify those exceeding the 5% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "2c42c4348e535666",
+      "_ground_truth": {
+        "count": 0,
+        "columns": []
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "How many columns in the dataset have more than 10% missing values? Provide your answer as a JSON object with keys \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted).",
+      "hint": "Compute the missing-value percentage for each column and select those where the percentage exceeds 10%.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "2c42c4348e535666",
+      "_ground_truth": {
+        "count": 0,
+        "columns": []
+      },
+      "_template": "count_high_missing_columns"
+    }
+  ]
+}

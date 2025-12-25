@@ -113,22 +113,65 @@ class CompositionalQuestionGenerator:
         if n_questions and len(expanded_templates) > n_questions:
             expanded_templates = expanded_templates[:n_questions]
 
-        # 3. Generate questions from each template + parameter set
-        questions = []
+        # 3. Execute all templates first (sequential - needs sandbox)
+        print(f"\nExecuting {len(expanded_templates)} templates...")
+        execution_results = []
         for i, (template, params) in enumerate(expanded_templates):
             params_label = ", ".join(f"{k}={v}" for k, v in params.items()) if params else "default"
-            print(f"\n[{i+1}/{len(expanded_templates)}] {template.name} ({params_label})")
+            code = template.instantiate(profile, params=params)
 
             try:
-                question_dict = await self._process_template(template, profile, params)
-                if question_dict:
-                    questions.append(question_dict)
-                    print(f"  OK: {question_dict['question'][:60]}...")
+                result = await self._execute_code(code)
+                if result:
+                    ground_truth, answer_hash = result
+                    execution_results.append({
+                        "template": template,
+                        "params": params,
+                        "code": code,
+                        "ground_truth": ground_truth,
+                        "answer_hash": answer_hash,
+                    })
+                    print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) ✓")
+                else:
+                    print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) - no answer")
             except Exception as e:
-                print(f"  FAILED: {e}")
-                continue
+                print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) FAILED: {e}")
 
-        # 4. Format output
+        # 4. Verbalize all concurrently (parallel LLM calls)
+        print(f"\nVerbalizing {len(execution_results)} questions concurrently...")
+
+        async def verbalize_one(item: dict) -> dict | None:
+            try:
+                question_text, hint = await self.verbalizer.verbalize(
+                    code=item["code"],
+                    profile=profile,
+                    ground_truth=item["ground_truth"],
+                    output_schema=item["template"].output_schema,
+                )
+                if not question_text or question_text.startswith("[VERBALIZATION FAILED"):
+                    return None
+                return {
+                    "question": question_text,
+                    "hint": hint,
+                    "n_steps": item["template"].n_steps,
+                    "difficulty": item["template"].difficulty,
+                    "template_name": item["template"].name,
+                    "template_params": item["params"] or None,
+                    "output_type": item["template"].output_type,
+                    "output_schema": item["template"].output_schema,
+                    "ground_truth_hash": item["answer_hash"],
+                    "_ground_truth": item["ground_truth"],
+                    "_template": item["template"].name,
+                }
+            except Exception as e:
+                print(f"  Verbalization error: {e}")
+                return None
+
+        verbalized = await asyncio.gather(*[verbalize_one(item) for item in execution_results])
+        questions = [q for q in verbalized if q is not None]
+        print(f"  Verbalized {len(questions)}/{len(execution_results)} successfully")
+
+        # 5. Format output
         df = pd.read_csv(self.csv_path, nrows=0)
         output = {
             "dataset_columns": df.columns.tolist(),
@@ -137,55 +180,6 @@ class CompositionalQuestionGenerator:
 
         print(f"\nGenerated {len(questions)} questions")
         return output
-
-    async def _process_template(
-        self,
-        template: CompositionTemplate,
-        profile: dict,
-        params: dict[str, Any],
-    ) -> dict | None:
-        """
-        Process a single template: execute code, verbalize, return question dict.
-
-        Returns:
-            Question dict or None if failed
-        """
-        # Instantiate template with profile data
-        code = template.instantiate(profile, params=params)
-
-        # Execute in sandbox
-        result = await self._execute_code(code)
-        if result is None:
-            return None
-
-        ground_truth, answer_hash = result
-
-        # Verbalize via LLM
-        question_text, hint = await self.verbalizer.verbalize(
-            code=code,
-            profile=profile,
-            ground_truth=ground_truth,
-            output_schema=template.output_schema,
-        )
-
-        if not question_text or question_text.startswith("[VERBALIZATION FAILED"):
-            print(f"  Verbalization failed")
-            return None
-
-        return {
-            "question": question_text,
-            "hint": hint,
-            "n_steps": template.n_steps,
-            "difficulty": template.difficulty,
-            "template_name": template.name,
-            "template_params": params or None,
-            "output_type": template.output_type,
-            "output_schema": template.output_schema,
-            "ground_truth_hash": answer_hash,
-            # Store ground truth for debugging (optional, can be removed in production)
-            "_ground_truth": ground_truth,
-            "_template": template.name,
-        }
 
     async def _execute_code(self, code: str) -> tuple[Any, str] | None:
         """
@@ -269,7 +263,8 @@ async def generate_questions(
 
         # Save output
         if output_dir is None:
-            dataset_name = Path(csv_path).stem
+            # Use parent folder name (e.g., "mirichoi0218_insurance" from ".../mirichoi0218_insurance/data.csv")
+            dataset_name = Path(csv_path).parent.name
             output_dir = f"data/questions/{dataset_name}"
 
         output_path = Path(output_dir)
@@ -308,8 +303,9 @@ def main() -> int:
     parser.add_argument(
         "--csv",
         type=str,
-        required=True,
-        help="Path to CSV dataset",
+        nargs="*",
+        default=None,
+        help="Path(s) to CSV dataset(s). If omitted, uses all datasets from data/kaggle/",
     )
     parser.add_argument(
         "--output-dir",
@@ -332,26 +328,50 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    try:
-        result = asyncio.run(
-            generate_questions(
-                csv_path=args.csv,
-                output_dir=args.output_dir,
-                n_questions=args.n_questions,
-                model=args.model,
-            )
-        )
-        print(f"\nGenerated {len(result['questions'])} questions successfully")
-        return 0
+    # Auto-discover datasets if none specified
+    csv_paths = args.csv if args.csv else config.csv_sources
+    if isinstance(csv_paths, str):
+        csv_paths = [csv_paths]
 
-    except KeyboardInterrupt:
-        print("\nInterrupted")
+    if not csv_paths:
+        print("No CSV files found. Specify --csv or ensure data/kaggle/ has datasets.")
         return 1
-    except Exception as e:
-        print(f"\nError: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
+
+    total_questions = 0
+    failed_csvs = []
+
+    for csv_path in csv_paths:
+        print(f"\n{'='*60}")
+        print(f"Processing: {csv_path}")
+        print("=" * 60)
+
+        try:
+            result = asyncio.run(
+                generate_questions(
+                    csv_path=csv_path,
+                    output_dir=args.output_dir,
+                    n_questions=args.n_questions,
+                    model=args.model,
+                )
+            )
+            total_questions += len(result["questions"])
+            print(f"Generated {len(result['questions'])} questions")
+
+        except KeyboardInterrupt:
+            print("\nInterrupted")
+            return 1
+        except Exception as e:
+            print(f"FAILED: {e}")
+            failed_csvs.append(csv_path)
+            continue
+
+    print(f"\n{'='*60}")
+    print(f"COMPLETE: {total_questions} questions from {len(csv_paths) - len(failed_csvs)} datasets")
+    if failed_csvs:
+        print(f"Failed: {len(failed_csvs)} datasets")
+        for f in failed_csvs:
+            print(f"  - {f}")
+    return 0 if not failed_csvs else 1
 
 
 if __name__ == "__main__":
