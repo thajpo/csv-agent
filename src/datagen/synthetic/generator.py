@@ -23,9 +23,9 @@ from typing import Any
 import pandas as pd
 
 from src.core.config import config
-from src.datagen.profiler import DataProfiler
-from src.datagen.templates import CompositionTemplate, get_applicable_templates
-from src.datagen.verbalizer import QuestionVerbalizer
+from src.datagen.synthetic.profiler import DataProfiler
+from src.datagen.synthetic.templates import CompositionTemplate, get_applicable_templates
+from src.datagen.synthetic.verbalizer import QuestionVerbalizer
 from src.envs.csv_env import LocalCSVAnalysisEnv
 from src.utils.hashing import hash_artifact
 

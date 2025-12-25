@@ -15,7 +15,7 @@ And legacy sub-configs for Environment integration:
 import json
 import os
 from pathlib import Path
-from typing import List, Union, Dict, Any, Optional
+from typing import List, Literal, Union, Dict, Any, Optional
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from src.core.types import Question
 
@@ -98,6 +98,9 @@ class Config(BaseModel):
     # Context / Memory
     max_active_turns: int = 5
     max_context_tokens: int = 80000
+
+    # Question source: "llm" (LLM-generated) or "synthetic" (template-based)
+    question_source: Literal["llm", "synthetic"] = "llm"
 
     # pipelines: question generation
     question_gen_max_turns: int = 20
