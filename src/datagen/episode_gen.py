@@ -324,17 +324,29 @@ async def main(
     if isinstance(csv_sources, str):
         csv_sources = [csv_sources]
 
-    # Output as single JSONL file
-    output_jsonl = Path(output_path) if output_path else Path(config.episodes_jsonl)
+    # Output as single JSONL file (must be specified explicitly)
+    if output_path is None:
+        ui.base.print_error(
+            "ERROR: --output is required. Use one of:\n"
+            f"  --output {config.episodes_synthetic_jsonl}  (for synthetic questions)\n"
+            f"  --output {config.episodes_llm_jsonl}  (for LLM questions)"
+        )
+        return 1
+    output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
     if output_jsonl.exists():
         output_jsonl.unlink()
 
-    # Get parent directory of questions
-    base_questions_dir = (
-        Path(questions_dir) if questions_dir else Path(config.questions_json).parent
-    )
+    # Get parent directory of questions (must be specified explicitly)
+    if questions_dir is None:
+        ui.base.print_error(
+            "ERROR: --questions-dir is required. Use one of:\n"
+            f"  --questions-dir {config.questions_synthetic_dir}  (for synthetic questions)\n"
+            f"  --questions-dir {config.questions_llm_dir}  (for LLM questions)"
+        )
+        return 1
+    base_questions_dir = Path(questions_dir)
 
     # Sampling args
     sampling_args = {

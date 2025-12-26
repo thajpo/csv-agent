@@ -116,9 +116,11 @@ class Config(BaseModel):
     float_tolerance: float = 0.1
     max_concurrent_containers: int = 30  # Profiled optimal for this machine
 
-    # Outputs
-    questions_json: str = "data/questions/questions.json"
-    episodes_jsonl: str = "data/episodes/episodes.jsonl"
+    # Outputs - separate paths for LLM vs synthetic pipelines
+    questions_llm_dir: str = "data/questions_llm"
+    questions_synthetic_dir: str = "data/questions_synthetic"
+    episodes_llm_jsonl: str = "data/episodes/episodes_llm.jsonl"
+    episodes_synthetic_jsonl: str = "data/episodes/episodes_synthetic.jsonl"
 
     # Train/Test/Val Splitting
     split_seed: int = 42

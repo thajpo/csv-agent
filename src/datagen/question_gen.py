@@ -354,7 +354,7 @@ async def run_parallel_generation(
     max_tokens = config.sampling_args.max_tokens
     model = config.question_gen_model
     max_turns = config.question_gen_max_turns
-    base_output_dir = Path(config.questions_json).parent
+    base_output_dir = Path(config.questions_llm_dir)
 
     # Prepare tasks
     semaphore = asyncio.Semaphore(max_concurrent)

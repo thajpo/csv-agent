@@ -225,8 +225,8 @@ def main():
     parser.add_argument(
         "--input",
         type=str,
-        default=config.episodes_jsonl,
-        help=f"Input episodes JSONL file (default: {config.episodes_jsonl})"
+        required=True,
+        help="Input episodes JSONL file (e.g., data/episodes/episodes_synthetic.jsonl)"
     )
     parser.add_argument(
         "--output-dir",

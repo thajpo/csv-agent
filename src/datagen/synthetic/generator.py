@@ -270,7 +270,7 @@ async def generate_questions(
         if output_dir is None:
             # Use parent folder name (e.g., "mirichoi0218_insurance" from ".../mirichoi0218_insurance/data.csv")
             dataset_name = Path(csv_path).parent.name
-            output_dir = f"data/questions/{dataset_name}"
+            output_dir = f"{config.questions_synthetic_dir}/{dataset_name}"
 
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
