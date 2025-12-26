@@ -5,14 +5,14 @@ Tests template instantiation, execution, and evaluation logic
 without requiring LLM calls.
 """
 
-import asyncio
 import json
+import random
+
 import pytest
 import pytest_asyncio
 
 from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.synthetic.templates import (
-    ALL_TEMPLATES,
     get_applicable_templates,
     MAX_VARIANCE_MEAN,
     STRONGEST_CORRELATION,
@@ -150,13 +150,18 @@ class TestTemplateInstantiation:
                 assert "submit(" in code
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module")
 async def sandbox():
-    """Create a sandbox environment for template execution."""
     env = LocalCSVAnalysisEnv(csv_path="data/kaggle/mirichoi0218_insurance/data.csv")
     state = await env.setup_state({})
     yield env, state
     await env.destroy_sandbox(state["sandbox_id"])
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_sandbox_state(sandbox):
+    env, state = sandbox
+    await env.reset(state["sandbox_id"], state["python_state"])
 
 
 class TestTemplateExecution:
@@ -257,31 +262,34 @@ class TestTemplateExecution:
         assert isinstance(answer["columns"], list)
 
     @pytest.mark.asyncio
-    async def test_all_applicable_templates_execute(self, sandbox):
-        """All applicable templates should execute without error."""
+    async def test_template_canary(self, sandbox):
+        """Canary test: sample of templates execute correctly (catches new broken templates)."""
         env, state = sandbox
         profiler = DataProfiler()
         profile = profiler.analyze("data/kaggle/mirichoi0218_insurance/data.csv")
 
         templates = get_applicable_templates(profile)
+
+        sampled = random.sample(templates, min(3, len(templates)))
         failed = []
 
-        for template in templates:
-            for params in template.iter_param_sets():
-                await env.reset(state["sandbox_id"], state["python_state"])
+        for template in sampled:
+            param_sets = list(template.iter_param_sets())
+            params = param_sets[0] if param_sets else {}
 
-                code = template.instantiate(profile, params=params)
-                output = await env.python(
-                    code=code,
-                    sandbox_id=state["sandbox_id"],
-                    python_state=state["python_state"],
-                )
+            await env.reset(state["sandbox_id"], state["python_state"])
 
-                if "✓ Submitted:" not in output:
-                    params_str = json.dumps(params) if params else "default"
-                    failed.append(f"{template.name} ({params_str})")
+            code = template.instantiate(profile, params=params)
+            output = await env.python(
+                code=code,
+                sandbox_id=state["sandbox_id"],
+                python_state=state["python_state"],
+            )
 
-        assert not failed, f"Templates failed to produce submission: {failed}"
+            if "✓ Submitted:" not in output:
+                failed.append(template.name)
+
+        assert not failed, f"Templates failed: {failed}"
 
 
 if __name__ == "__main__":

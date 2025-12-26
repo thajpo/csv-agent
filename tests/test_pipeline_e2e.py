@@ -317,78 +317,23 @@ class TestTriangulationLogic:
 
 
 @pytest.mark.live
-class TestPipelineLive:
-    """Live tests requiring real LLM API. Run with: pytest --run-live"""
-
-    @pytest.fixture
-    def test_csv(self):
-        return "data/kaggle/mirichoi0218_insurance/data.csv"
-
-    @pytest.fixture
-    def temp_dir(self):
-        with tempfile.TemporaryDirectory() as d:
-            yield Path(d)
+class TestAPISmoke:
+    """Minimal API integration test. Run with: pytest --run-live"""
 
     @pytest.mark.asyncio
-    @pytest.mark.timeout(300)  # 5 min max
-    async def test_triangulation_live(self, test_csv, temp_dir):
-        """
-        Live triangulation test - calls actual LLM API.
+    async def test_api_client_works(self):
+        """Verify LLM API client works - auth, request format, response parsing."""
+        from src.core.model import APILLM
 
-        This test may fail due to LLM non-determinism - that's expected.
-        It's here for manual verification, not CI.
-        """
-        from src.datagen.synthetic.profiler import DataProfiler
-        from src.datagen.synthetic.templates import get_applicable_templates
-        from src.datagen.teacher import triangulate_teacher
-        from src.core.prompts import generate_data_overview
-
-        # Generate a question
-        profiler = DataProfiler()
-        profile = profiler.analyze(test_csv)
-        templates = get_applicable_templates(profile)
-        easy = [t for t in templates if t.difficulty == "EASY"]
-        template = easy[0]
-
-        question = f"[TEST] {template.name}: Analyze the dataset."
-        hint = "Follow the template logic."
-
-        data_overview = generate_data_overview(test_csv)
-
-        result = await triangulate_teacher(
-            csv_path=test_csv,
-            question=question,
-            hint=hint,
+        llm = APILLM(
             model=config.teacher_model,
-            n_consistency=2,
-            dataset_description="Insurance dataset",
-            data_overview=data_overview,
-            max_turns=5,
-            sampling_args={"temperature": 0.7, "max_tokens": 2000},
-            float_tol=0.1,
-            n_steps=template.n_steps,
-            difficulty=template.difficulty,
-            ui=QuietUI(),
+            sampling_args={"temperature": 0, "max_tokens": 10},
         )
-
-        (
-            gold_trace,
-            gold_conversation,
-            system_prompt,
-            consistency_results,
-            verified,
-            timing_metadata,
-            majority_hash,
-            majority_count,
-        ) = result
-
-        # These assertions may fail due to LLM non-determinism
-        # That's okay - this is a smoke test
-        print(f"Gold success: {gold_trace['success']}")
-        print(f"Verified: {verified}")
-        print(f"Consistency results: {len(consistency_results)}")
-
-        assert len(consistency_results) == 2, "Should have 2 consistency traces"
+        try:
+            response = await llm("Reply with exactly one word: PONG")
+            assert "PONG" in response.upper()
+        finally:
+            await llm.aclose()
 
 
 if __name__ == "__main__":

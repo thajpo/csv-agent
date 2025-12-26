@@ -308,6 +308,7 @@ async def execute_teacher_trace(
     reuse_env: bool = False,
     ui: Any,
     trace_mode: str = "gold",
+    llm=None,
 ) -> tuple[TraceDict, list[dict], str, float]:
     """
     Execute a single teacher trace (with or without hint).
@@ -320,7 +321,6 @@ async def execute_teacher_trace(
 
     ui.print_trace_start(trace_mode)
 
-    # Create environment and execute rollout
     env_instance = await Environment.from_params(
         csv_path=csv_path,
         model=model,
@@ -336,6 +336,7 @@ async def execute_teacher_trace(
         env=env,
         state=state,
         reuse_env=reuse_env,
+        llm=llm,
     )
     final_state = await env_instance.rollout()
 
@@ -425,16 +426,17 @@ async def triangulate_teacher(
     hint: str,
     model: str,
     *,
-    n_steps: int | None = None,  # Expected hook count
-    difficulty: str | None = None,  # EASY, MEDIUM, HARD, VERY_HARD
+    n_steps: int | None = None,
+    difficulty: str | None = None,
     n_consistency: int = 3,
     dataset_description: str = "",
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
-    container_pool: list[tuple] | None = None,  # Docker containers
-    ui: Any,  # UI instance (required)
+    container_pool: list[tuple] | None = None,
+    ui: Any,
     float_tol: float = 0.1,
+    llm=None,
 ) -> tuple[
     TraceDict,
     list[dict],
@@ -482,7 +484,7 @@ async def triangulate_teacher(
     ) = await execute_teacher_trace(
         csv_path=csv_path,
         question=question,
-        model=model,  # Required positional arg (3rd)
+        model=model,
         hint=hint,
         n_steps=n_steps,
         difficulty=difficulty,
@@ -496,6 +498,7 @@ async def triangulate_teacher(
         reuse_env=use_pool,
         ui=ui,
         trace_mode="gold",
+        llm=llm,
     )
 
     pool = container_pool or []
@@ -511,7 +514,7 @@ async def triangulate_teacher(
         trace, conversation, _, elapsed = await execute_teacher_trace(
             csv_path=csv_path,
             question=question,
-            model=model,  # Required positional arg (3rd)
+            model=model,
             hint=None,
             n_steps=n_steps,
             difficulty=difficulty,
@@ -525,6 +528,7 @@ async def triangulate_teacher(
             reuse_env=use_pool,
             ui=ui,
             trace_mode=f"{i + 1}/{n_consistency}",
+            llm=llm,
         )
         return (trace, conversation, elapsed)
 

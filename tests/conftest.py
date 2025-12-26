@@ -53,3 +53,9 @@ def fake_llm_simple():
     return FakeLLM(
         ["I'll analyze the data and submit the answer.\n\n```python\nsubmit(42)\n```"]
     )
+
+
+@pytest.fixture
+def fake_llm_factory():
+    """Factory fixture to create FakeLLM with custom responses."""
+    return FakeLLM
