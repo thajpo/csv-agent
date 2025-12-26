@@ -22,9 +22,34 @@ This file tracks planned improvements and technical debt for future sessions.
 
 ---
 
+### 5. Regenerate Episodes with New Schema
+
+**Description:** Run `episode_gen.py` to generate fresh episodes using the new `TraceDict`-based schema.
+
+**Reason:** Old `episodes.jsonl` was deleted (incompatible with new schema). Need fresh data before training.
+
+**Estimated Time:** 1-2 hours (depends on number of datasets and questions)
+
+---
+
+### 6. Validate Format Converters with Training Run
+
+**Description:** Run SFT training using output from `prepare_finetune_data.py` to verify format converters produce trainable data.
+
+**Reason:** Format converters (`sft-standard`, `sft-interleaved`, `prm`) are implemented but untested with actual training.
+
+**Estimated Time:** 2-4 hours
+
+**Implementation Notes:**
+- Test each format: `--format sft-standard`, `--format sft-interleaved`, `--format prm`
+- Verify training loss decreases (sanity check)
+- Check for data loading errors or format mismatches
+
+---
+
 ## Near-Term Features
 
-### 5. Add Progress Indicator for Parallel Mode
+### 7. Add Progress Indicator for Parallel Mode
 
 **Description:** Show progress feedback during parallel CSV processing. Currently parallel mode is silent until all CSVs complete.
 
@@ -38,7 +63,7 @@ This file tracks planned improvements and technical debt for future sessions.
 
 ---
 
-### 6. Memory Profiling
+### 8. Memory Profiling
 
 **Description:** Measure actual memory savings from fork-based worker sharing vs. separate containers.
 
@@ -55,13 +80,13 @@ This file tracks planned improvements and technical debt for future sessions.
 
 ## Medium-Term Features
 
-### ~~7. Semaphore for Max Concurrent Containers~~ ✅ DONE
+### ~~9. Semaphore for Max Concurrent Containers~~ ✅ DONE
 
 Implemented via `config.max_concurrent_containers` (default: 10) with asyncio.Semaphore in `episode_gen.py`.
 
 ---
 
-### 8. Resume Capability for Parallel Processing
+### 10. Resume Capability for Parallel Processing
 
 **Description:** If parallel processing fails mid-batch, ability to resume from last checkpoint.
 
@@ -76,7 +101,7 @@ Implemented via `config.max_concurrent_containers` (default: 10) with asyncio.Se
 
 ---
 
-### 9. Per-CSV Progress Logging
+### 11. Per-CSV Progress Logging
 
 **Description:** In parallel mode, write progress to per-CSV log files for debugging.
 
@@ -90,7 +115,7 @@ Implemented via `config.max_concurrent_containers` (default: 10) with asyncio.Se
 
 ---
 
-### 10. Container Health Monitoring
+### 12. Container Health Monitoring
 
 **Description:** Detect and restart workers that become unresponsive (e.g., stuck in infinite loop, OOM killed).
 
@@ -107,7 +132,7 @@ Implemented via `config.max_concurrent_containers` (default: 10) with asyncio.Se
 
 ## Longer-Term / Exploratory
 
-### 11. Distributed Execution
+### 13. Distributed Execution
 
 **Description:** Run containers across multiple machines (Kubernetes, cloud VMs, RunPod).
 
@@ -117,7 +142,7 @@ Implemented via `config.max_concurrent_containers` (default: 10) with asyncio.Se
 
 ---
 
-### 12. Persistent Worker Pools
+### 14. Persistent Worker Pools
 
 **Description:** Keep containers warm between `episode_gen.py` runs to eliminate startup overhead.
 
@@ -127,13 +152,43 @@ Implemented via `config.max_concurrent_containers` (default: 10) with asyncio.Se
 
 ---
 
-### 13. Question Generation Parallelization
+### 15. Question Generation Parallelization
 
 **Description:** Apply same multi-tenant container pattern to `question_gen.py`.
 
 **Reason:** Question generation also runs code in sandbox. Same memory benefits apply.
 
 **Estimated Time:** 2-4 hours (mostly copy-paste from episode_gen pattern)
+
+---
+
+### 16. Add More Training Format Converters
+
+**Description:** Extend `prepare_finetune_data.py` with additional formats: DPO pairs, RLHF, ORM (Outcome Reward Model).
+
+**Reason:** New `TraceDict` schema supports deriving multiple training formats. More formats = more training options.
+
+**Estimated Time:** 2-4 hours per format
+
+**Implementation Notes:**
+- DPO: Pair successful vs failed traces for preference learning
+- ORM: Final-answer-only reward labels (simpler than PRM)
+- RLHF: Format for PPO-style training
+
+---
+
+### 17. Interleaved State Prediction Experiments
+
+**Description:** Compare training outcomes: `sft-standard` vs `sft-interleaved` (Lucas Beyer style).
+
+**Reason:** Hypothesis: predicting intermediate state (hooks, execution results) improves agent reasoning. Needs validation.
+
+**Estimated Time:** 1-2 days (training + eval)
+
+**Implementation Notes:**
+- Train two models on same data, different formats
+- Evaluate on held-out questions
+- Measure: accuracy, reasoning quality, multi-turn performance
 
 ---
 
@@ -146,3 +201,5 @@ Implemented via `config.max_concurrent_containers` (default: 10) with asyncio.Se
 - [x] Add `--parallel` flag to episode_gen.py
 - [x] Clean up config (remove unused `n_containers`, `n_workers_per_csv`)
 - [x] Add `max_concurrent_containers` config with semaphore throttling
+- [x] Refactor episode schema: `TraceDict`/`TurnDict`/`QADict` for flexible training formats
+- [x] Add format converters: `sft-standard`, `sft-interleaved`, `prm` (`prepare_finetune_data.py`)
