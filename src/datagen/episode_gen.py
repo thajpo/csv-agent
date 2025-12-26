@@ -28,7 +28,7 @@ from src.core.prompts import generate_data_overview
 from src.core.types import (
     EpisodeJSONL,
     Question,
-    QuestionDict,
+    QADict,
     TriangulationMetadataDict,
     TimingMetadataDict,
 )
@@ -257,7 +257,7 @@ async def process_csv_task(
             episode_id=str(uuid.uuid4()),
             timestamp=datetime.now(),
             csv_source=task.csv_path,
-            question=QuestionDict(
+            question=QADict(
                 id=question_obj.id,
                 question_text=question_obj.question_text,
                 hint=question_obj.hint,

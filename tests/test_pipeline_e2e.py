@@ -79,7 +79,7 @@ class TestPipelineE2E:
         from src.core.types import (
             Question,
             EpisodeJSONL,
-            QuestionDict,
+            QADict,
             TimingMetadataDict,
             TriangulationMetadataDict,
         )
@@ -210,7 +210,7 @@ class TestPipelineE2E:
             episode_id=str(uuid.uuid4()),
             timestamp=datetime.now(),
             csv_source=test_csv,
-            question=QuestionDict(
+            question=QADict(
                 id=question_obj.id,
                 question_text=question_obj.question_text,
                 hint=question_obj.hint,

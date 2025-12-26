@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 # ============= Core TypedDicts =============
 
 
-class QuestionDict(TypedDict, total=False):
+class QADict(TypedDict, total=False):
     """Serialized Question structure."""
 
     id: str | None
@@ -188,7 +188,7 @@ class EpisodeJSONL(BaseModel):
     csv_source: str
 
     # Question
-    question: QuestionDict
+    question: QADict
 
     # Traces (source of truth)
     gold_trace: TraceDict  # Teacher WITH hint
@@ -265,7 +265,7 @@ class ExplorationTrace(BaseModel):
 
     csv_path: str
     turns: list[ExplorationTurn]
-    questions_generated: list[QuestionDict]  # Use typed dict
+    questions_generated: list[QADict]
     total_turns: int
     timestamp: datetime = Field(default_factory=datetime.now)
 
