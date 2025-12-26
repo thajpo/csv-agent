@@ -16,6 +16,7 @@ dependencies = [
     "pydantic>=2.12.5",
     "pytest>=9.0.1",
     "pytest-asyncio>=1.3.0",
+    "pytest-xdist>=3.5.0",
     "rich>=14.2.0",
     "scikit-learn>=1.7.2",
     "scipy>=1.14.0",
@@ -42,3 +43,7 @@ rollouts_per_example = 3
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+addopts = "-n auto"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

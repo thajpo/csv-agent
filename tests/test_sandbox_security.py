@@ -12,9 +12,9 @@ import pytest_asyncio
 from src.envs.csv_env import LocalCSVAnalysisEnv
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module")
 async def sandbox():
-    """Create a sandbox environment for testing."""
+    """Create a sandbox environment for testing (module-scoped for speed)."""
     env = LocalCSVAnalysisEnv(csv_path="data/csv/data.csv")
     state = await env.setup_state(state={})
     sandbox_id = state["sandbox_id"]

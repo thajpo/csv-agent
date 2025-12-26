@@ -15,9 +15,9 @@ import pytest_asyncio
 from src.envs.container_pool import MultiTenantContainer, Slot, WorkerAdapter
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="module")
 async def container():
-    """Create a multi-tenant container for testing."""
+    """Create a multi-tenant container for testing (module-scoped for speed)."""
     c = MultiTenantContainer(
         csv_path="data/csv/data.csv",
         n_workers=3,
@@ -48,10 +48,9 @@ class TestMultiTenantContainer:
     async def test_parallel_execution(self, container):
         """Should execute code in parallel on multiple workers."""
         # Run different code on each worker in parallel
-        results = await asyncio.gather(*[
-            container.run_on_worker(i, f"df.shape[{i % 2}]")
-            for i in range(3)
-        ])
+        results = await asyncio.gather(
+            *[container.run_on_worker(i, f"df.shape[{i % 2}]") for i in range(3)]
+        )
 
         # Should get results from all workers
         assert len(results) == 3
@@ -120,7 +119,9 @@ class TestMultiTenantContainer:
     @pytest.mark.asyncio
     async def test_hook_works(self, container):
         """hook() function should work in workers."""
-        result = await container.run_on_worker(0, "hook(df.shape[0], 'df.shape[0]', name='row_count')")
+        result = await container.run_on_worker(
+            0, "hook(df.shape[0], 'df.shape[0]', name='row_count')"
+        )
         assert "Hook" in result
 
 
@@ -162,14 +163,18 @@ class TestWorkerAdapter:
 
         # Set a variable
         await adapter.python("adapter_var = 999", python_state=state["python_state"])
-        result1 = await adapter.python("adapter_var", python_state=state["python_state"])
+        result1 = await adapter.python(
+            "adapter_var", python_state=state["python_state"]
+        )
         assert "999" in result1
 
         # Reset
         await adapter.reset_state(state)
 
         # Variable should be gone
-        result2 = await adapter.python("adapter_var", python_state=state["python_state"])
+        result2 = await adapter.python(
+            "adapter_var", python_state=state["python_state"]
+        )
         assert "NameError" in result2 or "not defined" in result2.lower()
 
     @pytest.mark.asyncio
@@ -196,10 +201,12 @@ class TestWorkerAdapter:
         assert len(container_pool) == 3
 
         # Each adapter should execute independently
-        results = await asyncio.gather(*[
-            adapter.python(f"'worker_{i}'", python_state=state["python_state"])
-            for i, (adapter, state) in enumerate(container_pool)
-        ])
+        results = await asyncio.gather(
+            *[
+                adapter.python(f"'worker_{i}'", python_state=state["python_state"])
+                for i, (adapter, state) in enumerate(container_pool)
+            ]
+        )
 
         assert len(results) == 3
         for i, result in enumerate(results):
