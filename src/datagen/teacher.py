@@ -26,8 +26,6 @@ from src.core.types import (
     TurnDict,
     ExecutionResultDict,
     HookDict,
-    ExecutionTrace,
-    Hook,  # Legacy, for transition
 )
 from src.utils.hashing import hash_artifact
 from src.utils.normalization import normalize_value
@@ -315,7 +313,7 @@ async def execute_teacher_trace(
     Execute a single teacher trace (with or without hint).
 
     Returns:
-        Tuple of (ExecutionTrace, conversation_messages, system_prompt, elapsed_seconds)
+        Tuple of (TraceDict, conversation_messages, system_prompt, elapsed_seconds)
     """
     # Track timing
     start_time = time.time()
@@ -457,10 +455,10 @@ async def triangulate_teacher(
 
     Returns:
         Tuple of:
-        - gold_trace: ExecutionTrace WITH hint
+        - gold_trace: TraceDict WITH hint
         - gold_conversation: list[dict] of messages
         - system_prompt: str
-        - consistency_results: list of (ExecutionTrace, conversation) tuples
+        - consistency_results: list of (TraceDict, conversation) tuples
         - verified: True if gold matches majority of consistency traces
         - timing_metadata: dict with gold_elapsed, consistency_elapsed, total_elapsed, avg_elapsed
         - majority_answer_hash: hash of tolerance-based majority answer (if any)

@@ -239,8 +239,11 @@ class EpisodeGenUI:
 
         self.console.print("[bold cyan]│[/bold cyan]")
         self.console.print("[bold cyan]│[/bold cyan] [bold]Gold Trace:[/bold]")
-        self.console.print(f"[bold cyan]│[/bold cyan]   Answer: {gold_trace.final_answer}")
-        self.console.print(f"[bold cyan]│[/bold cyan]   Hash:   {gold_trace.final_answer_hash}")
+        # Handle both dict (TraceDict) and object access patterns
+        gold_answer = gold_trace.get("final_answer") if isinstance(gold_trace, dict) else gold_trace.final_answer
+        gold_hash = gold_trace.get("final_answer_hash") if isinstance(gold_trace, dict) else gold_trace.final_answer_hash
+        self.console.print(f"[bold cyan]│[/bold cyan]   Answer: {gold_answer}")
+        self.console.print(f"[bold cyan]│[/bold cyan]   Hash:   {gold_hash}")
 
         self.console.print("[bold cyan]│[/bold cyan]")
         self.console.print("[bold cyan]│[/bold cyan] [bold]Consistency Results:[/bold]")
@@ -250,13 +253,14 @@ class EpisodeGenUI:
                 self.console.print(f"[bold cyan]│[/bold cyan]   Trace {i}: [red]FAILED[/red]")
                 continue
 
-            answer = trace.final_answer
-            answer_hash = trace.final_answer_hash
+            # Handle both dict (TraceDict) and object access patterns
+            answer = trace.get("final_answer") if isinstance(trace, dict) else trace.final_answer
+            answer_hash = trace.get("final_answer_hash") if isinstance(trace, dict) else trace.final_answer_hash
 
             matches = answers_match(
-                gold_trace.final_answer_hash,
+                gold_hash,
                 answer_hash,
-                gold_trace.final_answer,
+                gold_answer,
                 answer,
                 float_tol=float_tol
             )
@@ -265,8 +269,8 @@ class EpisodeGenUI:
             self.console.print(f"[bold cyan]│[/bold cyan]   Trace {i}: {answer}  (hash: {hash_display}) {check}")
 
         valid_answers = [
-            t.final_answer for t in consistency_traces
-            if t is not None and t.final_answer is not None
+            (t.get("final_answer") if isinstance(t, dict) else t.final_answer) for t in consistency_traces
+            if t is not None and (t.get("final_answer") if isinstance(t, dict) else t.final_answer) is not None
         ]
         majority_value, majority_count = get_majority_answer(valid_answers, float_tol=float_tol)
 
@@ -275,7 +279,7 @@ class EpisodeGenUI:
 
         self.console.print("[bold cyan]│[/bold cyan]")
         self.console.print("[bold cyan]│[/bold cyan] [bold]Verification:[/bold]")
-        self.console.print(f"[bold cyan]│[/bold cyan]   Gold value:     {gold_trace.final_answer}")
+        self.console.print(f"[bold cyan]│[/bold cyan]   Gold value:     {gold_answer}")
         self.console.print(f"[bold cyan]│[/bold cyan]   Majority value: {majority_value}")
         self.console.print(f"[bold cyan]│[/bold cyan]   Tolerance:      ±{float_tol}")
         self.console.print("[bold cyan]│[/bold cyan]")
