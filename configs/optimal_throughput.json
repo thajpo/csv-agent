@@ -1,0 +1,14 @@
+{
+  "n_workers": 8,
+  "max_concurrent_containers": 30,
+  "system_info": {
+    "platform": "Darwin",
+    "machine": "arm64",
+    "python_version": "3.13.9",
+    "cpu_cores": 8,
+    "memory_bytes": 17179869184,
+    "memory_gb": 16.0,
+    "docker_memory_gb": 7.653358459472656
+  },
+  "profiled_at": "2025-12-26 13:51:56"
+}

@@ -373,9 +373,11 @@ name = "csv-agent-qa"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "datasets" },
     { name = "datetime" },
     { name = "docker" },
     { name = "httpx" },
+    { name = "huggingface-hub" },
     { name = "ipykernel" },
     { name = "jupyter-client" },
     { name = "numpy" },
@@ -398,9 +400,11 @@ kaggle = [
 
 [package.metadata]
 requires-dist = [
+    { name = "datasets", specifier = ">=3.0.0" },
     { name = "datetime", specifier = ">=6.0" },
     { name = "docker", specifier = ">=7.1.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "huggingface-hub", specifier = ">=0.27.0" },
     { name = "ipykernel", specifier = ">=7.1.0" },
     { name = "jupyter-client", specifier = ">=8.6.3" },
     { name = "kaggle", marker = "extra == 'kaggle'", specifier = ">=1.6.0" },
