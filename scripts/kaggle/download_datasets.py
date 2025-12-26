@@ -165,35 +165,22 @@ def download_dataset(
             shutil.rmtree(temp_dir)
 
 
-def get_liked_datasets(api, limit: int | None = None) -> list[str]:
+def get_popular_datasets(api) -> list[str]:
     """
-    Get user's liked/favorited datasets that are tabular.
-    
-    Returns list of dataset refs like "owner/dataset-name"
+    Get popular tabular CSV datasets from Kaggle.
+
+    Returns list of dataset refs like "owner/dataset-name", sorted by votes.
+    Fetches all available - caller handles limiting based on successful downloads.
     """
-    # Get user's datasets (this gets datasets they've interacted with)
-    # Note: Kaggle API doesn't have a direct "liked" endpoint,
-    # so we'll use dataset_list with user filter
-    
-    # For now, let's get popular tabular datasets as a fallback
-    # The user can also provide a curated list
-    
     try:
-        # Try to get user's datasets first
         datasets = api.dataset_list(
             file_type="csv",
             sort_by="votes",
-            max_size=50 * 1024 * 1024,  # 50MB max
+            max_size=50 * 1024 * 1024,  # 50MB max (pre-filter)
         )
-        
-        refs = []
-        for d in datasets:
-            if limit and len(refs) >= limit:
-                break
-            refs.append(d.ref)
-        
-        return refs
-        
+
+        return [d.ref for d in datasets]
+
     except Exception as e:
         print(f"Error fetching datasets: {e}")
         return []
@@ -256,28 +243,31 @@ def main():
         dataset_refs = load_curated_list(args.from_list)
     else:
         print("Fetching popular tabular datasets...")
-        dataset_refs = get_liked_datasets(api, limit=args.limit)
+        dataset_refs = get_popular_datasets(api)
 
-    if args.limit:
-        dataset_refs = dataset_refs[:args.limit]
+    print(f"Found {len(dataset_refs)} candidate datasets\n")
 
-    print(f"Found {len(dataset_refs)} datasets to process\n")
-
-    # Download each dataset
+    # Download until we reach limit (counting only successful downloads)
     manifest = []
     skipped_filter = 0
     skipped_exists = 0
+    successful_downloads = 0
 
     for i, ref in enumerate(dataset_refs, 1):
-        print(f"[{i}/{len(dataset_refs)}] {ref}")
+        # Stop when we have enough successful downloads
+        if args.limit and successful_downloads >= args.limit:
+            break
+
+        print(f"[{i}] {ref} (got {successful_downloads}/{args.limit or '∞'})")
 
         # Skip if already downloaded
         slug = ref.replace("/", "_")
         existing_dir = output_dir / slug
         if (existing_dir / "data.csv").exists():
-            print(f"  ✓ Already exists, skipping")
+            print(f"  ✓ Already exists, counting as success")
             manifest.append({"ref": ref, "slug": slug})
             skipped_exists += 1
+            successful_downloads += 1
             continue
 
         # Download (filters applied inside)
@@ -294,15 +284,16 @@ def main():
             json.dump(metadata, f, indent=2)
 
         manifest.append({"ref": ref, "slug": slug})
+        successful_downloads += 1
 
     # Save manifest at root level
     manifest_path = output_dir / "manifest.json"
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
 
-    newly_downloaded = len(manifest) - skipped_exists
+    newly_downloaded = successful_downloads - skipped_exists
     print(f"\n{'=' * 40}")
-    print(f"✓ Total: {len(manifest)} datasets in manifest")
+    print(f"✓ Successful: {successful_downloads} datasets")
     print(f"  New downloads: {newly_downloaded}")
     print(f"  Already existed: {skipped_exists}")
     print(f"  Filtered out: {skipped_filter}")
