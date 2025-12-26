@@ -6,35 +6,11 @@ This file tracks planned improvements and technical debt for future sessions.
 
 ## Loose Ends
 
-### 1. Delete Stale Plan File
+### ~~1. Delete Stale Plan File~~ ✅ DONE (file no longer exists)
 
-**Description:** Remove the obsolete plan file at `/home/j/.claude/plans/keen-percolating-diffie.md` which describes completed work.
+### ~~2. Remove Backwards Compatibility Alias~~ ✅ DONE (already removed)
 
-**Reason:** Keep the workspace clean and avoid confusion in future sessions.
-
-**Estimated Time:** 1 minute
-
----
-
-### 2. Remove Backwards Compatibility Alias
-
-**Description:** Remove `ContainerPool = MultiTenantContainer` alias from `src/envs/container_pool.py:654`.
-
-**Reason:** The alias was added during the rename but nothing uses it. Dead code should be removed.
-
-**Estimated Time:** 2 minutes
-
----
-
-### 3. Add Triangulation Integration Test
-
-**Description:** Create `tests/test_triangulation.py` that tests `batch_triangulate()` with the new `MultiTenantContainer` using mocked LLM responses.
-
-**Reason:** Current tests cover components (container, adapter, security) but not the full triangulation flow. Integration tests catch interface mismatches.
-
-**Estimated Time:** 1-2 hours
-
----
+### ~~3. Add Triangulation Integration Test~~ ✅ DONE (`tests/test_triangulation.py` exists)
 
 ### 4. End-to-End Testing with Real LLM
 
