@@ -199,6 +199,9 @@ class EpisodeJSONL(BaseModel):
     triangulation: TriangulationMetadataDict
     timing: TimingMetadataDict
 
+    # Provenance (optional)
+    source: str | None = None  # "synthetic" or "llm" - tracks question origin
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 

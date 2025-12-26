@@ -14,6 +14,51 @@ from typing import Any
 from src.core.model import APILLM
 
 
+VERBALIZATION_PROMPT_K = '''You are generating diverse natural language questions for a data science training dataset.
+
+## DATASET CONTEXT:
+{dataset_description}
+
+## DATA OVERVIEW:
+{data_overview}
+
+## CODE THAT PRODUCES THE ANSWER:
+```python
+{code}
+```
+
+## GROUND TRUTH ANSWER:
+{ground_truth}
+
+## REQUIRED OUTPUT FORMAT:
+{output_schema}
+
+## YOUR TASK:
+Generate {k} DIVERSE question phrasings that would lead someone to discover this answer through data exploration.
+
+Think: "What question would a data scientist naturally ask that leads to this analysis?"
+
+QUESTION STYLES (use a mix):
+1. **Hypothesis-driven**: "I wonder if..." / "I suspect that..." / "Could it be that..."
+2. **Direct**: Clear, straightforward ask
+3. **Contextual**: Uses domain knowledge (e.g., "For patient outcomes..." if health data)
+4. **Exploratory**: "Before modeling, I want to understand..." / "What patterns exist in..."
+
+CRITICAL RULES:
+1. DO NOT mention specific column names - reference by properties ("the most variable column")
+2. Each question MUST include the required output format
+3. Each question should feel natural, not mechanical
+4. The hint should guide exploration without revealing the solution
+5. Make questions genuinely DIFFERENT from each other (not just rewording)
+
+OUTPUT FORMAT (respond with ONLY this JSON array, no other text):
+[
+  {{"question": "First question phrasing here...", "hint": "Hint for first question"}},
+  {{"question": "Second question phrasing here...", "hint": "Hint for second question"}},
+  ...
+]'''
+
+
 VERBALIZATION_PROMPT = '''You are converting a data analysis code snippet into a natural language question for a data science training dataset.
 
 ## CODE BEING EXECUTED:
@@ -157,6 +202,90 @@ class QuestionVerbalizer:
 
             # Last resort: return error message
             return f"[VERBALIZATION FAILED: {response[:100]}]", ""
+
+    async def verbalize_k(
+        self,
+        code: str,
+        profile: dict,
+        ground_truth: Any,
+        output_schema: str = "",
+        data_overview: str = "",
+        dataset_description: str = "",
+        k: int = 3,
+    ) -> list[tuple[str, str]]:
+        """
+        Generate K diverse question variants for the same code.
+
+        Args:
+            code: The Python code that was executed
+            profile: Dataset profile from DataProfiler
+            ground_truth: The actual answer from executing the code
+            output_schema: Description of the exact expected output format
+            data_overview: Text summary of the dataset (from generate_data_overview)
+            dataset_description: Human description of what the dataset contains
+            k: Number of question variants to generate
+
+        Returns:
+            List of (question_text, hint) tuples
+        """
+        # Format ground truth for display
+        if isinstance(ground_truth, dict):
+            gt_str = json.dumps(ground_truth, indent=2)
+        else:
+            gt_str = str(ground_truth)
+
+        # Build prompt
+        prompt = VERBALIZATION_PROMPT_K.format(
+            code=code.strip(),
+            ground_truth=gt_str,
+            output_schema=output_schema or "Not specified",
+            data_overview=data_overview or "Not available",
+            dataset_description=dataset_description or "No description provided",
+            k=k,
+        )
+
+        # Call LLM
+        response = await self.llm(prompt)
+
+        # Parse K responses
+        variants = self._parse_k_response(response, k)
+
+        return variants
+
+    def _parse_k_response(self, response: str, k: int) -> list[tuple[str, str]]:
+        """Parse LLM response to extract K question/hint pairs."""
+        variants = []
+
+        try:
+            # Try to find JSON array in response
+            # Match array that may contain nested objects
+            array_match = re.search(r'\[[\s\S]*\]', response)
+            if array_match:
+                data = json.loads(array_match.group())
+                if isinstance(data, list):
+                    for item in data:
+                        if isinstance(item, dict):
+                            q = item.get("question", "")
+                            h = item.get("hint", "")
+                            if q:
+                                variants.append((q, h))
+        except json.JSONDecodeError:
+            pass
+
+        # Fallback: try to extract individual objects
+        if not variants:
+            # Look for individual {"question": ..., "hint": ...} objects
+            obj_pattern = r'\{\s*"question"\s*:\s*"([^"]+)"\s*,\s*"hint"\s*:\s*"([^"]*)"\s*\}'
+            matches = re.findall(obj_pattern, response)
+            for q, h in matches:
+                variants.append((q, h))
+
+        # If we got fewer than requested, that's okay - return what we have
+        if not variants:
+            # Last resort: return single failed variant
+            return [(f"[VERBALIZATION FAILED: {response[:100]}]", "")]
+
+        return variants
 
     async def aclose(self):
         """Cleanup resources."""

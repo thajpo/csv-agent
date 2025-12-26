@@ -8,20 +8,30 @@ module for output, keeping the environment logic separate from presentation.
 Refactored to use a sandboxed Python environment for code execution.
 """
 
-
 import re
 
 import pandas as pd
 
 from src.core.model import APILLM
-from src.utils.interaction import get_turn_validation_feedback, parse_execution_result, extract_python_cells
-from src.core.prompts import generate_data_overview, build_system_prompt, CONTINUE_MSG, FINAL_MSG
+from src.utils.interaction import (
+    get_turn_validation_feedback,
+    parse_execution_result,
+    extract_python_cells,
+)
+from src.core.prompts import (
+    generate_data_overview,
+    build_system_prompt,
+    CONTINUE_MSG,
+    FINAL_MSG,
+)
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
 
 
-def validate_hooks_grounded(hooks: list[dict], code_cells: list[str]) -> tuple[list[dict], list[dict]]:
+def validate_hooks_grounded(
+    hooks: list[dict], code_cells: list[str]
+) -> tuple[list[dict], list[dict]]:
     """
     Validate that each hook's code_line is grounded in the executed code.
 
@@ -100,11 +110,13 @@ def parse_submitted_answer(output: str) -> str | None:
         # Try to parse as JSON first (new format)
         try:
             import json
+
             return json.loads(answer_str)
         except (json.JSONDecodeError, ValueError):
             # Fall back to ast.literal_eval for backward compatibility
             try:
                 import ast
+
                 return ast.literal_eval(answer_str)
             except (ValueError, SyntaxError):
                 # Return as string if can't parse
@@ -113,24 +125,35 @@ def parse_submitted_answer(output: str) -> str | None:
 
 
 # Keywords that suggest a statistical/hypothesis answer needing structured format
-_STATISTICAL_KEYWORDS = {'yes', 'no', 'significant', 'not significant', 'reject', 'fail to reject', 'accept'}
+_STATISTICAL_KEYWORDS = {
+    "yes",
+    "no",
+    "significant",
+    "not significant",
+    "reject",
+    "fail to reject",
+    "accept",
+}
+
 
 def _needs_structured_format(answer) -> bool:
     """
     Check if a submitted answer looks like it should be structured but isn't.
-    
+
     Returns True if the answer is a string containing statistical keywords,
     suggesting the model should have submitted a dict with answer/p_value.
     """
     if not isinstance(answer, str):
         return False
-    
+
     answer_lower = answer.lower().strip()
-    
+
     # If it's already a simple value (number, short label), accept it
-    if len(answer_lower) < 20 and not any(kw in answer_lower for kw in _STATISTICAL_KEYWORDS):
+    if len(answer_lower) < 20 and not any(
+        kw in answer_lower for kw in _STATISTICAL_KEYWORDS
+    ):
         return False
-    
+
     # If it contains statistical keywords, it should be structured
     return any(kw in answer_lower for kw in _STATISTICAL_KEYWORDS)
 
@@ -154,7 +177,7 @@ class Environment:
     This class handles the execution of multi-turn episodes where
     an LLM explores a CSV dataset using tools. It's designed to be
     pure RL logic with no presentation dependencies (uses stdlib logging).
-    
+
     Uses a sandboxed Python environment for code execution.
     """
 
@@ -167,37 +190,26 @@ class Environment:
         env: CSVAnalysisEnv | None = None,
         state: dict | None = None,
         reuse_env: bool = False,
+        llm=None,
     ):
-        """
-        Initialize Environment with focused configs.
-
-        Args:
-            data: Dataset paths and metadata
-            model: LLM model and sampling parameters
-            execution: Execution limits (turns, tokens, context)
-            task: Task definition (mode, question)
-            env: Optional CSVAnalysisEnv (created if None)
-
-        """
         # Store configs
         self.data = data
         self.model_config = model
         self.execution = execution
         self.task = task
 
-        # Derived values
         self.csv_path = data.csv_path
-        self.model = APILLM(
-            model=model.model_name,
-            sampling_args=model.sampling_args_dict()
-        )
-        self.env = env  # Will be created in create() if None
-        self.state = state  # Verifiers state dict
-        self.reuse_env = reuse_env  # If True, reset instead of destroy
+        if llm is not None:
+            self.model = llm
+        else:
+            self.model = APILLM(
+                model=model.model_name, sampling_args=model.sampling_args_dict()
+            )
+        self.env = env
+        self.state = state
+        self.reuse_env = reuse_env
 
-        self.df = None  # Will be loaded on first rollout
-        
-        # Track submitted answer across executions
+        self.df = None
         self.submitted_answer = None
 
     @classmethod
@@ -210,10 +222,10 @@ class Environment:
         env: CSVAnalysisEnv | None = None,
         state: dict | None = None,
         reuse_env: bool = False,
+        llm=None,
     ):
-        """Async factory to create Environment with initialized CSVAnalysisEnv."""
-        instance = cls(data, model, execution, task, env, state, reuse_env)
-        
+        instance = cls(data, model, execution, task, env, state, reuse_env, llm)
+
         # Create env and state if not provided
         if instance.env is None:
             instance.env = CSVAnalysisEnv(csv_path=instance.csv_path)
@@ -223,7 +235,7 @@ class Environment:
             # Env provided but no state - set up state
             instance.state = {}
             instance.state = await instance.env.setup_state(instance.state)
-        
+
         return instance
 
     @classmethod
@@ -244,6 +256,7 @@ class Environment:
         env: CSVAnalysisEnv | None = None,
         state: dict | None = None,
         reuse_env: bool = False,
+        llm=None,
     ):
         """
         Factory with primitive args - handles config construction internally.
@@ -273,34 +286,35 @@ class Environment:
         from src.core.types import Question
 
         # Build question object if provided
-        question_obj = Question(
-            question_text=question,
-            hint=hint,
-            n_steps=n_steps,
-            difficulty=difficulty,
-        ) if question else None
-        
+        question_obj = (
+            Question(
+                question_text=question,
+                hint=hint,
+                n_steps=n_steps,
+                difficulty=difficulty,
+            )
+            if question
+            else None
+        )
+
         # Build configs from primitives
         data_config = DataConfig(
             csv_path=csv_path,
             dataset_description=dataset_description,
             data_overview=data_overview,
         )
-        
-        model_config = ModelConfig(
-            model_name=model,
-            **sampling_args
-        )
-        
+
+        model_config = ModelConfig(model_name=model, **sampling_args)
+
         execution_config = ExecutionConfig(
             max_turns=max_turns,
         )
-        
+
         task_config = TaskConfig(
             mode=mode,
             question=question_obj,
         )
-        
+
         return await cls.create(
             data=data_config,
             model=model_config,
@@ -316,10 +330,7 @@ class Environment:
         if self.df is None:
             self.df = pd.read_csv(self.csv_path)
 
-
     def init_state(self):
-
-
         self._load_csv()
         data_overview = generate_data_overview(self.csv_path)
         sys_prompt = build_system_prompt(
@@ -362,11 +373,11 @@ class Environment:
             sandbox_id=self.state["sandbox_id"],
             python_state=self.state["python_state"],
         )
-        
+
         # Parse the string output into success/stdout/stderr
         result = parse_execution_result(output)
         result.code = code
-        
+
         # Check for submitted answer in output
         submitted = parse_submitted_answer(output)
         if submitted is not None:
@@ -377,6 +388,7 @@ class Environment:
             else:
                 # Protocol violation: answer not wrapped
                 import logging
+
                 logging.error(
                     f"Protocol violation: Answer submitted without wrapper. "
                     f"Expected {{'__csv_agent_answer__': value}}, got {type(submitted).__name__}. "
@@ -406,7 +418,6 @@ class Environment:
         messages = self.conversation.to_openai_messages()
         response = await self.model(messages)
 
-
         return response
 
     def response_is_valid(self, response: str, code_cells: list[str]) -> bool:
@@ -414,7 +425,9 @@ class Environment:
         error_msg = get_turn_validation_feedback(response, code_cells)
         if error_msg:
             self.conversation.add_assistant_response(response)
-            error_feedback = error_msg + "\n\nPlease try again following the correct format."
+            error_feedback = (
+                error_msg + "\n\nPlease try again following the correct format."
+            )
             self.conversation.add_user_feedback(error_feedback)
             return False
         return True
@@ -435,7 +448,6 @@ class Environment:
                 self.code_cells.append(cell_code)
 
                 # Log execution
-
 
                 # Check for submission
                 if result.submitted_answer is not None:
@@ -477,7 +489,9 @@ class Environment:
             hooks = self.submission_metadata.get("hooks", [])
 
             # Check grounding: code_line must be substring of executed code
-            grounded_hooks, ungrounded_hooks = validate_hooks_grounded(hooks, self.code_cells)
+            grounded_hooks, ungrounded_hooks = validate_hooks_grounded(
+                hooks, self.code_cells
+            )
 
             # Get expected hook count from question if available
             expected_hooks = 2  # Minimum default
@@ -521,7 +535,6 @@ class Environment:
         if done_signal:
             self.is_completed = True
 
-
     async def rollout(self):
         """Execute a multi-turn rollout episode.
 
@@ -532,8 +545,6 @@ class Environment:
 
         try:
             while not self.is_completed:
-
-
                 # Check if we've reached max turns BEFORE processing
                 if self.current_turn >= self.execution.max_turns:
                     await self.handle_max_turns_reached()
@@ -560,8 +571,7 @@ class Environment:
                 if self.reuse_env:
                     # Reset for reuse instead of destroying
                     await self.env.reset(
-                        self.state["sandbox_id"],
-                        self.state.get("python_state")
+                        self.state["sandbox_id"], self.state.get("python_state")
                     )
                 else:
                     await self.env.destroy_sandbox(self.state["sandbox_id"])

@@ -43,7 +43,9 @@ rollouts_per_example = 3
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-addopts = "-n auto"
+addopts = "-n auto -m 'not live'"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "live: marks tests requiring real LLM API (run with '--run-live')",
+    "integration: marks tests requiring Docker",
 ]

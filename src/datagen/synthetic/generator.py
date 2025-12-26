@@ -23,6 +23,7 @@ from typing import Any
 import pandas as pd
 
 from src.core.config import config
+from src.core.prompts import generate_data_overview
 from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.synthetic.templates import CompositionTemplate, get_applicable_templates
 from src.datagen.synthetic.verbalizer import QuestionVerbalizer
@@ -46,6 +47,7 @@ class CompositionalQuestionGenerator:
         csv_path: str,
         model: str | None = None,
         sampling_args: dict | None = None,
+        dataset_description: str = "",
     ):
         """
         Initialize the generator.
@@ -54,6 +56,7 @@ class CompositionalQuestionGenerator:
             csv_path: Path to CSV dataset
             model: LLM model for verbalization (defaults to config.question_gen_model)
             sampling_args: LLM sampling args (defaults to config.sampling_args)
+            dataset_description: Human description of the dataset (from meta.json)
         """
         self.csv_path = Path(csv_path).resolve()
         if not self.csv_path.exists():
@@ -61,20 +64,25 @@ class CompositionalQuestionGenerator:
 
         self.model = model or config.question_gen_model
         self.sampling_args = sampling_args or config.sampling_args.model_dump()
+        self.dataset_description = dataset_description
 
         self.profiler = DataProfiler()
         self.verbalizer: QuestionVerbalizer | None = None
         self.env: LocalCSVAnalysisEnv | None = None
         self.state: dict | None = None
+        self.data_overview: str = ""
 
     async def setup(self) -> None:
-        """Initialize sandbox and verbalizer."""
+        """Initialize sandbox, verbalizer, and generate data overview."""
         self.verbalizer = QuestionVerbalizer(
             model=self.model,
             sampling_args=self.sampling_args,
         )
         self.env = LocalCSVAnalysisEnv(csv_path=str(self.csv_path))
         self.state = await self.env.setup_state({})
+
+        # Generate data overview for richer verbalization context
+        self.data_overview = generate_data_overview(str(self.csv_path))
 
     async def cleanup(self) -> None:
         """Cleanup resources."""
@@ -142,39 +150,51 @@ class CompositionalQuestionGenerator:
             except Exception as e:
                 print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) FAILED: {e}")
 
-        # 4. Verbalize all concurrently (parallel LLM calls)
-        print(f"\nVerbalizing {len(execution_results)} questions concurrently...")
+        # 4. Verbalize all concurrently with K variants each (parallel LLM calls)
+        k = config.n_question_variants
+        print(f"\nVerbalizing {len(execution_results)} templates (K={k} variants each)...")
 
-        async def verbalize_one(item: dict) -> dict | None:
+        async def verbalize_k_variants(item: dict) -> list[dict]:
+            """Generate K question variants for one template execution."""
             try:
-                question_text, hint = await self.verbalizer.verbalize(
+                variants = await self.verbalizer.verbalize_k(
                     code=item["code"],
                     profile=profile,
                     ground_truth=item["ground_truth"],
                     output_schema=item["template"].output_schema,
+                    data_overview=self.data_overview,
+                    dataset_description=self.dataset_description,
+                    k=k,
                 )
-                if not question_text or question_text.startswith("[VERBALIZATION FAILED"):
-                    return None
-                return {
-                    "question": question_text,
-                    "hint": hint,
-                    "n_steps": item["template"].n_steps,
-                    "difficulty": item["template"].difficulty,
-                    "template_name": item["template"].name,
-                    "template_params": item["params"] or None,
-                    "output_type": item["template"].output_type,
-                    "output_schema": item["template"].output_schema,
-                    "ground_truth_hash": item["answer_hash"],
-                    "_ground_truth": item["ground_truth"],
-                    "_template": item["template"].name,
-                }
+
+                results = []
+                for variant_idx, (question_text, hint) in enumerate(variants):
+                    if not question_text or question_text.startswith("[VERBALIZATION FAILED"):
+                        continue
+                    results.append({
+                        "question": question_text,
+                        "hint": hint,
+                        "n_steps": item["template"].n_steps,
+                        "difficulty": item["template"].difficulty,
+                        "template_name": item["template"].name,
+                        "template_params": item["params"] or None,
+                        "output_type": item["template"].output_type,
+                        "output_schema": item["template"].output_schema,
+                        "ground_truth_hash": item["answer_hash"],
+                        "variant_index": variant_idx,
+                        "_ground_truth": item["ground_truth"],
+                        "_template": item["template"].name,
+                    })
+                return results
             except Exception as e:
                 print(f"  Verbalization error: {e}")
-                return None
+                return []
 
-        verbalized = await asyncio.gather(*[verbalize_one(item) for item in execution_results])
-        questions = [q for q in verbalized if q is not None]
-        print(f"  Verbalized {len(questions)}/{len(execution_results)} successfully")
+        verbalized_lists = await asyncio.gather(*[verbalize_k_variants(item) for item in execution_results])
+        # Flatten list of lists
+        questions = [q for sublist in verbalized_lists for q in sublist]
+        n_templates_with_questions = sum(1 for sublist in verbalized_lists if sublist)
+        print(f"  Generated {len(questions)} questions from {n_templates_with_questions}/{len(execution_results)} templates")
 
         # 5. Format output
         df = pd.read_csv(self.csv_path, nrows=0)
@@ -239,6 +259,32 @@ class CompositionalQuestionGenerator:
             return None
 
 
+def load_dataset_description(csv_path: str) -> str:
+    """Load dataset description from meta.json adjacent to CSV."""
+    csv_path_obj = Path(csv_path)
+
+    # Try sibling meta.json first (for data/kaggle/{slug}/data.csv structure)
+    meta_path = csv_path_obj.parent / "meta.json"
+    if not meta_path.exists():
+        # Try sidecar format (data.meta.json)
+        meta_path = csv_path_obj.with_suffix(".meta.json")
+
+    if meta_path.exists():
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+                return (
+                    meta.get("description")
+                    or meta.get("subtitle")
+                    or meta.get("title")
+                    or ""
+                )
+        except Exception:
+            pass
+
+    return ""
+
+
 async def generate_questions(
     csv_path: str,
     output_dir: str | None = None,
@@ -257,9 +303,15 @@ async def generate_questions(
     Returns:
         Generated questions dict
     """
+    # Load dataset description from meta.json
+    dataset_description = load_dataset_description(csv_path)
+    if dataset_description:
+        print(f"Dataset description: {dataset_description[:100]}...")
+
     generator = CompositionalQuestionGenerator(
         csv_path=csv_path,
         model=model,
+        dataset_description=dataset_description,
     )
 
     try:
