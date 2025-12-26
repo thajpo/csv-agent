@@ -81,13 +81,10 @@ class APILLM:
                         "max_tokens": self.sampling_args.get("max_tokens", 8192),
                         "temperature": self.sampling_args.get("temperature", 0.7),
                         "top_p": self.sampling_args.get("top_p", 1.0),
-                        "n": self.sampling_args.get("n", 1),
-                        "stream": self.sampling_args.get("stream", False),
-                        "logprobs": self.sampling_args.get("logprobs", None),
-                        "echo": self.sampling_args.get("echo", False),
-                        "stop": self.sampling_args.get("stop", None),
-                        "presence_penalty": self.sampling_args.get("presence_penalty", 0.0),
-                        "frequency_penalty": self.sampling_args.get("frequency_penalty", 0.0),
+                        # Only include optional params if explicitly set and non-default
+                        **({"stop": self.sampling_args["stop"]} if self.sampling_args.get("stop") else {}),
+                        **({"presence_penalty": self.sampling_args["presence_penalty"]} if self.sampling_args.get("presence_penalty", 0) != 0 else {}),
+                        **({"frequency_penalty": self.sampling_args["frequency_penalty"]} if self.sampling_args.get("frequency_penalty", 0) != 0 else {}),
                     },
                 )
                 response.raise_for_status()
@@ -114,6 +111,13 @@ class APILLM:
                     wait_time = 2 ** attempt
                     await asyncio.sleep(wait_time)
                     continue
+                # Log the error response body for debugging 4xx errors
+                if e.response.status_code >= 400 and e.response.status_code < 500:
+                    try:
+                        error_body = e.response.json()
+                        print(f"⚠️  API Error {e.response.status_code}: {error_body}")
+                    except Exception:
+                        print(f"⚠️  API Error {e.response.status_code}: {e.response.text[:500]}")
                 raise
 
             except (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException) as e:
