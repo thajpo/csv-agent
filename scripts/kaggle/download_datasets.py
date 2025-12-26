@@ -179,23 +179,25 @@ def download_dataset(
         return dataset_dir
 
 
-def iter_popular_datasets(api):
+def iter_popular_datasets(api, max_size_mb: float = 50.0):
     """
     Lazily iterate popular tabular CSV datasets from Kaggle.
 
     Yields dataset refs like "owner/dataset-name", sorted by votes.
     Fetches pages on-demand to avoid rate limiting and wasted API calls.
+    Pre-filters by actual size (API max_size filter is unreliable).
     """
     import time
 
     page = 1
+    max_bytes = max_size_mb * 1024 * 1024
 
     while True:
         try:
             datasets = list(api.dataset_list(
                 file_type="csv",
                 sort_by="votes",
-                max_size=50 * 1024 * 1024,  # 50MB max (pre-filter)
+                max_size=50 * 1024 * 1024,  # 50MB max (pre-filter, unreliable)
                 page=page,
             ))
 
@@ -203,6 +205,9 @@ def iter_popular_datasets(api):
                 break  # No more results
 
             for d in datasets:
+                # Double-check size (API filter is unreliable)
+                if d.total_bytes and d.total_bytes > max_bytes:
+                    continue  # Skip silently
                 yield d.ref
 
             page += 1
