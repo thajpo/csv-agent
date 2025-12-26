@@ -102,11 +102,17 @@ def get_dataset_metadata(api, dataset_ref: str) -> dict:
     }
 
 
+class DownloadTimeout(Exception):
+    """Raised when download takes too long."""
+    pass
+
+
 def download_dataset(
     api,
     dataset_ref: str,
     output_dir: Path,
     max_size_mb: float = 5.0,
+    timeout_seconds: int = 60,
 ) -> Path | None:
     """
     Download dataset to output_dir/{slug}/ with standardized structure.
@@ -114,12 +120,17 @@ def download_dataset(
     Filters:
     - Skips multi-CSV datasets
     - Skips datasets larger than max_size_mb
+    - Skips downloads taking longer than timeout_seconds
 
     Returns:
         Path to dataset folder if successful, None if skipped.
     """
     import shutil
+    import signal
     import tempfile
+
+    def timeout_handler(signum, frame):
+        raise DownloadTimeout(f"Download timed out after {timeout_seconds}s")
 
     slug = dataset_ref.replace("/", "_")
 
@@ -127,8 +138,14 @@ def download_dataset(
     with tempfile.TemporaryDirectory(prefix="kaggle_") as temp_dir:
         temp_path = Path(temp_dir)
 
-        # Download and unzip to temp
-        api.dataset_download_files(dataset_ref, path=str(temp_path), unzip=True)
+        # Download with timeout
+        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout_seconds)
+        try:
+            api.dataset_download_files(dataset_ref, path=str(temp_path), unzip=True)
+        finally:
+            signal.alarm(0)  # Cancel alarm
+            signal.signal(signal.SIGALRM, old_handler)
 
         # Find CSV files
         csv_files = list(temp_path.glob("**/*.csv"))
@@ -285,6 +302,10 @@ def main():
         # Download (filters applied inside)
         try:
             dataset_dir = download_dataset(api, ref, output_dir, max_size_mb=args.max_size)
+        except DownloadTimeout:
+            print(f"  ⚠ Download timed out (>60s), skipping")
+            skipped_filter += 1
+            continue
         except Exception as e:
             print(f"  ⚠ Download error: {e}")
             skipped_filter += 1
