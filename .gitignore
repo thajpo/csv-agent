@@ -12,4 +12,10 @@ wheels/
 # Downloaded Kaggle datasets
 kaggle/downloaded/
 scripts/kaggle/downloaded/
+
+# Generated data (large, machine-specific)
+data/episodes/
+data/kaggle/manifest.json
+
+# OS files
 .DS_Store
