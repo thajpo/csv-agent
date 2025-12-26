@@ -124,6 +124,11 @@ class CompositionalQuestionGenerator:
                 result = await self._execute_code(code)
                 if result:
                     ground_truth, answer_hash = result
+                    # Skip questions where template returns an error
+                    # (e.g., "No suitable categorical column found")
+                    if isinstance(ground_truth, dict) and "error" in ground_truth:
+                        print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) - skipped (template error)")
+                        continue
                     execution_results.append({
                         "template": template,
                         "params": params,
