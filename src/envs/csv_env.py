@@ -73,6 +73,7 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
         "__csv_agent_hook__": True,
         "variable_name": name,
         "value_hash": value_hash,
+        "value": normalized,
         "description": description,
         "code_line": code_line,
         "depends_on": depends_on or [],

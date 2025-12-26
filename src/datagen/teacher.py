@@ -334,6 +334,7 @@ async def execute_teacher_trace(
             code_line=h["code_line"],
             variable_name=h.get("variable_name") or "",
             value_hash=h["value_hash"],
+            value=h.get("value"),
             description=h.get("description") or "",
             depends_on=h.get("depends_on") or [],
         ))

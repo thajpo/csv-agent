@@ -38,6 +38,7 @@ class HookDict(TypedDict, total=False):
     code_line: str
     variable_name: str | None
     value_hash: str
+    value: Any  # Normalized value for PRM training
     description: str | None
     depends_on: list[str]
 
@@ -135,7 +136,7 @@ class Question(BaseModel):
 
 class Hook(BaseModel):
     """A verifiable checkpoint in the solution trace.
-    
+
     Hooks capture intermediate states during code execution for RL reward.
     The value_hash allows verification without storing the actual value.
     The depends_on field tracks which previous hooks must be computed first.
@@ -143,6 +144,7 @@ class Hook(BaseModel):
     code_line: str                      # The code that produced this
     variable_name: str | None = None    # e.g., 'df_filtered'
     value_hash: str                     # Hash of the value at this point
+    value: Any = None                   # Normalized value for PRM training
     description: str | None = None      # Optional semantic description
     depends_on: list[str] = Field(default_factory=list)  # Names of hooks this depends on (DAG edges)
 
