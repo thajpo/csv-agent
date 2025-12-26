@@ -15,7 +15,8 @@ scripts/kaggle/downloaded/
 
 # Generated data (large, machine-specific)
 data/episodes/
-data/kaggle/manifest.json
+data/kaggle/
+data/questions/
 
 # OS files
 .DS_Store
