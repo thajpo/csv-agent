@@ -23,15 +23,10 @@ All settings are in `config.yaml`:
 Explore a dataset and generate questions:
 
 ```bash
-uv run python scripts/generate_questions.py
+uv run python -m src.datagen.question_gen
 ```
 
-Override config:
-```bash
-uv run python scripts/generate_questions.py --csv other.csv --model gpt-4o
-```
-
-Output: `outputs/<dataset>/questions.json`
+Output: `data/questions/<dataset>/questions.json`
 
 ---
 
@@ -40,12 +35,10 @@ Output: `outputs/<dataset>/questions.json`
 Validate questions via teacher triangulation:
 
 ```bash
-uv run python scripts/generate_training_data.py --questions outputs/data/questions.json
+uv run python -m src.datagen.episode_gen
 ```
 
-Output:
-- `outputs/<dataset>/traces.json` - All traces
-- `outputs/<dataset>/training_data.json` - Verified traces only
+Output: `data/episodes/episodes.jsonl`
 
 ---
 
@@ -96,7 +89,7 @@ To expand your training data with Kaggle datasets:
 
 4. Use downloaded datasets:
    ```bash
-   uv run python scripts/generate_questions.py --csv kaggle/downloaded/uciml_iris.csv
+   uv run python -m src.datagen.question_gen --csv data/kaggle/uciml_iris.csv
    ```
 
 ---

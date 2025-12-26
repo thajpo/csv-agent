@@ -174,9 +174,8 @@ csv-agent/
 │   ├── csv/                # Input CSV datasets
 │   ├── questions/          # Generated questions
 │   ├── episodes/           # Training episodes (JSONL)
-│   ├── outputs/            # Per-dataset outputs
+│   ├── kaggle/             # Kaggle downloaded datasets
 │   ├── fixtures/           # Test fixtures
-│   ├── traces/             # Exploration traces
 │   └── mock/               # Mock data for testing
 ├── docs/                   # Documentation
 ├── configs/                # Configuration files
