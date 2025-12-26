@@ -111,12 +111,10 @@ class Config(BaseModel):
     )
 
     # pipelines: episode generation / triangulation
-    n_consistency: int = 5
+    n_consistency: int = 7  # Optimal for 8-worker containers (profiled)
     verified_only: bool = False
     float_tolerance: float = 0.1
-    max_concurrent_containers: int = (
-        10  # Limit parallel CSV processing to avoid resource exhaustion
-    )
+    max_concurrent_containers: int = 30  # Profiled optimal for this machine
 
     # Outputs
     questions_json: str = "data/questions/questions.json"

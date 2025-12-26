@@ -404,13 +404,21 @@ async def main(
                 )
                 return (task, episodes)
 
-        results = await asyncio.gather(*[process_task_wrapper(task) for task in tasks])
+        # Create tasks for asyncio.as_completed
+        pending_tasks = [
+            asyncio.create_task(process_task_wrapper(task)) for task in tasks
+        ]
 
-        # Aggregate results
-        for task, episodes in results:
+        # Process as each completes (provides real-time progress)
+        completed_count = 0
+        for coro in asyncio.as_completed(pending_tasks):
+            task_result, episodes = await coro
+            completed_count += 1
+
             n_verified = sum(1 for ep in episodes if ep.verified)
             ui.base.print_success(
-                f"✓ {task.dataset_name}: {len(episodes)} episodes ({n_verified} verified)"
+                f"✓ [{completed_count}/{len(tasks)}] {task_result.dataset_name}: "
+                f"{len(episodes)} episodes ({n_verified} verified)"
             )
             all_episodes.extend(episodes)
 
