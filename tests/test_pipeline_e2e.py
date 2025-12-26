@@ -79,9 +79,9 @@ class TestPipelineE2E:
         from src.core.types import (
             Question,
             EpisodeJSONL,
-            Episode,
-            ExecutionTrace,
+            QuestionDict,
             TimingMetadataDict,
+            TriangulationMetadataDict,
         )
         from src.eval.synthetic import SyntheticEvaluator
         from datetime import datetime
@@ -192,8 +192,8 @@ class TestPipelineE2E:
             majority_count,
         ) = result
 
-        print(f"  Gold trace success: {gold_trace.execution_success}")
-        print(f"  Gold answer: {gold_trace.final_answer}")
+        print(f"  Gold trace success: {gold_trace['success']}")
+        print(f"  Gold answer: {gold_trace['final_answer']}")
         print(f"  Consistency traces: {len(consistency_results)}")
         print(f"  Verified: {verified}")
 
@@ -204,25 +204,38 @@ class TestPipelineE2E:
 
         question_obj = Question.from_dict(question_dict)
         consistency_traces = [t for t, _ in consistency_results]
+        n_succeeded = sum(1 for t in consistency_traces if t["success"])
 
-        episode = Episode(
-            id=str(uuid.uuid4()),
-            question=question_obj,
-            teacher_trace=gold_trace,
+        episode_jsonl = EpisodeJSONL(
+            episode_id=str(uuid.uuid4()),
+            timestamp=datetime.now(),
+            csv_source=test_csv,
+            question=QuestionDict(
+                id=question_obj.id,
+                question_text=question_obj.question_text,
+                hint=question_obj.hint,
+                difficulty=question_obj.difficulty,
+                n_steps=question_obj.n_steps,
+                template_name=question_obj.template_name,
+                template_params=question_obj.template_params,
+                ground_truth=question_obj.ground_truth,
+            ),
+            gold_trace=gold_trace,
             consistency_traces=consistency_traces,
             verified=verified,
-            timestamp=datetime.now(),
-        )
-
-        episode_jsonl = EpisodeJSONL.from_episode(
-            episode=episode,
-            gold_conversation=gold_conversation,
-            consistency_conversations=[c for _, c in consistency_results],
-            system_prompt=system_prompt,
-            csv_source=test_csv,
-            timing_metadata=cast(TimingMetadataDict, timing_metadata),
-            majority_answer_hash=majority_hash,
-            majority_count=majority_count,
+            triangulation=TriangulationMetadataDict(
+                n_consistency_runs=len(consistency_traces),
+                n_consistency_succeeded=n_succeeded,
+                majority_answer_hash=majority_hash,
+                majority_count=majority_count,
+                gold_matches_majority=verified,
+            ),
+            timing=TimingMetadataDict(
+                gold_elapsed=timing_metadata["gold_elapsed"],
+                consistency_elapsed=timing_metadata["consistency_elapsed"],
+                total_elapsed=timing_metadata["total_elapsed"],
+                avg_elapsed=timing_metadata["avg_elapsed"],
+            ),
         )
 
         episodes_path = temp_dir / "test_episodes.jsonl"
@@ -230,7 +243,7 @@ class TestPipelineE2E:
             f.write(episode_jsonl.model_dump_json() + "\n")
 
         print(f"  Episode saved: {episodes_path}")
-        print(f"  Episode ID: {episode.id}")
+        print(f"  Episode ID: {episode_jsonl.episode_id}")
 
         # ============================================
         # Step 4: Run evaluation
@@ -247,8 +260,8 @@ class TestPipelineE2E:
         # ============================================
         # Assertions
         # ============================================
-        assert gold_trace.execution_success, "Gold trace should succeed"
-        assert gold_trace.final_answer is not None, "Gold trace should have answer"
+        assert gold_trace["success"], "Gold trace should succeed"
+        assert gold_trace["final_answer"] is not None, "Gold trace should have answer"
         assert len(consistency_results) == 2, "Should have 2 consistency traces"
         assert metrics.total == 1, "Should have 1 episode"
 

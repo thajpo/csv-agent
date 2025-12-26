@@ -196,7 +196,9 @@ def _canonicalize_teacher_dict(
         - missing: list of keys missing from teacher
     """
     teacher_norm = {_normalize_key(k): _normalize_value(v) for k, v in teacher.items()}
-    expected_norm = {_normalize_key(k): _normalize_value(v) for k, v in expected.items()}
+    expected_norm = {
+        _normalize_key(k): _normalize_value(v) for k, v in expected.items()
+    }
 
     canonical: dict[str, Any] = {}
     missing: list[str] = []
@@ -271,7 +273,9 @@ def _compute_hook_metrics(
     expected_hooks = expected_hooks or []
 
     teacher_hashes = {h.get("value_hash") for h in teacher_hooks if h.get("value_hash")}
-    expected_hashes = {h.get("value_hash") for h in expected_hooks if h.get("value_hash")}
+    expected_hashes = {
+        h.get("value_hash") for h in expected_hooks if h.get("value_hash")
+    }
 
     matches = len(teacher_hashes & expected_hashes)
     expected_count = len(expected_hashes)
@@ -346,14 +350,22 @@ class SyntheticEvaluator:
             try:
                 for ep in episodes:
                     question = ep.get("question", {})
-                    template_name = question.get("template_name") or question.get("_template")
+                    template_name = question.get("template_name") or question.get(
+                        "_template"
+                    )
                     template_params = question.get("template_params")
                     difficulty = question.get("difficulty", "unknown")
                     question_text = question.get("question_text", "")
 
-                    teacher_trace = ep.get("teacher_gold_trace", {})
+                    teacher_trace = ep.get("gold_trace") or ep.get(
+                        "teacher_gold_trace", {}
+                    )
                     teacher_answer = teacher_trace.get("final_answer")
-                    teacher_hooks = teacher_trace.get("hooks", [])
+                    all_hooks = []
+                    for turn in teacher_trace.get("turns", []):
+                        exec_result = turn.get("execution", {})
+                        all_hooks.extend(exec_result.get("hooks", []))
+                    teacher_hooks = all_hooks or teacher_trace.get("hooks", [])
 
                     expected_answer = None
                     expected_hooks = []
@@ -364,7 +376,9 @@ class SyntheticEvaluator:
                             matched = False
                             reason = "template not found"
                         else:
-                            exec_result = await session.execute(template, template_params)
+                            exec_result = await session.execute(
+                                template, template_params
+                            )
                             if exec_result is None:
                                 matched = False
                                 reason = "template execution failed"
@@ -388,16 +402,16 @@ class SyntheticEvaluator:
                             self.p_value_tol,
                         )
 
-                    (matches,
-                     expected_count,
-                     teacher_count,
-                     recall,
-                     precision) = _compute_hook_metrics(teacher_hooks, expected_hooks)
+                    (matches, expected_count, teacher_count, recall, precision) = (
+                        _compute_hook_metrics(teacher_hooks, expected_hooks)
+                    )
 
                     hook_recalls.append(recall)
                     hook_precisions.append(precision)
 
-                    template_label = _template_label(template_name or "unknown", template_params)
+                    template_label = _template_label(
+                        template_name or "unknown", template_params
+                    )
                     result = SyntheticEvalResult(
                         question_text=question_text[:100],
                         template=template_label,
@@ -436,7 +450,9 @@ class SyntheticEvaluator:
         mismatches = [r for r in results if not r.matched]
 
         avg_hook_recall = sum(hook_recalls) / len(hook_recalls) if hook_recalls else 0.0
-        avg_hook_precision = sum(hook_precisions) / len(hook_precisions) if hook_precisions else 0.0
+        avg_hook_precision = (
+            sum(hook_precisions) / len(hook_precisions) if hook_precisions else 0.0
+        )
 
         return SyntheticEvalMetrics(
             accuracy=correct / total,
@@ -449,9 +465,7 @@ class SyntheticEvaluator:
             },
             total_by_difficulty={k: len(v) for k, v in by_difficulty.items()},
             correct_by_difficulty={k: sum(v) for k, v in by_difficulty.items()},
-            accuracy_by_template={
-                k: sum(v) / len(v) for k, v in by_template.items()
-            },
+            accuracy_by_template={k: sum(v) / len(v) for k, v in by_template.items()},
             mismatches=mismatches,
         )
 
@@ -464,7 +478,9 @@ class SyntheticEvaluator:
         print("SYNTHETIC EVALUATION REPORT")
         print("=" * 60)
         print()
-        print(f"Overall Accuracy: {metrics.accuracy:.1%} ({metrics.correct}/{metrics.total})")
+        print(
+            f"Overall Accuracy: {metrics.accuracy:.1%} ({metrics.correct}/{metrics.total})"
+        )
         print(f"Avg Hook Recall:  {metrics.avg_hook_recall:.1%}")
         print(f"Avg Hook Precision: {metrics.avg_hook_precision:.1%}")
         print()

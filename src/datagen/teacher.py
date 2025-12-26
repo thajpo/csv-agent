@@ -14,14 +14,118 @@ This filters out questions where:
 """
 
 import asyncio
+import json
+import re
 import time
 import pandas as pd
 from typing import Any, List
 
 from src.core.environment import Environment
-from src.core.types import ExecutionTrace, Hook
+from src.core.types import (
+    TraceDict,
+    TurnDict,
+    ExecutionResultDict,
+    HookDict,
+    ExecutionTrace,
+    Hook,  # Legacy, for transition
+)
 from src.utils.hashing import hash_artifact
 from src.utils.normalization import normalize_value
+
+
+def parse_hooks_from_stdout(stdout: str) -> list[HookDict]:
+    """Extract hook JSON objects from execution stdout."""
+    hooks = []
+    for line in stdout.split("\n"):
+        if "📍 Hook:" in line:
+            json_start = line.find("{")
+            if json_start != -1:
+                try:
+                    hook_data = json.loads(line[json_start:])
+                    if hook_data.get("__csv_agent_hook__"):
+                        hooks.append(
+                            HookDict(
+                                variable_name=hook_data.get("variable_name"),
+                                code_line=hook_data.get("code_line", ""),
+                                value=hook_data.get("value"),
+                                value_hash=hook_data.get("value_hash", ""),
+                                depends_on=hook_data.get("depends_on", []),
+                                description=hook_data.get("description"),
+                            )
+                        )
+                except json.JSONDecodeError:
+                    continue
+    return hooks
+
+
+def extract_reasoning_from_response(response: str) -> str:
+    """Extract reasoning text from assistant response (everything before code block)."""
+    code_pattern = r"```python\n.*?```"
+    parts = re.split(code_pattern, response, flags=re.DOTALL)
+    return parts[0].strip() if parts else ""
+
+
+def build_trace_dict(
+    final_state,
+    conversation_messages: list[dict],
+) -> TraceDict:
+    """Build TraceDict from environment final state and conversation."""
+    turns: list[TurnDict] = []
+
+    assistant_messages = [
+        m for m in conversation_messages if m.get("role") == "assistant"
+    ]
+    execution_results_per_turn = final_state.execution_results_per_turn
+
+    for turn_idx, assistant_msg in enumerate(assistant_messages):
+        response = assistant_msg["content"]
+        reasoning = extract_reasoning_from_response(response)
+
+        code_blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
+        code = code_blocks[0] if code_blocks else ""
+
+        exec_results = (
+            execution_results_per_turn[turn_idx]
+            if turn_idx < len(execution_results_per_turn)
+            else []
+        )
+
+        if exec_results:
+            result = exec_results[0]
+            hooks = parse_hooks_from_stdout(result.stdout)
+            execution = ExecutionResultDict(
+                success=result.success,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                hooks=hooks,
+                submitted_answer=result.submitted_answer,
+            )
+        else:
+            execution = ExecutionResultDict(
+                success=True,
+                stdout="",
+                stderr="",
+                hooks=[],
+                submitted_answer=None,
+            )
+
+        turns.append(
+            TurnDict(
+                turn_index=turn_idx,
+                reasoning=reasoning,
+                code=code,
+                execution=execution,
+            )
+        )
+
+    return TraceDict(
+        turns=turns,
+        final_answer=final_state.submitted_answer,
+        final_answer_hash=hash_artifact(final_state.submitted_answer)
+        if final_state.submitted_answer
+        else None,
+        success=final_state.submitted_answer is not None,
+    )
 
 
 def answers_match(
@@ -87,6 +191,7 @@ def answers_match(
 
         # Both dicts: compare keys exactly, values with float tolerance
         if isinstance(v1, dict) and isinstance(v2, dict):
+
             def _values_match(a: Any, b: Any) -> bool:
                 if isinstance(a, (int, float)) and isinstance(b, (int, float)):
                     return abs(float(a) - float(b)) <= float_tol
@@ -190,22 +295,22 @@ def get_majority_answer(answers: list[Any], float_tol: float = 0.1) -> tuple[Any
 async def execute_teacher_trace(
     csv_path: str,
     question: str,
-    model: str,  # Must come from src.core.config
-    *,  # Force remaining args to be keyword-only
+    model: str,
+    *,
     hint: str | None = None,
-    n_steps: int | None = None,  # Expected hook count
-    difficulty: str | None = None,  # EASY, MEDIUM, HARD, VERY_HARD
+    n_steps: int | None = None,
+    difficulty: str | None = None,
     mode: str = "teacher-tutor",
     dataset_description: str = "",
     data_overview: str = "",
     max_turns: int = 10,
     sampling_args: dict | None = None,
-    env=None,  # Optional pre-created env (for pooling)
-    state: dict | None = None,  # Optional pre-created state (for pooling)
-    reuse_env: bool = False,  # If True, reset instead of destroy
-    ui: Any,  # UI instance for Rich output (required)
-    trace_mode: str = "gold",  # For UI display ("gold" or "1/5", etc.)
-) -> tuple[ExecutionTrace, list[dict], str, float]:
+    env=None,
+    state: dict | None = None,
+    reuse_env: bool = False,
+    ui: Any,
+    trace_mode: str = "gold",
+) -> tuple[TraceDict, list[dict], str, float]:
     """
     Execute a single teacher trace (with or without hint).
 
@@ -229,7 +334,7 @@ async def execute_teacher_trace(
         dataset_description=dataset_description,
         data_overview=data_overview,
         max_turns=max_turns,
-        sampling_args=sampling_args,
+        sampling_args=sampling_args or {},
         env=env,
         state=state,
         reuse_env=reuse_env,
@@ -311,54 +416,7 @@ async def execute_teacher_trace(
         elapsed_seconds=elapsed_seconds,
     )
 
-    # Extract hooks from submission_metadata
-    # ENFORCEMENT: Hooks MUST have code_line - this is the critical code that solves the problem
-    submission_metadata = final_state.submission_metadata
-    raw_hooks = submission_metadata.get("hooks", [])
-
-    import logging
-
-    valid_hooks = []
-    invalid_hook_count = 0
-    for h in raw_hooks:
-        if not isinstance(h, dict):
-            continue
-        if not h.get("value_hash"):
-            continue
-        if not h.get("code_line"):
-            # Hook without code_line is invalid - we need to know WHAT CODE produced the value
-            invalid_hook_count += 1
-            logging.warning(f"Hook missing required code_line: {h.get('variable_name', 'unnamed')}")
-            continue
-        valid_hooks.append(Hook(
-            code_line=h["code_line"],
-            variable_name=h.get("variable_name") or "",
-            value_hash=h["value_hash"],
-            value=h.get("value"),
-            description=h.get("description") or "",
-            depends_on=h.get("depends_on") or [],
-        ))
-
-    hooks = valid_hooks
-
-    # Warn if trace has few valid hooks (may indicate question/prompt issue)
-    if len(hooks) < 2 and execution_success:
-        logging.warning(
-            f"Trace has only {len(hooks)} valid hook(s) with code_line - model may not be documenting solution steps"
-        )
-    if invalid_hook_count > 0:
-        logging.warning(
-            f"Rejected {invalid_hook_count} hook(s) missing code_line field"
-        )
-
-    trace = ExecutionTrace(
-        code_cells=code_cells,
-        final_answer=final_answer,
-        final_answer_hash=final_answer_hash,
-        execution_success=execution_success,
-        hooks=hooks,
-        submission_metadata=submission_metadata,
-    )
+    trace = build_trace_dict(final_state, conversation_messages)
 
     return trace, conversation_messages, system_prompt, elapsed_seconds
 
@@ -380,10 +438,10 @@ async def triangulate_teacher(
     ui: Any,  # UI instance (required)
     float_tol: float = 0.1,
 ) -> tuple[
-    ExecutionTrace,
+    TraceDict,
     list[dict],
     str,
-    list[tuple[ExecutionTrace, list[dict]]],
+    list[tuple[TraceDict, list[dict]]],
     bool,
     dict,
     str | None,
@@ -413,7 +471,11 @@ async def triangulate_teacher(
     # 1. Run gold trace (with hint)
     ui.print_trace_header(mode="gold", hint=hint)
 
-    gold_env, gold_state = container_pool[0] if use_pool else (None, None)
+    if use_pool:
+        assert container_pool is not None
+        gold_env, gold_state = container_pool[0]
+    else:
+        gold_env, gold_state = None, None
     (
         gold_trace,
         gold_conversation,
@@ -438,13 +500,16 @@ async def triangulate_teacher(
         trace_mode="gold",
     )
 
-    # 2. Run consistency traces (without hint) IN PARALLEL
+    pool = container_pool or []
+
     async def run_consistency_trace(i: int):
         """Helper to run a single consistency trace."""
         ui.print_trace_header(mode=f"{i + 1}/{n_consistency}", hint=None)
 
-        # Use pool slot i+1 (slot 0 is for gold trace)
-        c_env, c_state = container_pool[i + 1] if use_pool else (None, None)
+        if use_pool:
+            c_env, c_state = pool[i + 1]
+        else:
+            c_env, c_state = None, None
         trace, conversation, _, elapsed = await execute_teacher_trace(
             csv_path=csv_path,
             question=question,
@@ -471,7 +536,9 @@ async def triangulate_teacher(
     )
 
     # Separate timing data from results
-    consistency_results = [(trace, conv) for trace, conv, _ in consistency_results_with_timing]
+    consistency_results = [
+        (trace, conv) for trace, conv, _ in consistency_results_with_timing
+    ]
     consistency_elapsed = [elapsed for _, _, elapsed in consistency_results_with_timing]
 
     # Build timing metadata
@@ -483,12 +550,10 @@ async def triangulate_teacher(
         "avg_elapsed": total_elapsed / (1 + n_consistency),
     }
 
-    # 3. Cluster-based voting on consistency answers
-    # Extract answers from successful consistency traces (filter out None failures)
     submitted_answers = [
-        trace.final_answer
+        trace["final_answer"]
         for trace, _ in consistency_results
-        if trace.final_answer is not None
+        if trace["final_answer"] is not None
     ]
 
     if not submitted_answers:
@@ -511,9 +576,8 @@ async def triangulate_teacher(
         hash_artifact(majority_value) if majority_value is not None else None
     )
 
-    # Check if gold matches majority (with tolerance for floats and formats)
     verified = answers_match(
-        None, None, gold_trace.final_answer, majority_value, float_tol=float_tol
+        None, None, gold_trace["final_answer"], majority_value, float_tol=float_tol
     )
 
     # Display triangulation result
@@ -553,10 +617,10 @@ async def batch_triangulate(
 ) -> list[
     tuple[
         dict,
-        ExecutionTrace,
+        TraceDict,
         list[dict],
         str,
-        list[tuple[ExecutionTrace, list[dict]]],
+        list[tuple[TraceDict, list[dict]]],
         bool,
         dict,
         str | None,
@@ -600,7 +664,9 @@ async def batch_triangulate(
 
         cleanup_csv_sandbox_containers()
 
-        ui.base.print_status(f"Creating multi-tenant container ({n_workers} workers)...")
+        ui.base.print_status(
+            f"Creating multi-tenant container ({n_workers} workers)..."
+        )
 
         # Create single container with multiple workers (fork-based, memory shared)
         container = MultiTenantContainer(csv_path=csv_path, n_workers=n_workers)
