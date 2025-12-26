@@ -49,17 +49,9 @@ This file tracks planned improvements and technical debt for future sessions.
 
 ## Near-Term Features
 
-### 7. Add Progress Indicator for Parallel Mode
+### ~~7. Add Progress Indicator for Parallel Mode~~ ✅ DONE
 
-**Description:** Show progress feedback during parallel CSV processing. Currently parallel mode is silent until all CSVs complete.
-
-**Reason:** Long-running parallel jobs with no feedback make users uncertain if progress is being made.
-
-**Estimated Time:** 1-2 hours
-
-**Implementation Notes:**
-- Could use `asyncio.as_completed()` instead of `gather()` to report as each CSV finishes
-- Or periodic status updates via a background task
+Implemented via `asyncio.as_completed()` in `episode_gen.py`. Progress is now reported as each CSV completes with format `[N/total] dataset_name: X episodes (Y verified)`.
 
 ---
 
@@ -203,3 +195,7 @@ Implemented via `config.max_concurrent_containers` (default: 10) with asyncio.Se
 - [x] Add `max_concurrent_containers` config with semaphore throttling
 - [x] Refactor episode schema: `TraceDict`/`TurnDict`/`QADict` for flexible training formats
 - [x] Add format converters: `sft-standard`, `sft-interleaved`, `prm` (`prepare_finetune_data.py`)
+- [x] Add progress indicator for parallel mode via `asyncio.as_completed()`
+- [x] Remove deprecated `ExecutionTrace` from `teacher.py` (migrated to `TraceDict`)
+- [x] Add throughput profiler (`scripts/profile_throughput.py`) for container optimization
+- [x] Expand synthetic templates to 24 (was 14) with intro/mid-level statistics

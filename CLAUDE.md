@@ -27,12 +27,17 @@ uv sync --extra kaggle     # Include optional Kaggle integration
 
 **Stage 1: Generate Questions**
 ```bash
+# LLM-based exploration (default)
 uv run python -m src.datagen.question_gen
+
+# Synthetic/compositional (template-based, faster, deterministic)
+uv run python -m src.datagen.synthetic.generator
 ```
 
 **Stage 2: Generate Training Data**
 ```bash
 uv run python -m src.datagen.episode_gen
+uv run python -m src.datagen.episode_gen --parallel  # Multi-CSV parallel mode
 ```
 
 ### Testing
@@ -78,7 +83,7 @@ parse_submitted_answer(stdout) → extracts wrapped answer
 - `conversation.py` - Manages conversation history with context window limits
 - `model.py` - LLM API wrapper (supports OpenAI, Anthropic via `verifiers`)
 - `config.py` - Pydantic config with global singleton (`from src.core.config import config`)
-- `types.py` - Core data structures (Question, ExecutionTrace, Hook, etc.)
+- `types.py` - Core data structures (Question, TraceDict, TurnDict, Hook, etc.)
 
 **`src/envs/`**
 - `csv_env.py` - Docker sandbox environment for Python code execution
@@ -92,6 +97,11 @@ parse_submitted_answer(stdout) → extracts wrapped answer
   - `batch_triangulate()` - Batch processing with container pooling
 - `question_gen.py` - LLM-based dataset exploration and question generation
 - `episode_gen.py` - Convert triangulation results to episode JSONL format
+- `synthetic/` - Template-based compositional question generation
+  - `generator.py` - Main generator class and CLI
+  - `templates.py` - Composition templates (e.g., aggregation, filtering, stats)
+  - `profiler.py` - Dataset profiling for template selection
+  - `verbalizer.py` - LLM-based code-to-NL verbalization
 
 **`src/utils/`**
 - `normalization.py` - Normalize values before hashing (DataFrame → dict, numpy → list, etc.)
@@ -110,10 +120,8 @@ CSV → Question Generation → Questions JSON
 
 **Episode Schema** (see `docs/episode_schema.md`):
 - `verified`: bool - Gold matches majority
-- `teacher_gold_trace`: ExecutionTrace with hooks
-- `consistency_traces`: List[ExecutionTrace]
-- `conversation_for_sft`: OpenAI message format
-- `rl_verification_data`: Expected answer hashes for RL reward
+- `gold_trace`: TraceDict with hooks and turn-level granularity
+- `consistency_traces`: List[TraceDict]
 - `timing_metadata`: Execution timing per trace (gold_elapsed, consistency_elapsed, total_elapsed, avg_elapsed)
 
 ### Configuration
@@ -125,6 +133,7 @@ CSV → Question Generation → Questions JSON
 
 **Key config fields**:
 - `teacher_model` / `question_gen_model` - Model identifiers
+- `question_source` - "llm" (exploration-based) or "synthetic" (template-based)
 - `max_turns` - Max conversation turns per episode
 - `n_consistency` - Number of no-hint traces for triangulation (default: 5)
 - `float_tolerance` - Tolerance for float comparison in answer matching (default: 0.1)
