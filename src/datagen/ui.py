@@ -246,6 +246,10 @@ class EpisodeGenUI:
         self.console.print("[bold cyan]│[/bold cyan] [bold]Consistency Results:[/bold]")
 
         for i, trace in enumerate(consistency_traces, 1):
+            if trace is None:
+                self.console.print(f"[bold cyan]│[/bold cyan]   Trace {i}: [red]FAILED[/red]")
+                continue
+
             answer = trace.final_answer
             answer_hash = trace.final_answer_hash
 
@@ -262,7 +266,7 @@ class EpisodeGenUI:
 
         valid_answers = [
             t.final_answer for t in consistency_traces
-            if t.final_answer is not None
+            if t is not None and t.final_answer is not None
         ]
         majority_value, majority_count = get_majority_answer(valid_answers, float_tol=float_tol)
 
