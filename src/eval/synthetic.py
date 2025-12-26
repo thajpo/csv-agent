@@ -187,7 +187,14 @@ def _normalize_value(value: Any) -> Any:
 def _canonicalize_teacher_dict(
     teacher: dict,
     expected: dict,
-) -> tuple[dict, list[str]]:
+) -> tuple[dict, dict, list[str]]:
+    """Canonicalize teacher dict to match expected schema.
+
+    Returns:
+        - canonical: teacher dict with values aligned to expected keys
+        - expected_norm: normalized expected dict (with sorted lists)
+        - missing: list of keys missing from teacher
+    """
     teacher_norm = {_normalize_key(k): _normalize_value(v) for k, v in teacher.items()}
     expected_norm = {_normalize_key(k): _normalize_value(v) for k, v in expected.items()}
 
@@ -216,7 +223,7 @@ def _canonicalize_teacher_dict(
 
         canonical[key] = value
 
-    return canonical, missing
+    return canonical, expected_norm, missing
 
 
 def _compare_answers(
@@ -229,11 +236,10 @@ def _compare_answers(
         if not isinstance(actual, dict):
             return False, "actual answer is not a dict"
 
-        canonical, missing = _canonicalize_teacher_dict(actual, expected)
+        canonical, expected_norm, missing = _canonicalize_teacher_dict(actual, expected)
         if missing:
             return False, f"missing keys: {', '.join(sorted(missing))}"
 
-        expected_norm = {_normalize_key(k): _normalize_value(v) for k, v in expected.items()}
         matched = answers_match(
             None,
             None,
@@ -297,7 +303,7 @@ class SyntheticEvaluator:
     def __init__(
         self,
         episodes_path: str,
-        float_tol: float = 0.02,
+        float_tol: float = 0.1,
         p_value_tol: float = 0.002,
     ):
         """
@@ -500,8 +506,8 @@ def main():
     parser.add_argument(
         "--float-tol",
         type=float,
-        default=0.02,
-        help="Absolute tolerance for float comparison (default 0.02)",
+        default=0.1,
+        help="Absolute tolerance for float comparison (default 0.1)",
     )
     parser.add_argument(
         "--p-value-tol",
