@@ -1,0 +1,100 @@
+{
+  "episode_id": "test-episode-001",
+  "timestamp": "2025-01-01T00:00:00",
+  "csv_source": "data/kaggle/mirichoi0218_insurance/data.csv",
+  "question": {
+    "id": "abc123",
+    "question_text": "What is the mean of the column with highest variance?",
+    "hint": "First compute variance for each numeric column, find the max, then compute mean of that column.",
+    "difficulty": "EASY",
+    "n_steps": 2,
+    "template_name": "max_variance_mean",
+    "template_params": null,
+    "output_type": "float",
+    "output_schema": null,
+    "ground_truth_hash": "a1b2c3d4e5f6",
+    "ground_truth": 13270.42
+  },
+  "gold_trace": {
+    "turns": [
+      {
+        "turn_index": 0,
+        "reasoning": "I need to find the column with the highest variance and compute its mean. Let me first load the data and compute variance for each numeric column.",
+        "code": "import pandas as pd\n\ndf = pd.read_csv('data.csv')\nnumeric_cols = df.select_dtypes(include='number').columns\nvariances = df[numeric_cols].var()\nmax_var_col = variances.idxmax()\nhook(variances.to_dict(), name='variances')\n\nmean_val = df[max_var_col].mean()\nsubmit(mean_val)",
+        "execution": {
+          "success": true,
+          "stdout": "hook captured: variances\n\u2713 Submitted: {\"__csv_agent_answer__\": 13270.42, \"hooks\": [{\"name\": \"variances\", \"value\": {\"age\": 14.0, \"charges\": 146661782.0}}]}",
+          "stderr": "",
+          "hooks": [
+            {
+              "variable_name": "variances",
+              "code_line": "hook(variances.to_dict(), name='variances')",
+              "value": {"age": 14.0, "charges": 146661782.0},
+              "value_hash": "hash123",
+              "depends_on": [],
+              "description": null
+            }
+          ],
+          "submitted_answer": 13270.42
+        }
+      }
+    ],
+    "final_answer": 13270.42,
+    "final_answer_hash": "a1b2c3d4e5f6",
+    "success": true
+  },
+  "consistency_traces": [
+    {
+      "turns": [
+        {
+          "turn_index": 0,
+          "reasoning": "Computing variance and mean for the dataset.",
+          "code": "import pandas as pd\ndf = pd.read_csv('data.csv')\nvariances = df.select_dtypes(include='number').var()\nmax_col = variances.idxmax()\nresult = df[max_col].mean()\nsubmit(result)",
+          "execution": {
+            "success": true,
+            "stdout": "\u2713 Submitted: {\"__csv_agent_answer__\": 13270.42, \"hooks\": []}",
+            "stderr": "",
+            "hooks": [],
+            "submitted_answer": 13270.42
+          }
+        }
+      ],
+      "final_answer": 13270.42,
+      "final_answer_hash": "a1b2c3d4e5f6",
+      "success": true
+    },
+    {
+      "turns": [
+        {
+          "turn_index": 0,
+          "reasoning": "Finding highest variance column and its mean.",
+          "code": "import pandas as pd\ndf = pd.read_csv('data.csv')\nnum_df = df.select_dtypes('number')\nvar_series = num_df.var()\nmax_var_col = var_series.idxmax()\nanswer = num_df[max_var_col].mean()\nsubmit(answer)",
+          "execution": {
+            "success": true,
+            "stdout": "\u2713 Submitted: {\"__csv_agent_answer__\": 13270.42, \"hooks\": []}",
+            "stderr": "",
+            "hooks": [],
+            "submitted_answer": 13270.42
+          }
+        }
+      ],
+      "final_answer": 13270.42,
+      "final_answer_hash": "a1b2c3d4e5f6",
+      "success": true
+    }
+  ],
+  "verified": true,
+  "triangulation": {
+    "n_consistency_runs": 2,
+    "n_consistency_succeeded": 2,
+    "majority_answer_hash": "a1b2c3d4e5f6",
+    "majority_count": 2,
+    "gold_matches_majority": true
+  },
+  "timing": {
+    "gold_elapsed": 5.2,
+    "consistency_elapsed": [4.8, 5.1],
+    "total_elapsed": 15.1,
+    "avg_elapsed": 5.03
+  }
+}
