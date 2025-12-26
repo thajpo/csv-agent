@@ -813,25 +813,557 @@ else:
 
 
 # =============================================================================
+# INTRO STATISTICS - Basic hypothesis testing and descriptive stats
+# =============================================================================
+
+CHI_SQUARED_INDEPENDENCE = CompositionTemplate(
+    name="chi_squared_independence",
+    description="Test independence between two categorical variables using chi-squared test",
+    output_schema='A JSON object with exactly 7 keys: "column1" (first categorical column), "column2" (second categorical column), "chi_squared" (test statistic rounded to 4 decimals), "p_value" (rounded to 6 decimals), "degrees_of_freedom" (integer), "expected_min" (minimum expected frequency rounded to 2 decimals), and "independent" (boolean, true if p >= 0.05). Example: {"column1": "gender", "column2": "product", "chi_squared": 15.2345, "p_value": 0.004321, "degrees_of_freedom": 4, "expected_min": 5.23, "independent": false}',
+    code_template='''
+# Step 1: Identify categorical columns with reasonable cardinality
+cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+suitable_cats = [c for c in cat_cols if 2 <= df[c].nunique() <= 10]
+hook(suitable_cats, "suitable categorical columns", name='suitable_cats')
+
+if len(suitable_cats) < 2:
+    submit({"error": "Need at least 2 categorical columns with 2-10 unique values"})
+else:
+    col1, col2 = suitable_cats[0], suitable_cats[1]
+    hook([col1, col2], "selected columns for chi-squared test", name='selected_cols')
+    print(f"Testing independence: {col1} vs {col2}")
+
+    # Step 2: Create contingency table
+    contingency = pd.crosstab(df[col1], df[col2])
+    hook(contingency.shape, "contingency table shape", name='table_shape', depends_on=['selected_cols'])
+    print(f"Contingency table: {contingency.shape[0]} x {contingency.shape[1]}")
+
+    # Step 3: Perform chi-squared test
+    chi2, p_value, dof, expected = scipy.stats.chi2_contingency(contingency)
+    hook({"chi2": float(chi2), "p_value": float(p_value), "dof": int(dof)}, "chi-squared results", name='chi2_results', depends_on=['table_shape'])
+    print(f"Chi-squared: {chi2:.4f}, p-value: {p_value:.6f}, dof: {dof}")
+
+    # Step 4: Check expected frequencies (should be >= 5 for validity)
+    min_expected = expected.min()
+    hook(min_expected, "minimum expected frequency", name='min_expected', depends_on=['chi2_results'])
+    print(f"Min expected frequency: {min_expected:.2f}")
+
+    # Step 5: Determine independence
+    is_independent = p_value >= 0.05
+    hook(is_independent, "independence at alpha=0.05", name='is_independent', depends_on=['min_expected'])
+
+    submit({
+        "column1": col1,
+        "column2": col2,
+        "chi_squared": round(float(chi2), 4),
+        "p_value": round(float(p_value), 6),
+        "degrees_of_freedom": int(dof),
+        "expected_min": round(float(min_expected), 2),
+        "independent": is_independent
+    })
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: sum(1 for c in p.get("columns", {}).values() if c.get("type") == "categorical") >= 2,
+    n_steps=6,
+    difficulty="MEDIUM",
+)
+
+MANN_WHITNEY_U_TEST = CompositionTemplate(
+    name="mann_whitney_u_test",
+    description="Non-parametric comparison of two groups using Mann-Whitney U test",
+    output_schema='A JSON object with exactly 8 keys: "target_column", "grouping_column", "group1", "group2", "median1" (rounded to 4 decimals), "median2" (rounded to 4 decimals), "u_statistic" (rounded to 2 decimals), and "p_value" (rounded to 6 decimals). Example: {"target_column": "score", "grouping_column": "treatment", "group1": "control", "group2": "experimental", "median1": 72.5000, "median2": 78.0000, "u_statistic": 1234.50, "p_value": 0.034567}',
+    code_template='''
+# Step 1: Find most skewed numeric column (non-parametric tests suit skewed data)
+numeric_cols = df.select_dtypes('number').columns.tolist()
+skewness = {col: abs(df[col].skew()) for col in numeric_cols if not df[col].isna().all()}
+target_col = max(skewness, key=skewness.get)
+hook({"target": target_col, "skewness": skewness[target_col]}, "target column (most skewed)", name='target_col')
+print(f"Target: {target_col} (skewness: {skewness[target_col]:.4f})")
+
+# Step 2: Find binary grouping column
+cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+binary_col = None
+for col in cat_cols:
+    if df[col].nunique() == 2:
+        binary_col = col
+        break
+
+if binary_col is None:
+    # Create binary from median split
+    other_numeric = [c for c in numeric_cols if c != target_col][0] if len(numeric_cols) > 1 else target_col
+    df['_binary_group'] = (df[other_numeric] > df[other_numeric].median()).map({True: 'high', False: 'low'})
+    binary_col = '_binary_group'
+
+hook(binary_col, "grouping column", name='binary_col')
+print(f"Grouping by: {binary_col}")
+
+# Step 3: Extract groups
+groups = df[binary_col].dropna().unique()
+g1_name, g2_name = str(groups[0]), str(groups[1])
+hook([g1_name, g2_name], "group names", name='groups', depends_on=['binary_col'])
+
+g1_data = df[df[binary_col] == groups[0]][target_col].dropna()
+g2_data = df[df[binary_col] == groups[1]][target_col].dropna()
+hook({"n1": len(g1_data), "n2": len(g2_data)}, "group sizes", name='sizes', depends_on=['groups'])
+
+# Step 4: Compute medians
+med1, med2 = g1_data.median(), g2_data.median()
+hook({"median1": float(med1), "median2": float(med2)}, "group medians", name='medians', depends_on=['sizes'])
+print(f"Medians: {med1:.4f} vs {med2:.4f}")
+
+# Step 5: Mann-Whitney U test
+u_stat, p_value = scipy.stats.mannwhitneyu(g1_data, g2_data, alternative='two-sided')
+hook({"u_stat": float(u_stat), "p_value": float(p_value)}, "Mann-Whitney results", name='mw_results', depends_on=['medians'])
+print(f"U-statistic: {u_stat:.2f}, p-value: {p_value:.6f}")
+
+submit({
+    "target_column": target_col,
+    "grouping_column": binary_col,
+    "group1": g1_name,
+    "group2": g2_name,
+    "median1": round(float(med1), 4),
+    "median2": round(float(med2), 4),
+    "u_statistic": round(float(u_stat), 2),
+    "p_value": round(float(p_value), 6)
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 1,
+    n_steps=6,
+    difficulty="MEDIUM",
+)
+
+SPEARMAN_RANK_CORRELATION = CompositionTemplate(
+    name="spearman_rank_correlation",
+    description="Find strongest monotonic (rank-based) correlation between numeric columns",
+    output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "spearman_rho" (correlation coefficient rounded to 4 decimals), "p_value" (rounded to 6 decimals), and "interpretation" (string: "strong", "moderate", "weak", or "negligible"). Example: {"columns": ["age", "income"], "spearman_rho": 0.7234, "p_value": 0.000001, "interpretation": "strong"}',
+    code_template='''
+# Step 1: Get numeric columns
+numeric_cols = df.select_dtypes('number').columns.tolist()
+hook(len(numeric_cols), "number of numeric columns", name='n_cols')
+print(f"Numeric columns: {len(numeric_cols)}")
+
+# Step 2: Compute Spearman correlation matrix
+spearman_matrix = df[numeric_cols].corr(method='spearman').abs()
+np.fill_diagonal(spearman_matrix.values, 0)
+hook(spearman_matrix.shape, "Spearman correlation matrix computed", name='corr_matrix')
+
+# Step 3: Find strongest pair
+max_idx = spearman_matrix.stack().idxmax()
+col1, col2 = max_idx
+hook([col1, col2], "strongest Spearman pair", name='max_pair', depends_on=['corr_matrix'])
+print(f"Strongest monotonic correlation: {col1} vs {col2}")
+
+# Step 4: Compute exact Spearman with p-value
+rho, p_value = scipy.stats.spearmanr(df[col1].dropna(), df[col2].dropna())
+hook({"rho": float(rho), "p_value": float(p_value)}, "Spearman results", name='spearman', depends_on=['max_pair'])
+print(f"Spearman rho: {rho:.4f}, p-value: {p_value:.6f}")
+
+# Step 5: Interpret strength
+abs_rho = abs(rho)
+if abs_rho >= 0.7:
+    interpretation = "strong"
+elif abs_rho >= 0.4:
+    interpretation = "moderate"
+elif abs_rho >= 0.2:
+    interpretation = "weak"
+else:
+    interpretation = "negligible"
+hook(interpretation, "correlation interpretation", name='interpretation', depends_on=['spearman'])
+
+submit({
+    "columns": sorted([col1, col2]),
+    "spearman_rho": round(float(rho), 4),
+    "p_value": round(float(p_value), 6),
+    "interpretation": interpretation
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 3,
+    n_steps=6,
+    difficulty="MEDIUM",
+)
+
+COEFFICIENT_OF_VARIATION = CompositionTemplate(
+    name="coefficient_of_variation",
+    description="Find the column with highest relative variability (coefficient of variation)",
+    output_schema='A JSON object with exactly 4 keys: "column" (name of column with highest CV), "cv" (coefficient of variation as percentage rounded to 2 decimals), "mean" (rounded to 4 decimals), and "std" (rounded to 4 decimals). Example: {"column": "price", "cv": 45.23, "mean": 1234.5678, "std": 558.4567}',
+    code_template='''
+# Step 1: Get numeric columns with positive means
+numeric_cols = df.select_dtypes('number').columns.tolist()
+cv_values = {}
+
+for col in numeric_cols:
+    mean_val = df[col].mean()
+    std_val = df[col].std()
+    if mean_val > 0 and std_val > 0:
+        cv_values[col] = (std_val / mean_val) * 100
+
+hook(cv_values, "coefficient of variation per column", name='cv_values')
+print("Coefficient of Variation (%):")
+for col, cv in sorted(cv_values.items(), key=lambda x: -x[1])[:5]:
+    print(f"  {col}: {cv:.2f}%")
+
+# Step 2: Find column with highest CV
+max_cv_col = max(cv_values, key=cv_values.get)
+hook(max_cv_col, "column with highest CV", name='max_cv_col', depends_on=['cv_values'])
+print(f"Highest CV: {max_cv_col} ({cv_values[max_cv_col]:.2f}%)")
+
+# Step 3: Get mean and std for that column
+col_mean = df[max_cv_col].mean()
+col_std = df[max_cv_col].std()
+hook({"mean": float(col_mean), "std": float(col_std)}, "column statistics", name='col_stats', depends_on=['max_cv_col'])
+
+submit({
+    "column": max_cv_col,
+    "cv": round(cv_values[max_cv_col], 2),
+    "mean": round(float(col_mean), 4),
+    "std": round(float(col_std), 4)
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 2,
+    n_steps=4,
+    difficulty="EASY",
+)
+
+IQR_OUTLIER_ANALYSIS = CompositionTemplate(
+    name="iqr_outlier_analysis",
+    description="Detect outliers using IQR method (1.5*IQR beyond quartiles)",
+    output_schema='A JSON object with exactly 7 keys: "column" (analyzed column), "q1" (25th percentile rounded to 4 decimals), "q3" (75th percentile rounded to 4 decimals), "iqr" (rounded to 4 decimals), "lower_fence" (rounded to 4 decimals), "upper_fence" (rounded to 4 decimals), and "n_outliers" (integer count). Example: {"column": "salary", "q1": 45000.0000, "q3": 75000.0000, "iqr": 30000.0000, "lower_fence": 0.0000, "upper_fence": 120000.0000, "n_outliers": 23}',
+    code_template='''
+# Step 1: Find column with highest variance
+numeric_cols = df.select_dtypes('number').columns.tolist()
+variances = df[numeric_cols].var()
+target_col = variances.idxmax()
+hook(target_col, "target column (highest variance)", name='target_col')
+print(f"Analyzing: {target_col}")
+
+# Step 2: Compute quartiles
+q1 = df[target_col].quantile(0.25)
+q3 = df[target_col].quantile(0.75)
+iqr = q3 - q1
+hook({"q1": float(q1), "q3": float(q3), "iqr": float(iqr)}, "quartile info", name='quartiles', depends_on=['target_col'])
+print(f"Q1: {q1:.4f}, Q3: {q3:.4f}, IQR: {iqr:.4f}")
+
+# Step 3: Calculate fences
+lower_fence = q1 - 1.5 * iqr
+upper_fence = q3 + 1.5 * iqr
+hook({"lower": float(lower_fence), "upper": float(upper_fence)}, "fences", name='fences', depends_on=['quartiles'])
+print(f"Fences: [{lower_fence:.4f}, {upper_fence:.4f}]")
+
+# Step 4: Count outliers
+data = df[target_col].dropna()
+outliers = ((data < lower_fence) | (data > upper_fence)).sum()
+hook(outliers, "outlier count", name='n_outliers', depends_on=['fences'])
+print(f"Outliers: {outliers} ({100*outliers/len(data):.2f}%)")
+
+submit({
+    "column": target_col,
+    "q1": round(float(q1), 4),
+    "q3": round(float(q3), 4),
+    "iqr": round(float(iqr), 4),
+    "lower_fence": round(float(lower_fence), 4),
+    "upper_fence": round(float(upper_fence), 4),
+    "n_outliers": int(outliers)
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 1,
+    n_steps=5,
+    difficulty="EASY",
+)
+
+PERCENTILE_RANKING = CompositionTemplate(
+    name="percentile_ranking",
+    description="Find the value at specific percentiles for the column with highest range",
+    output_schema='A JSON object with exactly 6 keys: "column" (analyzed column), "p10" (10th percentile rounded to 4 decimals), "p25" (25th percentile), "p50" (median), "p75" (75th percentile), and "p90" (90th percentile). Example: {"column": "income", "p10": 25000.0000, "p25": 40000.0000, "p50": 55000.0000, "p75": 75000.0000, "p90": 100000.0000}',
+    code_template='''
+# Step 1: Find column with largest range
+numeric_cols = df.select_dtypes('number').columns.tolist()
+ranges = {col: df[col].max() - df[col].min() for col in numeric_cols}
+target_col = max(ranges, key=ranges.get)
+hook({"column": target_col, "range": ranges[target_col]}, "column with largest range", name='target_col')
+print(f"Analyzing: {target_col} (range: {ranges[target_col]:.4f})")
+
+# Step 2: Compute percentiles
+percentiles = [10, 25, 50, 75, 90]
+values = {f"p{p}": df[target_col].quantile(p/100) for p in percentiles}
+hook(values, "percentile values", name='percentiles', depends_on=['target_col'])
+print("Percentiles:")
+for k, v in values.items():
+    print(f"  {k}: {v:.4f}")
+
+submit({
+    "column": target_col,
+    "p10": round(float(values["p10"]), 4),
+    "p25": round(float(values["p25"]), 4),
+    "p50": round(float(values["p50"]), 4),
+    "p75": round(float(values["p75"]), 4),
+    "p90": round(float(values["p90"]), 4)
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 1,
+    n_steps=3,
+    difficulty="EASY",
+)
+
+DESCRIPTIVE_SUMMARY = CompositionTemplate(
+    name="descriptive_summary",
+    description="Compute comprehensive descriptive statistics for the most variable column",
+    output_schema='A JSON object with exactly 9 keys: "column", "count" (integer), "mean" (rounded to 4 decimals), "std", "min", "max", "median", "skewness", and "kurtosis" (all rounded to 4 decimals). Example: {"column": "age", "count": 1000, "mean": 35.4567, "std": 12.3456, "min": 18.0000, "max": 85.0000, "median": 34.0000, "skewness": 0.5678, "kurtosis": -0.2345}',
+    code_template='''
+# Step 1: Find column with highest variance
+numeric_cols = df.select_dtypes('number').columns.tolist()
+variances = df[numeric_cols].var()
+target_col = variances.idxmax()
+hook(target_col, "target column", name='target_col')
+print(f"Summarizing: {target_col}")
+
+# Step 2: Compute all descriptive statistics
+data = df[target_col].dropna()
+stats_dict = {
+    "count": len(data),
+    "mean": data.mean(),
+    "std": data.std(),
+    "min": data.min(),
+    "max": data.max(),
+    "median": data.median(),
+    "skewness": data.skew(),
+    "kurtosis": data.kurtosis()
+}
+hook(stats_dict, "descriptive statistics", name='stats', depends_on=['target_col'])
+for k, v in stats_dict.items():
+    print(f"  {k}: {v:.4f}" if isinstance(v, float) else f"  {k}: {v}")
+
+submit({
+    "column": target_col,
+    "count": int(stats_dict["count"]),
+    "mean": round(float(stats_dict["mean"]), 4),
+    "std": round(float(stats_dict["std"]), 4),
+    "min": round(float(stats_dict["min"]), 4),
+    "max": round(float(stats_dict["max"]), 4),
+    "median": round(float(stats_dict["median"]), 4),
+    "skewness": round(float(stats_dict["skewness"]), 4),
+    "kurtosis": round(float(stats_dict["kurtosis"]), 4)
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 1,
+    n_steps=3,
+    difficulty="EASY",
+)
+
+LEVENE_VARIANCE_TEST = CompositionTemplate(
+    name="levene_variance_test",
+    description="Test equality of variances between groups using Levene's test",
+    output_schema='A JSON object with exactly 7 keys: "target_column", "grouping_column", "n_groups" (integer), "levene_statistic" (rounded to 4 decimals), "p_value" (rounded to 6 decimals), "variances_equal" (boolean, true if p >= 0.05), and "group_variances" (dict mapping group names to variance rounded to 4 decimals). Example: {"target_column": "score", "grouping_column": "class", "n_groups": 3, "levene_statistic": 2.3456, "p_value": 0.098765, "variances_equal": true, "group_variances": {"A": 123.4567, "B": 145.6789, "C": 112.3456}}',
+    code_template='''
+# Step 1: Find numeric column with high variance
+numeric_cols = df.select_dtypes('number').columns.tolist()
+variances = df[numeric_cols].var()
+target_col = variances.idxmax()
+hook(target_col, "target column", name='target_col')
+print(f"Testing variance homogeneity for: {target_col}")
+
+# Step 2: Find categorical grouping column
+cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+group_col = None
+for col in cat_cols:
+    if 2 <= df[col].nunique() <= 6:
+        group_col = col
+        break
+
+if group_col is None:
+    submit({"error": "No suitable categorical column (2-6 groups)"})
+else:
+    hook(group_col, "grouping column", name='group_col', depends_on=['target_col'])
+    print(f"Grouping by: {group_col}")
+
+    # Step 3: Get groups
+    groups = df.groupby(group_col)[target_col].apply(lambda x: x.dropna().values)
+    group_names = groups.index.tolist()
+    n_groups = len(group_names)
+    hook({"n_groups": n_groups, "groups": group_names}, "group info", name='group_info', depends_on=['group_col'])
+
+    # Step 4: Compute group variances
+    group_vars = {str(g): float(df[df[group_col] == g][target_col].var()) for g in group_names}
+    hook(group_vars, "group variances", name='group_vars', depends_on=['group_info'])
+    print("Variances by group:")
+    for g, v in group_vars.items():
+        print(f"  {g}: {v:.4f}")
+
+    # Step 5: Levene's test
+    stat, p_value = scipy.stats.levene(*[groups[g] for g in group_names])
+    hook({"stat": float(stat), "p_value": float(p_value)}, "Levene test results", name='levene', depends_on=['group_vars'])
+    print(f"Levene's test: W={stat:.4f}, p={p_value:.6f}")
+
+    # Step 6: Interpret
+    variances_equal = p_value >= 0.05
+    hook(variances_equal, "variances equal at alpha=0.05", name='result', depends_on=['levene'])
+
+    submit({
+        "target_column": target_col,
+        "grouping_column": group_col,
+        "n_groups": n_groups,
+        "levene_statistic": round(float(stat), 4),
+        "p_value": round(float(p_value), 6),
+        "variances_equal": variances_equal,
+        "group_variances": {k: round(v, 4) for k, v in group_vars.items()}
+    })
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 1 and _has_categorical_cols(p),
+    n_steps=7,
+    difficulty="HARD",
+)
+
+KOLMOGOROV_SMIRNOV_NORMALITY = CompositionTemplate(
+    name="ks_normality_test",
+    description="Test for normality using Kolmogorov-Smirnov test against theoretical normal",
+    output_schema='A JSON object with exactly 6 keys: "column" (tested column), "ks_statistic" (rounded to 4 decimals), "p_value" (rounded to 6 decimals), "is_normal" (boolean, true if p >= 0.05), "sample_mean" (rounded to 4 decimals), and "sample_std" (rounded to 4 decimals). Example: {"column": "height", "ks_statistic": 0.0456, "p_value": 0.234567, "is_normal": true, "sample_mean": 170.1234, "sample_std": 10.5678}',
+    code_template='''
+# Step 1: Find column closest to normal (lowest skewness)
+numeric_cols = df.select_dtypes('number').columns.tolist()
+skewness = {col: abs(df[col].skew()) for col in numeric_cols}
+target_col = min(skewness, key=skewness.get)
+hook(target_col, "target column (lowest skewness)", name='target_col')
+print(f"Testing: {target_col} (skewness: {skewness[target_col]:.4f})")
+
+# Step 2: Get clean data
+data = df[target_col].dropna()
+n = len(data)
+hook(n, "sample size", name='n', depends_on=['target_col'])
+
+# Step 3: Compute sample statistics
+sample_mean = data.mean()
+sample_std = data.std()
+hook({"mean": float(sample_mean), "std": float(sample_std)}, "sample statistics", name='stats', depends_on=['n'])
+print(f"Mean: {sample_mean:.4f}, Std: {sample_std:.4f}")
+
+# Step 4: Standardize data
+standardized = (data - sample_mean) / sample_std
+
+# Step 5: K-S test against standard normal
+ks_stat, p_value = scipy.stats.kstest(standardized, 'norm')
+hook({"ks_stat": float(ks_stat), "p_value": float(p_value)}, "K-S test results", name='ks_results', depends_on=['stats'])
+print(f"K-S statistic: {ks_stat:.4f}, p-value: {p_value:.6f}")
+
+# Step 6: Interpret
+is_normal = p_value >= 0.05
+hook(is_normal, "is normal at alpha=0.05", name='is_normal', depends_on=['ks_results'])
+
+submit({
+    "column": target_col,
+    "ks_statistic": round(float(ks_stat), 4),
+    "p_value": round(float(p_value), 6),
+    "is_normal": is_normal,
+    "sample_mean": round(float(sample_mean), 4),
+    "sample_std": round(float(sample_std), 4)
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 1,
+    n_steps=7,
+    difficulty="MEDIUM",
+)
+
+PAIRED_COLUMNS_CORRELATION_CHANGE = CompositionTemplate(
+    name="correlation_change_analysis",
+    description="Compare correlation before and after log-transforming skewed columns",
+    output_schema='A JSON object with exactly 5 keys: "columns" (list of 2 column names, alphabetically sorted), "original_correlation" (Pearson, rounded to 4 decimals), "log_correlation" (after log transform, rounded to 4 decimals), "improvement" (absolute difference, rounded to 4 decimals), and "transformation_helpful" (boolean, true if |log_corr| > |orig_corr|). Example: {"columns": ["income", "spending"], "original_correlation": 0.4567, "log_correlation": 0.7234, "improvement": 0.2667, "transformation_helpful": true}',
+    code_template='''
+# Step 1: Find two most skewed positive columns
+numeric_cols = df.select_dtypes('number').columns.tolist()
+# Filter to positive columns (can take log)
+positive_cols = [c for c in numeric_cols if (df[c] > 0).all()]
+if len(positive_cols) < 2:
+    # Shift to make positive
+    positive_cols = numeric_cols[:2]
+
+skewness = {col: abs(df[col].skew()) for col in positive_cols}
+sorted_cols = sorted(skewness, key=skewness.get, reverse=True)[:2]
+col1, col2 = sorted_cols[0], sorted_cols[1]
+hook([col1, col2], "selected columns (most skewed)", name='selected_cols')
+print(f"Analyzing: {col1} vs {col2}")
+
+# Step 2: Compute original Pearson correlation
+clean_data = df[[col1, col2]].dropna()
+orig_corr = clean_data[col1].corr(clean_data[col2])
+hook(orig_corr, "original correlation", name='orig_corr', depends_on=['selected_cols'])
+print(f"Original Pearson: {orig_corr:.4f}")
+
+# Step 3: Log-transform (add small constant to avoid log(0))
+log_col1 = np.log1p(clean_data[col1] - clean_data[col1].min() + 1)
+log_col2 = np.log1p(clean_data[col2] - clean_data[col2].min() + 1)
+hook({"col1_skew_after": log_col1.skew(), "col2_skew_after": log_col2.skew()}, "skewness after transform", name='log_skew', depends_on=['orig_corr'])
+
+# Step 4: Compute log-transformed correlation
+log_corr = log_col1.corr(log_col2)
+hook(log_corr, "log-transformed correlation", name='log_corr', depends_on=['log_skew'])
+print(f"Log-transformed Pearson: {log_corr:.4f}")
+
+# Step 5: Compare
+improvement = abs(log_corr) - abs(orig_corr)
+transformation_helpful = abs(log_corr) > abs(orig_corr)
+hook({"improvement": float(improvement), "helpful": transformation_helpful}, "comparison", name='comparison', depends_on=['log_corr'])
+
+submit({
+    "columns": sorted([col1, col2]),
+    "original_correlation": round(float(orig_corr), 4),
+    "log_correlation": round(float(log_corr), 4),
+    "improvement": round(abs(float(improvement)), 4),
+    "transformation_helpful": transformation_helpful
+})
+'''.strip(),
+    output_type="dict",
+    applicable_when=lambda p: _count_numeric_cols(p) >= 2,
+    n_steps=6,
+    difficulty="HARD",
+)
+
+
+# =============================================================================
 # ALL TEMPLATES REGISTRY
 # =============================================================================
 
 ALL_TEMPLATES = [
-    # Superlative (2) - 3 steps
+    # === EASY (3-4 steps) ===
+    # Superlative (2)
     MAX_VARIANCE_MEAN,
     MIN_MEAN_COLUMN_STD,
-    # Cross-column (2) - 4 steps
-    STRONGEST_CORRELATION,
-    WEAKEST_CORRELATION,
-    # Conditional (1) - 5 steps
-    CONDITIONAL_NORMALITY,
-    # Threshold (2) - 3-4 steps
+    # Threshold (2)
     COUNT_HIGH_MISSING_COLUMNS,
     COUNT_OUTLIER_COLUMNS,
-    # Multi-stage (2) - 5 steps
+    # Basic descriptive (4) - NEW
+    COEFFICIENT_OF_VARIATION,
+    IQR_OUTLIER_ANALYSIS,
+    PERCENTILE_RANKING,
+    DESCRIPTIVE_SUMMARY,
+
+    # === MEDIUM (4-6 steps) ===
+    # Cross-column (2)
+    STRONGEST_CORRELATION,
+    WEAKEST_CORRELATION,
+    # Conditional (1)
+    CONDITIONAL_NORMALITY,
+    # Intro statistics (5) - NEW
+    CHI_SQUARED_INDEPENDENCE,
+    MANN_WHITNEY_U_TEST,
+    SPEARMAN_RANK_CORRELATION,
+    KOLMOGOROV_SMIRNOV_NORMALITY,
+
+    # === HARD (5-7 steps) ===
+    # Multi-stage (2)
     CATEGORY_WITH_HIGHEST_TARGET_MEAN,
     CORRELATION_AFTER_OUTLIER_REMOVAL,
-    # Complex statistical (5) - 8-10 steps
+    # New hypothesis tests (2) - NEW
+    LEVENE_VARIANCE_TEST,
+    PAIRED_COLUMNS_CORRELATION_CHANGE,
+
+    # === VERY HARD (8-10 steps) ===
+    # Complex statistical (5)
     REGRESSION_MOST_PREDICTIVE,
     TTEST_DISCOVERED_GROUPS,
     BOOTSTRAP_CI_DISCOVERED,
