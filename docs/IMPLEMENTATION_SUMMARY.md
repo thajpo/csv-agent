@@ -167,7 +167,7 @@ uv run python -m src.training.prepare_finetune_data \
   --output training_data/train_openai.jsonl
 
 # 4. Upload to provider
-# OpenAI: openai api fine_tuning.jobs.create -t training_data/train_openai.jsonl -m gpt-4o-mini
+# OpenAI: openai api fine_tuning.jobs.create -t training_data/train_openai.jsonl -m <base-model>
 # Anthropic: (use their API/dashboard)
 ```
 

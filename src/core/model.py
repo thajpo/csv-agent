@@ -6,14 +6,14 @@ Usage:
     from src.llm import LLM
     llm = LLM()
     response = llm("What is 2+2?")
-    
+
     # OpenRouter (set OPENROUTER_API_KEY env var)
+    from src.core.config import config
     from src.llm import APILLM
-    llm = APILLM()  # defaults to qwen/qwen3-32b
-    llm = APILLM(model="anthropic/claude-sonnet-4")
-    
+    llm = APILLM(model=config.teacher_model, sampling_args={...})
+
     # Local server (vLLM, Ollama)
-    llm = APILLM(base_url="http://localhost:8000/v1", model="Qwen/Qwen3-32B", api_key="none")
+    llm = APILLM(base_url="http://localhost:8000/v1", model="<your-model>", api_key="none", sampling_args={...})
 """
 
 from typing import Any

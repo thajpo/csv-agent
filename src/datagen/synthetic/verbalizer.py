@@ -114,7 +114,7 @@ class QuestionVerbalizer:
         Initialize the verbalizer.
 
         Args:
-            model: Model identifier (e.g., "openai/gpt-oss-120b")
+            model: Model identifier (see config.question_gen_model)
             sampling_args: Sampling configuration dict
         """
         self.llm = APILLM(model=model, sampling_args=sampling_args)

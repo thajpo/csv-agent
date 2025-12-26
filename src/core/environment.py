@@ -266,7 +266,7 @@ class Environment:
 
         Args:
             csv_path: Path to CSV file
-            model: Model identifier (e.g., 'openai/gpt-4o')
+            model: Model identifier (see config.teacher_model)
             question: Question text (optional)
             hint: Hint for the question (optional)
             n_steps: Expected number of solution steps/hooks
@@ -323,6 +323,7 @@ class Environment:
             env=env,
             state=state,
             reuse_env=reuse_env,
+            llm=llm,
         )
 
     def _load_csv(self):

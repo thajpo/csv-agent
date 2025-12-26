@@ -46,7 +46,7 @@ class Evaluator:
         Initialize Evaluator.
 
         Args:
-            model: Model identifier (e.g., 'openai/gpt-4o-mini')
+            model: Model identifier (see config.teacher_model)
             csv_path: Optional CSV path override (if None, uses episode's csv_source)
             max_turns: Maximum conversation turns per episode
             sampling_args: Model sampling parameters (temperature, max_tokens, top_p)

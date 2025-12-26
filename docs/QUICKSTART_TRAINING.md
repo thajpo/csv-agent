@@ -29,9 +29,9 @@ uv run python -m src.training.prepare_finetune_data \
   --input episodes/episodes.jsonl \
   --provider openai
 
-# Evaluate fine-tuned model
+# Evaluate fine-tuned model (use your fine-tuned model ID)
 uv run python -m scripts.evaluate_model \
-  --model openai/ft:gpt-4o-mini:your-org:your-model \
+  --model <your-fine-tuned-model> \
   --episodes test_fixtures/mock_episodes.jsonl
 ```
 
@@ -104,7 +104,7 @@ uv run python -m src.training.prepare_finetune_data \
 # 4. Upload to provider
 # openai api fine_tuning.jobs.create \
 #   -t training_data/train_openai.jsonl \
-#   -m gpt-4o-mini
+#   -m <base-model-for-finetuning>
 ```
 
 ## Validation

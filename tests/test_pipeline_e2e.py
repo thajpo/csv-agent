@@ -6,14 +6,14 @@ Two test modes:
 2. Live integration test - hits real API (requires API key, marked slow)
 """
 
-import asyncio
 import json
 import os
 import tempfile
 from pathlib import Path
 
 import pytest
-import pytest_asyncio
+
+from src.core.config import config
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -229,25 +229,96 @@ class TestSyntheticQuestionGen:
         assert submission["__csv_agent_answer__"] is not None
 
 
-# Skip live tests if no API key
-_has_api_key = bool(
-    os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
-)
+class TestPromptContract:
+    """Verify prompt structure doesn't accidentally change."""
+
+    def test_teacher_tutor_prompt_structure(self):
+        from src.core.prompts import build_system_prompt
+        from src.core.types import Question
+
+        question = Question(
+            question_text="What is the mean?",
+            hint="Calculate mean",
+            n_steps=3,
+            difficulty="EASY",
+        )
+        prompt = build_system_prompt(
+            mode="teacher-tutor",
+            dataset_description="Test dataset",
+            data_overview="shape: (100, 5)",
+            question=question,
+        )
+
+        assert "MANDATORY" in prompt
+        assert "hook(" in prompt
+        assert "submit(" in prompt
+        assert "What is the mean?" in prompt
+        assert "Calculate mean" in prompt
+
+    def test_teacher_consistency_prompt_has_no_hint(self):
+        from src.core.prompts import build_system_prompt
+        from src.core.types import Question
+
+        question = Question(
+            question_text="What is the mean?",
+            hint="Calculate mean",
+            n_steps=3,
+        )
+        prompt = build_system_prompt(
+            mode="teacher-consistency",
+            dataset_description="Test dataset",
+            data_overview="shape: (100, 5)",
+            question=question,
+        )
+
+        assert "What is the mean?" in prompt
+        assert "Calculate mean" not in prompt
 
 
-@pytest.mark.skipif(not _has_api_key, reason="No LLM API key found")
-@pytest.mark.slow
+class TestTriangulationLogic:
+    """
+    Test triangulation orchestration with FakeLLM.
+
+    Uses real Docker but mocked LLM to test:
+    - Majority voting logic
+    - Trace building
+    - Answer matching with tolerance
+    """
+
+    @pytest.fixture
+    def test_csv(self):
+        return "data/csv/data.csv"
+
+    @pytest.mark.skip(
+        reason="FakeLLM integration with full triangulation is complex - use live test"
+    )
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_triangulation_with_fake_llm(self, test_csv, fake_llm_factory):
+        pass
+
+    @pytest.mark.asyncio
+    async def test_majority_voting_logic(self):
+        from src.datagen.teacher import get_majority_answer, answers_match
+
+        answers = [42.0, 42.05, 42.08, 100.0]
+        majority, count = get_majority_answer(answers, float_tol=0.1)
+
+        assert count == 3
+        assert answers_match(None, None, majority, 42.0, float_tol=0.1)
+
+    @pytest.mark.asyncio
+    async def test_answers_match_tolerance(self):
+        from src.datagen.teacher import answers_match
+
+        assert answers_match(None, None, 42.0, 42.05, float_tol=0.1)
+        assert not answers_match(None, None, 42.0, 43.0, float_tol=0.1)
+        assert answers_match(None, None, {"a": 1.0}, {"a": 1.05}, float_tol=0.1)
+
+
+@pytest.mark.live
 class TestPipelineLive:
-    """
-    Live integration tests that hit real APIs.
-
-    These tests are:
-    - Slow (minutes)
-    - Non-deterministic (LLM output varies)
-    - Expensive (API costs)
-
-    Run with: pytest -m slow
-    """
+    """Live tests requiring real LLM API. Run with: pytest --run-live"""
 
     @pytest.fixture
     def test_csv(self):
@@ -288,7 +359,7 @@ class TestPipelineLive:
             csv_path=test_csv,
             question=question,
             hint=hint,
-            model="openai/gpt-4o-mini",
+            model=config.teacher_model,
             n_consistency=2,
             dataset_description="Insurance dataset",
             data_overview=data_overview,

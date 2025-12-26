@@ -40,14 +40,15 @@ Custom evaluation harness for CSV agent models. Evaluates model performance on t
 
 ```bash
 # Evaluate model on test episodes
+# Model must be specified - see config.teacher_model for the configured default
 uv run python -m scripts.evaluate_model \\
-  --model openai/gpt-4o-mini \\
+  --model <your-model> \\
   --episodes episodes/test.jsonl \\
   --output eval_results/report.md
 
 # With custom CSV path and JSON output
 uv run python -m scripts.evaluate_model \\
-  --model openai/gpt-4o-mini \\
+  --model <your-model> \\
   --episodes test_fixtures/mock_episodes.jsonl \\
   --csv mock/data.csv \\
   --format json \\
@@ -55,7 +56,7 @@ uv run python -m scripts.evaluate_model \\
 
 # Adjust concurrency and tolerance
 uv run python -m scripts.evaluate_model \\
-  --model openai/gpt-4o-mini \\
+  --model <your-model> \\
   --episodes episodes/test.jsonl \\
   --concurrency 10 \\
   --float-tol 0.05
@@ -68,9 +69,11 @@ import asyncio
 from src.eval.evaluator import Evaluator
 from src.eval.report import generate_report
 
-# Create evaluator
+# Create evaluator (model comes from config)
+from src.core.config import config
+
 evaluator = Evaluator(
-    model="openai/gpt-4o-mini",
+    model=config.teacher_model,  # See src/core/config.py for model config
     csv_path="data.csv",  # Optional override
     max_turns=10,
     sampling_args={"temperature": 0.7, "max_tokens": 6000},
@@ -92,7 +95,7 @@ generate_report(
     results=results,
     output_path="report.md",
     format="markdown",
-    model="openai/gpt-4o-mini",
+    model=config.teacher_model,
     episodes_path="episodes/test.jsonl",
 )
 ```
@@ -145,8 +148,9 @@ For each episode:
 Test with mock episodes:
 
 ```bash
+# Use your configured model (see src/core/config.py)
 uv run python -m scripts.evaluate_model \\
-  --model openai/gpt-4o-mini \\
+  --model <your-model> \\
   --episodes test_fixtures/mock_episodes.jsonl \\
   --csv mock/data.csv \\
   --output test_report.md

@@ -19,7 +19,7 @@ export OPENROUTER_API_KEY="sk-or-..."
 uv run python -m src.datagen.episode_gen
 ```
 
-Default model: `openai/gpt-4o` (configurable in `src/core/config.py`)
+Model is configured in `src/core/config.py` (see `teacher_model` and `question_gen_model`)
 
 ---
 

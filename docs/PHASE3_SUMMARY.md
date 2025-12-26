@@ -97,15 +97,15 @@ mock/data.csv
 ## Usage Examples
 
 ```bash
-# Basic evaluation
+# Basic evaluation (model from config.teacher_model in src/core/config.py)
 uv run python -m scripts.evaluate_model \
-  --model openai/gpt-4o-mini \
+  --model <your-model> \
   --episodes episodes/test.jsonl \
   --output eval_results/report.md
 
 # JSON output with custom concurrency
 uv run python -m scripts.evaluate_model \
-  --model openai/gpt-4o-mini \
+  --model <your-model> \
   --episodes test_fixtures/mock_episodes.jsonl \
   --csv mock/data.csv \
   --format json \
@@ -138,8 +138,9 @@ uv run python -m scripts.evaluate_model \
 
 1. Test with real episodes:
    ```bash
+   # Use model from config.teacher_model in src/core/config.py
    uv run python -m scripts.evaluate_model \
-     --model openai/gpt-4o-mini \
+     --model <your-model> \
      --episodes episodes/test.jsonl \
      --output eval_results/baseline_report.md
    ```

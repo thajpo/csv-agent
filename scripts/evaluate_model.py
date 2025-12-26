@@ -2,13 +2,14 @@
 CLI script for evaluating CSV agent models.
 
 Usage:
+    # Model is required - see src/core/config.py for configured default
     uv run python -m scripts.evaluate_model \\
-        --model openai/gpt-4o-mini \\
+        --model <your-model> \\
         --episodes episodes/test.jsonl \\
         --output eval_results/report.md
 
     uv run python -m scripts.evaluate_model \\
-        --model openai/gpt-4o-mini \\
+        --model <your-model> \\
         --episodes data/fixtures/mock_episodes.jsonl \\
         --csv data/mock/data.csv \\
         --format json \\
@@ -35,7 +36,7 @@ async def main():
         "--model",
         type=str,
         required=True,
-        help="Model identifier (e.g., 'openai/gpt-4o-mini')",
+        help="Model identifier (see config.teacher_model in src/core/config.py)",
     )
     parser.add_argument(
         "--episodes",
