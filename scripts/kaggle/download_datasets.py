@@ -160,30 +160,55 @@ def download_dataset(
         return dataset_dir
 
     finally:
-        # Cleanup temp directory
+        # Cleanup temp directory (ignore errors - may have permission issues)
         if temp_dir.exists():
-            shutil.rmtree(temp_dir)
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def get_popular_datasets(api) -> list[str]:
+def get_popular_datasets(api, min_candidates: int = 300) -> list[str]:
     """
     Get popular tabular CSV datasets from Kaggle.
 
     Returns list of dataset refs like "owner/dataset-name", sorted by votes.
-    Fetches all available - caller handles limiting based on successful downloads.
+    Fetches multiple pages to get enough candidates (many will be filtered).
+
+    Args:
+        api: Authenticated Kaggle API instance
+        min_candidates: Minimum number of candidates to fetch (default 300)
     """
-    try:
-        datasets = api.dataset_list(
-            file_type="csv",
-            sort_by="votes",
-            max_size=50 * 1024 * 1024,  # 50MB max (pre-filter)
-        )
+    import time
 
-        return [d.ref for d in datasets]
+    refs = []
+    page = 1
 
-    except Exception as e:
-        print(f"Error fetching datasets: {e}")
-        return []
+    while len(refs) < min_candidates:
+        try:
+            datasets = list(api.dataset_list(
+                file_type="csv",
+                sort_by="votes",
+                max_size=50 * 1024 * 1024,  # 50MB max (pre-filter)
+                page=page,
+            ))
+
+            if not datasets:
+                break  # No more results
+
+            refs.extend(d.ref for d in datasets)
+            print(f"  Fetched page {page}: {len(datasets)} datasets (total: {len(refs)})")
+            page += 1
+
+            # Rate limit: small delay between pages
+            time.sleep(0.5)
+
+        except Exception as e:
+            if "429" in str(e):
+                print(f"  Rate limited, waiting 5s...")
+                time.sleep(5)
+                continue
+            print(f"  Error fetching page {page}: {e}")
+            break  # Stop on other errors
+
+    return refs
 
 
 def load_curated_list(path: Path) -> list[str]:
@@ -271,17 +296,25 @@ def main():
             continue
 
         # Download (filters applied inside)
-        dataset_dir = download_dataset(api, ref, output_dir, max_size_mb=args.max_size)
+        try:
+            dataset_dir = download_dataset(api, ref, output_dir, max_size_mb=args.max_size)
+        except Exception as e:
+            print(f"  ⚠ Download error: {e}")
+            skipped_filter += 1
+            continue
 
         if not dataset_dir:
             skipped_filter += 1
             continue
 
         # Get metadata and save inside dataset folder
-        metadata = get_dataset_metadata(api, ref)
-        meta_path = dataset_dir / "meta.json"
-        with open(meta_path, "w") as f:
-            json.dump(metadata, f, indent=2)
+        try:
+            metadata = get_dataset_metadata(api, ref)
+            meta_path = dataset_dir / "meta.json"
+            with open(meta_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+        except Exception as e:
+            print(f"  ⚠ Metadata error (continuing anyway): {e}")
 
         manifest.append({"ref": ref, "slug": slug})
         successful_downloads += 1
