@@ -119,17 +119,19 @@ def download_dataset(
         Path to dataset folder if successful, None if skipped.
     """
     import shutil
+    import tempfile
 
     slug = dataset_ref.replace("/", "_")
-    temp_dir = output_dir / "_temp"
-    temp_dir.mkdir(exist_ok=True)
 
-    try:
+    # Use unique temp dir per download (auto-cleanup on exit)
+    with tempfile.TemporaryDirectory(prefix="kaggle_") as temp_dir:
+        temp_path = Path(temp_dir)
+
         # Download and unzip to temp
-        api.dataset_download_files(dataset_ref, path=str(temp_dir), unzip=True)
+        api.dataset_download_files(dataset_ref, path=str(temp_path), unzip=True)
 
         # Find CSV files
-        csv_files = list(temp_dir.glob("**/*.csv"))
+        csv_files = list(temp_path.glob("**/*.csv"))
 
         if not csv_files:
             print(f"  ⚠ No CSV files found, skipping")
@@ -159,29 +161,19 @@ def download_dataset(
         print(f"  ✓ Saved: {slug}/data.csv ({size_mb:.1f} MB)")
         return dataset_dir
 
-    finally:
-        # Cleanup temp directory (ignore errors - may have permission issues)
-        if temp_dir.exists():
-            shutil.rmtree(temp_dir, ignore_errors=True)
 
-
-def get_popular_datasets(api, min_candidates: int = 300) -> list[str]:
+def iter_popular_datasets(api):
     """
-    Get popular tabular CSV datasets from Kaggle.
+    Lazily iterate popular tabular CSV datasets from Kaggle.
 
-    Returns list of dataset refs like "owner/dataset-name", sorted by votes.
-    Fetches multiple pages to get enough candidates (many will be filtered).
-
-    Args:
-        api: Authenticated Kaggle API instance
-        min_candidates: Minimum number of candidates to fetch (default 300)
+    Yields dataset refs like "owner/dataset-name", sorted by votes.
+    Fetches pages on-demand to avoid rate limiting and wasted API calls.
     """
     import time
 
-    refs = []
     page = 1
 
-    while len(refs) < min_candidates:
+    while True:
         try:
             datasets = list(api.dataset_list(
                 file_type="csv",
@@ -193,12 +185,11 @@ def get_popular_datasets(api, min_candidates: int = 300) -> list[str]:
             if not datasets:
                 break  # No more results
 
-            refs.extend(d.ref for d in datasets)
-            print(f"  Fetched page {page}: {len(datasets)} datasets (total: {len(refs)})")
-            page += 1
+            for d in datasets:
+                yield d.ref
 
-            # Rate limit: small delay between pages
-            time.sleep(0.5)
+            page += 1
+            time.sleep(0.3)  # Small delay between pages
 
         except Exception as e:
             if "429" in str(e):
@@ -206,9 +197,7 @@ def get_popular_datasets(api, min_candidates: int = 300) -> list[str]:
                 time.sleep(5)
                 continue
             print(f"  Error fetching page {page}: {e}")
-            break  # Stop on other errors
-
-    return refs
+            break
 
 
 def load_curated_list(path: Path) -> list[str]:
@@ -262,15 +251,13 @@ def main():
     print(f"  Max size: {args.max_size} MB")
     print()
 
-    # Get dataset list
+    # Get dataset iterator (lazy for API, eager for curated list)
     if args.from_list:
         print(f"Loading curated list from {args.from_list}...")
-        dataset_refs = load_curated_list(args.from_list)
+        dataset_iter = iter(load_curated_list(args.from_list))
     else:
-        print("Fetching popular tabular datasets...")
-        dataset_refs = get_popular_datasets(api)
-
-    print(f"Found {len(dataset_refs)} candidate datasets\n")
+        print("Fetching popular datasets (lazy pagination)...\n")
+        dataset_iter = iter_popular_datasets(api)
 
     # Download until we reach limit (counting only successful downloads)
     manifest = []
@@ -278,7 +265,7 @@ def main():
     skipped_exists = 0
     successful_downloads = 0
 
-    for i, ref in enumerate(dataset_refs, 1):
+    for i, ref in enumerate(dataset_iter, 1):
         # Stop when we have enough successful downloads
         if args.limit and successful_downloads >= args.limit:
             break
