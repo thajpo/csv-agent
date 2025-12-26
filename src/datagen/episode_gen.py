@@ -270,6 +270,7 @@ async def main(
     n_consistency: int | None = None,
     max_questions: int | None = None,
     skip_difficulty_filter: bool = False,
+    difficulties: list[str] | None = None,
 ):
     # Create global UI instance
     ui = EpisodeGenUI()
@@ -309,6 +310,14 @@ async def main(
 
     # Gather all valid CSV tasks
     tasks = gather_csv_tasks(csv_sources, base_questions_dir, ui, skip_difficulty_filter)
+
+    # Filter by specific difficulties if requested
+    if difficulties:
+        allowed = set(d.upper() for d in difficulties)
+        for task in tasks:
+            task.questions = [q for q in task.questions if q.get("difficulty", "").upper() in allowed]
+        # Remove tasks with no questions after filtering
+        tasks = [t for t in tasks if t.questions]
 
     # Limit questions per dataset if specified
     if max_questions is not None:
@@ -445,6 +454,13 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip difficulty distribution filtering (use all questions)"
     )
+    parser.add_argument(
+        "--difficulties",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Only include these difficulties (e.g., --difficulties HARD VERY_HARD)"
+    )
     args = parser.parse_args()
 
     try:
@@ -455,6 +471,7 @@ if __name__ == "__main__":
             n_consistency=args.n_consistency,
             max_questions=args.max_questions,
             skip_difficulty_filter=args.skip_difficulty_filter,
+            difficulties=args.difficulties,
         )))
     except KeyboardInterrupt:
         # Already handled in signal_handler, but just in case
