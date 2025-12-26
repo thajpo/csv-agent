@@ -373,7 +373,11 @@ async def run_parallel_generation(
             try:
                 with open(meta_path) as f:
                     meta_data = json.load(f)
-                    dataset_description = meta_data.get("description") or meta_data.get("subtitle")
+                    dataset_description = (
+                        meta_data.get("description")
+                        or meta_data.get("subtitle")
+                        or meta_data.get("title")
+                    )
             except Exception as e:
                 ui.print_warning(f"Failed to read metadata from {meta_path}: {e}")
 
