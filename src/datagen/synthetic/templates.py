@@ -624,11 +624,11 @@ hook(original_mean, "original mean", name='original_mean', depends_on=['sample_s
 print(f"Original mean: {original_mean:.4f}")
 
 # Step 6: Bootstrap resampling (1000 iterations)
-np.random.seed(42)
+rng = np.random.default_rng(42)
 n_bootstrap = 1000
 bootstrap_means = []
 for _ in range(n_bootstrap):
-    sample = np.random.choice(data, size=n, replace=True)
+    sample = rng.choice(data, size=n, replace=True)
     bootstrap_means.append(sample.mean())
 
 bootstrap_means = np.array(bootstrap_means)
