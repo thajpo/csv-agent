@@ -18,7 +18,10 @@ Usage:
 
 from typing import Any
 import asyncio
+import json
 import os
+from datetime import datetime
+from pathlib import Path
 import httpx
 
 
@@ -113,6 +116,7 @@ class APILLM:
                     continue
                 # Log the error response body for debugging 4xx errors
                 if e.response.status_code >= 400 and e.response.status_code < 500:
+                    self._log_openrouter_error(e, messages)
                     try:
                         error_body = e.response.json()
                         print(f"⚠️  API Error {e.response.status_code}: {error_body}")
@@ -130,6 +134,51 @@ class APILLM:
                 raise
 
         raise RuntimeError(f"Failed after {max_retries} attempts")
+
+    @staticmethod
+    def _estimate_tokens(messages: list[dict]) -> int:
+        """Estimate tokens from message content (4 chars ~ 1 token)."""
+        total_chars = sum(len(m.get("content", "")) for m in messages)
+        return total_chars // 4
+
+    def _log_openrouter_error(self, error: httpx.HTTPStatusError, messages: list[dict]) -> None:
+        """Write a compact error report to logs/openrouter_400.log."""
+        try:
+            log_path = Path("logs/openrouter_400.log")
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+
+            total_chars = sum(len(m.get("content", "")) for m in messages)
+            estimated_tokens = self._estimate_tokens(messages)
+            max_message_chars = max((len(m.get("content", "")) for m in messages), default=0)
+            error_text = ""
+            try:
+                error_text = error.response.text
+            except Exception:
+                error_text = "<no response text>"
+
+            error_summary = {
+                "status_code": error.response.status_code,
+                "url": str(error.request.url),
+                "model": self.model,
+                "max_tokens": self.sampling_args.get("max_tokens", 8192),
+                "temperature": self.sampling_args.get("temperature", 0.7),
+                "top_p": self.sampling_args.get("top_p", 1.0),
+                "message_count": len(messages),
+                "total_chars": total_chars,
+                "estimated_tokens": estimated_tokens,
+                "max_message_chars": max_message_chars,
+            }
+
+            timestamp = datetime.utcnow().isoformat() + "Z"
+            with open(log_path, "a") as f:
+                f.write(f"[{timestamp}] OpenRouter 4xx error\n")
+                f.write(json.dumps(error_summary, indent=2))
+                f.write("\n")
+                f.write("response_text:\n")
+                f.write(error_text[:2000])
+                f.write("\n---\n")
+        except Exception:
+            pass
     
     async def aclose(self):
         """Async cleanup method."""
