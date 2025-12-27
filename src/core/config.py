@@ -109,7 +109,6 @@ class Config(BaseModel):
     question_difficulty_distribution: Dict[str, float] = Field(
         default={"EASY": 0.30, "MEDIUM": 0.30, "HARD": 0.20, "VERY_HARD": 0.20}
     )
-    n_question_variants: int = 3  # K question phrasings per template (self-instruct)
 
     # pipelines: episode generation / triangulation
     n_consistency: int = 7  # Optimal for 8-worker containers (profiled)

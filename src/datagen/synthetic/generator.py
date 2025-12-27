@@ -150,51 +150,44 @@ class CompositionalQuestionGenerator:
             except Exception as e:
                 print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) FAILED: {e}")
 
-        # 4. Verbalize all concurrently with K variants each (parallel LLM calls)
-        k = config.n_question_variants
-        print(f"\nVerbalizing {len(execution_results)} templates (K={k} variants each)...")
+        # 4. Verbalize all concurrently (parallel LLM calls)
+        print(f"\nVerbalizing {len(execution_results)} templates...")
 
-        async def verbalize_k_variants(item: dict) -> list[dict]:
-            """Generate K question variants for one template execution."""
+        async def verbalize_one(item: dict) -> dict | None:
+            """Generate a single question for one template execution."""
             try:
-                variants = await self.verbalizer.verbalize_k(
+                question_text, hint = await self.verbalizer.verbalize(
                     code=item["code"],
                     profile=profile,
                     ground_truth=item["ground_truth"],
                     output_schema=item["template"].output_schema,
                     data_overview=self.data_overview,
                     dataset_description=self.dataset_description,
-                    k=k,
                 )
 
-                results = []
-                for variant_idx, (question_text, hint) in enumerate(variants):
-                    if not question_text or question_text.startswith("[VERBALIZATION FAILED"):
-                        continue
-                    results.append({
-                        "question": question_text,
-                        "hint": hint,
-                        "n_steps": item["template"].n_steps,
-                        "difficulty": item["template"].difficulty,
-                        "template_name": item["template"].name,
-                        "template_params": item["params"] or None,
-                        "output_type": item["template"].output_type,
-                        "output_schema": item["template"].output_schema,
-                        "ground_truth_hash": item["answer_hash"],
-                        "variant_index": variant_idx,
-                        "_ground_truth": item["ground_truth"],
-                        "_template": item["template"].name,
-                    })
-                return results
+                if not question_text or question_text.startswith("[VERBALIZATION FAILED"):
+                    return None
+
+                return {
+                    "question": question_text,
+                    "hint": hint,
+                    "n_steps": item["template"].n_steps,
+                    "difficulty": item["template"].difficulty,
+                    "template_name": item["template"].name,
+                    "template_params": item["params"] or None,
+                    "output_type": item["template"].output_type,
+                    "output_schema": item["template"].output_schema,
+                    "ground_truth_hash": item["answer_hash"],
+                    "_ground_truth": item["ground_truth"],
+                    "_template": item["template"].name,
+                }
             except Exception as e:
                 print(f"  Verbalization error: {e}")
-                return []
+                return None
 
-        verbalized_lists = await asyncio.gather(*[verbalize_k_variants(item) for item in execution_results])
-        # Flatten list of lists
-        questions = [q for sublist in verbalized_lists for q in sublist]
-        n_templates_with_questions = sum(1 for sublist in verbalized_lists if sublist)
-        print(f"  Generated {len(questions)} questions from {n_templates_with_questions}/{len(execution_results)} templates")
+        verbalized = await asyncio.gather(*[verbalize_one(item) for item in execution_results])
+        questions = [q for q in verbalized if q is not None]
+        print(f"  Generated {len(questions)} questions from {len(execution_results)} templates")
 
         # 5. Format output
         df = pd.read_csv(self.csv_path, nrows=0)
