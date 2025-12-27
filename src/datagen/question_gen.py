@@ -276,7 +276,10 @@ async def explore_and_generate_questions(
 
     # Read column names for fingerprinting (validates questions match dataset)
     import pandas as pd
-    df_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
+    try:
+        df_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
+    except UnicodeDecodeError:
+        df_columns = pd.read_csv(csv_path, nrows=0, encoding='latin-1').columns.tolist()
 
     questions_file = output_path / "questions.json"
     questions_payload = {

@@ -337,7 +337,10 @@ EXPLORATION_CONTINUE_MSG = "\n\nContinue exploring the dataset. Write Python cod
 
 def generate_data_overview(csv_path: str = "data.csv") -> str:
     """Generate bootstrap exploration output for initial data inspection."""
-    df = pd.read_csv(csv_path)
+    try:
+        df = pd.read_csv(csv_path)
+    except UnicodeDecodeError:
+        df = pd.read_csv(csv_path, encoding='latin-1')
     lines = []
     lines.append(f"=== SHAPE ===")
     lines.append(f"Rows: {len(df)}")

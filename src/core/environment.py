@@ -329,7 +329,10 @@ class Environment:
     def _load_csv(self):
         """Load CSV file if not already loaded."""
         if self.df is None:
-            self.df = pd.read_csv(self.csv_path)
+            try:
+                self.df = pd.read_csv(self.csv_path)
+            except UnicodeDecodeError:
+                self.df = pd.read_csv(self.csv_path, encoding='latin-1')
 
     def init_state(self):
         self._load_csv()

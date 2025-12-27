@@ -542,7 +542,13 @@ while True:
         state["python_state"] = {"ready": True, "execution_count": 0}
         
         # Run setup code (import libraries, load CSV)
-        csv_setup = SETUP_CODE + f'\ndf = pd.read_csv("/data.csv")\nprint(f"Loaded CSV: {{df.shape[0]}} rows, {{df.shape[1]}} columns")'
+        csv_setup = SETUP_CODE + '''
+try:
+    df = pd.read_csv("/data.csv")
+except UnicodeDecodeError:
+    df = pd.read_csv("/data.csv", encoding='latin-1')
+print(f"Loaded CSV: {df.shape[0]} rows, {df.shape[1]} columns")
+'''
         await self.python(
             code=csv_setup,
             sandbox_id=sandbox_id,
@@ -655,5 +661,11 @@ with open('{self._RESPONSE_FIFO}', 'r') as f:
             python_state["execution_count"] = 0
         
         # Re-run setup code (imports + load CSV)
-        csv_setup = SETUP_CODE + f'\ndf = pd.read_csv("/data.csv")\nprint(f"Loaded CSV: {{df.shape[0]}} rows, {{df.shape[1]}} columns")'
+        csv_setup = SETUP_CODE + '''
+try:
+    df = pd.read_csv("/data.csv")
+except UnicodeDecodeError:
+    df = pd.read_csv("/data.csv", encoding='latin-1')
+print(f"Loaded CSV: {df.shape[0]} rows, {df.shape[1]} columns")
+'''
         await self.python(csv_setup, sandbox_id, python_state)
