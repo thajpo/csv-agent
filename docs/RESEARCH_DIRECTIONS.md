@@ -14,11 +14,12 @@ This document captures research ideas, failure modes, and future directions disc
 3. [What We Have vs What We Need](#what-we-have-vs-what-we-need)
 4. [Failure Modes and Concerns](#failure-modes-and-concerns)
 5. [Potential Solutions](#potential-solutions)
-6. [The Core Tension](#the-core-tension)
-7. [Phased Approach](#phased-approach)
-8. [Concrete Experiments](#concrete-experiments)
-9. [Open Questions](#open-questions)
-10. [Immediate Next Steps](#immediate-next-steps)
+6. [Data Source: Kaggle Competition Solutions](#data-source-kaggle-competition-solutions)
+7. [The Core Tension](#the-core-tension)
+8. [Phased Approach](#phased-approach)
+9. [Concrete Experiments](#concrete-experiments)
+10. [Open Questions](#open-questions)
+11. [Immediate Next Steps](#immediate-next-steps)
 
 ---
 
@@ -217,6 +218,103 @@ This enables tolerance-based step comparison using existing `answers_match()` fu
 - Start with hook after every line
 - Gradually reduce to major checkpoints only
 - Model learns to self-verify intermediate steps
+
+---
+
+## Data Source: Kaggle Competition Solutions
+
+### Motivation: The Three Data Sources
+
+We currently have two data sources with complementary weaknesses:
+
+| Source | Verified? | Human-like? | Notes |
+|--------|-----------|-------------|-------|
+| LLM traces (`question_gen.py`) | ❌ | ✅ | Natural reasoning, but unverified correctness |
+| Synthetic templates | ✅ | ❌ | Deterministic and correct, but procedural |
+
+Kaggle competition solutions offer a potential third source that is **both verified and human-like**:
+
+| Source | Verified? | Human-like? | Notes |
+|--------|-----------|-------------|-------|
+| Kaggle solutions | ✅ | ✅ | Ran on leaderboard, written by real analysts |
+
+### The Idea
+
+Download medal-winning notebooks from tabular Kaggle competitions. These contain:
+- Real analytical questions (not template-derived)
+- Multiple valid approaches (different medalists solve differently)
+- Dead ends and exploration (real notebooks show failed attempts)
+- Quality signal (upvotes, medal tier, leaderboard score)
+
+This addresses failure modes #1 (questions aren't questions), #2 (no dead ends), and #4 (no ambiguity).
+
+### Hook Extraction via LLM + Execution
+
+The challenge: Kaggle notebooks don't have explicit `hook()` calls. How do we extract step-level supervision?
+
+**Approach**: Use LLM to propose hooks, execution to verify.
+
+```
+Kaggle notebook code
+        ↓
+LLM: "identify key intermediate values that lead to the final answer"
+        ↓
+Insert hook() calls at proposed locations
+        ↓
+Execute in sandbox
+        ↓
+If final output matches expected → hooks are valid
+If mismatch → LLM-proposed hooks were wrong, discard
+```
+
+This is the same pattern as teacher triangulation: LLM proposes, execution verifies. Wrong hooks fail at runtime, so we don't need perfect LLM extraction—just good-enough proposals filtered by execution.
+
+### Verifier Bootstrapping (DeepSeek-Math-V2 Style)
+
+Once we have Kaggle solutions with validated hooks, we can bootstrap a verifier:
+
+1. **Score solutions**: LLM scores notebooks on reasoning quality (0, 0.5, 1)
+2. **Train verifier**: Learn `score = verifier(code, dataset_context)`
+3. **Meta-verify**: If verifier says "flawed because X", execute code to check if X is true
+4. **Use as reward model**: Verifier scores generator outputs during GRPO
+
+The execution-grounded meta-verification is an advantage over DeepSeek's domain (natural language proofs), where verification is expensive.
+
+### Infrastructure Requirements
+
+**Already exists:**
+- `scripts/kaggle/download_datasets.py` — dataset downloading with metadata
+- `data/kaggle/` — 75+ datasets already downloaded
+- Kaggle API: `api.kernels_list(competition="titanic", sort_by="scoreDescending")`
+- Docker sandbox execution with hook capture
+
+**Needs to be built:**
+- Script to download competition *notebooks* (not just datasets)
+- Filter for tabular-only competitions
+- Code extraction from `.ipynb` format
+- LLM hook extraction prompt
+- Scoring rubric for solution quality
+
+**Proposed data structure:**
+```
+data/kaggle_solutions/
+├── titanic/
+│   ├── competition_meta.json
+│   ├── gold/
+│   │   ├── notebook_001.py
+│   │   └── notebook_001.json  # score, votes, extracted hooks
+│   ├── silver/
+│   └── bronze/
+└── house-prices/
+```
+
+### When to Pursue This
+
+**Trigger**: After Phase 1 proves dense rewards help, and we observe that synthetic questions are the bottleneck (model doesn't generalize to real analyst questions).
+
+**Not before**: This adds complexity. First validate the core training loop works.
+
+**Estimated effort**: Medium. The extraction pipeline is straightforward given existing infrastructure. The verifier training is the hard part (same as Phase 3).
 
 ---
 

@@ -23,6 +23,26 @@ Settings are in `src/core/config.py` (Pydantic models). Key fields:
 
 ## Pipeline
 
+### Quick Start (Recommended)
+
+Run the full pipeline with a single command:
+
+```bash
+uv run python -m src.datagen.run_all           # Both synthetic + LLM
+uv run python -m src.datagen.run_all --synth   # Synthetic only (faster)
+uv run python -m src.datagen.run_all --llm     # LLM only
+```
+
+Options:
+```bash
+--skip-questions      # Skip question gen, use existing questions
+--max-questions N     # Limit per dataset (for testing)
+```
+
+---
+
+### Manual Pipeline
+
 Two paths for question generation:
 
 | Path | Speed | Determinism | Use Case |
@@ -30,14 +50,11 @@ Two paths for question generation:
 | **Synthetic** | Fast | Deterministic | Scale, reproducibility |
 | **LLM** | Slow | Non-deterministic | Exploration, diversity |
 
----
-
-### Stage 1: Generate Questions
+#### Stage 1: Generate Questions
 
 **Synthetic (recommended for scale):**
 ```bash
 uv run python -m src.datagen.synthetic.generator
-uv run python -m src.datagen.synthetic.generator --csv path/to/data.csv
 ```
 
 **LLM-based exploration:**
@@ -45,44 +62,30 @@ uv run python -m src.datagen.synthetic.generator --csv path/to/data.csv
 uv run python -m src.datagen.question_gen
 ```
 
-Output: `data/questions_synthetic/<dataset>/questions.json`
-
----
-
-### Stage 2: Generate Training Episodes (Triangulation)
-
-Triangulation verifies questions by running:
-1. **Gold trace** - teacher WITH hint
-2. **Consistency traces** - teacher WITHOUT hint (N times, in parallel)
-3. **Verification** - gold answer must match majority of consistency answers
+#### Stage 2: Generate Training Episodes
 
 **For synthetic questions:**
 ```bash
-uv run python -m src.datagen.episode_gen \
+uv run python -m src.datagen.synthetic_episodes \
     --questions-dir data/questions_synthetic \
-    --output data/episodes/episodes_synthetic.jsonl \
-    --parallel
+    --output data/episodes/episodes_synthetic.jsonl
 ```
 
-**For LLM questions:**
+**For LLM questions (with triangulation):**
 ```bash
 uv run python -m src.datagen.episode_gen \
     --questions-dir data/questions_llm \
     --output data/episodes/episodes_llm.jsonl \
-    --parallel \
     --skip-difficulty-filter
 ```
 
 **Options:**
 ```bash
---parallel                # Process multiple CSVs concurrently
---skip-difficulty-filter  # Use all questions (recommended for LLM questions)
+--skip-difficulty-filter  # Use all questions (recommended for LLM)
 --max-questions N         # Limit questions per dataset (for testing)
 --n-consistency N         # Override consistency traces (default: 7)
 --difficulties HARD VERY_HARD  # Filter by difficulty
 ```
-
-> **Note:** LLM-generated questions often don't match the expected difficulty distribution (30% EASY, 30% MEDIUM, 20% HARD, 20% VERY_HARD). Use `--skip-difficulty-filter` to process all questions. Synthetic questions don't have this issue.
 
 Output: `data/episodes/*.jsonl`
 

@@ -4,10 +4,10 @@ Full pipeline orchestrator.
 Runs all data generation stages sequentially to avoid resource conflicts.
 
 Usage:
-    uv run python -m src.datagen.run_all                    # Full pipeline
-    uv run python -m src.datagen.run_all --synthetic-only   # Just synthetic
-    uv run python -m src.datagen.run_all --llm-only         # Just LLM-based
-    uv run python -m src.datagen.run_all --skip-questions   # Skip question gen
+    uv run python -m src.datagen.run_all --both      # Full pipeline (default)
+    uv run python -m src.datagen.run_all --synth     # Just synthetic
+    uv run python -m src.datagen.run_all --llm       # Just LLM-based
+    uv run python -m src.datagen.run_all --skip-questions  # Skip question gen
 """
 
 import argparse
@@ -39,15 +39,22 @@ def run_stage(name: str, cmd: list[str]) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Run full data generation pipeline")
-    parser.add_argument(
-        "--synthetic-only",
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--both",
         action="store_true",
-        help="Only run synthetic pipeline (skip LLM-based)",
+        default=True,
+        help="Run both synthetic and LLM pipelines (default)",
     )
-    parser.add_argument(
-        "--llm-only",
+    mode.add_argument(
+        "--synth",
         action="store_true",
-        help="Only run LLM pipeline (skip synthetic)",
+        help="Only run synthetic pipeline",
+    )
+    mode.add_argument(
+        "--llm",
+        action="store_true",
+        help="Only run LLM pipeline",
     )
     parser.add_argument(
         "--skip-questions",
@@ -62,8 +69,13 @@ def main():
     )
     args = parser.parse_args()
 
-    run_synthetic = not args.llm_only
-    run_llm = not args.synthetic_only
+    run_synthetic = args.both or args.synth
+    run_llm = args.both or args.llm
+
+    # Handle default case (no flags = --both)
+    if not args.synth and not args.llm:
+        run_synthetic = True
+        run_llm = True
 
     stages_run = 0
     stages_failed = 0
