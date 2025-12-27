@@ -391,19 +391,43 @@ class Environment:
         )
 
         # Truncate massive outputs to prevent context overflow
-        # Keep start and end to preserve submit() output which appears at end
+        # Preserve the ✓ Submitted: line intact (it contains the answer JSON)
         if len(output) > self.MAX_OUTPUT_CHARS:
-            truncated_chars = len(output) - self.MAX_OUTPUT_CHARS
-            keep_each = self.MAX_OUTPUT_CHARS // 2
-            logger.warning(
-                f"Truncating output: {len(output):,} chars -> {self.MAX_OUTPUT_CHARS:,} chars "
-                f"(removed {truncated_chars:,} chars from middle)"
-            )
-            output = (
-                output[:keep_each] +
-                f"\n\n... [TRUNCATED {truncated_chars:,} chars] ...\n\n" +
-                output[-keep_each:]
-            )
+            submit_marker = "✓ Submitted:"
+            submit_idx = output.find(submit_marker)
+
+            if submit_idx != -1:
+                # Find end of submission line
+                submit_end = output.find("\n", submit_idx)
+                if submit_end == -1:
+                    submit_end = len(output)
+                submit_line = output[submit_idx:submit_end]
+
+                # Keep start + submission line
+                keep_start = self.MAX_OUTPUT_CHARS - len(submit_line) - 100  # buffer
+                truncated_chars = len(output) - keep_start - len(submit_line)
+                logger.warning(
+                    f"Truncating output: {len(output):,} chars -> ~{keep_start + len(submit_line):,} chars "
+                    f"(removed {truncated_chars:,} chars, preserved submission)"
+                )
+                output = (
+                    output[:keep_start] +
+                    f"\n\n... [TRUNCATED {truncated_chars:,} chars] ...\n\n" +
+                    submit_line
+                )
+            else:
+                # No submission found, use middle-out truncation
+                truncated_chars = len(output) - self.MAX_OUTPUT_CHARS
+                keep_each = self.MAX_OUTPUT_CHARS // 2
+                logger.warning(
+                    f"Truncating output: {len(output):,} chars -> {self.MAX_OUTPUT_CHARS:,} chars "
+                    f"(removed {truncated_chars:,} chars from middle)"
+                )
+                output = (
+                    output[:keep_each] +
+                    f"\n\n... [TRUNCATED {truncated_chars:,} chars] ...\n\n" +
+                    output[-keep_each:]
+                )
 
         # Parse the string output into success/stdout/stderr
         result = parse_execution_result(output)
