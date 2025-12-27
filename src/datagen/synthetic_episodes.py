@@ -14,6 +14,12 @@ Usage:
     uv run python -m src.datagen.synthetic_episodes \
         --questions-dir data/questions_synthetic \
         --output data/episodes/episodes_synthetic.jsonl
+
+    # Parallel mode (process multiple datasets concurrently)
+    uv run python -m src.datagen.synthetic_episodes \
+        --questions-dir data/questions_synthetic \
+        --output data/episodes/episodes_synthetic.jsonl \
+        --parallel --n-workers 4
 """
 
 import asyncio
@@ -246,10 +252,53 @@ async def process_dataset(
     return episodes, failures
 
 
+async def process_dataset_task(
+    dataset_name: str,
+    csv_path: str,
+    questions: list[dict],
+    teacher_model: str,
+    max_turns: int,
+    sampling_args: dict,
+    ui: EpisodeGenUI,
+    semaphore: asyncio.Semaphore | None = None,
+) -> tuple[str, list[EpisodeJSONL], list[dict]]:
+    """
+    Wrapper for process_dataset that respects semaphore for parallel execution.
+
+    Returns:
+        (dataset_name, episodes, failures)
+    """
+    if semaphore:
+        async with semaphore:
+            ui.base.print_section(f"Processing {dataset_name}: {len(questions)} questions")
+            episodes, failures = await process_dataset(
+                csv_path=Path(csv_path),
+                questions=questions,
+                teacher_model=teacher_model,
+                max_turns=max_turns,
+                sampling_args=sampling_args,
+                ui=ui,
+            )
+            return dataset_name, episodes, failures
+    else:
+        ui.base.print_section(f"Processing {dataset_name}: {len(questions)} questions")
+        episodes, failures = await process_dataset(
+            csv_path=Path(csv_path),
+            questions=questions,
+            teacher_model=teacher_model,
+            max_turns=max_turns,
+            sampling_args=sampling_args,
+            ui=ui,
+        )
+        return dataset_name, episodes, failures
+
+
 async def main(
     questions_dir: str,
     output_path: str,
     max_questions: int | None = None,
+    parallel: bool = False,
+    n_workers: int = 4,
 ):
     ui = EpisodeGenUI()
     signal.signal(signal.SIGINT, signal_handler)
@@ -289,7 +338,8 @@ async def main(
         ui.base.print_error(f"No questions found in {questions_dir}")
         return 1
 
-    ui.base.print_section(f"Found {len(question_files)} datasets with questions")
+    mode_str = f"parallel ({n_workers} workers)" if parallel else "sequential"
+    ui.base.print_section(f"Found {len(question_files)} datasets with questions [{mode_str}]")
 
     # Output file
     output_jsonl = Path(output_path)
@@ -297,10 +347,8 @@ async def main(
     if output_jsonl.exists():
         output_jsonl.unlink()
 
-    all_episodes = []
-    all_failures = []
-    failure_by_template = defaultdict(int)
-
+    # Prepare tasks
+    tasks_to_run = []
     for qf in question_files:
         dataset_name = qf.parent.name
         csv_path = csv_by_name.get(dataset_name)
@@ -314,22 +362,55 @@ async def main(
         if max_questions and len(questions) > max_questions:
             questions = questions[:max_questions]
 
-        ui.base.print_section(f"Processing {dataset_name}: {len(questions)} questions")
+        tasks_to_run.append((dataset_name, csv_path, questions))
 
-        episodes, failures = await process_dataset(
-            csv_path=Path(csv_path),
-            questions=questions,
-            teacher_model=teacher_model,
-            max_turns=max_turns,
-            sampling_args=sampling_args,
-            ui=ui,
-        )
+    all_episodes = []
+    all_failures = []
+    failure_by_template = defaultdict(int)
 
-        all_episodes.extend(episodes)
-        all_failures.extend(failures)
+    if parallel and len(tasks_to_run) > 1:
+        # Parallel execution with semaphore
+        semaphore = asyncio.Semaphore(n_workers)
+        coros = [
+            process_dataset_task(
+                dataset_name=name,
+                csv_path=csv_path,
+                questions=questions,
+                teacher_model=teacher_model,
+                max_turns=max_turns,
+                sampling_args=sampling_args,
+                ui=ui,
+                semaphore=semaphore,
+            )
+            for name, csv_path, questions in tasks_to_run
+        ]
+        results = await asyncio.gather(*coros, return_exceptions=True)
 
-        for f in failures:
-            failure_by_template[f.get("template_name", "unknown")] += 1
+        for result in results:
+            if isinstance(result, Exception):
+                ui.base.print_error(f"Dataset failed with exception: {result}")
+                continue
+            dataset_name, episodes, failures = result
+            all_episodes.extend(episodes)
+            all_failures.extend(failures)
+            for f in failures:
+                failure_by_template[f.get("template_name", "unknown")] += 1
+    else:
+        # Sequential execution
+        for name, csv_path, questions in tasks_to_run:
+            _, episodes, failures = await process_dataset_task(
+                dataset_name=name,
+                csv_path=csv_path,
+                questions=questions,
+                teacher_model=teacher_model,
+                max_turns=max_turns,
+                sampling_args=sampling_args,
+                ui=ui,
+            )
+            all_episodes.extend(episodes)
+            all_failures.extend(failures)
+            for f in failures:
+                failure_by_template[f.get("template_name", "unknown")] += 1
 
     # Write episodes
     with open(output_jsonl, "w") as f:
@@ -371,6 +452,17 @@ if __name__ == "__main__":
         default=None,
         help="Max questions per dataset (for testing)",
     )
+    parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help="Process multiple datasets in parallel",
+    )
+    parser.add_argument(
+        "--n-workers",
+        type=int,
+        default=4,
+        help="Number of parallel workers (default: 4)",
+    )
     args = parser.parse_args()
 
     try:
@@ -380,6 +472,8 @@ if __name__ == "__main__":
                     questions_dir=args.questions_dir,
                     output_path=args.output,
                     max_questions=args.max_questions,
+                    parallel=args.parallel,
+                    n_workers=args.n_workers,
                 )
             )
         )
