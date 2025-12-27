@@ -390,6 +390,7 @@ for pid in children:
         n_workers: int | None = None,
         n_question_slots: int = 1,
         n_consistency: int = 7,
+        session_id: str | None = None,
     ):
         """
         Initialize a multi-tenant container.
@@ -399,6 +400,8 @@ for pid in children:
             n_workers: Total worker count (legacy, overrides slot calculation if set)
             n_question_slots: Number of parallel question slots (default: 1)
             n_consistency: Consistency traces per question (default: 7)
+            session_id: Session ID for container isolation (default: random).
+                       Container name will be: csv-mt-{session_id}-{uuid}
 
         Workers are organized as:
             slot 0: workers 0..(n_consistency)      → question 1
@@ -412,6 +415,7 @@ for pid in children:
         self.n_question_slots = n_question_slots
         self.n_consistency = n_consistency
         self.traces_per_slot = 1 + n_consistency  # 1 gold + N consistency
+        self.session_id = session_id or uuid.uuid4().hex[:8]
 
         # Calculate total workers (legacy n_workers overrides)
         if n_workers is not None:
@@ -467,7 +471,7 @@ for pid in children:
 
     async def _setup_container(self) -> None:
         """Create and start the container with multiple workers."""
-        self.container_id = f"csv-mt-{uuid.uuid4().hex[:8]}"
+        self.container_id = f"csv-mt-{self.session_id}-{uuid.uuid4().hex[:8]}"
 
         # Create container
         await self._run_docker(
@@ -896,6 +900,7 @@ class ContainerPool:
         max_containers: int = 4,
         n_question_slots: int = 4,
         n_consistency: int = 7,
+        session_id: str | None = None,
     ):
         """
         Initialize the container pool.
@@ -904,10 +909,14 @@ class ContainerPool:
             max_containers: Maximum number of containers in the pool
             n_question_slots: Parallel question slots per container
             n_consistency: Consistency traces per question
+            session_id: Session ID for container isolation (default: random).
+                       All containers in this pool will share the same session_id,
+                       allowing session-scoped cleanup.
         """
         self.max_containers = max_containers
         self.n_question_slots = n_question_slots
         self.n_consistency = n_consistency
+        self.session_id = session_id or uuid.uuid4().hex[:8]
 
         self._containers: list[MultiTenantContainer] = []
         self._available: asyncio.Queue[MultiTenantContainer] = asyncio.Queue()
@@ -941,7 +950,7 @@ class ContainerPool:
         if csv_path is None:
             raise ValueError("ContainerPool requires at least one CSV path to initialize")
 
-        print(f"Creating container pool: {self.max_containers} containers...")
+        print(f"Creating container pool: {self.max_containers} containers (session: {self.session_id})...")
 
         # Create all containers in parallel
         create_tasks = []
@@ -950,6 +959,7 @@ class ContainerPool:
                 csv_path=csv_path,
                 n_question_slots=self.n_question_slots,
                 n_consistency=self.n_consistency,
+                session_id=self.session_id,
             )
             self._containers.append(container)
             create_tasks.append(container.start())

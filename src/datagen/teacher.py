@@ -424,6 +424,7 @@ async def execute_teacher_trace(
     ui: Any,
     trace_mode: str = "gold",
     llm=None,
+    session_id: str | None = None,
 ) -> tuple[TraceDict, list[dict], str, float]:
     """
     Execute a single teacher trace (with or without hint).
@@ -452,6 +453,7 @@ async def execute_teacher_trace(
         state=state,
         reuse_env=reuse_env,
         llm=llm,
+        session_id=session_id,
     )
     final_state = await env_instance.rollout()
 

@@ -203,12 +203,14 @@ class Environment:
         state: dict | None = None,
         reuse_env: bool = False,
         llm=None,
+        session_id: str | None = None,
     ):
         # Store configs
         self.data = data
         self.model_config = model
         self.execution = execution
         self.task = task
+        self.session_id = session_id
 
         self.csv_path = data.csv_path
         if llm is not None:
@@ -235,12 +237,13 @@ class Environment:
         state: dict | None = None,
         reuse_env: bool = False,
         llm=None,
+        session_id: str | None = None,
     ):
-        instance = cls(data, model, execution, task, env, state, reuse_env, llm)
+        instance = cls(data, model, execution, task, env, state, reuse_env, llm, session_id)
 
         # Create env and state if not provided
         if instance.env is None:
-            instance.env = CSVAnalysisEnv(csv_path=instance.csv_path)
+            instance.env = CSVAnalysisEnv(csv_path=instance.csv_path, session_id=session_id)
             instance.state = {}
             instance.state = await instance.env.setup_state(instance.state)
         elif instance.state is None:
@@ -269,6 +272,7 @@ class Environment:
         state: dict | None = None,
         reuse_env: bool = False,
         llm=None,
+        session_id: str | None = None,
     ):
         """
         Factory with primitive args - handles config construction internally.
@@ -291,6 +295,7 @@ class Environment:
             env: Optional pre-created LocalCSVAnalysisEnv (for pooling)
             state: Optional pre-created state dict (for pooling)
             reuse_env: If True, reset env after rollout instead of destroying
+            session_id: Session ID for container isolation (for parallel execution)
 
         Returns:
             Initialized Environment ready for rollout
@@ -336,6 +341,7 @@ class Environment:
             state=state,
             reuse_env=reuse_env,
             llm=llm,
+            session_id=session_id,
         )
 
     def _load_csv(self):

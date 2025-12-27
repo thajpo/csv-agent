@@ -421,18 +421,22 @@ while True:
         self,
         csv_path: str,
         pip_install_packages: str = PACKAGES,
+        session_id: str | None = None,
     ) -> None:
         """
         Initialize the CSV Analysis Environment.
-        
+
         Args:
             csv_path: Path to the CSV file to load.
             pip_install_packages: Packages to install in container.
+            session_id: Session ID for container isolation (default: random).
+                       Container name will be: csv-sandbox-{session_id}-{uuid}
         """
         self.csv_path = Path(csv_path).resolve()
         if not self.csv_path.exists():
             raise FileNotFoundError(f"CSV file not found: {csv_path}")
         self.pip_install_packages = pip_install_packages
+        self.session_id = session_id or uuid.uuid4().hex[:8]
         self.execution_count = 0
 
     async def _run_docker(
@@ -506,12 +510,12 @@ while True:
     async def setup_state(self, state: dict, **kwargs) -> dict:
         """
         Initialize the environment: create container, copy CSV, start worker.
-        
+
         Returns state dict with sandbox_id and python_state.
         """
         await self._ensure_image()
-        
-        sandbox_id = f"csv-sandbox-{uuid.uuid4().hex[:8]}"
+
+        sandbox_id = f"csv-sandbox-{self.session_id}-{uuid.uuid4().hex[:8]}"
         
         # Start container
         await self._run_docker(

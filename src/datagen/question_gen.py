@@ -22,6 +22,7 @@ from src.datagen.pipeline_ui import QuestionGenUI
 from src.core.config import config
 
 from src.envs.csv_env import LocalCSVAnalysisEnv
+from src.utils.docker import generate_session_id, cleanup_session
 
 
 def get_datasets_with_episodes() -> set[str]:
@@ -167,6 +168,7 @@ async def explore_and_generate_questions(
     max_tokens: int = 6000,
     output_dir: str = ".",
     dataset_description: str = "",
+    session_id: str | None = None,
 ) -> tuple[list[dict], ExplorationTrace]:
     """
     LLM explores dataset and generates questions.
@@ -188,7 +190,7 @@ async def explore_and_generate_questions(
     ui.print_empty_line()
 
     # 1. Setup
-    env = LocalCSVAnalysisEnv(csv_path=csv_path)
+    env = LocalCSVAnalysisEnv(csv_path=csv_path, session_id=session_id)
     state = {}
     state = await env.setup_state(state)
 
@@ -358,6 +360,7 @@ async def process_single_dataset(
     semaphore: asyncio.Semaphore,
     index: int,
     total: int,
+    session_id: str | None = None,
 ) -> tuple[str, bool, int | None]:
     """
     Process a single dataset with semaphore-controlled concurrency.
@@ -376,6 +379,7 @@ async def process_single_dataset(
                 max_tokens=max_tokens,
                 output_dir=str(output_dir),
                 dataset_description=dataset_description,
+                session_id=session_id,
             )
 
             ui.print_success(
@@ -401,6 +405,10 @@ async def run_parallel_generation(
 
     Returns (success_count, failure_count, skipped_count)
     """
+    # Generate session ID for container isolation
+    session_id = generate_session_id()
+    ui.print_status(f"Session ID: {session_id}")
+
     # Common config
     temperature = config.sampling_args.temperature
     max_tokens = config.sampling_args.max_tokens
@@ -471,6 +479,7 @@ async def run_parallel_generation(
                 semaphore=semaphore,
                 index=i,
                 total=len(csv_sources),
+                session_id=session_id,
             )
         )
 

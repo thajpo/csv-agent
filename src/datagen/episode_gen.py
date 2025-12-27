@@ -33,7 +33,7 @@ from src.core.types import (
     BatchTriangulationResult,
 )
 from src.core.config import config
-from src.utils.docker import cleanup_csv_sandbox_containers
+from src.utils.docker import cleanup_csv_sandbox_containers, cleanup_session, generate_session_id
 from src.envs.container_pool import ContainerPool
 
 
@@ -48,12 +48,14 @@ class CSVTask:
     questions_file: Path
 
 
-def signal_handler(signum, frame):
-    """Handle Ctrl+C gracefully."""
-    print("\n\n🛑 Interrupted! Cleaning up containers...")
-    cleanup_csv_sandbox_containers()
-    print("✓ Cleanup complete")
-    sys.exit(0)
+def make_signal_handler(session_id: str):
+    """Create a signal handler that cleans up only this session's containers."""
+    def handler(signum, frame):
+        print(f"\n\n🛑 Interrupted! Cleaning up session {session_id} containers...")
+        cleanup_session(session_id)
+        print("✓ Cleanup complete")
+        sys.exit(0)
+    return handler
 
 
 def load_questions(questions_path: str) -> tuple[list[dict], list[str] | None]:
@@ -351,7 +353,13 @@ async def main(
 ):
     # Create global UI instance
     ui = EpisodeGenUI()
-    # Register signal handler for Ctrl+C
+
+    # Generate session ID for container isolation
+    session_id = generate_session_id()
+    ui.base.print_status(f"Session ID: {session_id}")
+
+    # Register signal handler for Ctrl+C (session-scoped cleanup)
+    signal_handler = make_signal_handler(session_id)
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
@@ -482,6 +490,7 @@ async def main(
         max_containers=max_concurrent,
         n_question_slots=config.n_question_slots,
         n_consistency=max_consistency,
+        session_id=session_id,
     )
     await pool.start(initial_csv_path=tasks[0].csv_path)
 

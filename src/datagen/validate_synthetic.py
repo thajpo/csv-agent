@@ -44,17 +44,19 @@ from src.core.types import (
     TimingMetadataDict,
 )
 from src.core.config import config
-from src.utils.docker import cleanup_csv_sandbox_containers
+from src.utils.docker import cleanup_csv_sandbox_containers, cleanup_session, generate_session_id
 from src.utils.hashing import hash_artifact
 from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
 
 
-def signal_handler(signum, frame):
-    """Handle Ctrl+C gracefully."""
-    print("\n\n🛑 Interrupted! Cleaning up containers...")
-    cleanup_csv_sandbox_containers()
-    print("✓ Cleanup complete")
-    sys.exit(0)
+def make_signal_handler(session_id: str):
+    """Create a signal handler that cleans up only this session's containers."""
+    def handler(signum, frame):
+        print(f"\n\n🛑 Interrupted! Cleaning up session {session_id} containers...")
+        cleanup_session(session_id)
+        print("✓ Cleanup complete")
+        sys.exit(0)
+    return handler
 
 
 def load_questions(questions_path: str) -> tuple[list[dict], list[str] | None]:
@@ -103,6 +105,7 @@ async def validate_single_question(
     dataset_description: str,
     data_overview: str,
     ui: EpisodeGenUI,
+    session_id: str | None = None,
 ) -> tuple[bool, dict | None, float, str | None]:
     """
     Validate a single synthetic question by running teacher trace.
@@ -129,6 +132,7 @@ async def validate_single_question(
             dataset_description=dataset_description,
             data_overview=data_overview,
             ui=ui,
+            session_id=session_id,
         )
 
         elapsed = time.time() - start_time
@@ -201,6 +205,7 @@ async def process_dataset(
     max_turns: int,
     sampling_args: dict,
     ui: EpisodeGenUI,
+    session_id: str | None = None,
 ) -> tuple[list[EpisodeJSONL], list[dict]]:
     """
     Process all questions for a single dataset.
@@ -227,6 +232,7 @@ async def process_dataset(
             dataset_description=dataset_description,
             data_overview=data_overview,
             ui=ui,
+            session_id=session_id,
         )
 
         if success and trace:
@@ -296,6 +302,7 @@ async def process_dataset_task(
     sampling_args: dict,
     ui: EpisodeGenUI,
     semaphore: asyncio.Semaphore | None = None,
+    session_id: str | None = None,
 ) -> tuple[str, list[EpisodeJSONL], list[dict]]:
     """
     Wrapper for process_dataset that respects semaphore for parallel execution.
@@ -315,6 +322,7 @@ async def process_dataset_task(
                 max_turns=max_turns,
                 sampling_args=sampling_args,
                 ui=ui,
+                session_id=session_id,
             )
             return dataset_name, episodes, failures
     else:
@@ -326,6 +334,7 @@ async def process_dataset_task(
             max_turns=max_turns,
             sampling_args=sampling_args,
             ui=ui,
+            session_id=session_id,
         )
         return dataset_name, episodes, failures
 
@@ -340,6 +349,13 @@ async def main(
     skip_existing: set | None = None,
 ):
     ui = EpisodeGenUI()
+
+    # Generate session ID for container isolation
+    session_id = generate_session_id()
+    ui.base.print_status(f"Session ID: {session_id}")
+
+    # Register signal handler for Ctrl+C (session-scoped cleanup)
+    signal_handler = make_signal_handler(session_id)
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
@@ -452,6 +468,7 @@ async def main(
                 sampling_args=sampling_args,
                 ui=ui,
                 semaphore=semaphore,
+                session_id=session_id,
             )
             for name, csv_path, questions in tasks_to_run
         ]
@@ -489,6 +506,7 @@ async def main(
                 max_turns=max_turns,
                 sampling_args=sampling_args,
                 ui=ui,
+                session_id=session_id,
             )
             all_episodes.extend(episodes)
             all_failures.extend(failures)
