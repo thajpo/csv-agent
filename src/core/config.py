@@ -116,6 +116,10 @@ class Config(BaseModel):
     verified_only: bool = False
     float_tolerance: float = 0.1
     max_concurrent_containers: int = 4  # Reduced: each container now has 32 workers
+    dynamic_triangulation: bool = True
+    triangulation_by_difficulty: Dict[str, int] = Field(
+        default_factory=lambda: {"EASY": 2, "MEDIUM": 2, "HARD": 4, "VERY_HARD": 6}
+    )
 
     # Outputs - separate paths for LLM vs synthetic pipelines
     questions_llm_dir: str = "data/questions_llm"
