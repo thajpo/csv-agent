@@ -11,12 +11,12 @@ Unlike episode_gen.py, this skips triangulation since synthetic questions
 have known ground truth from template execution.
 
 Usage:
-    uv run python -m src.datagen.synthetic_episodes \
+    uv run python -m src.datagen.validate_synthetic \
         --questions-dir data/questions_synthetic \
         --output data/episodes/episodes_synthetic.jsonl
 
     # Parallel mode (process multiple datasets concurrently)
-    uv run python -m src.datagen.synthetic_episodes \
+    uv run python -m src.datagen.validate_synthetic \
         --questions-dir data/questions_synthetic \
         --output data/episodes/episodes_synthetic.jsonl \
         --parallel --n-workers 4
@@ -34,7 +34,7 @@ from collections import defaultdict
 import time
 
 from src.datagen.teacher import execute_teacher_trace
-from src.datagen.ui import EpisodeGenUI
+from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
 from src.core.types import (
     EpisodeJSONL,
@@ -114,7 +114,12 @@ async def validate_single_question(
 
     try:
         # Run teacher trace WITH hint (gold mode)
-        trace, conversation, system_prompt, elapsed_seconds = await execute_teacher_trace(
+        (
+            trace,
+            conversation,
+            system_prompt,
+            elapsed_seconds,
+        ) = await execute_teacher_trace(
             csv_path=csv_path,
             question=question_dict.get("question", ""),
             model=teacher_model,
@@ -130,7 +135,12 @@ async def validate_single_question(
 
         # Check if trace succeeded
         if not trace["success"]:
-            return False, trace, elapsed, f"Trace failed: {trace.get('error', 'unknown')}"
+            return (
+                False,
+                trace,
+                elapsed,
+                f"Trace failed: {trace.get('error', 'unknown')}",
+            )
 
         # Compare answer hash to ground truth
         expected_hash = question_dict.get("ground_truth_hash")
@@ -146,17 +156,36 @@ async def validate_single_question(
             if expected_answer is not None and actual_answer is not None:
                 # Simple float tolerance check
                 try:
-                    if isinstance(expected_answer, (int, float)) and isinstance(actual_answer, (int, float)):
-                        if abs(expected_answer - actual_answer) <= config.float_tolerance:
+                    if isinstance(expected_answer, (int, float)) and isinstance(
+                        actual_answer, (int, float)
+                    ):
+                        if (
+                            abs(expected_answer - actual_answer)
+                            <= config.float_tolerance
+                        ):
                             return True, trace, elapsed, None
                 except (TypeError, ValueError):
                     pass
 
             # Debug: show what differed
             import json
-            exp_str = json.dumps(expected_answer, default=str)[:200] if expected_answer else "None"
-            act_str = json.dumps(actual_answer, default=str)[:200] if actual_answer else "None"
-            return False, trace, elapsed, f"Answer mismatch:\n      Expected: {exp_str}\n      Got:      {act_str}"
+
+            exp_str = (
+                json.dumps(expected_answer, default=str)[:200]
+                if expected_answer
+                else "None"
+            )
+            act_str = (
+                json.dumps(actual_answer, default=str)[:200]
+                if actual_answer
+                else "None"
+            )
+            return (
+                False,
+                trace,
+                elapsed,
+                f"Answer mismatch:\n      Expected: {exp_str}\n      Got:      {act_str}",
+            )
 
         return True, trace, elapsed, None
 
@@ -241,13 +270,15 @@ async def process_dataset(
             episodes.append(episode)
             ui.base.print_success(f"    ✓ Validated ({elapsed:.1f}s)")
         else:
-            failures.append({
-                "question": q_dict.get("question", "")[:100],
-                "template_name": q_dict.get("template_name"),
-                "variant_index": q_dict.get("variant_index"),
-                "error": error,
-                "elapsed": elapsed,
-            })
+            failures.append(
+                {
+                    "question": q_dict.get("question", "")[:100],
+                    "template_name": q_dict.get("template_name"),
+                    "variant_index": q_dict.get("variant_index"),
+                    "error": error,
+                    "elapsed": elapsed,
+                }
+            )
             ui.base.print_warning(f"    ✗ Failed: {error}")
 
     return episodes, failures
@@ -271,7 +302,9 @@ async def process_dataset_task(
     """
     if semaphore:
         async with semaphore:
-            ui.base.print_section(f"Processing {dataset_name}: {len(questions)} questions")
+            ui.base.print_section(
+                f"Processing {dataset_name}: {len(questions)} questions"
+            )
             episodes, failures = await process_dataset(
                 csv_path=Path(csv_path),
                 questions=questions,
@@ -348,7 +381,9 @@ async def main(
         return 1
 
     mode_str = f"parallel ({n_workers} workers)" if parallel else "sequential"
-    ui.base.print_section(f"Found {len(question_files)} datasets with questions [{mode_str}]")
+    ui.base.print_section(
+        f"Found {len(question_files)} datasets with questions [{mode_str}]"
+    )
 
     # Output file
     output_jsonl = Path(output_path)
@@ -374,10 +409,16 @@ async def main(
         # Filter out already-processed questions
         if skip_existing:
             original_count = len(questions)
-            questions = [q for q in questions if q.get("id", q.get("ground_truth_hash", "")) not in skip_existing]
+            questions = [
+                q
+                for q in questions
+                if q.get("id", q.get("ground_truth_hash", "")) not in skip_existing
+            ]
             skipped = original_count - len(questions)
             if skipped > 0:
-                ui.base.console.print(f"  [dim]{dataset_name}: skipping {skipped} already processed[/dim]")
+                ui.base.console.print(
+                    f"  [dim]{dataset_name}: skipping {skipped} already processed[/dim]"
+                )
 
         if max_questions and len(questions) > max_questions:
             questions = questions[:max_questions]
@@ -430,7 +471,9 @@ async def main(
                 verified=len(episodes),
                 failed=len(failures),
             )
-            progress.log(f"✓ {dataset_name}: {len(episodes)} verified, {len(failures)} failed")
+            progress.log(
+                f"✓ {dataset_name}: {len(episodes)} verified, {len(failures)} failed"
+            )
     else:
         # Sequential execution
         for name, csv_path, questions in tasks_to_run:
@@ -477,7 +520,9 @@ async def main(
             ui.base.print_status(f"  {template}: {count}")
 
     # Mark progress complete
-    progress.log(f"Completed: {len(all_episodes)} episodes, {len(all_failures)} failures")
+    progress.log(
+        f"Completed: {len(all_episodes)} episodes, {len(all_failures)} failures"
+    )
     progress.complete()
 
     # Exit codes: 0=success, 1=partial success (some data), 2=total failure
@@ -490,7 +535,9 @@ async def main(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Synthetic episode generation pipeline.")
+    parser = argparse.ArgumentParser(
+        description="Synthetic episode generation pipeline."
+    )
     parser.add_argument(
         "--questions-dir",
         type=str,

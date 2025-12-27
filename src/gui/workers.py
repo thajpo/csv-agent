@@ -115,9 +115,15 @@ def start_pipeline(
 
     elif stage == "synthetic_episodes":
         cmd = [
-            "uv", "run", "python", "-m", "src.datagen.synthetic_episodes",
-            "--questions-dir", str(questions_dir or state.questions_dir),
-            "--output", str(output_path or state.episodes_dir / "synthetic.jsonl"),
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "src.datagen.validate_synthetic",
+            "--questions-dir",
+            str(questions_dir or state.questions_dir),
+            "--output",
+            str(output_path or state.episodes_dir / "synthetic.jsonl"),
         ]
         if parallel:
             cmd.append("--parallel")

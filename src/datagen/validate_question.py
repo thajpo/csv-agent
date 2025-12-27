@@ -36,7 +36,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from src.datagen.teacher import execute_teacher_trace
-from src.datagen.ui import EpisodeGenUI
+from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
 from src.core.config import config
 from src.utils.hashing import hash_artifact
@@ -53,7 +53,9 @@ def load_question_from_file(questions_file: str, index: int) -> dict:
     questions = data.get("questions", data if isinstance(data, list) else [])
 
     if index >= len(questions):
-        raise ValueError(f"Index {index} out of range (have {len(questions)} questions)")
+        raise ValueError(
+            f"Index {index} out of range (have {len(questions)} questions)"
+        )
 
     return questions[index]
 
@@ -90,13 +92,15 @@ async def validate_question(
         except Exception:
             pass
 
-    console.print(Panel(
-        f"[bold]Question:[/bold] {question}\n\n"
-        f"[dim]Hint:[/dim] {hint or 'None'}\n"
-        f"[dim]CSV:[/dim] {csv_path}\n"
-        f"[dim]Model:[/dim] {config.teacher_model}",
-        title="Validation Setup",
-    ))
+    console.print(
+        Panel(
+            f"[bold]Question:[/bold] {question}\n\n"
+            f"[dim]Hint:[/dim] {hint or 'None'}\n"
+            f"[dim]CSV:[/dim] {csv_path}\n"
+            f"[dim]Model:[/dim] {config.teacher_model}",
+            title="Validation Setup",
+        )
+    )
 
     console.print("\n[dim]Running teacher trace...[/dim]\n")
 
@@ -140,13 +144,15 @@ async def validate_question(
         else:
             status = "[bold red]FAILED[/bold red]"
 
-        console.print(Panel(
-            f"{status}\n\n"
-            f"[dim]Elapsed:[/dim] {elapsed:.1f}s\n"
-            f"[dim]Turns:[/dim] {len(trace.get('turns', []))}\n"
-            f"[dim]Success:[/dim] {trace.get('success', False)}",
-            title="Result",
-        ))
+        console.print(
+            Panel(
+                f"{status}\n\n"
+                f"[dim]Elapsed:[/dim] {elapsed:.1f}s\n"
+                f"[dim]Turns:[/dim] {len(trace.get('turns', []))}\n"
+                f"[dim]Success:[/dim] {trace.get('success', False)}",
+                title="Result",
+            )
+        )
 
         # Show answer comparison
         if expected_answer is not None or expected_hash:
@@ -178,12 +184,11 @@ async def validate_question(
                     console.print(f"[dim]Reasoning:[/dim] {turn['reasoning'][:300]}...")
 
                 if show_code and turn.get("code"):
-                    console.print(Syntax(
-                        turn["code"],
-                        "python",
-                        theme="monokai",
-                        line_numbers=True
-                    ))
+                    console.print(
+                        Syntax(
+                            turn["code"], "python", theme="monokai", line_numbers=True
+                        )
+                    )
 
                 execution = turn.get("execution", {})
                 if execution.get("stdout"):
@@ -194,11 +199,9 @@ async def validate_question(
                     console.print(Panel(stdout, title="stdout", style="green"))
 
                 if execution.get("stderr"):
-                    console.print(Panel(
-                        execution["stderr"][:300],
-                        title="stderr",
-                        style="red"
-                    ))
+                    console.print(
+                        Panel(execution["stderr"][:300], title="stderr", style="red")
+                    )
 
                 hooks = execution.get("hooks", [])
                 if hooks:
@@ -210,27 +213,34 @@ async def validate_question(
                 console.print()
 
         # Show final answer
-        console.print(Panel(
-            f"[bold]{final_answer}[/bold]",
-            title="Final Answer",
-            style="green" if (success and answer_matches) else "red"
-        ))
+        console.print(
+            Panel(
+                f"[bold]{final_answer}[/bold]",
+                title="Final Answer",
+                style="green" if (success and answer_matches) else "red",
+            )
+        )
 
         # Save trace
         if save_trace:
             output_path = Path(save_trace)
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(output_path, 'w') as f:
-                json.dump({
-                    "question": question,
-                    "hint": hint,
-                    "csv_path": csv_path,
-                    "trace": trace,
-                    "elapsed": elapsed,
-                    "expected_answer": expected_answer,
-                    "expected_hash": expected_hash,
-                    "answer_matches": answer_matches,
-                }, f, indent=2, default=str)
+            with open(output_path, "w") as f:
+                json.dump(
+                    {
+                        "question": question,
+                        "hint": hint,
+                        "csv_path": csv_path,
+                        "trace": trace,
+                        "elapsed": elapsed,
+                        "expected_answer": expected_answer,
+                        "expected_hash": expected_hash,
+                        "answer_matches": answer_matches,
+                    },
+                    f,
+                    indent=2,
+                    default=str,
+                )
             console.print(f"\n[green]Trace saved to {output_path}[/green]")
 
         return success and answer_matches
@@ -238,6 +248,7 @@ async def validate_question(
     except Exception as e:
         console.print(f"[red]ERROR: {e}[/red]")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -278,16 +289,18 @@ def main():
         expected_hash = None
 
     # Run validation
-    success = asyncio.run(validate_question(
-        csv_path=args.csv,
-        question=question,
-        hint=hint,
-        expected_answer=expected_answer,
-        expected_hash=expected_hash,
-        show_trace=args.show_trace,
-        show_code=args.show_code,
-        save_trace=args.save_trace,
-    ))
+    success = asyncio.run(
+        validate_question(
+            csv_path=args.csv,
+            question=question,
+            hint=hint,
+            expected_answer=expected_answer,
+            expected_hash=expected_hash,
+            show_trace=args.show_trace,
+            show_code=args.show_code,
+            save_trace=args.save_trace,
+        )
+    )
 
     sys.exit(0 if success else 1)
 

@@ -22,7 +22,7 @@ from typing import Any
 from dataclasses import dataclass
 
 from src.datagen.teacher import batch_triangulate
-from src.datagen.ui import EpisodeGenUI
+from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
 from src.core.types import (
     EpisodeJSONL,
@@ -158,10 +158,10 @@ def gather_csv_tasks(
                 with open(meta_path) as f:
                     meta_data = json.load(f)
                     dataset_description = (
-                    meta_data.get("description")
-                    or meta_data.get("subtitle")
-                    or meta_data.get("title")
-                )
+                        meta_data.get("description")
+                        or meta_data.get("subtitle")
+                        or meta_data.get("title")
+                    )
             except Exception as e:
                 ui.base.print_warning(f"Failed to read metadata from {meta_path}: {e}")
 
@@ -190,7 +190,9 @@ def gather_csv_tasks(
             try:
                 actual_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
             except UnicodeDecodeError:
-                actual_columns = pd.read_csv(csv_path, nrows=0, encoding='latin-1').columns.tolist()
+                actual_columns = pd.read_csv(
+                    csv_path, nrows=0, encoding="latin-1"
+                ).columns.tolist()
             if set(expected_columns) != set(actual_columns):
                 missing = set(expected_columns) - set(actual_columns)
                 extra = set(actual_columns) - set(expected_columns)
@@ -417,14 +419,17 @@ async def main(
         original_total = sum(len(t.questions) for t in tasks)
         for task in tasks:
             task.questions = [
-                q for q in task.questions
+                q
+                for q in task.questions
                 if q.get("id", q.get("ground_truth_hash", "")) not in skip_existing
             ]
         # Remove tasks with no questions after filtering
         tasks = [t for t in tasks if t.questions]
         new_total = sum(len(t.questions) for t in tasks)
         if original_total > new_total:
-            ui.base.print_status(f"Skipping {original_total - new_total} already-processed questions")
+            ui.base.print_status(
+                f"Skipping {original_total - new_total} already-processed questions"
+            )
 
     # Limit questions per dataset if specified
     if max_questions is not None:
@@ -501,12 +506,11 @@ async def main(
             await pool.release(container)
 
     # Create tasks for asyncio.as_completed
-    pending_tasks = [
-        asyncio.create_task(process_task_wrapper(task)) for task in tasks
-    ]
+    pending_tasks = [asyncio.create_task(process_task_wrapper(task)) for task in tasks]
 
     # Process as each completes (provides real-time progress)
     completed_count = 0
+    had_error = False
     try:
         for coro in asyncio.as_completed(pending_tasks):
             task_result, episodes = await coro
@@ -518,9 +522,21 @@ async def main(
                 f"{len(episodes)} episodes ({n_verified} verified)"
             )
             all_episodes.extend(episodes)
+    except Exception as e:
+        had_error = True
+        ui.base.print_error(f"ERROR: Episode generation failed: {e}")
     finally:
+        # Cancel remaining tasks before stopping pool to avoid tearing down live workers
+        for task in pending_tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*pending_tasks, return_exceptions=True)
+
         # Stop the pool (destroys all containers)
         await pool.stop()
+
+    if had_error:
+        return 1
 
     # Write all episodes to output file
     total_verified = sum(1 for ep in all_episodes if ep.verified)
@@ -540,5 +556,3 @@ async def main(
     ui.base.print_empty_line()
 
     return 0
-
-

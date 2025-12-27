@@ -31,7 +31,11 @@ console = Console()
 
 def cmd_status():
     """Show data inventory - the most important visibility command."""
-    from src.utils.stats import collect_questions_stats, collect_episodes_stats, collect_datasets
+    from src.utils.stats import (
+        collect_questions_stats,
+        collect_episodes_stats,
+        collect_datasets,
+    )
 
     datasets = collect_datasets()
     q_stats = collect_questions_stats()
@@ -39,10 +43,9 @@ def cmd_status():
 
     # Compact status display
     console.print()
-    console.print(Panel.fit(
-        "[bold]csv-agent[/bold] Data Generation Pipeline",
-        style="cyan"
-    ))
+    console.print(
+        Panel.fit("[bold]csv-agent[/bold] Data Generation Pipeline", style="cyan")
+    )
 
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_column("Label", style="dim")
@@ -61,7 +64,7 @@ def cmd_status():
     table.add_row(
         "Questions",
         f"[green]synthetic[/green] {synth_q:,} ({synth_q_datasets} datasets) | "
-        f"[blue]llm[/blue] {llm_q:,} ({llm_q_datasets} datasets)"
+        f"[blue]llm[/blue] {llm_q:,} ({llm_q_datasets} datasets)",
     )
 
     # Episodes
@@ -70,13 +73,13 @@ def cmd_status():
     llm_e = e_stats["llm"]["total"]
     llm_e_verified = e_stats["llm"]["verified"]
 
-    synth_pct = f"{synth_e_verified/max(synth_e,1)*100:.0f}%" if synth_e else "0%"
-    llm_pct = f"{llm_e_verified/max(llm_e,1)*100:.0f}%" if llm_e else "0%"
+    synth_pct = f"{synth_e_verified / max(synth_e, 1) * 100:.0f}%" if synth_e else "0%"
+    llm_pct = f"{llm_e_verified / max(llm_e, 1) * 100:.0f}%" if llm_e else "0%"
 
     table.add_row(
         "Episodes",
         f"[green]synthetic[/green] {synth_e_verified}/{synth_e} verified ({synth_pct}) | "
-        f"[blue]llm[/blue] {llm_e_verified}/{llm_e} verified ({llm_pct})"
+        f"[blue]llm[/blue] {llm_e_verified}/{llm_e} verified ({llm_pct})",
     )
 
     console.print(table)
@@ -131,7 +134,7 @@ def cmd_progress():
         pct = done / total
         filled = int(pct * width)
         bar = "█" * filled + "░" * (width - filled)
-        return f"{bar} {pct*100:.0f}%"
+        return f"{bar} {pct * 100:.0f}%"
 
     # Questions (consider 100% if we have any)
     synth_q_pct = 100 if total_synth_q > 0 else 0
@@ -140,7 +143,9 @@ def cmd_progress():
         "1. Questions",
         f"{total_synth_q:,}",
         f"{total_llm_q:,}",
-        "[green]Complete[/green]" if total_synth_q + total_llm_q > 0 else "[red]Not started[/red]"
+        "[green]Complete[/green]"
+        if total_synth_q + total_llm_q > 0
+        else "[red]Not started[/red]",
     )
 
     # Episodes
@@ -148,7 +153,7 @@ def cmd_progress():
         "2. Episodes",
         f"{total_synth_e:,} / {total_synth_q:,}",
         f"{total_llm_e:,} / {total_llm_q:,}",
-        progress_bar(total_synth_e + total_llm_e, total_synth_q + total_llm_q)
+        progress_bar(total_synth_e + total_llm_e, total_synth_q + total_llm_q),
     )
 
     console.print(table)
@@ -188,7 +193,9 @@ def cmd_progress():
         by_diff_e = e_stats["llm"]["by_difficulty"]
         for diff, q_count in by_diff_q.items():
             remaining = max(q_count - by_diff_e.get(diff, 0), 0)
-            n_cons = config.triangulation_by_difficulty.get(diff.upper(), config.n_consistency)
+            n_cons = config.triangulation_by_difficulty.get(
+                diff.upper(), config.n_consistency
+            )
             total += remaining * (1 + n_cons)
         return total
 
@@ -200,7 +207,9 @@ def cmd_progress():
 
     if total_remaining > 0:
         console.print(f"[bold yellow]Bottleneck:[/bold yellow] Episode generation")
-        console.print(f"  Remaining: {remaining_synth:,} synthetic + {remaining_llm:,} LLM = [bold]{total_remaining:,}[/bold] episodes")
+        console.print(
+            f"  Remaining: {remaining_synth:,} synthetic + {remaining_llm:,} LLM = [bold]{total_remaining:,}[/bold] episodes"
+        )
 
         # Estimate based on episode file timestamps
         synth_file = Path("data/episodes/episodes_synthetic.jsonl")
@@ -217,7 +226,12 @@ def cmd_progress():
             llm_hours = (llm_traces_remaining * llm_per_trace) / 3600
             console.print(f"  Estimated LLM time: ~{llm_hours:.1f} hours")
 
-        if synth_per_trace is None and llm_per_trace is None and synth_file.exists() and total_synth_e > 0:
+        if (
+            synth_per_trace is None
+            and llm_per_trace is None
+            and synth_file.exists()
+            and total_synth_e > 0
+        ):
             # Fallback to timestamp-based throughput
             with open(synth_file) as f:
                 lines = f.readlines()
@@ -232,7 +246,9 @@ def cmd_progress():
                     if rate > 0:
                         hours_remaining = total_remaining / rate
                         console.print(f"  Estimated rate: {rate:.1f} episodes/hour")
-                        console.print(f"  Time to complete: ~{hours_remaining:.1f} hours")
+                        console.print(
+                            f"  Time to complete: ~{hours_remaining:.1f} hours"
+                        )
 
         # Show per-type estimates
         console.print()
@@ -241,24 +257,34 @@ def cmd_progress():
         if config.dynamic_triangulation and config.triangulation_by_difficulty:
             diff_items = sorted(config.triangulation_by_difficulty.items())
             diff_summary = ", ".join(f"{k}:{v}" for k, v in diff_items)
-            console.print(f"  LLM:       {diff_summary} (consistency traces by difficulty)")
+            console.print(
+                f"  LLM:       {diff_summary} (consistency traces by difficulty)"
+            )
         else:
             console.print(f"  LLM:       ~{1 + config.n_consistency} traces/question")
 
         console.print()
         console.print("[bold]Speed Strategy:[/bold]")
-        console.print("  1. [green]Run synthetic first[/green] - 8x faster, has ground truth")
+        console.print(
+            "  1. [green]Run synthetic first[/green] - 8x faster, has ground truth"
+        )
         console.print("  2. Run LLM in parallel (separate terminal) if resources allow")
-        console.print("  3. Adjust triangulation_by_difficulty (config) for faster LLM validation")
+        console.print(
+            "  3. Adjust triangulation_by_difficulty (config) for faster LLM validation"
+        )
 
     console.print()
 
     # Recommendations
     console.print("[bold]Recommended Next Steps:[/bold]")
     if total_synth_e < total_synth_q:
-        console.print(f"  [green]→[/green] csvagent generate episodes --synth  # {remaining_synth:,} remaining")
+        console.print(
+            f"  [green]→[/green] csvagent generate episodes --synth  # {remaining_synth:,} remaining"
+        )
     if total_llm_e < total_llm_q:
-        console.print(f"  [blue]→[/blue] csvagent generate episodes --llm   # {remaining_llm:,} remaining")
+        console.print(
+            f"  [blue]→[/blue] csvagent generate episodes --llm   # {remaining_llm:,} remaining"
+        )
 
     console.print()
     return 0
@@ -267,7 +293,9 @@ def cmd_progress():
 # ============= Generate Commands =============
 
 
-def cmd_generate_questions(synth: bool, llm: bool, max_datasets: int | None, dry_run: bool):
+def cmd_generate_questions(
+    synth: bool, llm: bool, max_datasets: int | None, dry_run: bool
+):
     """Generate questions using synthetic templates or LLM exploration."""
     if not synth and not llm:
         console.print("[red]Specify --synth or --llm (or both)[/red]")
@@ -276,7 +304,9 @@ def cmd_generate_questions(synth: bool, llm: bool, max_datasets: int | None, dry
     if dry_run:
         console.print("[bold]Dry Run - Generate Questions[/bold]\n")
         if synth:
-            console.print(f"  [green]synthetic[/green]: Will generate template-based questions")
+            console.print(
+                f"  [green]synthetic[/green]: Will generate template-based questions"
+            )
             console.print(f"    Max datasets: {max_datasets or 'all'}")
             console.print(f"    Output: data/questions_synthetic/")
         if llm:
@@ -291,6 +321,7 @@ def cmd_generate_questions(synth: bool, llm: bool, max_datasets: int | None, dry
     if synth:
         console.print("[bold]Generating synthetic questions...[/bold]")
         from src.datagen.synthetic.generator import main as synth_gen_main
+
         result = synth_gen_main(max_datasets=max_datasets)
         if result != 0:
             exit_code = result
@@ -298,6 +329,7 @@ def cmd_generate_questions(synth: bool, llm: bool, max_datasets: int | None, dry
     if llm:
         console.print("[bold]Generating LLM questions...[/bold]")
         from src.datagen.question_gen import main as llm_gen_main
+
         result = llm_gen_main(max_datasets=max_datasets)
         if result != 0:
             exit_code = result
@@ -305,7 +337,9 @@ def cmd_generate_questions(synth: bool, llm: bool, max_datasets: int | None, dry
     return exit_code
 
 
-def _show_episode_preflight(source: str, questions_dir: Path, episodes_file: Path) -> tuple[int, int, set]:
+def _show_episode_preflight(
+    source: str, questions_dir: Path, episodes_file: Path
+) -> tuple[int, int, set]:
     """
     Show pre-flight summary before episode generation.
     Returns: (total_questions, existing_count, existing_question_ids)
@@ -348,19 +382,27 @@ def _show_episode_preflight(source: str, questions_dir: Path, episodes_file: Pat
     # Display
     color = "green" if source == "synthetic" else "blue"
     console.print()
-    console.print(Panel(
-        f"[bold]Questions available:[/bold]    {total_questions:,}\n"
-        f"[bold]Already processed:[/bold]      {existing_count:,} ({pct:.0f}%)\n"
-        f"[bold]Remaining to generate:[/bold]  {remaining:,}\n\n"
-        f"Progress: [{color}]{bar}[/{color}] {pct:.0f}%",
-        title=f"Episode Generation - {source.capitalize()}",
-        border_style=color,
-    ))
+    console.print(
+        Panel(
+            f"[bold]Questions available:[/bold]    {total_questions:,}\n"
+            f"[bold]Already processed:[/bold]      {existing_count:,} ({pct:.0f}%)\n"
+            f"[bold]Remaining to generate:[/bold]  {remaining:,}\n\n"
+            f"Progress: [{color}]{bar}[/{color}] {pct:.0f}%",
+            title=f"Episode Generation - {source.capitalize()}",
+            border_style=color,
+        )
+    )
 
     return total_questions, existing_count, existing_ids
 
 
-def cmd_generate_episodes(synth: bool, llm: bool, max_questions: int | None, dry_run: bool, fresh: bool = False):
+def cmd_generate_episodes(
+    synth: bool,
+    llm: bool,
+    max_questions: int | None,
+    dry_run: bool,
+    fresh: bool = False,
+):
     """Generate verified episodes via teacher triangulation."""
     if not synth and not llm:
         console.print("[red]Specify --synth or --llm (or both)[/red]")
@@ -372,26 +414,38 @@ def cmd_generate_episodes(synth: bool, llm: bool, max_questions: int | None, dry
         questions_dir = Path("data/questions_synthetic")
         episodes_file = Path("data/episodes/episodes_synthetic.jsonl")
 
-        total_q, existing, existing_ids = _show_episode_preflight("synthetic", questions_dir, episodes_file)
+        total_q, existing, existing_ids = _show_episode_preflight(
+            "synthetic", questions_dir, episodes_file
+        )
         remaining = total_q - existing
 
         if remaining == 0:
             console.print("\n[green]All synthetic questions already processed![/green]")
         elif dry_run:
-            console.print(f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]")
+            console.print(
+                f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
+            )
         else:
             if not fresh and existing > 0:
-                console.print(f"\n[dim]Mode: Append (skipping {existing:,} existing)[/dim]")
+                console.print(
+                    f"\n[dim]Mode: Append (skipping {existing:,} existing)[/dim]"
+                )
             elif fresh:
-                console.print(f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]")
+                console.print(
+                    f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]"
+                )
 
             console.print()
-            from src.datagen.synthetic_episodes import main as synth_ep_main
-            result = synth_ep_main(
-                questions_dir=str(questions_dir),
-                output_path=str(episodes_file),
-                max_questions=max_questions,
-                skip_existing=existing_ids if not fresh else set(),
+            import asyncio
+            from src.datagen.validate_synthetic import main as synth_ep_main
+
+            result = asyncio.run(
+                synth_ep_main(
+                    questions_dir=str(questions_dir),
+                    output_path=str(episodes_file),
+                    max_questions=max_questions,
+                    skip_existing=existing_ids if not fresh else set(),
+                )
             )
             if result != 0:
                 exit_code = result
@@ -400,26 +454,38 @@ def cmd_generate_episodes(synth: bool, llm: bool, max_questions: int | None, dry
         questions_dir = Path("data/questions")
         episodes_file = Path("data/episodes/episodes_llm.jsonl")
 
-        total_q, existing, existing_ids = _show_episode_preflight("llm", questions_dir, episodes_file)
+        total_q, existing, existing_ids = _show_episode_preflight(
+            "llm", questions_dir, episodes_file
+        )
         remaining = total_q - existing
 
         if remaining == 0:
             console.print("\n[green]All LLM questions already processed![/green]")
         elif dry_run:
-            console.print(f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]")
+            console.print(
+                f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
+            )
         else:
             if not fresh and existing > 0:
-                console.print(f"\n[dim]Mode: Append (skipping {existing:,} existing)[/dim]")
+                console.print(
+                    f"\n[dim]Mode: Append (skipping {existing:,} existing)[/dim]"
+                )
             elif fresh:
-                console.print(f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]")
+                console.print(
+                    f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]"
+                )
 
             console.print()
+            import asyncio
             from src.datagen.episode_gen import main as llm_ep_main
-            result = llm_ep_main(
-                questions_dir=str(questions_dir),
-                output_path=str(episodes_file),
-                max_questions=max_questions,
-                skip_existing=existing_ids if not fresh else set(),
+
+            result = asyncio.run(
+                llm_ep_main(
+                    questions_dir=str(questions_dir),
+                    output_path=str(episodes_file),
+                    max_questions=max_questions,
+                    skip_existing=existing_ids if not fresh else set(),
+                )
             )
             if result != 0:
                 exit_code = result
@@ -450,16 +516,20 @@ def cmd_run(mode: str, triangulate: bool, test: bool, dry_run: bool):
         console.print("\n[dim]No changes made (dry run)[/dim]")
         return 0
 
-    from src.datagen.run_all import main as run_all_main
+    from src.datagen.pipeline import main as run_all_main
+
     return run_all_main(mode=mode, triangulate=triangulate, test=test)
 
 
 # ============= Inspect Commands =============
 
 
-def cmd_inspect_questions(dataset: str | None, sample: int, source: str, show_hint: bool, show_answer: bool):
+def cmd_inspect_questions(
+    dataset: str | None, sample: int, source: str, show_hint: bool, show_answer: bool
+):
     """Preview generated questions."""
     from src.utils.inspect import inspect_questions
+
     inspect_questions(
         dataset=dataset,
         sample=sample,
@@ -470,9 +540,12 @@ def cmd_inspect_questions(dataset: str | None, sample: int, source: str, show_hi
     return 0
 
 
-def cmd_inspect_episodes(output: str | None, count: int, verified: bool, show_hooks: bool):
+def cmd_inspect_episodes(
+    output: str | None, count: int, verified: bool, show_hooks: bool
+):
     """Preview generated episodes."""
     from src.utils.inspect import inspect_episodes
+
     inspect_episodes(
         output=output,
         count=count,
@@ -485,6 +558,7 @@ def cmd_inspect_episodes(output: str | None, count: int, verified: bool, show_ho
 def cmd_inspect_trace(episode_id: str, output: str | None):
     """Deep inspect a single episode trace."""
     from src.utils.inspect import inspect_trace
+
     inspect_trace(episode_id=episode_id, output=output)
     return 0
 
@@ -492,18 +566,26 @@ def cmd_inspect_trace(episode_id: str, output: str | None):
 # ============= Validate Command =============
 
 
-def cmd_validate(csv: str, questions_file: str | None, question: str | None, index: int, hint: str | None):
+def cmd_validate(
+    csv: str,
+    questions_file: str | None,
+    question: str | None,
+    index: int,
+    hint: str | None,
+):
     """Validate a single question for debugging."""
     import asyncio
     from src.datagen.validate_question import validate_question
 
-    return asyncio.run(validate_question(
-        csv_path=csv,
-        questions_file=questions_file,
-        question_text=question,
-        index=index,
-        hint=hint,
-    ))
+    return asyncio.run(
+        validate_question(
+            csv_path=csv,
+            questions_file=questions_file,
+            question_text=question,
+            index=index,
+            hint=hint,
+        )
+    )
 
 
 # ============= Stats Command =============
@@ -542,7 +624,9 @@ def cmd_stats(questions: bool, episodes: bool, gaps: bool):
 
 def cmd_profiler(tool: str, episodes_dir: str | None, max_k: int | None):
     """Run pipeline profiler tools."""
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "pipeline_profiler.py"
+    script_path = (
+        Path(__file__).resolve().parents[1] / "scripts" / "pipeline_profiler.py"
+    )
     if not script_path.exists():
         console.print(f"[red]Profiler script not found: {script_path}[/red]")
         return 1
@@ -563,10 +647,12 @@ def cmd_profiler(tool: str, episodes_dir: str | None, max_k: int | None):
 def interactive_menu():
     """Main interactive menu with arrow key navigation."""
     console.print()
-    console.print(Panel.fit(
-        "[bold cyan]csv-agent[/bold cyan] Data Generation Pipeline\n"
-        "[dim]Use arrow keys to navigate, Enter to select[/dim]",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold cyan]csv-agent[/bold cyan] Data Generation Pipeline\n"
+            "[dim]Use arrow keys to navigate, Enter to select[/dim]",
+        )
+    )
 
     while True:
         choice = questionary.select(
@@ -617,7 +703,9 @@ def interactive_menu():
             _interactive_inspect_trace()
 
         elif choice == "validate":
-            console.print("[yellow]Use CLI for validate: csvagent validate --csv PATH[/yellow]")
+            console.print(
+                "[yellow]Use CLI for validate: csvagent validate --csv PATH[/yellow]"
+            )
 
         elif choice == "stats":
             cmd_stats(questions=False, episodes=False, gaps=True)
@@ -633,28 +721,26 @@ def _interactive_generate_questions():
             questionary.Choice("Synthetic (fast, deterministic)", value="synth"),
             questionary.Choice("LLM-based (slow, exploratory)", value="llm"),
             questionary.Choice("Both", value="both"),
-        ]
+        ],
     ).ask()
 
     if source is None:
         return
 
     max_datasets_str = questionary.text(
-        "Limit datasets? (Enter for all):",
-        default=""
+        "Limit datasets? (Enter for all):", default=""
     ).ask()
 
     max_datasets = int(max_datasets_str) if max_datasets_str else None
 
-    dry_run = questionary.confirm(
-        "Dry run (preview only)?",
-        default=False
-    ).ask()
+    dry_run = questionary.confirm("Dry run (preview only)?", default=False).ask()
 
     synth = source in ("synth", "both")
     llm = source in ("llm", "both")
 
-    cmd_generate_questions(synth=synth, llm=llm, max_datasets=max_datasets, dry_run=dry_run)
+    cmd_generate_questions(
+        synth=synth, llm=llm, max_datasets=max_datasets, dry_run=dry_run
+    )
 
 
 def _interactive_generate_episodes():
@@ -665,28 +751,26 @@ def _interactive_generate_episodes():
             questionary.Choice("Synthetic questions", value="synth"),
             questionary.Choice("LLM questions", value="llm"),
             questionary.Choice("Both", value="both"),
-        ]
+        ],
     ).ask()
 
     if source is None:
         return
 
     max_q_str = questionary.text(
-        "Max questions per dataset? (Enter for all):",
-        default=""
+        "Max questions per dataset? (Enter for all):", default=""
     ).ask()
 
     max_questions = int(max_q_str) if max_q_str else None
 
-    dry_run = questionary.confirm(
-        "Dry run (preview only)?",
-        default=False
-    ).ask()
+    dry_run = questionary.confirm("Dry run (preview only)?", default=False).ask()
 
     synth = source in ("synth", "both")
     llm = source in ("llm", "both")
 
-    cmd_generate_episodes(synth=synth, llm=llm, max_questions=max_questions, dry_run=dry_run)
+    cmd_generate_episodes(
+        synth=synth, llm=llm, max_questions=max_questions, dry_run=dry_run
+    )
 
 
 def _interactive_run():
@@ -697,36 +781,28 @@ def _interactive_run():
             questionary.Choice("Both (synthetic + LLM)", value="both"),
             questionary.Choice("Synthetic only", value="synth"),
             questionary.Choice("LLM only", value="llm"),
-        ]
+        ],
     ).ask()
 
     if mode is None:
         return
 
     triangulate = questionary.confirm(
-        "Skip question generation (episodes only)?",
-        default=False
+        "Skip question generation (episodes only)?", default=False
     ).ask()
 
     test = questionary.confirm(
-        "Test mode (1 dataset, 1 question)?",
-        default=False
+        "Test mode (1 dataset, 1 question)?", default=False
     ).ask()
 
-    dry_run = questionary.confirm(
-        "Dry run (preview only)?",
-        default=False
-    ).ask()
+    dry_run = questionary.confirm("Dry run (preview only)?", default=False).ask()
 
     cmd_run(mode=mode, triangulate=triangulate, test=test, dry_run=dry_run)
 
 
 def _interactive_inspect_questions():
     """Interactive question inspection."""
-    source = questionary.select(
-        "Question source:",
-        choices=["synthetic", "llm"]
-    ).ask()
+    source = questionary.select("Question source:", choices=["synthetic", "llm"]).ask()
 
     if source is None:
         return
@@ -770,7 +846,7 @@ Examples:
   csvagent run --both --test
   csvagent inspect questions --source synthetic
   csvagent inspect trace abc123
-        """
+        """,
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -781,21 +857,29 @@ Examples:
     subparsers.add_parser("progress", help="Detailed progress with estimates")
 
     # generate
-    gen_parser = subparsers.add_parser("generate", help="Generate questions or episodes")
+    gen_parser = subparsers.add_parser(
+        "generate", help="Generate questions or episodes"
+    )
     gen_sub = gen_parser.add_subparsers(dest="gen_type", required=True)
 
     q_parser = gen_sub.add_parser("questions", help="Generate questions")
-    q_parser.add_argument("--synth", action="store_true", help="Synthetic (template-based)")
+    q_parser.add_argument(
+        "--synth", action="store_true", help="Synthetic (template-based)"
+    )
     q_parser.add_argument("--llm", action="store_true", help="LLM exploration")
     q_parser.add_argument("--max-datasets", type=int, help="Limit datasets")
     q_parser.add_argument("--dry-run", action="store_true", help="Preview only")
 
     e_parser = gen_sub.add_parser("episodes", help="Generate episodes")
-    e_parser.add_argument("--synth", action="store_true", help="From synthetic questions")
+    e_parser.add_argument(
+        "--synth", action="store_true", help="From synthetic questions"
+    )
     e_parser.add_argument("--llm", action="store_true", help="From LLM questions")
     e_parser.add_argument("--max-questions", type=int, help="Max per dataset")
     e_parser.add_argument("--dry-run", action="store_true", help="Preview only")
-    e_parser.add_argument("--fresh", action="store_true", help="Start fresh (overwrite existing)")
+    e_parser.add_argument(
+        "--fresh", action="store_true", help="Start fresh (overwrite existing)"
+    )
 
     # run
     run_parser = subparsers.add_parser("run", help="Run full pipeline")
@@ -815,7 +899,9 @@ Examples:
     iq_parser = insp_sub.add_parser("questions", help="Preview questions")
     iq_parser.add_argument("--dataset", help="Specific dataset")
     iq_parser.add_argument("--sample", type=int, default=5, help="Number to show")
-    iq_parser.add_argument("--source", choices=["synthetic", "llm"], default="synthetic")
+    iq_parser.add_argument(
+        "--source", choices=["synthetic", "llm"], default="synthetic"
+    )
     iq_parser.add_argument("--show-hint", action="store_true")
     iq_parser.add_argument("--show-answer", action="store_true")
 
@@ -861,7 +947,9 @@ Examples:
         help="Profiler tool to run",
     )
     prof_parser.add_argument("--episodes-dir", help="Episodes directory")
-    prof_parser.add_argument("--max-k", type=int, default=None, help="Max k for triangulation profiling")
+    prof_parser.add_argument(
+        "--max-k", type=int, default=None, help="Max k for triangulation profiling"
+    )
 
     return parser
 

@@ -31,9 +31,9 @@ def run_stage(name: str, cmd: list[str]) -> bool:
         1 = partial success (some failures, but output generated)
         2+ = total failure (no output)
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {name}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     start = time.time()
     result = subprocess.run(cmd)
@@ -96,9 +96,15 @@ def main(
     # Stage 2: Synthetic Episodes
     if run_synthetic:
         cmd = [
-            "uv", "run", "python", "-m", "src.datagen.synthetic_episodes",
-            "--questions-dir", str(config.questions_synthetic_dir),
-            "--output", str(config.episodes_synthetic_jsonl),
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "src.datagen.validate_synthetic",
+            "--questions-dir",
+            str(config.questions_synthetic_dir),
+            "--output",
+            str(config.episodes_synthetic_jsonl),
         ]
         if max_questions:
             cmd.extend(["--max-questions", str(max_questions)])
@@ -121,9 +127,15 @@ def main(
     # Stage 4: LLM Episodes (with triangulation)
     if run_llm:
         cmd = [
-            "uv", "run", "python", "-m", "src.datagen.episode_gen",
-            "--questions-dir", str(config.questions_llm_dir),
-            "--output", str(config.episodes_llm_jsonl),
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "src.datagen.episode_gen",
+            "--questions-dir",
+            str(config.questions_llm_dir),
+            "--output",
+            str(config.episodes_llm_jsonl),
             "--skip-difficulty-filter",
         ]
         if max_questions:
@@ -137,9 +149,9 @@ def main(
             stages_failed += 1
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  PIPELINE COMPLETE")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Stages run: {stages_run}")
     print(f"  Stages failed: {stages_failed}")
 

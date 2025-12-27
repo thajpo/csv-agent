@@ -8,6 +8,7 @@ This script uses an LLM to:
 
 Configuration is managed via src.core.config.
 """
+
 import asyncio
 import json
 import re
@@ -17,7 +18,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
-from src.datagen.ui import QuestionGenUI
+from src.datagen.pipeline_ui import QuestionGenUI
 from src.core.config import config
 
 from src.envs.csv_env import LocalCSVAnalysisEnv
@@ -25,7 +26,7 @@ from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
 from src.core.types import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, get_exploration_continue_msg
-from src.utils.interaction import parse_execution_result, extract_python_cells
+from src.utils.parsing import parse_execution_result, extract_python_cells
 
 # Rebuild Pydantic model to resolve forward reference to CodeCellResult
 ExplorationTurn.model_rebuild()
@@ -58,16 +59,17 @@ def try_parse_questions(response: str) -> list[dict] | None:
     Parse questions from response. Tries multiple formats for robustness.
     Output is always normalized to the same structure regardless of input format.
     """
+
     def validate_questions(questions: list) -> bool:
         """Check if questions list has valid structure."""
         return all(
-            isinstance(q, dict) and
-            all(key in q for key in ["question", "hint", "n_steps", "difficulty"])
+            isinstance(q, dict)
+            and all(key in q for key in ["question", "hint", "n_steps", "difficulty"])
             for q in questions
         )
 
     # Strategy 1: Look for ```json fenced blocks (preferred format)
-    json_pattern = r'```json\s*\n(.*?)```'
+    json_pattern = r"```json\s*\n(.*?)```"
     matches = re.findall(json_pattern, response, re.DOTALL)
     if matches:
         try:
@@ -91,7 +93,7 @@ def try_parse_questions(response: str) -> list[dict] | None:
             pass  # Strategy failed, try next
 
     # Strategy 3: Look for Python dict assignment
-    python_dict_pattern = r'(?:questions|output)\s*=\s*(\{.*?\})'
+    python_dict_pattern = r"(?:questions|output)\s*=\s*(\{.*?\})"
     matches = re.findall(python_dict_pattern, response, re.DOTALL)
     if matches:
         try:
@@ -105,7 +107,9 @@ def try_parse_questions(response: str) -> list[dict] | None:
     return None
 
 
-async def force_question_generation(llm: APILLM, conversation: ConversationHistory, num_questions: int = 30) -> list[dict]:
+async def force_question_generation(
+    llm: APILLM, conversation: ConversationHistory, num_questions: int = 30
+) -> list[dict]:
     """
     If model hasn't generated questions by max_turns, force it with a direct prompt.
 
@@ -122,7 +126,9 @@ async def force_question_generation(llm: APILLM, conversation: ConversationHisto
     questions = try_parse_questions(response)
 
     if not questions:
-        raise RuntimeError("Model failed to generate valid questions even after forcing. Check model output.")
+        raise RuntimeError(
+            "Model failed to generate valid questions even after forcing. Check model output."
+        )
 
     return questions
 
@@ -134,7 +140,7 @@ async def explore_and_generate_questions(
     temperature: float = 0.7,
     max_tokens: int = 6000,
     output_dir: str = ".",
-    dataset_description: str = ""
+    dataset_description: str = "",
 ) -> tuple[list[dict], ExplorationTrace]:
     """
     LLM explores dataset and generates questions.
@@ -159,10 +165,13 @@ async def explore_and_generate_questions(
     env = LocalCSVAnalysisEnv(csv_path=csv_path)
     state = {}
     state = await env.setup_state(state)
-    
+
     ui.print_status(f"CSVAnalysisEnv initialized with sandbox")
-    
-    llm = APILLM(model=model, sampling_args={"temperature": temperature, "max_tokens": max_tokens})
+
+    llm = APILLM(
+        model=model,
+        sampling_args={"temperature": temperature, "max_tokens": max_tokens},
+    )
 
     # Get pipeline parameters from config
     num_questions = config.num_questions_to_generate
@@ -204,14 +213,14 @@ async def explore_and_generate_questions(
                     sandbox_id=state["sandbox_id"],
                     python_state=state["python_state"],
                 )
-                
+
                 # result is now CodeCellResult object
                 result = parse_execution_result(output)
                 result.code = code
-                # If success, use stdout, else keep output in stderr? 
+                # If success, use stdout, else keep output in stderr?
                 # Actually parse_execution_result handles this splitting already.
                 # Just ensure code is set.
-                
+
                 execution_results.append(result)
 
                 if result.success:
@@ -225,27 +234,37 @@ async def explore_and_generate_questions(
                 reasoning=response,
                 code_cells=code_cells,
                 execution_results=execution_results,
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
             exploration_turns.append(turn)
 
             # Check for completion
             if "<DONE>" in response or "</DONE>" in response:
                 if turn_num < min_exploration_turns:
-                    ui.print_warning(f"Model tried to finish too early (turn {turn_num + 1}/{min_exploration_turns} minimum)")
-                    ui.print_status("Rejecting early completion - continuing exploration")
+                    ui.print_warning(
+                        f"Model tried to finish too early (turn {turn_num + 1}/{min_exploration_turns} minimum)"
+                    )
+                    ui.print_status(
+                        "Rejecting early completion - continuing exploration"
+                    )
                 else:
                     ui.print_success("Model signaled completion with <DONE>")
                     questions_generated = try_parse_questions(response)
                     if questions_generated:
-                        ui.print_success(f"Successfully extracted {len(questions_generated)} questions!")
+                        ui.print_success(
+                            f"Successfully extracted {len(questions_generated)} questions!"
+                        )
                         break
                     else:
-                        ui.print_error("Found <DONE> but couldn't parse questions from response")
+                        ui.print_error(
+                            "Found <DONE> but couldn't parse questions from response"
+                        )
 
             # Build feedback
             feedback = build_execution_feedback(execution_results)
-            feedback += get_exploration_continue_msg(turn_num, min_exploration_turns, num_questions)
+            feedback += get_exploration_continue_msg(
+                turn_num, min_exploration_turns, num_questions
+            )
 
             conversation.add_assistant_response(response)
             conversation.add_user_feedback(feedback)
@@ -259,7 +278,9 @@ async def explore_and_generate_questions(
     # 3. Validate we got questions
     if not questions_generated:
         ui.print_warning("Model didn't generate questions. Forcing...")
-        questions_generated = await force_question_generation(llm, conversation, num_questions)
+        questions_generated = await force_question_generation(
+            llm, conversation, num_questions
+        )
 
     # 4. Create trace
     trace = ExplorationTrace(
@@ -267,7 +288,7 @@ async def explore_and_generate_questions(
         turns=exploration_turns,
         questions_generated=questions_generated,
         total_turns=len(exploration_turns),
-        timestamp=datetime.now()
+        timestamp=datetime.now(),
     )
 
     # 5. Save outputs
@@ -276,22 +297,23 @@ async def explore_and_generate_questions(
 
     # Read column names for fingerprinting (validates questions match dataset)
     import pandas as pd
+
     try:
         df_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
     except UnicodeDecodeError:
-        df_columns = pd.read_csv(csv_path, nrows=0, encoding='latin-1').columns.tolist()
+        df_columns = pd.read_csv(csv_path, nrows=0, encoding="latin-1").columns.tolist()
 
     questions_file = output_path / "questions.json"
     questions_payload = {
         "dataset_columns": df_columns,
         "questions": questions_generated,
     }
-    with open(questions_file, 'w') as f:
+    with open(questions_file, "w") as f:
         json.dump(questions_payload, f, indent=2)
     ui.print_saved_file(questions_file)
 
     trace_file = output_path / "exploration_trace.json"
-    with open(trace_file, 'w') as f:
+    with open(trace_file, "w") as f:
         json.dump(trace.model_dump(), f, indent=2, default=str)
     ui.print_saved_file(trace_file)
 
@@ -330,12 +352,15 @@ async def process_single_dataset(
                 dataset_description=dataset_description,
             )
 
-            ui.print_success(f"✓ [{index}/{total}] {dataset_name}: {len(questions)} questions")
+            ui.print_success(
+                f"✓ [{index}/{total}] {dataset_name}: {len(questions)} questions"
+            )
             return (dataset_name, True, len(questions))
 
         except Exception as e:
             ui.print_error(f"✗ [{index}/{total}] {dataset_name}: {e}")
             import traceback
+
             traceback.print_exc()
             return (dataset_name, False, None)
 
@@ -414,7 +439,9 @@ async def run_parallel_generation(
         return 0, 0
 
     # Run all tasks concurrently (semaphore limits actual parallelism)
-    ui.print_header(f"Processing {len(tasks)} datasets with {max_concurrent} concurrent workers")
+    ui.print_header(
+        f"Processing {len(tasks)} datasets with {max_concurrent} concurrent workers"
+    )
     results = await asyncio.gather(*tasks)
 
     success_count = sum(1 for _, success, _ in results if success)
@@ -447,7 +474,9 @@ def main(max_datasets: int | None = None):
 
     # Final summary
     ui.print_summary_header()
-    ui.print_status(f"Processed {len(csv_sources)} sources: {success_count} success, {failure_count} failed")
+    ui.print_status(
+        f"Processed {len(csv_sources)} sources: {success_count} success, {failure_count} failed"
+    )
 
     # Exit codes: 0=success, 1=partial success (some data), 2=total failure
     if success_count == 0:
@@ -459,7 +488,9 @@ def main(max_datasets: int | None = None):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="LLM-based question generator for CSV datasets.")
+    parser = argparse.ArgumentParser(
+        description="LLM-based question generator for CSV datasets."
+    )
     parser.add_argument(
         "--max-datasets",
         type=int,
