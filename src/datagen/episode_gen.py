@@ -33,7 +33,12 @@ from src.core.types import (
     BatchTriangulationResult,
 )
 from src.core.config import config
-from src.utils.docker import cleanup_csv_sandbox_containers, cleanup_session, generate_session_id
+from src.utils.docker import (
+    cleanup_csv_sandbox_containers,
+    cleanup_session,
+    generate_session_id,
+    check_resource_availability,
+)
 from src.envs.container_pool import ContainerPool
 
 
@@ -481,6 +486,21 @@ async def main(
                 )
     else:
         max_consistency = n_consistency
+
+    # Pre-flight resource check
+    resource_status = check_resource_availability(max_concurrent)
+    if resource_status.warning:
+        ui.base.print_warning(f"⚠️  {resource_status.warning}")
+        if resource_status.recommended_max_containers < max_concurrent:
+            ui.base.print_warning(
+                f"   Consider: --max-concurrent {resource_status.recommended_max_containers}"
+            )
+    elif resource_status.existing_containers > 0:
+        ui.base.print_status(
+            f"Note: {resource_status.existing_containers} containers from other sessions, "
+            f"{resource_status.available_memory_gb:.1f}GB available"
+        )
+
     ui.base.print_section(
         f"Processing {len(tasks)} CSVs ({max_concurrent} containers pooled)"
     )
