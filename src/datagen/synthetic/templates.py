@@ -312,7 +312,7 @@ submit(round(result, 3))
 STRONGEST_CORRELATION = CompositionTemplate(
     name="strongest_correlation",
     description="Find the pair of numeric columns with the strongest correlation",
-    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "correlation" (the correlation coefficient rounded to 3 decimal places). Example: {"columns": ["col_a", "col_b"], "correlation": 0.847}',
+    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "correlation" (the correlation coefficient rounded to 4 decimal places). Example: {"columns": ["col_a", "col_b"], "correlation": 0.8470}',
     code_template="""
 # Step 1: Compute correlation matrix
 numeric_cols = df.select_dtypes('number')
@@ -331,7 +331,7 @@ correlation_value = corr_matrix.loc[max_corr_idx[0], max_corr_idx[1]]
 hook(correlation_value, "correlation_value extracted", name='correlation_value', depends_on=['max_corr_idx'])
 print(f"Correlation: {correlation_value:.4f}")
 
-submit({"columns": sorted(list(max_corr_idx)), "correlation": round(float(correlation_value), 3)})
+submit({"columns": sorted(list(max_corr_idx)), "correlation": round(float(correlation_value), 4)})
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 3,
@@ -342,7 +342,7 @@ submit({"columns": sorted(list(max_corr_idx)), "correlation": round(float(correl
 WEAKEST_CORRELATION = CompositionTemplate(
     name="weakest_correlation",
     description="Find the pair of numeric columns with the weakest (closest to zero) correlation",
-    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "correlation" (the absolute correlation value rounded to 3 decimal places). Example: {"columns": ["col_a", "col_b"], "correlation": 0.012}',
+    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "correlation" (the absolute correlation value rounded to 4 decimal places). Example: {"columns": ["col_a", "col_b"], "correlation": 0.0120}',
     code_template="""
 # Step 1: Compute correlation matrix
 numeric_cols = df.select_dtypes('number')
@@ -360,7 +360,7 @@ correlation_value = corr_matrix.loc[min_corr_idx[0], min_corr_idx[1]]
 hook(correlation_value, "correlation_value extracted", name='correlation_value', depends_on=['min_corr_idx'])
 print(f"Correlation: {correlation_value:.4f}")
 
-submit({"columns": sorted(list(min_corr_idx)), "correlation": round(float(correlation_value), 3)})
+submit({"columns": sorted(list(min_corr_idx)), "correlation": round(float(correlation_value), 4)})
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 3,
@@ -611,7 +611,7 @@ else:
 CORRELATION_AFTER_OUTLIER_REMOVAL = CompositionTemplate(
     name="correlation_after_outlier_removal",
     description="Find strongest correlation, remove outliers from those columns, recompute correlation",
-    output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "original_correlation" (rounded to 3 decimals), "outliers_removed" (integer count), and "clean_correlation" (rounded to 3 decimals). Example: {"columns": ["col_a", "col_b"], "original_correlation": 0.847, "outliers_removed": 12, "clean_correlation": 0.891}',
+    output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "original_correlation" (rounded to 4 decimals), "outliers_removed" (integer count), and "clean_correlation" (rounded to 4 decimals). Example: {"columns": ["col_a", "col_b"], "original_correlation": 0.8470, "outliers_removed": 12, "clean_correlation": 0.8910}',
     code_template="""
 # Step 1: Find the strongest correlation pair
 numeric_cols = df.select_dtypes('number')
@@ -638,9 +638,9 @@ print(f"Correlation after cleaning: {clean_corr:.4f}")
 
 submit({
     "columns": sorted([col1, col2]),
-    "original_correlation": round(float(original_corr), 3),
+    "original_correlation": round(float(original_corr), 4),
     "outliers_removed": int(rows_removed),
-    "clean_correlation": round(float(clean_corr), 3)
+    "clean_correlation": round(float(clean_corr), 4)
 })
 """.strip(),
     output_type="dict",
@@ -657,10 +657,11 @@ submit({
 REGRESSION_MOST_PREDICTIVE = CompositionTemplate(
     name="regression_most_predictive",
     description="Find the most predictive feature via correlation, build regression, report R-squared",
-    output_schema='A JSON object with exactly 6 keys: "target" (column name), "best_predictor" (column name), "correlation" (rounded to 3 decimals), "r_squared" (rounded to 4 decimals), "coefficient" (rounded to 4 decimals), and "p_value" (rounded to 6 decimals). Example: {"target": "price", "best_predictor": "sqft", "correlation": 0.834, "r_squared": 0.6956, "coefficient": 135.2847, "p_value": 0.000001}',
+    output_schema='A JSON object with exactly 6 keys: "target" (column name), "best_predictor" (column name), "correlation" (rounded to 4 decimals), "r_squared" (rounded to 4 decimals), "coefficient" (rounded to 4 decimals), and "p_value" (rounded to 6 decimals). Example: {"target": "price", "best_predictor": "sqft", "correlation": 0.8340, "r_squared": 0.6956, "coefficient": 135.2847, "p_value": 0.000001}',
     code_template="""
-# Step 1: Identify numeric columns
-numeric_cols = df.select_dtypes('number').columns.tolist()
+# Step 1: Identify numeric columns (exclude index-like columns)
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
 print(f"Numeric columns: {len(numeric_cols)}")
 
@@ -703,7 +704,7 @@ hook({"coef": float(coef), "p_value": float(p_value)}, "regression stats", name=
 submit({
     "target": target_col,
     "best_predictor": best_predictor,
-    "correlation": round(float(best_corr), 3),
+    "correlation": round(float(best_corr), 4),
     "r_squared": round(float(r_squared), 4),
     "coefficient": round(float(coef), 4),
     "p_value": round(float(p_value), 6)
@@ -721,7 +722,8 @@ TTEST_DISCOVERED_GROUPS = CompositionTemplate(
     output_schema='A JSON object with exactly 9 keys: "target_column", "grouping_column", "group1", "group2", "mean1" (rounded to 4 decimals), "mean2" (rounded to 4 decimals), "t_statistic" (rounded to 4 decimals), "p_value" (rounded to 6 decimals), and "significant" (boolean, true if p < 0.05). Example: {"target_column": "score", "grouping_column": "gender", "group1": "M", "group2": "F", "mean1": 75.4321, "mean2": 78.1234, "t_statistic": -2.3456, "p_value": 0.019234, "significant": true}',
     code_template="""
 # Step 1: Find numeric column with highest variance
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column (highest variance)", name='target_col')
@@ -799,7 +801,8 @@ BOOTSTRAP_CI_DISCOVERED = CompositionTemplate(
     output_schema='A JSON object with exactly 7 keys: "column" (name of most skewed column), "skewness" (rounded to 4 decimals), "mean" (rounded to 4 decimals), "ci_lower" (lower bound of 95% CI, rounded to 4 decimals), "ci_upper" (upper bound, rounded to 4 decimals), "std_error" (bootstrap standard error, rounded to 4 decimals), and "n_bootstrap" (integer, the number of bootstrap samples). Example: {"column": "income", "skewness": 2.3456, "mean": 50000.1234, "ci_lower": 48500.5678, "ci_upper": 51500.9012, "std_error": 750.3456, "n_bootstrap": 1000}',
     code_template="""
 # Step 1: Identify numeric columns
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
 
 # Step 2: Compute skewness for each column
@@ -871,7 +874,8 @@ ANOVA_DISCOVERED_GROUPS = CompositionTemplate(
     output_schema='A JSON object with exactly 11 keys: "target_column", "grouping_column", "n_groups" (integer), "f_statistic" (rounded to 4 decimals), "p_value" (rounded to 6 decimals), "significant" (boolean), "best_group" (category with highest mean), "best_mean" (rounded to 4 decimals), "worst_group" (category with lowest mean), "worst_mean" (rounded to 4 decimals), and "eta_squared" (effect size, rounded to 4 decimals). Example: {"target_column": "sales", "grouping_column": "region", "n_groups": 4, "f_statistic": 15.2345, "p_value": 0.000012, "significant": true, "best_group": "West", "best_mean": 1234.5678, "worst_group": "East", "worst_mean": 890.1234, "eta_squared": 0.1523}',
     code_template="""
 # Step 1: Find numeric column with highest variance
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column (highest variance)", name='target_col')
@@ -947,10 +951,11 @@ else:
 MULTIPLE_REGRESSION_TOP_PREDICTORS = CompositionTemplate(
     name="multiple_regression_top_predictors",
     description="Find top 3 predictors via correlation, build multiple regression, report adjusted R-squared",
-    output_schema='A JSON object with exactly 6 keys: "target" (column name), "predictors" (list of 3 column names), "r_squared" (rounded to 4 decimals), "adj_r_squared" (rounded to 4 decimals), "n_significant" (integer count of predictors with p < 0.05), "coefficients" (dict mapping "const" and predictor names to coefficients rounded to 4 decimals), and "p_values" (dict mapping "const" and predictor names to p-values rounded to 6 decimals). Example: {"target": "price", "predictors": ["sqft", "bedrooms", "age"], "r_squared": 0.7234, "adj_r_squared": 0.7156, "n_significant": 2, "coefficients": {"const": 10000.0, "sqft": 123.45, "bedrooms": 5000.12, "age": -200.34}, "p_values": {"const": 0.0, "sqft": 0.000001, "bedrooms": 0.023456, "age": 0.156789}}',
+    output_schema='A JSON object with exactly 5 keys: "target" (column name), "predictors" (list of 3 column names, alphabetically sorted), "r_squared" (rounded to 4 decimals), "adj_r_squared" (rounded to 4 decimals), and "n_significant" (integer count of predictors with p < 0.05). Example: {"target": "price", "predictors": ["age", "bedrooms", "sqft"], "r_squared": 0.7234, "adj_r_squared": 0.7156, "n_significant": 2}',
     code_template="""
 # Step 1: Identify numeric columns
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
 print(f"Numeric columns: {len(numeric_cols)}")
 
@@ -992,28 +997,21 @@ else:
     hook({"r_squared": float(model.rsquared), "adj_r_squared": float(model.rsquared_adj)}, "model fit", name='model_fit', depends_on=['n_samples'])
     print(f"R-squared: {model.rsquared:.4f}, Adjusted: {model.rsquared_adj:.4f}")
 
-    # Step 8: Extract coefficients and p-values (including const)
-    all_params = ['const'] + top_3
-    coefs = {col: {"coef": float(model.params[col]), "p_value": float(model.pvalues[col])} for col in all_params}
-    hook(coefs, "coefficients and p-values", name='coefficients', depends_on=['model_fit'])
-
-    # Step 9: Count significant predictors (excluding const)
+    # Step 8: Count significant predictors
     n_significant = sum(1 for col in top_3 if model.pvalues[col] < 0.05)
-    hook(n_significant, "significant predictors at alpha=0.05", name='n_significant', depends_on=['coefficients'])
+    hook(n_significant, "significant predictors at alpha=0.05", name='n_significant', depends_on=['model_fit'])
 
     submit({
         "target": target_col,
-        "predictors": top_3,
+        "predictors": sorted(top_3),
         "r_squared": round(float(model.rsquared), 4),
         "adj_r_squared": round(float(model.rsquared_adj), 4),
-        "n_significant": n_significant,
-        "coefficients": {col: round(coefs[col]["coef"], 4) for col in all_params},
-        "p_values": {col: round(coefs[col]["p_value"], 6) for col in all_params}
+        "n_significant": n_significant
     })
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 4,
-    n_steps=10,
+    n_steps=9,
     difficulty="VERY_HARD",
 )
 
@@ -1083,7 +1081,8 @@ MANN_WHITNEY_U_TEST = CompositionTemplate(
     output_schema='A JSON object with exactly 8 keys: "target_column", "grouping_column", "group1", "group2", "median1" (rounded to 4 decimals), "median2" (rounded to 4 decimals), "u_statistic" (rounded to 2 decimals), and "p_value" (rounded to 6 decimals). Example: {"target_column": "score", "grouping_column": "treatment", "group1": "control", "group2": "experimental", "median1": 72.5000, "median2": 78.0000, "u_statistic": 1234.50, "p_value": 0.034567}',
     code_template="""
 # Step 1: Find most skewed numeric column (non-parametric tests suit skewed data)
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 skewness = {col: abs(df[col].skew()) for col in numeric_cols if not df[col].isna().all()}
 target_col = max(skewness, key=skewness.get)
 hook({"target": target_col, "skewness": skewness[target_col]}, "target column (most skewed)", name='target_col')
@@ -1148,7 +1147,8 @@ SPEARMAN_RANK_CORRELATION = CompositionTemplate(
     output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "spearman_rho" (correlation coefficient rounded to 4 decimals), "p_value" (rounded to 6 decimals), and "interpretation" (string: "strong", "moderate", "weak", or "negligible"). Example: {"columns": ["age", "income"], "spearman_rho": 0.7234, "p_value": 0.000001, "interpretation": "strong"}',
     code_template="""
 # Step 1: Get numeric columns
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 hook(len(numeric_cols), "number of numeric columns", name='n_cols')
 print(f"Numeric columns: {len(numeric_cols)}")
 
@@ -1199,7 +1199,8 @@ COEFFICIENT_OF_VARIATION = CompositionTemplate(
     output_schema='A JSON object with exactly 4 keys: "column" (name of column with highest CV), "cv" (coefficient of variation as percentage rounded to 2 decimals), "mean" (rounded to 4 decimals), and "std" (rounded to 4 decimals). Example: {"column": "price", "cv": 45.23, "mean": 1234.5678, "std": 558.4567}',
     code_template="""
 # Step 1: Get numeric columns with non-zero means
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 cv_values = {}
 
 for col in numeric_cols:
@@ -1245,7 +1246,8 @@ IQR_OUTLIER_ANALYSIS = CompositionTemplate(
     output_schema='A JSON object with exactly 7 keys: "column" (analyzed column), "q1" (25th percentile rounded to 4 decimals), "q3" (75th percentile rounded to 4 decimals), "iqr" (rounded to 4 decimals), "lower_fence" (rounded to 4 decimals), "upper_fence" (rounded to 4 decimals), and "n_outliers" (integer count). Example: {"column": "salary", "q1": 45000.0000, "q3": 75000.0000, "iqr": 30000.0000, "lower_fence": 0.0000, "upper_fence": 120000.0000, "n_outliers": 23}',
     code_template="""
 # Step 1: Find column with highest variance
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column (highest variance)", name='target_col')
@@ -1292,7 +1294,8 @@ PERCENTILE_RANKING = CompositionTemplate(
     output_schema='A JSON object with exactly 6 keys: "column" (analyzed column), "p10" (10th percentile rounded to 4 decimals), "p25" (25th percentile), "p50" (median), "p75" (75th percentile), and "p90" (90th percentile). Example: {"column": "income", "p10": 25000.0000, "p25": 40000.0000, "p50": 55000.0000, "p75": 75000.0000, "p90": 100000.0000}',
     code_template="""
 # Step 1: Find column with largest range
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 ranges = {col: df[col].max() - df[col].min() for col in numeric_cols}
 target_col = max(ranges, key=ranges.get)
 hook({"column": target_col, "range": ranges[target_col]}, "column with largest range", name='target_col')
@@ -1327,7 +1330,8 @@ DESCRIPTIVE_SUMMARY = CompositionTemplate(
     output_schema='A JSON object with exactly 9 keys: "column", "count" (integer), "mean" (rounded to 4 decimals), "std", "min", "max", "median", "skewness", and "kurtosis" (all rounded to 4 decimals). Example: {"column": "age", "count": 1000, "mean": 35.4567, "std": 12.3456, "min": 18.0000, "max": 85.0000, "median": 34.0000, "skewness": 0.5678, "kurtosis": -0.2345}',
     code_template="""
 # Step 1: Find column with highest variance
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column", name='target_col')
@@ -1373,7 +1377,8 @@ LEVENE_VARIANCE_TEST = CompositionTemplate(
     output_schema='A JSON object with exactly 7 keys: "target_column", "grouping_column", "n_groups" (integer), "levene_statistic" (rounded to 4 decimals), "p_value" (rounded to 6 decimals), "variances_equal" (boolean, true if p >= 0.05), and "group_variances" (dict mapping group names to variance rounded to 4 decimals). Example: {"target_column": "score", "grouping_column": "class", "n_groups": 3, "levene_statistic": 2.3456, "p_value": 0.098765, "variances_equal": true, "group_variances": {"A": 123.4567, "B": 145.6789, "C": 112.3456}}',
     code_template="""
 # Step 1: Find numeric column with high variance
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column", name='target_col')
@@ -1437,7 +1442,8 @@ KOLMOGOROV_SMIRNOV_NORMALITY = CompositionTemplate(
     output_schema='A JSON object with exactly 6 keys: "column" (tested column), "ks_statistic" (rounded to 4 decimals), "p_value" (rounded to 6 decimals), "is_normal" (boolean, true if p >= 0.05), "sample_mean" (rounded to 4 decimals), and "sample_std" (rounded to 4 decimals). Example: {"column": "height", "ks_statistic": 0.0456, "p_value": 0.234567, "is_normal": true, "sample_mean": 170.1234, "sample_std": 10.5678}',
     code_template="""
 # Step 1: Find column closest to normal (lowest skewness)
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 skewness = {col: abs(df[col].skew()) for col in numeric_cols}
 target_col = min(skewness, key=skewness.get)
 hook(target_col, "target column (lowest skewness)", name='target_col')
@@ -1490,7 +1496,8 @@ PAIRED_COLUMNS_CORRELATION_CHANGE = CompositionTemplate(
     output_schema='A JSON object with exactly 5 keys: "columns" (list of 2 column names, alphabetically sorted), "original_correlation" (Pearson, rounded to 4 decimals), "log_correlation" (after log transform, rounded to 4 decimals), "improvement" (absolute difference, rounded to 4 decimals), and "transformation_helpful" (boolean, true if |log_corr| > |orig_corr|). Example: {"columns": ["income", "spending"], "original_correlation": 0.4567, "log_correlation": 0.7234, "improvement": 0.2667, "transformation_helpful": true}',
     code_template="""
 # Step 1: Find two most skewed positive columns
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 # Filter to positive columns (can take log)
 positive_cols = [c for c in numeric_cols if (df[c] > 0).all()]
 if len(positive_cols) < 2:
@@ -1549,7 +1556,8 @@ AUDIT_MISSING_IMPUTATION_EFFECT = CompositionTemplate(
     output_schema='A JSON object with exactly 6 keys: "column" (name of numeric column with highest missing_pct), "missing_pct" (rounded to 2 decimals), "imputed_count" (integer), "original_mean" (rounded to 4 decimals, computed on non-missing), "imputed_mean" (rounded to 4 decimals, mean after median imputation), and "mean_shift" (imputed_mean - original_mean, rounded to 4 decimals). Example: {"column": "age", "missing_pct": 12.50, "imputed_count": 125, "original_mean": 35.4567, "imputed_mean": 35.1023, "mean_shift": -0.3544}',
     code_template="""
 # Step 1: Find numeric column with highest missing percentage
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 missing_pcts = {col: df[col].isna().mean() * 100 for col in numeric_cols}
 target_col = max(missing_pcts, key=missing_pcts.get)
 missing_pct = missing_pcts[target_col]
@@ -1617,7 +1625,8 @@ else:
     print(f"Category column: {suitable_cat} ({df[suitable_cat].nunique()} categories)")
 
     # Step 2: Find target column (highest variance numeric)
-    numeric_cols = df.select_dtypes('number').columns.tolist()
+    numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
     variances = df[numeric_cols].var()
     target_col = variances.idxmax()
     hook(target_col, "target column", name='target_col', depends_on=['cat_col'])
@@ -1664,7 +1673,8 @@ ADAPTIVE_TWO_SAMPLE_TEST = CompositionTemplate(
     output_schema='A JSON object with exactly 10 keys: "target_column", "grouping_column", "group1", "group2", "test_used" ("t_test" or "mann_whitney_u"), "p_value" (rounded to 6 decimals), "effect_size_type" ("cohens_d" or "rank_biserial"), "effect_size" (rounded to 4 decimals), "significant" (boolean), and "assumptions_passed" (boolean). Example: {"target_column": "score", "grouping_column": "treatment", "group1": "control", "group2": "drug", "test_used": "mann_whitney_u", "p_value": 0.034567, "effect_size_type": "rank_biserial", "effect_size": 0.2451, "significant": true, "assumptions_passed": false}',
     code_template="""
 # Step 1: Find target column (prefer less skewed for interesting test choice)
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 skewness = {col: abs(df[col].skew()) for col in numeric_cols}
 target_col = min(skewness, key=skewness.get)
 hook(target_col, "target column (least skewed)", name='target_col')
@@ -1750,7 +1760,8 @@ QUANTILE_BIN_BEST_MEAN = CompositionTemplate(
     output_schema='A JSON object with exactly 5 keys: "binning_column" (string), "target_column" (string), "best_bin" (string label), "best_bin_mean" (rounded to 4 decimals), and "bin_means" (dict mapping bin labels to means rounded to 4 decimals). Example: {"binning_column": "age", "target_column": "income", "best_bin": "(45.0, 60.0]", "best_bin_mean": 75000.1234, "bin_means": {"(18.0, 30.0]": 45000.0, "(30.0, 45.0]": 52000.0}}',
     code_template="""
 # Step 1: Choose binning column (most skewed - more interesting bins)
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 if len(numeric_cols) < 2:
     submit({"error": "Need at least 2 numeric columns"})
 else:
@@ -1811,7 +1822,8 @@ ITERATIVE_OUTLIER_REMOVAL = CompositionTemplate(
     output_schema='A JSON object with exactly 5 keys: "column" (string), "iterations_used" (integer), "total_removed" (integer), "initial_mean" (rounded to 4 decimals), and "final_mean" (rounded to 4 decimals). Example: {"column": "price", "iterations_used": 3, "total_removed": 18, "initial_mean": 123.4567, "final_mean": 118.9012}',
     code_template="""
 # Step 1: Pick column with highest CV (most likely to have meaningful outliers)
-numeric_cols = df.select_dtypes('number').columns.tolist()
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
 cv_values = {}
 for col in numeric_cols:
     mean = df[col].mean()
@@ -1911,7 +1923,8 @@ else:
     print(f"Category column: {cat_col}")
 
     # Step 2: Find target column (highest variance)
-    numeric_cols = df.select_dtypes('number').columns.tolist()
+    numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
     variances = df[numeric_cols].var()
     target_col = variances.idxmax()
     hook(target_col, "target column", name='target_col', depends_on=['cat_col'])
