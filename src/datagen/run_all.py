@@ -3,15 +3,14 @@ Full pipeline orchestrator.
 
 Runs all data generation stages sequentially to avoid resource conflicts.
 
-Usage:
-    uv run python -m src.datagen.run_all --both        # Full pipeline (default)
-    uv run python -m src.datagen.run_all --synth       # Synthetic only
-    uv run python -m src.datagen.run_all --llm         # LLM only
-    uv run python -m src.datagen.run_all --triangulate # Episodes only (skip question gen)
-    uv run python -m src.datagen.run_all --test        # Quick e2e test (1 question, 1 trace)
+Usage (via CLI):
+    csvagent run --both        # Full pipeline (default)
+    csvagent run --synth       # Synthetic only
+    csvagent run --llm         # LLM only
+    csvagent run --triangulate # Episodes only (skip question gen)
+    csvagent run --test        # Quick e2e test (1 question, 1 trace)
 """
 
-import argparse
 import subprocess
 import sys
 import time
@@ -51,56 +50,31 @@ def run_stage(name: str, cmd: list[str]) -> bool:
         return False
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run full data generation pipeline")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--both",
-        action="store_true",
-        default=True,
-        help="Run both synthetic and LLM pipelines (default)",
-    )
-    mode.add_argument(
-        "--synth",
-        action="store_true",
-        help="Only run synthetic pipeline",
-    )
-    mode.add_argument(
-        "--llm",
-        action="store_true",
-        help="Only run LLM pipeline",
-    )
-    parser.add_argument(
-        "--triangulate",
-        action="store_true",
-        help="Skip question generation, only run triangulation/episodes",
-    )
-    parser.add_argument(
-        "--max-questions",
-        type=int,
-        default=None,
-        help="Limit questions per dataset",
-    )
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="Quick e2e test: 1 dataset, 1 question, 1 consistency trace",
-    )
-    args = parser.parse_args()
+def main(
+    mode: str = "both",
+    triangulate: bool = False,
+    test: bool = False,
+    max_questions: int | None = None,
+) -> int:
+    """
+    Run full data generation pipeline.
 
-    run_synthetic = args.both or args.synth
-    run_llm = args.both or args.llm
+    Args:
+        mode: "synth", "llm", or "both"
+        triangulate: Skip question generation, only run episodes
+        test: Quick e2e test (1 dataset, 1 question, 1 consistency trace)
+        max_questions: Limit questions per dataset
 
-    # Handle default case (no flags = --both)
-    if not args.synth and not args.llm:
-        run_synthetic = True
-        run_llm = True
+    Returns:
+        0 if all stages succeeded, 1 if any failed
+    """
+    run_synthetic = mode in ("synth", "both")
+    run_llm = mode in ("llm", "both")
 
     # Test mode: minimal settings for fast iteration
-    max_questions = args.max_questions
     n_consistency = None
     max_datasets = None
-    if args.test:
+    if test:
         max_questions = max_questions or 1
         n_consistency = 1
         max_datasets = 1
@@ -110,7 +84,7 @@ def main():
     stages_failed = 0
 
     # Stage 1: Synthetic Questions
-    if run_synthetic and not args.triangulate:
+    if run_synthetic and not triangulate:
         cmd = ["uv", "run", "python", "-m", "src.datagen.synthetic.generator"]
         if max_datasets:
             cmd.extend(["--max-datasets", str(max_datasets)])
@@ -135,7 +109,7 @@ def main():
             stages_failed += 1
 
     # Stage 3: LLM Questions
-    if run_llm and not args.triangulate:
+    if run_llm and not triangulate:
         cmd = ["uv", "run", "python", "-m", "src.datagen.question_gen"]
         if max_datasets:
             cmd.extend(["--max-datasets", str(max_datasets)])
@@ -184,7 +158,3 @@ def main():
     print()
 
     return 1 if stages_failed > 0 else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

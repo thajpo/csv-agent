@@ -1,11 +1,11 @@
 """
 Data generation statistics and coverage report.
 
-Usage:
-    uv run python -m src.utils.stats              # Full report
-    uv run python -m src.utils.stats --questions  # Questions only
-    uv run python -m src.utils.stats --episodes   # Episodes only
-    uv run python -m src.utils.stats --gaps       # Show gaps/missing data
+Usage (via CLI):
+    csvagent stats              # Full report
+    csvagent stats --questions  # Questions only
+    csvagent stats --episodes   # Episodes only
+    csvagent stats --gaps       # Show gaps/missing data
 """
 
 import argparse
@@ -277,5 +277,3 @@ def main():
         show_gaps(q_stats, e_stats)
 
 
-if __name__ == "__main__":
-    main()

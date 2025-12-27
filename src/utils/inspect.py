@@ -1,12 +1,12 @@
 """
 Inspect and preview generated outputs.
 
-Usage:
-    uv run python -m src.utils.inspect questions                    # Preview questions
-    uv run python -m src.utils.inspect questions --dataset titanic  # Specific dataset
-    uv run python -m src.utils.inspect episodes                     # Preview episodes
-    uv run python -m src.utils.inspect episodes --verified          # Only verified
-    uv run python -m src.utils.inspect trace EPISODE_ID             # Deep inspect trace
+Usage (via CLI):
+    csvagent inspect questions                    # Preview questions
+    csvagent inspect questions --dataset titanic  # Specific dataset
+    csvagent inspect episodes                     # Preview episodes
+    csvagent inspect episodes --verified          # Only verified
+    csvagent inspect trace EPISODE_ID             # Deep inspect trace
 """
 
 import argparse
@@ -338,5 +338,3 @@ Examples:
         inspect_trace(episode_id=args.episode_id, output=args.output)
 
 
-if __name__ == "__main__":
-    main()
