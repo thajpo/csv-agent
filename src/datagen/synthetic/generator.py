@@ -16,6 +16,7 @@ This approach guarantees:
 import argparse
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -25,10 +26,92 @@ import pandas as pd
 from src.core.config import config
 from src.core.prompts import generate_data_overview
 from src.datagen.synthetic.profiler import DataProfiler
-from src.datagen.synthetic.templates import CompositionTemplate, get_applicable_templates
+from src.datagen.synthetic.templates import (
+    CompositionTemplate,
+    get_applicable_templates,
+    get_eligible_categorical_columns,
+    get_eligible_numeric_columns,
+)
 from src.datagen.synthetic.verbalizer import QuestionVerbalizer
 from src.envs.csv_env import LocalCSVAnalysisEnv
 from src.utils.hashing import hash_artifact
+
+
+def _dataset_is_viable(profile: dict) -> tuple[bool, str]:
+    """Gate synthetic generation to avoid degenerate or unlearnable datasets."""
+    shape = profile.get("shape", {})
+    rows = shape.get("rows", 0) or 0
+    cols = shape.get("columns", 0) or 0
+
+    # Keep thresholds centralized for easy tuning.
+    if rows < 50:
+        return False, f"too few rows ({rows})"
+    if cols < 2:
+        return False, f"too few columns ({cols})"
+
+    eligible_numeric = get_eligible_numeric_columns(profile)
+    eligible_categorical = get_eligible_categorical_columns(profile)
+    if not eligible_numeric and not eligible_categorical:
+        return False, "no eligible columns after filtering ids/degenerate fields"
+
+    # Skip datasets that are essentially empty.
+    columns = profile.get("columns", {})
+    if columns:
+        high_missing = [
+            col
+            for col, info in columns.items()
+            if info.get("missing_pct", 0) >= 95
+        ]
+        if len(high_missing) == cols:
+            return False, "all columns are >=95% missing"
+
+    return True, "ok"
+
+
+def _question_is_viable(question: str, profile: dict) -> tuple[bool, str]:
+    """Reject questions that leak method details or column names."""
+    if not question or not question.strip():
+        return False, "empty question"
+
+    # Heuristic sentence count to keep prompts concise and non-procedural.
+    sentence_count = len(re.findall(r"[.!?]", question))
+    if sentence_count > 2:
+        return False, "too many sentences"
+
+    lowered = question.lower()
+    forbidden_terms = [
+        "regression",
+        "t-test",
+        "anova",
+        "p-value",
+        "chi-square",
+        "bootstrap",
+        "cross-validation",
+        "k-fold",
+        "random_state",
+        "train-test",
+        "ols",
+        "pearson",
+        "spearman",
+        "ks test",
+        "kolmogorov",
+        "levene",
+        "mann-whitney",
+        "propensity",
+        "matching",
+    ]
+    if any(term in lowered for term in forbidden_terms):
+        return False, "mentions method details"
+
+    # Avoid explicit column names in questions to keep them property-based.
+    for col in profile.get("columns", {}):
+        col_name = str(col).strip().lower()
+        if len(col_name) < 4:
+            continue
+        if col_name in lowered:
+            return False, "mentions column names"
+
+    return True, "ok"
 
 
 class CompositionalQuestionGenerator:
@@ -108,6 +191,15 @@ class CompositionalQuestionGenerator:
         print(f"Profiling dataset: {self.csv_path.name}")
         profile = self.profiler.analyze(str(self.csv_path))
         print(f"  Shape: {profile['shape']['rows']} rows x {profile['shape']['columns']} cols")
+
+        # Dataset gates: skip degenerate inputs before template selection.
+        is_viable, reason = _dataset_is_viable(profile)
+        if not is_viable:
+            print(f"  Skipping synthetic generation: {reason}")
+            return {
+                "dataset_columns": list(profile.get("columns", {}).keys()),
+                "questions": [],
+            }
 
         # 2. Get applicable templates
         templates = get_applicable_templates(profile)
@@ -194,6 +286,23 @@ class CompositionalQuestionGenerator:
         # Flatten list of lists
         questions = [q for sublist in verbalized_lists for q in sublist]
         n_templates_with_questions = sum(1 for sublist in verbalized_lists if sublist)
+
+        # Filter questions that violate the "curious, non-procedural" contract.
+        filtered = []
+        rejected = {}
+        for question in questions:
+            is_ok, reason = _question_is_viable(question.get("question", ""), profile)
+            if is_ok:
+                filtered.append(question)
+            else:
+                rejected[reason] = rejected.get(reason, 0) + 1
+
+        if rejected:
+            print("  Question filter rejections:")
+            for reason, count in sorted(rejected.items(), key=lambda x: (-x[1], x[0])):
+                print(f"    - {reason}: {count}")
+
+        questions = filtered
         print(f"  Generated {len(questions)} questions from {n_templates_with_questions}/{len(execution_results)} templates")
 
         # 5. Format output
