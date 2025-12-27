@@ -9,6 +9,9 @@ Commands:
     episodes      - Analyze episode JSONL files for data quality issues
     hooks         - Validate hook grounding in episodes
     timing        - Analyze timing distributions
+    taxonomy      - Failure taxonomy for episode traces
+    perf          - Performance summary from episode timings
+    triangulation - Profile verification vs consistency count
     silent        - Detect silent failures in pipeline logs
 """
 
@@ -21,6 +24,33 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+
+def _load_episodes(episodes_dir: Path) -> dict[str, list[dict]]:
+    """Load all episodes from JSONL files in a directory."""
+    files = list(episodes_dir.glob("*.jsonl"))
+    episodes_by_file: dict[str, list[dict]] = {}
+    for jsonl_path in files:
+        episodes = []
+        with open(jsonl_path) as f:
+            for line in f:
+                try:
+                    episodes.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        episodes_by_file[jsonl_path.name] = episodes
+    return episodes_by_file
+
+
+def _iter_episodes(episodes_dir: Path):
+    """Yield (file_name, index, episode) tuples."""
+    for jsonl_path in episodes_dir.glob("*.jsonl"):
+        with open(jsonl_path) as f:
+            for i, line in enumerate(f):
+                try:
+                    yield jsonl_path.name, i, json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
 
 def cmd_containers(args):
@@ -92,14 +122,14 @@ def cmd_episodes(args):
     print("EPISODE DATA QUALITY ANALYSIS")
     print("=" * 60)
 
-    episodes_dir = Path("data/episodes")
+    episodes_dir = Path(args.episodes_dir)
     if not episodes_dir.exists():
         print(f"Episodes directory not found: {episodes_dir}")
         return 1
 
     jsonl_files = list(episodes_dir.glob("*.jsonl"))
     if not jsonl_files:
-        print("No JSONL files found in data/episodes/")
+        print(f"No JSONL files found in {episodes_dir}")
         return 1
 
     for jsonl_path in jsonl_files:
@@ -182,11 +212,11 @@ def cmd_hooks(args):
     print("HOOK VALIDATION ANALYSIS")
     print("=" * 60)
 
-    episodes_dir = Path("data/episodes")
+    episodes_dir = Path(args.episodes_dir)
     jsonl_files = list(episodes_dir.glob("*.jsonl"))
 
     if not jsonl_files:
-        print("No episode files found")
+        print(f"No episode files found in {episodes_dir}")
         return 1
 
     for jsonl_path in jsonl_files:
@@ -243,11 +273,11 @@ def cmd_timing(args):
     print("TIMING ANALYSIS")
     print("=" * 60)
 
-    episodes_dir = Path("data/episodes")
+    episodes_dir = Path(args.episodes_dir)
     jsonl_files = list(episodes_dir.glob("*.jsonl"))
 
     if not jsonl_files:
-        print("No episode files found")
+        print(f"No episode files found in {episodes_dir}")
         return 1
 
     all_timings = {
@@ -356,11 +386,206 @@ def cmd_silent(args):
                     print(f"  • {filepath}:{func_name}() - no logging/print statements")
 
 
+def cmd_taxonomy(args):
+    """Classify failures into a simple taxonomy for triage."""
+    print("=" * 60)
+    print("FAILURE TAXONOMY")
+    print("=" * 60)
+
+    episodes_dir = Path(args.episodes_dir)
+    if not episodes_dir.exists():
+        print(f"Episodes directory not found: {episodes_dir}")
+        return 1
+
+    taxonomy_counts = Counter()
+    totals = 0
+
+    for _, _, ep in _iter_episodes(episodes_dir):
+        totals += 1
+        gold = ep.get("gold_trace", {})
+        consistency = ep.get("consistency_traces", [])
+        triangulation = ep.get("triangulation", {})
+
+        if not gold.get("success", False):
+            taxonomy_counts["gold_failed"] += 1
+        if gold.get("final_answer") is None:
+            taxonomy_counts["gold_no_answer"] += 1
+
+        gold_turns = gold.get("turns", [])
+        if any(not t.get("execution", {}).get("success", True) for t in gold_turns):
+            taxonomy_counts["gold_exec_error"] += 1
+
+        gold_hooks = []
+        for turn in gold_turns:
+            gold_hooks.extend(turn.get("execution", {}).get("hooks", []))
+        if not gold_hooks:
+            taxonomy_counts["gold_no_hooks"] += 1
+
+        if consistency:
+            all_failed = all(
+                (not t.get("success", False)) or t.get("final_answer") is None
+                for t in consistency
+            )
+            if all_failed:
+                taxonomy_counts["consistency_all_failed"] += 1
+
+            majority_count = triangulation.get("majority_count")
+            n_runs = triangulation.get("n_consistency_runs")
+            if majority_count is not None and n_runs:
+                required = (n_runs // 2) + 1
+                if majority_count < required:
+                    taxonomy_counts["low_agreement"] += 1
+
+        if not ep.get("verified", False):
+            taxonomy_counts["unverified"] += 1
+
+    if totals == 0:
+        print("No episodes found")
+        return 1
+
+    print(f"\nTotal episodes: {totals}")
+    for label, count in taxonomy_counts.most_common():
+        print(f"  {label}: {count} ({100*count/max(totals,1):.1f}%)")
+
+    return 0
+
+
+def cmd_perf(args):
+    """Summarize performance metrics from episode timings."""
+    print("=" * 60)
+    print("PERFORMANCE SUMMARY")
+    print("=" * 60)
+
+    episodes_dir = Path(args.episodes_dir)
+    if not episodes_dir.exists():
+        print(f"Episodes directory not found: {episodes_dir}")
+        return 1
+
+    episodes_by_file = _load_episodes(episodes_dir)
+    if not episodes_by_file:
+        print("No JSONL files found in data/episodes/")
+        return 1
+
+    for filename, episodes in episodes_by_file.items():
+        if not episodes:
+            continue
+
+        gold_times = []
+        avg_times = []
+        total_times = []
+        timestamps = []
+
+        for ep in episodes:
+            timing = ep.get("timing", {})
+            if "gold_elapsed" in timing:
+                gold_times.append(timing["gold_elapsed"])
+            if "avg_elapsed" in timing:
+                avg_times.append(timing["avg_elapsed"])
+            if "total_elapsed" in timing:
+                total_times.append(timing["total_elapsed"])
+            ts = ep.get("timestamp")
+            if ts:
+                try:
+                    timestamps.append(datetime.fromisoformat(ts))
+                except ValueError:
+                    pass
+
+        print(f"\n[{filename}]")
+        print(f"  Episodes: {len(episodes)}")
+
+        def _print_stats(label: str, values: list[float]):
+            if not values:
+                return
+            values = sorted(values)
+            p50 = values[len(values) // 2]
+            p95 = values[int(len(values) * 0.95)] if len(values) > 20 else values[-1]
+            mean = sum(values) / len(values)
+            print(f"  {label}: mean {mean:.2f}s | p50 {p50:.2f}s | p95 {p95:.2f}s | max {max(values):.2f}s")
+
+        _print_stats("gold", gold_times)
+        _print_stats("avg", avg_times)
+        _print_stats("total", total_times)
+
+        if len(timestamps) >= 2:
+            timestamps.sort()
+            elapsed = (timestamps[-1] - timestamps[0]).total_seconds()
+            if elapsed > 0:
+                rate = len(timestamps) / elapsed * 3600
+                print(f"  throughput: {rate:.1f} episodes/hour")
+
+    return 0
+
+
+def cmd_triangulation(args):
+    """Profile verification rate vs number of consistency traces."""
+    print("=" * 60)
+    print("TRIANGULATION PROFILING")
+    print("=" * 60)
+
+    from src.core.config import config
+    from src.datagen.teacher import answers_match, get_majority_answer
+
+    episodes_dir = Path(args.episodes_dir)
+    if not episodes_dir.exists():
+        print(f"Episodes directory not found: {episodes_dir}")
+        return 1
+
+    max_k = args.max_k
+    if max_k is None:
+        max_k = config.n_consistency
+
+    totals_by_k = Counter()
+    verified_by_k = Counter()
+
+    for _, _, ep in _iter_episodes(episodes_dir):
+        consistency = ep.get("consistency_traces", [])
+        if not consistency:
+            continue
+        gold_answer = ep.get("gold_trace", {}).get("final_answer")
+        if gold_answer is None:
+            continue
+
+        for k in range(1, min(max_k, len(consistency)) + 1):
+            subset = consistency[:k]
+            submitted = [
+                trace.get("final_answer")
+                for trace in subset
+                if trace.get("final_answer") is not None
+            ]
+            if not submitted:
+                totals_by_k[k] += 1
+                continue
+            majority_value, _ = get_majority_answer(submitted, float_tol=config.float_tolerance)
+            verified = answers_match(None, None, gold_answer, majority_value, float_tol=config.float_tolerance)
+            totals_by_k[k] += 1
+            if verified:
+                verified_by_k[k] += 1
+
+    if not totals_by_k:
+        print("No triangulated episodes found")
+        return 1
+
+    for k in range(1, max(totals_by_k.keys()) + 1):
+        total = totals_by_k.get(k, 0)
+        verified = verified_by_k.get(k, 0)
+        if total == 0:
+            continue
+        print(f"  k={k}: {verified}/{total} verified ({100*verified/total:.1f}%)")
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Pipeline profiling and diagnostic tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
+    )
+
+    parser.add_argument(
+        "--episodes-dir",
+        default="data/episodes",
+        help="Episodes directory (default: data/episodes)",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -369,6 +594,10 @@ def main():
     subparsers.add_parser("episodes", help="Analyze episode data quality")
     subparsers.add_parser("hooks", help="Validate hook grounding")
     subparsers.add_parser("timing", help="Analyze timing distributions")
+    subparsers.add_parser("taxonomy", help="Failure taxonomy summary")
+    subparsers.add_parser("perf", help="Performance summary")
+    triang_parser = subparsers.add_parser("triangulation", help="Triangulation profiling")
+    triang_parser.add_argument("--max-k", type=int, default=None, help="Max consistency traces to evaluate")
     subparsers.add_parser("silent", help="Detect silent failure patterns")
     subparsers.add_parser("all", help="Run all checks")
 
@@ -382,6 +611,12 @@ def main():
         cmd_hooks(args)
     elif args.command == "timing":
         cmd_timing(args)
+    elif args.command == "taxonomy":
+        cmd_taxonomy(args)
+    elif args.command == "perf":
+        cmd_perf(args)
+    elif args.command == "triangulation":
+        cmd_triangulation(args)
     elif args.command == "silent":
         cmd_silent(args)
     elif args.command == "all":
@@ -389,6 +624,9 @@ def main():
         cmd_episodes(args)
         cmd_hooks(args)
         cmd_timing(args)
+        cmd_taxonomy(args)
+        cmd_perf(args)
+        cmd_triangulation(args)
         cmd_silent(args)
     else:
         parser.print_help()
