@@ -42,6 +42,8 @@ def json_default(obj):
 # Storage for hooks captured during execution
 _captured_hooks = []
 
+MAX_HOOK_VALUE_CHARS = 2000  # Truncate large values in hooks
+
 def hook(value, code_line, name=None, description=None, depends_on=None):
     """
     Capture an intermediate checkpoint for RL verification.
@@ -67,19 +69,27 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
     """
     import hashlib
     normalized = normalize_value(value)
-    value_hash = hashlib.sha256(json.dumps(normalized, sort_keys=True, default=json_default).encode()).hexdigest()[:16]
-    
+    full_json = json.dumps(normalized, sort_keys=True, default=json_default)
+    value_hash = hashlib.sha256(full_json.encode()).hexdigest()[:16]
+
+    # Truncate large values for output (hash is on full value)
+    if len(full_json) > MAX_HOOK_VALUE_CHARS:
+        truncated_value = full_json[:MAX_HOOK_VALUE_CHARS] + f"... [truncated {len(full_json) - MAX_HOOK_VALUE_CHARS} chars]"
+        display_value = truncated_value
+    else:
+        display_value = normalized
+
     hook_data = {
         "__csv_agent_hook__": True,
         "variable_name": name,
         "value_hash": value_hash,
-        "value": normalized,
+        "value": display_value,
         "description": description,
         "code_line": code_line,
         "depends_on": depends_on or [],
     }
     _captured_hooks.append(hook_data)
-    
+
     serialized = json.dumps(hook_data, default=json_default)
     print(f"📍 Hook: {serialized}")
     return value  # Pass through for chaining
