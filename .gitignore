@@ -23,5 +23,8 @@ data/questions_synthetic/
 # Smoke test outputs (ephemeral)
 smoke_test/
 
+# Runtime logs
+logs/
+
 # OS files
 .DS_Store
