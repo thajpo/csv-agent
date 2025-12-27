@@ -112,9 +112,10 @@ class Config(BaseModel):
 
     # pipelines: episode generation / triangulation
     n_consistency: int = 7  # Optimal for 8-worker containers (profiled)
+    n_question_slots: int = 4  # Parallel questions per container (tune via profiling)
     verified_only: bool = False
     float_tolerance: float = 0.1
-    max_concurrent_containers: int = 30  # Profiled optimal for this machine
+    max_concurrent_containers: int = 4  # Reduced: each container now has 32 workers
 
     # Outputs - separate paths for LLM vs synthetic pipelines
     questions_llm_dir: str = "data/questions_llm"
