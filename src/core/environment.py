@@ -376,6 +376,9 @@ class Environment:
         """Extract ```python...``` code blocks from response."""
         return extract_python_cells(response)
 
+    # Max output chars before truncation (~12.5K tokens at 4 chars/token)
+    MAX_OUTPUT_CHARS = 50_000
+
     async def execute_code_cell(self, code: str) -> CodeCellResult:
         """
         Execute code in CSVAnalysisEnv sandbox and return execution result.
@@ -386,6 +389,21 @@ class Environment:
             sandbox_id=self.state["sandbox_id"],
             python_state=self.state["python_state"],
         )
+
+        # Truncate massive outputs to prevent context overflow
+        # Keep start and end to preserve submit() output which appears at end
+        if len(output) > self.MAX_OUTPUT_CHARS:
+            truncated_chars = len(output) - self.MAX_OUTPUT_CHARS
+            keep_each = self.MAX_OUTPUT_CHARS // 2
+            logger.warning(
+                f"Truncating output: {len(output):,} chars -> {self.MAX_OUTPUT_CHARS:,} chars "
+                f"(removed {truncated_chars:,} chars from middle)"
+            )
+            output = (
+                output[:keep_each] +
+                f"\n\n... [TRUNCATED {truncated_chars:,} chars] ...\n\n" +
+                output[-keep_each:]
+            )
 
         # Parse the string output into success/stdout/stderr
         result = parse_execution_result(output)

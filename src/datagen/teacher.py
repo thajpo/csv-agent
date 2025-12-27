@@ -31,6 +31,8 @@ from src.core.types import (
     TurnDict,
     ExecutionResultDict,
     HookDict,
+    TriangulationResult,
+    BatchTriangulationResult,
 )
 from src.utils.hashing import hash_artifact
 from src.utils.normalization import normalize_value
@@ -550,16 +552,7 @@ async def triangulate_teacher(
     ui: Any,
     float_tol: float = 0.1,
     llm=None,
-) -> tuple[
-    TraceDict,
-    list[dict],
-    str,
-    list[tuple[TraceDict, list[dict]]],
-    bool,
-    dict,
-    str | None,
-    int,
-]:
+) -> TriangulationResult:
     """
     Run teacher triangulation: gold trace + consistency traces.
 
@@ -679,15 +672,15 @@ async def triangulate_teacher(
     ]
 
     if not submitted_answers:
-        return (
-            gold_trace,
-            gold_conversation,
-            system_prompt,
-            consistency_results,
-            False,
-            timing_metadata,
-            None,
-            0,
+        return TriangulationResult(
+            gold_trace=gold_trace,
+            gold_conversation=gold_conversation,
+            system_prompt=system_prompt,
+            consistency_results=consistency_results,
+            verified=False,
+            timing_metadata=timing_metadata,
+            majority_answer_hash=None,
+            majority_count=0,
         )
 
     # Find majority answer by clustering (handles float tolerance and formatting differences)
@@ -711,15 +704,15 @@ async def triangulate_teacher(
         float_tol=float_tol,
     )
 
-    return (
-        gold_trace,
-        gold_conversation,
-        system_prompt,
-        consistency_results,
-        verified,
-        timing_metadata,
-        majority_answer_hash,
-        majority_count,
+    return TriangulationResult(
+        gold_trace=gold_trace,
+        gold_conversation=gold_conversation,
+        system_prompt=system_prompt,
+        consistency_results=consistency_results,
+        verified=verified,
+        timing_metadata=timing_metadata,
+        majority_answer_hash=majority_answer_hash,
+        majority_count=majority_count,
     )
 
 
@@ -740,19 +733,7 @@ async def batch_triangulate(
     external_container: Any = None,  # Pre-created container from ContainerPool
     ui: Any,  # UI instance for Rich output (required)
     float_tol: float = 0.1,
-) -> list[
-    tuple[
-        dict,
-        TraceDict,
-        list[dict],
-        str,
-        list[tuple[TraceDict, list[dict]]],
-        bool,
-        dict,
-        str | None,
-        int,
-    ]
-]:
+) -> list[BatchTriangulationResult]:
     """
     Run triangulation on a batch of questions.
 
@@ -774,7 +755,7 @@ async def batch_triangulate(
         use_container_pool: If True, use multi-tenant container (much faster)
 
     Returns:
-        List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata, majority_answer_hash, majority_count)
+        List of BatchTriangulationResult (NamedTuple with question + triangulation fields)
     """
     from src.envs.container_pool import MultiTenantContainer
     from src.datagen.pipeline_ui import EpisodeGenUI
@@ -871,16 +852,7 @@ async def batch_triangulate(
             else:
                 container_pool = None
 
-            (
-                gold_trace,
-                gold_conversation,
-                system_prompt,
-                consistency_results,
-                verified,
-                timing_metadata,
-                majority_answer_hash,
-                majority_count,
-            ) = await triangulate_teacher(
+            result = await triangulate_teacher(
                 csv_path=csv_path,
                 question=q_dict["question"],
                 hint=q_dict.get("hint", ""),
@@ -897,7 +869,7 @@ async def batch_triangulate(
                 float_tol=float_tol,
             )
 
-            if verified:
+            if result.verified:
                 verified_count[0] += 1
 
             completed_count[0] += 1
@@ -907,17 +879,7 @@ async def batch_triangulate(
                 verified_count=verified_count[0],
             )
 
-            return (
-                q_dict,
-                gold_trace,
-                gold_conversation,
-                system_prompt,
-                consistency_results,
-                verified,
-                timing_metadata,
-                majority_answer_hash,
-                majority_count,
-            )
+            return BatchTriangulationResult(question=q_dict, *result)
         finally:
             # Release focus so next question can have it
             if has_focus:
