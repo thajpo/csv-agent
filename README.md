@@ -11,10 +11,15 @@ uv sync
 ## Configuration
 
 Settings are in `src/core/config.py` (Pydantic models). Key fields:
-- `teacher_model` / `question_gen_model` - Model identifiers
-- `max_turns` - Max conversation turns per episode
-- `n_consistency` - Number of verification traces for triangulation
-- `float_tolerance` - Tolerance for float comparison in answer matching
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `teacher_model` | `openai/gpt-oss-120b` | Model for episode generation |
+| `question_gen_model` | `openai/gpt-oss-120b` | Model for question generation |
+| `max_turns` | `10` | Max conversation turns per episode |
+| `n_consistency` | `7` | Number of consistency traces for triangulation |
+| `n_question_slots` | `4` | Parallel questions per container (tune for speed) |
+| `float_tolerance` | `0.1` | Tolerance for float comparison in answer matching |
 
 ## Pipeline
 
@@ -44,26 +49,40 @@ Output: `data/questions_synthetic/<dataset>/questions.json`
 
 ---
 
-### Stage 2: Generate Training Episodes
+### Stage 2: Generate Training Episodes (Triangulation)
 
-**Synthetic questions** (single teacher trace, validates against ground truth):
+Triangulation verifies questions by running:
+1. **Gold trace** - teacher WITH hint
+2. **Consistency traces** - teacher WITHOUT hint (N times, in parallel)
+3. **Verification** - gold answer must match majority of consistency answers
+
+**For synthetic questions:**
 ```bash
-uv run python -m src.datagen.synthetic_episodes \
+uv run python -m src.datagen.episode_gen \
     --questions-dir data/questions_synthetic \
-    --output data/episodes/synthetic.jsonl
-
-# Parallel mode (process multiple datasets concurrently)
-uv run python -m src.datagen.synthetic_episodes \
-    --questions-dir data/questions_synthetic \
-    --output data/episodes/synthetic.jsonl \
-    --parallel --n-workers 4
+    --output data/episodes/episodes_synthetic.jsonl \
+    --parallel
 ```
 
-**LLM questions** (full triangulation: gold + N consistency traces):
+**For LLM questions:**
 ```bash
-uv run python -m src.datagen.episode_gen
-uv run python -m src.datagen.episode_gen --parallel
+uv run python -m src.datagen.episode_gen \
+    --questions-dir data/questions_llm \
+    --output data/episodes/episodes_llm.jsonl \
+    --parallel \
+    --skip-difficulty-filter
 ```
+
+**Options:**
+```bash
+--parallel                # Process multiple CSVs concurrently
+--skip-difficulty-filter  # Use all questions (recommended for LLM questions)
+--max-questions N         # Limit questions per dataset (for testing)
+--n-consistency N         # Override consistency traces (default: 7)
+--difficulties HARD VERY_HARD  # Filter by difficulty
+```
+
+> **Note:** LLM-generated questions often don't match the expected difficulty distribution (30% EASY, 30% MEDIUM, 20% HARD, 20% VERY_HARD). Use `--skip-difficulty-filter` to process all questions. Synthetic questions don't have this issue.
 
 Output: `data/episodes/*.jsonl`
 
