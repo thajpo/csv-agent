@@ -29,9 +29,12 @@ from src.core.prompts import (
     CONTINUE_MSG,
     FINAL_MSG,
 )
-from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig, config
+from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
+
+# Max output chars before truncation (~12.5K tokens at 4 chars/token)
+MAX_OUTPUT_CHARS = 50_000
 
 
 def validate_hooks_grounded(
@@ -389,8 +392,7 @@ class Environment:
 
         # Truncate massive outputs to prevent context overflow
         # Preserve the ✓ Submitted: line intact (it contains the answer JSON)
-        max_output_chars = config.max_output_chars
-        if len(output) > max_output_chars:
+        if len(output) > MAX_OUTPUT_CHARS:
             submit_marker = "✓ Submitted:"
             submit_idx = output.find(submit_marker)
 
@@ -402,7 +404,7 @@ class Environment:
                 submit_line = output[submit_idx:submit_end]
 
                 # If submit_line itself is too large, progressively truncate
-                max_submit_len = max_output_chars - 5000  # Leave room for context
+                max_submit_len = MAX_OUTPUT_CHARS - 5000  # Leave room for context
                 if len(submit_line) > max_submit_len:
                     json_start = submit_line.find("{")
                     if json_start != -1:
@@ -444,7 +446,7 @@ class Environment:
                 # Keep start + submission line
                 # CRITICAL: Don't include any part of the original submission in output[:keep_start]
                 # Otherwise the parser will find the truncated original instead of our clean version
-                keep_start = max(0, max_output_chars - len(submit_line) - 100)
+                keep_start = max(0, MAX_OUTPUT_CHARS - len(submit_line) - 100)
                 keep_start = min(keep_start, submit_idx)  # Never include original submission
                 truncated_chars = len(output) - keep_start - len(submit_line)
                 logger.warning(
@@ -458,10 +460,10 @@ class Environment:
                 )
             else:
                 # No submission found, use middle-out truncation
-                truncated_chars = len(output) - max_output_chars
-                keep_each = max_output_chars // 2
+                truncated_chars = len(output) - MAX_OUTPUT_CHARS
+                keep_each = MAX_OUTPUT_CHARS // 2
                 logger.warning(
-                    f"Truncating output: {len(output):,} chars -> {max_output_chars:,} chars "
+                    f"Truncating output: {len(output):,} chars -> {MAX_OUTPUT_CHARS:,} chars "
                     f"(removed {truncated_chars:,} chars from middle)"
                 )
                 output = (

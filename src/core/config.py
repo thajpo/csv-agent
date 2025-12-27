@@ -85,10 +85,6 @@ class Config(BaseModel):
 
     # Execution / Policy
     max_turns: int = 10
-    mode: str = "teacher-tutor"
-    question: Optional[str] = (
-        "What is the mean TL (total length) for the control group?"
-    )
 
     # Models
     teacher_model: str = Field(default="openai/gpt-oss-120b")
@@ -132,28 +128,6 @@ class Config(BaseModel):
     train_ratio: float = 0.8
     val_ratio: float = 0.1
     test_ratio: float = 0.1
-
-    # API / Network
-    api_timeout_seconds: float = 120.0
-    api_max_retries: int = 3
-    api_retry_backoff_base: float = 2.0
-
-    # Output truncation
-    max_output_chars: int = 50_000
-    max_hook_value_chars: int = 2000
-
-    # Dataset viability thresholds (for synthetic generation)
-    min_dataset_rows: int = 50
-    min_dataset_columns: int = 2
-    max_missing_pct_per_column: float = 95.0
-
-    # Template-based generation (optional branch)
-    template_questions_output: str = "questions.json"
-    template_n_simple: int = 5
-    template_n_comparison: int = 5
-    template_n_multi_step: int = 3
-    template_n_filtering: int = 3
-    template_seed: int = 42
 
 
 # =============================================================================

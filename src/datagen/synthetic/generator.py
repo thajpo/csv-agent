@@ -37,6 +37,11 @@ from src.envs.csv_env import LocalCSVAnalysisEnv
 from src.utils.hashing import hash_artifact
 from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
 
+# Dataset viability thresholds
+MIN_DATASET_ROWS = 50
+MIN_DATASET_COLUMNS = 2
+MAX_MISSING_PCT_PER_COLUMN = 95.0
+
 
 def _dataset_is_viable(profile: dict) -> tuple[bool, str]:
     """Gate synthetic generation to avoid degenerate or unlearnable datasets."""
@@ -44,10 +49,9 @@ def _dataset_is_viable(profile: dict) -> tuple[bool, str]:
     rows = shape.get("rows", 0) or 0
     cols = shape.get("columns", 0) or 0
 
-    # Thresholds from config for easy tuning
-    if rows < config.min_dataset_rows:
+    if rows < MIN_DATASET_ROWS:
         return False, f"too few rows ({rows})"
-    if cols < config.min_dataset_columns:
+    if cols < MIN_DATASET_COLUMNS:
         return False, f"too few columns ({cols})"
 
     eligible_numeric = get_eligible_numeric_columns(profile)
@@ -61,10 +65,10 @@ def _dataset_is_viable(profile: dict) -> tuple[bool, str]:
         high_missing = [
             col
             for col, info in columns.items()
-            if info.get("missing_pct", 0) >= config.max_missing_pct_per_column
+            if info.get("missing_pct", 0) >= MAX_MISSING_PCT_PER_COLUMN
         ]
         if len(high_missing) == cols:
-            return False, f"all columns are >={config.max_missing_pct_per_column}% missing"
+            return False, f"all columns are >={MAX_MISSING_PCT_PER_COLUMN}% missing"
 
     return True, "ok"
 
