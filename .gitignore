@@ -18,5 +18,8 @@ data/episodes/
 data/kaggle/
 data/questions/
 
+# Smoke test outputs (ephemeral)
+smoke_test/
+
 # OS files
 .DS_Store
