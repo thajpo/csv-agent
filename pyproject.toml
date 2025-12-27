@@ -34,8 +34,8 @@ kaggle = ["kaggle>=1.6.0"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build]
-include = ["csv_agent_qa.py", "pyproject.toml"]
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
 
 [tool.verifiers.eval]
 num_examples = 5
