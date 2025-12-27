@@ -1,6 +1,6 @@
 # csv-agent
 
-Agent for CSV dataset exploration and training data generation.
+Synthetic training data generation pipeline for CSV analysis agents. Uses teacher triangulation to create verified question-answer pairs with execution traces.
 
 ## Setup
 
@@ -10,87 +10,99 @@ uv sync
 
 ## Configuration
 
-All settings are in `config.yaml`:
-- `csv` - Path to dataset
+Settings are in `src/core/config.py` (Pydantic models). Key fields:
 - `teacher_model` / `question_gen_model` - Model identifiers
-- `max_turns` - Max conversation turns
-- `n_consistency` - Number of verification traces
+- `max_turns` - Max conversation turns per episode
+- `n_consistency` - Number of verification traces for triangulation
+- `float_tolerance` - Tolerance for float comparison in answer matching
 
 ## Pipeline
 
+Two paths for question generation:
+
+| Path | Speed | Determinism | Use Case |
+|------|-------|-------------|----------|
+| **Synthetic** | Fast | Deterministic | Scale, reproducibility |
+| **LLM** | Slow | Non-deterministic | Exploration, diversity |
+
+---
+
 ### Stage 1: Generate Questions
 
-Explore a dataset and generate questions:
+**Synthetic (recommended for scale):**
+```bash
+uv run python -m src.datagen.synthetic.generator
+uv run python -m src.datagen.synthetic.generator --csv path/to/data.csv
+```
 
+**LLM-based exploration:**
 ```bash
 uv run python -m src.datagen.question_gen
 ```
 
-Output: `data/questions/<dataset>/questions.json`
+Output: `data/questions_synthetic/<dataset>/questions.json`
 
 ---
 
-### Stage 2: Generate Training Data
+### Stage 2: Generate Training Episodes
 
-Validate questions via teacher triangulation:
-
+**Synthetic questions** (single teacher trace, validates against ground truth):
 ```bash
-uv run python -m src.datagen.episode_gen
+uv run python -m src.datagen.synthetic_episodes \
+    --questions-dir data/questions_synthetic \
+    --output data/episodes/synthetic.jsonl
+
+# Parallel mode (process multiple datasets concurrently)
+uv run python -m src.datagen.synthetic_episodes \
+    --questions-dir data/questions_synthetic \
+    --output data/episodes/synthetic.jsonl \
+    --parallel --n-workers 4
 ```
 
-Output: `data/episodes/episodes.jsonl`
+**LLM questions** (full triangulation: gold + N consistency traces):
+```bash
+uv run python -m src.datagen.episode_gen
+uv run python -m src.datagen.episode_gen --parallel
+```
+
+Output: `data/episodes/*.jsonl`
 
 ---
 
 ### Stage 3: Upload to HuggingFace
 
-Upload verified episodes for training:
-
 ```bash
-# Login first (one-time)
-huggingface-cli login
+huggingface-cli login  # one-time
 
-# Upload splits
-uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --splits data/episodes/splits
-
-# Private dataset
+uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes
 uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --private
-```
-
-Then load for training:
-```python
-from datasets import load_dataset
-
-ds = load_dataset("your-username/csv-agent-episodes")
-ds = ds.map(lambda x: {"messages": x["conversation_for_sft"]["messages"]})
 ```
 
 ---
 
-### Adding Datasets from Kaggle
+## Smoke Test
 
-To expand your training data with Kaggle datasets:
+Validate the pipeline end-to-end:
 
-1. Install the optional kaggle dependency:
-   ```bash
-   uv sync --extra kaggle
-   ```
+```bash
+uv run python scripts/smoke_test.py                    # Full pipeline
+uv run python scripts/smoke_test.py --stage questions  # Question gen only
+uv run python scripts/smoke_test.py --n-questions 3    # More questions per CSV
+```
 
-2. Set up Kaggle API credentials (see `kaggle/README.md`)
+---
 
-3. Download datasets:
-   ```bash
-   # Download popular tabular datasets
-   uv run python kaggle/download_datasets.py --limit 10
+## Adding Datasets from Kaggle
 
-   # Or from a curated list
-   uv run python kaggle/download_datasets.py --from-list kaggle/curated_datasets.json
-   ```
+```bash
+uv sync --extra kaggle
 
-4. Use downloaded datasets:
-   ```bash
-   uv run python -m src.datagen.question_gen --csv data/kaggle/uciml_iris.csv
-   ```
+# Download datasets
+uv run python scripts/kaggle/download_datasets.py --limit 10
+
+# Use downloaded datasets
+uv run python -m src.datagen.synthetic.generator --csv data/kaggle/*/data.csv
+```
 
 ---
 
