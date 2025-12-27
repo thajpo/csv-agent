@@ -37,19 +37,11 @@ class CompositionTemplate:
 
     def instantiate(self, profile: dict, params: dict[str, Any] | None = None) -> str:
         """Fill in template placeholders with profile data."""
-        # Get numeric columns
-        numeric_cols = [
-            col
-            for col, info in profile.get("columns", {}).items()
-            if info.get("type") == "numeric"
-        ]
+        # Filter columns once to keep template code aligned with the same eligibility rules.
+        numeric_cols = _eligible_numeric_cols(profile)
 
         # Get categorical columns
-        categorical_cols = [
-            col
-            for col, info in profile.get("columns", {}).items()
-            if info.get("type") == "categorical"
-        ]
+        categorical_cols = _eligible_categorical_cols(profile)
 
         # Pick a target column (first numeric with reasonable variance)
         target_col = numeric_cols[0] if numeric_cols else None
@@ -66,6 +58,15 @@ class CompositionTemplate:
             for key, value in params.items():
                 code = code.replace(f"{{{key}}}", repr(value))
 
+        # Inject id-like column exclusions into templates that scan numeric/object columns.
+        id_like_cols = _id_like_cols(profile)
+        drop_expr = f".drop(columns={id_like_cols}, errors='ignore')"
+        code = code.replace("df.select_dtypes('number')", f"df.select_dtypes('number'){drop_expr}")
+        code = code.replace(
+            "df.select_dtypes(include=['object', 'category'])",
+            f"df.select_dtypes(include=['object', 'category']){drop_expr}",
+        )
+
         return code
 
     def iter_param_sets(self) -> list[dict[str, Any]]:
@@ -74,31 +75,88 @@ class CompositionTemplate:
 
 
 def _count_numeric_cols(profile: dict) -> int:
-    return len(
-        [c for c in profile.get("columns", {}).values() if c.get("type") == "numeric"]
-    )
+    """Count numeric columns in profile."""
+    return len(_eligible_numeric_cols(profile))
 
 
 def _has_categorical_cols(profile: dict) -> bool:
-    return any(
-        c.get("type") == "categorical" for c in profile.get("columns", {}).values()
-    )
+    """Check if dataset has categorical columns."""
+    return len(_eligible_categorical_cols(profile)) > 0
+
+
+def _is_id_like_column(name: str, info: dict, row_count: int) -> bool:
+    """Heuristic: exclude identifiers and near-unique columns from analysis targets."""
+    if not name:
+        return False
+    lowered = name.strip().lower()
+    if re.search(r"(^id$|_id$|^id_|uuid|guid|index$)", lowered):
+        return True
+    unique_count = info.get("unique_count")
+    if row_count and isinstance(unique_count, int):
+        if unique_count >= max(2, int(0.98 * row_count)):
+            return True
+    return False
+
+
+def _id_like_cols(profile: dict) -> list[str]:
+    row_count = profile.get("shape", {}).get("rows", 0) or 0
+    return [
+        col
+        for col, info in profile.get("columns", {}).items()
+        if _is_id_like_column(col, info, row_count)
+    ]
+
+
+def _eligible_numeric_cols(profile: dict) -> list[str]:
+    row_count = profile.get("shape", {}).get("rows", 0) or 0
+    cols = []
+    for col, info in profile.get("columns", {}).items():
+        if info.get("type") != "numeric":
+            continue
+        # Drop columns that are effectively empty to avoid brittle targets.
+        if info.get("missing_pct", 0) >= 95:
+            continue
+        if info.get("unique_count", 2) <= 1:
+            continue
+        if _is_id_like_column(col, info, row_count):
+            continue
+        cols.append(col)
+    return cols
+
+
+def _eligible_categorical_cols(profile: dict) -> list[str]:
+    row_count = profile.get("shape", {}).get("rows", 0) or 0
+    cols = []
+    for col, info in profile.get("columns", {}).items():
+        if info.get("type") != "categorical":
+            continue
+        # Drop columns that are effectively empty to avoid brittle groupings.
+        if info.get("missing_pct", 0) >= 95:
+            continue
+        if info.get("unique_count", 2) <= 1:
+            continue
+        if _is_id_like_column(col, info, row_count):
+            continue
+        cols.append(col)
+    return cols
+
+
+def get_eligible_numeric_columns(profile: dict) -> list[str]:
+    """Public helper for dataset gating and template selection."""
+    return _eligible_numeric_cols(profile)
+
+
+def get_eligible_categorical_columns(profile: dict) -> list[str]:
+    """Public helper for dataset gating and template selection."""
+    return _eligible_categorical_cols(profile)
 
 
 def _numeric_col_names(profile: dict) -> list[str]:
-    return [
-        name
-        for name, info in profile.get("columns", {}).items()
-        if info.get("type") == "numeric"
-    ]
+    return _eligible_numeric_cols(profile)
 
 
 def _categorical_col_names(profile: dict) -> list[str]:
-    return [
-        name
-        for name, info in profile.get("columns", {}).items()
-        if info.get("type") == "categorical"
-    ]
+    return _eligible_categorical_cols(profile)
 
 
 def _get_numeric_stat(profile: dict, col: str, stat: str) -> float | None:
@@ -397,6 +455,54 @@ submit({"count": int(high_missing_cols), "columns": sorted(high_missing_names)})
     param_sets=[
         {"missing_threshold": 5.0},
         {"missing_threshold": 10.0},
+    ],
+)
+
+DUPLICATE_ROWS_SUMMARY = CompositionTemplate(
+    name="duplicate_rows_summary",
+    description="Summarize duplicate rows to highlight data cleanliness issues",
+    output_schema='A JSON object with exactly 2 keys: "duplicate_rows" (integer) and "duplicate_pct" (percentage rounded to 2 decimals). Example: {"duplicate_rows": 12, "duplicate_pct": 0.48}',
+    code_template="""
+# Step 1: Count duplicate rows
+duplicate_rows = int(df.duplicated().sum())
+hook(duplicate_rows, "duplicate_rows counted", name='duplicate_rows')
+
+# Step 2: Compute duplicate percentage
+total_rows = len(df)
+duplicate_pct = round((duplicate_rows / total_rows) * 100, 2) if total_rows else 0.0
+hook(duplicate_pct, "duplicate_pct computed", name='duplicate_pct', depends_on=['duplicate_rows'])
+
+submit({"duplicate_rows": duplicate_rows, "duplicate_pct": duplicate_pct})
+""".strip(),
+    output_type="dict",
+    applicable_when=lambda p: (p.get("shape", {}).get("rows", 0) or 0) >= 2,
+    n_steps=3,
+    difficulty="EASY",
+)
+
+IDENTIFIER_LIKE_COLUMNS = CompositionTemplate(
+    name="identifier_like_columns",
+    description="Identify columns that behave like row identifiers (near-unique values)",
+    output_schema='A JSON object with exactly 2 keys: "count" (integer) and "columns" (list of column names, alphabetically sorted). Example: {"count": 2, "columns": ["id", "user_id"]}',
+    code_template="""
+# Step 1: Compute uniqueness ratio per column
+row_count = len(df)
+unique_ratio = df.nunique(dropna=False) / row_count if row_count else pd.Series(dtype=float)
+hook(unique_ratio.to_dict(), "unique_ratio computed", name='unique_ratio')
+
+# Step 2: Flag near-unique columns
+threshold = {unique_ratio_threshold}
+id_like_cols = unique_ratio[unique_ratio >= threshold].index.tolist()
+hook(id_like_cols, "id_like_cols identified", name='id_like_cols', depends_on=['unique_ratio'])
+
+submit({"count": len(id_like_cols), "columns": sorted(id_like_cols)})
+""".strip(),
+    output_type="dict",
+    applicable_when=lambda p: (p.get("shape", {}).get("rows", 0) or 0) >= 50,
+    n_steps=3,
+    difficulty="EASY",
+    param_sets=[
+        {"unique_ratio_threshold": 0.98},
     ],
 )
 
@@ -1864,6 +1970,8 @@ else:
 ALL_TEMPLATES = [
     # === EASY ===
     COUNT_HIGH_MISSING_COLUMNS,
+    DUPLICATE_ROWS_SUMMARY,
+    IDENTIFIER_LIKE_COLUMNS,
     COEFFICIENT_OF_VARIATION,
     IQR_OUTLIER_ANALYSIS,
     PERCENTILE_RANKING,
