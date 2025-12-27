@@ -443,107 +443,130 @@ class Environment:
             return False
         return True
 
-    async def process_turn(self, response: str) -> None:
-        """Process a single turn: extract code cells, execute, build feedback, check completion."""
-        code_cells = self.extract_python_cells(response)
+    # ============= Process Turn Helpers =============
 
-        # Execute all cells
-        execution_results = []
-        submitted_answer = None
+    async def _execute_cells(
+        self, code_cells: list[str]
+    ) -> tuple[list[CodeCellResult], any]:
+        """Execute code cells and return results with any submitted answer."""
+        results = []
+        submitted = None
 
-        if code_cells:
-            for cell_code in code_cells:
-                result = await self.execute_code_cell(cell_code)
+        for cell_code in code_cells:
+            result = await self.execute_code_cell(cell_code)
+            results.append(result)
+            self.code_cells.append(cell_code)
 
-                execution_results.append(result)
-                self.code_cells.append(cell_code)
+            if result.submitted_answer is not None:
+                submitted = result.submitted_answer
+                break  # Stop on submit()
 
-                # Log execution
+        return results, submitted
 
-                # Check for submission
-                if result.submitted_answer is not None:
-                    submitted_answer = result.submitted_answer
-                    break  # Stop on submit()
+    def _build_execution_feedback(
+        self, code_cells: list[str], results: list[CodeCellResult]
+    ) -> str:
+        """Build feedback string from execution results."""
+        if not code_cells:
+            return "No code blocks found. Write Python code in ```python blocks."
 
-        # 4. Build feedback from execution results
-        if code_cells:
-            feedback_parts = []
-            for i, result in enumerate(execution_results, 1):
-                if result.success:
-                    feedback_parts.append(f"✓ Cell {i} executed successfully")
-                    if result.stdout.strip():
-                        feedback_parts.append(f"Output:\n{result.stdout}")
-                else:
-                    feedback_parts.append(f"✗ Cell {i} failed")
-                    feedback_parts.append(f"Error:\n{result.stderr}")
+        parts = []
+        for i, result in enumerate(results, 1):
+            if result.success:
+                parts.append(f"✓ Cell {i} executed successfully")
+                if result.stdout.strip():
+                    parts.append(f"Output:\n{result.stdout}")
+            else:
+                parts.append(f"✗ Cell {i} failed")
+                parts.append(f"Error:\n{result.stderr}")
 
-            feedback = "\n\n".join(feedback_parts)
-            feedback += CONTINUE_MSG
-        else:
-            feedback = "No code blocks found. Write Python code in ```python blocks."
+        return "\n\n".join(parts) + CONTINUE_MSG
 
-        # 5. Check for completion (submit() was called)
-        done_signal = submitted_answer is not None
+    def _validate_format(self, answer: any) -> tuple[bool, str | None]:
+        """Check if answer format is valid. Returns (valid, error_feedback)."""
+        if not _needs_structured_format(answer):
+            return True, None
 
-        # 5a. Format validation: if answer needs structured format, re-prompt (up to 3 times)
-        if done_signal and _needs_structured_format(submitted_answer):
-            self.format_reprompt_count += 1
-            if self.format_reprompt_count < 3:
-                # Re-prompt for correct format
-                feedback = FORMAT_REPROMPT_MSG
-                done_signal = False
-                self.submitted_answer = None  # Clear so they can re-submit
-            # else: force-accept after 3 retries
+        self.format_reprompt_count += 1
+        if self.format_reprompt_count < 3:
+            return False, FORMAT_REPROMPT_MSG
 
-        # 5b. Hook validation: hooks must be grounded and sufficient
-        if done_signal and self.hook_reprompt_count < 3:
-            hooks = self.submission_metadata.get("hooks", [])
+        # Force-accept after 3 retries
+        return True, None
 
-            # Check grounding: code_line must be substring of executed code
-            grounded_hooks, ungrounded_hooks = validate_hooks_grounded(
-                hooks, self.code_cells
+    def _validate_hooks(self) -> tuple[bool, str | None]:
+        """Check if hooks are grounded and sufficient. Returns (valid, error_feedback)."""
+        if self.hook_reprompt_count >= 3:
+            return True, None  # Force-accept after 3 retries
+
+        hooks = self.submission_metadata.get("hooks", [])
+        grounded, ungrounded = validate_hooks_grounded(hooks, self.code_cells)
+
+        # Get expected hook count from question
+        expected = 2  # Default minimum
+        if self.task and self.task.question and self.task.question.n_steps:
+            expected = self.task.question.n_steps
+
+        has_ungrounded = len(ungrounded) > 0
+        insufficient = len(grounded) < expected
+
+        if not has_ungrounded and not insufficient:
+            return True, None
+
+        self.hook_reprompt_count += 1
+        if self.hook_reprompt_count >= 3:
+            return True, None  # Force-accept
+
+        # Build error feedback
+        parts = [HOOK_REPROMPT_MSG]
+        if has_ungrounded:
+            parts.append(
+                f"\n❌ Found {len(ungrounded)} ungrounded hook(s) - "
+                f"code_line does not match any executed code."
+            )
+        if insufficient:
+            parts.append(
+                f"\n❌ Expected ~{expected} hooks but found only {len(grounded)} valid hook(s)."
             )
 
-            # Get expected hook count from question if available
-            expected_hooks = 2  # Minimum default
-            if self.task and self.task.question and self.task.question.n_steps:
-                expected_hooks = self.task.question.n_steps
+        # Clear state for retry
+        self.code_cells = []
 
-            # Fail conditions: ungrounded hooks OR insufficient hook count
-            has_ungrounded = len(ungrounded_hooks) > 0
-            insufficient_hooks = len(grounded_hooks) < expected_hooks
+        return False, "".join(parts)
 
-            if has_ungrounded or insufficient_hooks:
-                self.hook_reprompt_count += 1
-                if self.hook_reprompt_count < 3:
-                    # Build specific feedback
-                    feedback_parts = [HOOK_REPROMPT_MSG]
-                    if has_ungrounded:
-                        feedback_parts.append(
-                            f"\n❌ Found {len(ungrounded_hooks)} ungrounded hook(s) - "
-                            f"code_line does not match any executed code."
-                        )
-                    if insufficient_hooks:
-                        feedback_parts.append(
-                            f"\n❌ Expected ~{expected_hooks} hooks but found only {len(grounded_hooks)} valid hook(s)."
-                        )
-                    feedback = "".join(feedback_parts)
-                    done_signal = False
-                    self.submitted_answer = None
-                    self.submission_metadata = {}
-                    # Clear code_cells so model must re-run everything with hooks
-                    self.code_cells = []
-                # else: force-accept after 3 retries
+    # ============= Main Process Turn =============
 
-        # 6. Store execution results for this turn
-        self.execution_results_per_turn.append(execution_results)
+    async def process_turn(self, response: str) -> None:
+        """Process a single turn: execute code, validate, update conversation."""
+        code_cells = self.extract_python_cells(response)
 
-        # 7. Add to conversation (response + feedback)
+        # Execute
+        results, submitted = await self._execute_cells(code_cells) if code_cells else ([], None)
+        feedback = self._build_execution_feedback(code_cells, results)
+
+        # Validate submission
+        done = submitted is not None
+        if done:
+            valid, error = self._validate_format(submitted)
+            if not valid:
+                feedback = error
+                done = False
+                self.submitted_answer = None
+
+        if done:
+            valid, error = self._validate_hooks()
+            if not valid:
+                feedback = error
+                done = False
+                self.submitted_answer = None
+                self.submission_metadata = {}
+
+        # Update state
+        self.execution_results_per_turn.append(results)
         self.conversation.add_assistant_response(response)
         self.conversation.add_user_feedback(feedback)
 
-        # 8. Check completion
-        if done_signal:
+        if done:
             self.is_completed = True
 
     async def rollout(self):
