@@ -17,6 +17,7 @@ scripts/kaggle/downloaded/
 data/episodes/
 data/kaggle/
 data/questions/
+data/questions_synthetic/
 
 # Smoke test outputs (ephemeral)
 smoke_test/
