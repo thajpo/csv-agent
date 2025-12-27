@@ -497,9 +497,12 @@ class Environment:
         return True, None
 
     def _validate_hooks(self) -> tuple[bool, str | None]:
-        """Check if hooks are grounded and sufficient. Returns (valid, error_feedback)."""
+        """Check if hooks are grounded and sufficient. Returns (valid, error_feedback).
+
+        Force-accepts after 3 failed validation attempts to prevent infinite loops.
+        """
         if self.hook_reprompt_count >= 3:
-            return True, None  # Force-accept after 3 retries
+            return True, None  # Already at max retries, force-accept
 
         hooks = self.submission_metadata.get("hooks", [])
         grounded, ungrounded = validate_hooks_grounded(hooks, self.code_cells)
@@ -517,7 +520,7 @@ class Environment:
 
         self.hook_reprompt_count += 1
         if self.hook_reprompt_count >= 3:
-            return True, None  # Force-accept
+            return True, None  # Just hit max retries, force-accept
 
         # Build error feedback
         parts = [HOOK_REPROMPT_MSG]

@@ -60,6 +60,15 @@ def load_questions(questions_path: str) -> tuple[list[dict], list[str] | None]:
     """
     Load questions from JSON file.
 
+    Supports two formats:
+    1. New format: {"dataset_columns": [...], "questions": [...]}
+       - Includes column fingerprint for schema validation
+       - Used by LLM-generated questions (question_gen.py)
+
+    2. Legacy format: [question1, question2, ...]
+       - Plain list of question dicts
+       - Used by older synthetic generators
+
     Returns:
         (questions, expected_columns) - expected_columns is None for legacy format
     """
@@ -98,7 +107,8 @@ def filter_by_difficulty(
     for idx, (difficulty, fraction) in enumerate(distribution.items()):
         exact = total_target * fraction
         base = int(exact)
-        allocations.append([idx, difficulty, base, exact - base])
+        fractional_part = exact - base  # Used for rounding remainder allocation
+        allocations.append([idx, difficulty, base, fractional_part])
         base_total += base
 
     remainder = total_target - base_total
@@ -334,6 +344,7 @@ async def main(
     max_questions: int | None = None,
     skip_difficulty_filter: bool = False,
     difficulties: list[str] | None = None,
+    skip_existing: set | None = None,
 ):
     # Create global UI instance
     ui = EpisodeGenUI()
@@ -366,7 +377,9 @@ async def main(
     output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
-    if output_jsonl.exists():
+    # Append mode if we're skipping existing, otherwise overwrite
+    append_mode = skip_existing is not None and len(skip_existing) > 0
+    if not append_mode and output_jsonl.exists():
         output_jsonl.unlink()
 
     # Get parent directory of questions (must be specified explicitly)
@@ -399,6 +412,20 @@ async def main(
             ]
         # Remove tasks with no questions after filtering
         tasks = [t for t in tasks if t.questions]
+
+    # Skip questions that already have episodes (append mode)
+    if skip_existing:
+        original_total = sum(len(t.questions) for t in tasks)
+        for task in tasks:
+            task.questions = [
+                q for q in task.questions
+                if q.get("id", q.get("ground_truth_hash", "")) not in skip_existing
+            ]
+        # Remove tasks with no questions after filtering
+        tasks = [t for t in tasks if t.questions]
+        new_total = sum(len(t.questions) for t in tasks)
+        if original_total > new_total:
+            ui.base.print_status(f"Skipping {original_total - new_total} already-processed questions")
 
     # Limit questions per dataset if specified
     if max_questions is not None:
@@ -499,7 +526,8 @@ async def main(
     # Write all episodes to output file
     total_verified = sum(1 for ep in all_episodes if ep.verified)
 
-    with open(output_jsonl, "w") as f:
+    write_mode = "a" if append_mode else "w"
+    with open(output_jsonl, write_mode) as f:
         for episode in all_episodes:
             f.write(json.dumps(episode.model_dump(), default=str) + "\n")
 

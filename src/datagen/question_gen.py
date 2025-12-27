@@ -18,6 +18,7 @@ from pathlib import Path
 from datetime import datetime
 
 from src.datagen.ui import QuestionGenUI
+from src.core.config import config
 
 from src.envs.csv_env import LocalCSVAnalysisEnv
 from src.core.model import APILLM
@@ -163,10 +164,9 @@ async def explore_and_generate_questions(
     
     llm = APILLM(model=model, sampling_args={"temperature": temperature, "max_tokens": max_tokens})
 
-    # Import config for pipeline parameters
-    from src.core.config import config as cfg
-    num_questions = cfg.num_questions_to_generate
-    min_exploration_turns = cfg.min_exploration_turns
+    # Get pipeline parameters from config
+    num_questions = config.num_questions_to_generate
+    min_exploration_turns = config.min_exploration_turns
 
     conversation = ConversationHistory(
         system_prompt=EXPLORATION_SYSTEM_PROMPT.format(
@@ -296,9 +296,6 @@ async def explore_and_generate_questions(
     ui.print_saved_file(trace_file)
 
     return questions_generated, trace
-
-
-from src.core.config import config
 
 
 async def process_single_dataset(
