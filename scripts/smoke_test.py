@@ -24,8 +24,8 @@ from rich.table import Table
 
 DEFAULT_CSVS = [
     "data/mock/data.csv",
-    "data/kaggle/uciml_breast-cancer-wisconsin-data/data.csv",
-    "data/kaggle/spscientist_students-performance-in-exams/data.csv",
+    "data/fixtures/smoke/breast_cancer/data.csv",
+    "data/fixtures/smoke/student_performance/data.csv",
 ]
 
 SMOKE_TEST_DIR = Path("smoke_test")

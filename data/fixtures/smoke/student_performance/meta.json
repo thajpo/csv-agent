@@ -1,0 +1,17 @@
+{
+  "ref": "spscientist/students-performance-in-exams",
+  "owner": "spscientist",
+  "name": "students-performance-in-exams",
+  "title": "Students Performance in Exams",
+  "subtitle": "Marks secured by the students in various subjects",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"education\", \"name\": \"education\", \"description\": \"Education datasets and kernels relate to statistics on student performance, university rankings, and answers for all your homework questions.\", \"fullPath\": \"subject > people and society > education\", \"competitionCount\": 62, \"datasetCount\": 35758, \"scriptCount\": 15180, \"totalCount\": 51000}",
+    "{\"ref\": \"exploratory data analysis\", \"name\": \"exploratory data analysis\", \"description\": null, \"fullPath\": \"technique > exploratory data analysis\", \"competitionCount\": 22, \"datasetCount\": 5949, \"scriptCount\": 34283, \"totalCount\": 40254}",
+    "{\"ref\": \"data visualization\", \"name\": \"data visualization\", \"description\": \"The art of depicting data in a visual format. Using charts and graphs, it is easier to observe patterns, relationships, and outliers.\", \"fullPath\": \"technique > data visualization\", \"competitionCount\": 24, \"datasetCount\": 8864, \"scriptCount\": 38059, \"totalCount\": 46947}",
+    "{\"ref\": \"standardized testing\", \"name\": \"standardized testing\", \"description\": null, \"fullPath\": \"subject > people and society > education > standardized testing\", \"competitionCount\": 2, \"datasetCount\": 12030, \"scriptCount\": 442, \"totalCount\": 12474}"
+  ],
+  "url": "https://www.kaggle.com/datasets/spscientist/students-performance-in-exams",
+  "totalBytes": 8907,
+  "downloadCount": 438692
+}

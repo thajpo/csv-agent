@@ -1,0 +1,15 @@
+{
+  "ref": "uciml/breast-cancer-wisconsin-data",
+  "owner": "uciml",
+  "name": "breast-cancer-wisconsin-data",
+  "title": "Breast Cancer Wisconsin (Diagnostic) Data Set",
+  "subtitle": "Predict whether the cancer is benign or malignant",
+  "description": "",
+  "keywords": [
+    "{\"ref\": \"healthcare\", \"name\": \"healthcare\", \"description\": \"AI in healthcare is a growing interest. One of the major problems is simply converting research into an application. Should be easy, right?\", \"fullPath\": \"subject > health and fitness > health > healthcare\", \"competitionCount\": 32, \"datasetCount\": 2354, \"scriptCount\": 2062, \"totalCount\": 4448}",
+    "{\"ref\": \"cancer\", \"name\": \"cancer\", \"description\": null, \"fullPath\": \"subject > health and fitness > health > health conditions > cancer\", \"competitionCount\": 20, \"datasetCount\": 56954, \"scriptCount\": 3490, \"totalCount\": 60464}"
+  ],
+  "url": "https://www.kaggle.com/datasets/uciml/breast-cancer-wisconsin-data",
+  "totalBytes": 49796,
+  "downloadCount": 507261
+}
