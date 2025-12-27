@@ -609,6 +609,7 @@ async def batch_triangulate(
     model: str,  # Must come from src.core.config
     *,  # Force remaining args to be keyword-only
     n_consistency: int = 3,
+    n_question_slots: int = 1,
     dataset_description: str = "",
     data_overview: str = "",
     max_turns: int = 10,
@@ -639,6 +640,7 @@ async def batch_triangulate(
         csv_path: Path to CSV file
         questions: List of question dicts (from question_gen.py)
         n_consistency: Number of consistency traces per question
+        n_question_slots: Number of questions to process in parallel
         model: Model identifier
         dataset_description: Dataset description
         data_overview: Data overview
@@ -649,16 +651,16 @@ async def batch_triangulate(
     Returns:
         List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata, majority_answer_hash, majority_count)
     """
-    from src.envs.container_pool import MultiTenantContainer, WorkerAdapter
+    from src.envs.container_pool import MultiTenantContainer
 
     results = []
-    verified_count = 0
+    verified_count = [0]  # Use list for mutation in nested function
     container = None
-    container_pool = None
 
     # Create multi-tenant container if enabled
     if use_container_pool:
-        n_workers = 1 + n_consistency  # 1 gold + N consistency traces
+        traces_per_slot = 1 + n_consistency
+        total_workers = n_question_slots * traces_per_slot
 
         # Cleanup existing containers first
         ui.base.print_status("Cleaning up old containers...")
@@ -667,24 +669,39 @@ async def batch_triangulate(
         cleanup_csv_sandbox_containers()
 
         ui.base.print_status(
-            f"Creating multi-tenant container ({n_workers} workers)..."
+            f"Creating multi-tenant container ({n_question_slots} slots × {traces_per_slot} workers = {total_workers} workers)..."
         )
 
-        # Create single container with multiple workers (fork-based, memory shared)
-        container = MultiTenantContainer(csv_path=csv_path, n_workers=n_workers)
+        # Create container with slots for parallel question processing
+        container = MultiTenantContainer(
+            csv_path=csv_path,
+            n_question_slots=n_question_slots,
+            n_consistency=n_consistency,
+        )
         await container.start()
 
-        # Create WorkerAdapters for triangulate_teacher compatibility
-        container_pool = [
-            (WorkerAdapter(container, i), WorkerAdapter.create_state(i))
-            for i in range(n_workers)
-        ]
+        ui.base.print_success(f"✓ Container ready ({total_workers} workers in {n_question_slots} slots)")
 
-        ui.base.print_success(f"✓ Container ready ({n_workers} workers)")
+    # Track which slots are available
+    available_slots = asyncio.Queue()
+    for i in range(n_question_slots):
+        await available_slots.put(i)
 
-    try:
-        for i, q_dict in enumerate(questions, 1):
-            ui.print_question_header(q_num=i, total=len(questions), question=q_dict)
+    # Track completed count for progress
+    completed_count = [0]
+
+    async def process_question(q_index: int, q_dict: dict):
+        """Process a single question using an available slot."""
+        # Get an available slot
+        slot_index = await available_slots.get()
+
+        try:
+            ui.print_question_header(
+                q_num=q_index + 1, total=len(questions), question=q_dict
+            )
+
+            # Get container pool for this slot
+            container_pool = container.create_slot_pool(slot_index) if container else None
 
             (
                 gold_trace,
@@ -712,30 +729,49 @@ async def batch_triangulate(
                 float_tol=float_tol,
             )
 
-            results.append(
-                (
-                    q_dict,
-                    gold_trace,
-                    gold_conversation,
-                    system_prompt,
-                    consistency_results,
-                    verified,
-                    timing_metadata,
-                    majority_answer_hash,
-                    majority_count,
-                )
-            )
-
             if verified:
-                verified_count += 1
+                verified_count[0] += 1
 
+            completed_count[0] += 1
             ui.print_progress_summary(
-                current=i, total=len(questions), verified_count=verified_count
+                current=completed_count[0],
+                total=len(questions),
+                verified_count=verified_count[0],
             )
 
-            # Reset all workers between questions (faster than recreate)
+            # Reset this slot's workers for reuse
             if container:
-                await container.reset_all_workers()
+                await container.reset_slot(slot_index)
+
+            return (
+                q_dict,
+                gold_trace,
+                gold_conversation,
+                system_prompt,
+                consistency_results,
+                verified,
+                timing_metadata,
+                majority_answer_hash,
+                majority_count,
+            )
+        finally:
+            # Return slot to pool
+            await available_slots.put(slot_index)
+
+    try:
+        if n_question_slots > 1 and use_container_pool:
+            # Parallel mode: process questions concurrently using slots
+            tasks = [
+                asyncio.create_task(process_question(i, q))
+                for i, q in enumerate(questions)
+            ]
+            results = await asyncio.gather(*tasks)
+            results = list(results)
+        else:
+            # Sequential mode (legacy behavior)
+            for i, q_dict in enumerate(questions):
+                result = await process_question(i, q_dict)
+                results.append(result)
 
     finally:
         # Clean up container
