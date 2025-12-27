@@ -160,7 +160,10 @@ def gather_csv_tasks(
         if expected_columns is not None:
             import pandas as pd
 
-            actual_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
+            try:
+                actual_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
+            except UnicodeDecodeError:
+                actual_columns = pd.read_csv(csv_path, nrows=0, encoding='latin-1').columns.tolist()
             if set(expected_columns) != set(actual_columns):
                 missing = set(expected_columns) - set(actual_columns)
                 extra = set(actual_columns) - set(expected_columns)
@@ -228,6 +231,7 @@ async def process_csv_task(
         questions=task.questions,
         model=teacher_model,
         n_consistency=n_consistency,
+        n_question_slots=config.n_question_slots,
         dataset_description=task.dataset_description,
         data_overview=data_overview,
         max_turns=max_turns,

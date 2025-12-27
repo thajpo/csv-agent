@@ -71,6 +71,13 @@ class MultiTenantContainer:
     significantly reducing memory usage compared to separate containers.
 
     Use one MultiTenantContainer per CSV file for parallel triangulation.
+
+    Supports "question slots" for parallel question processing:
+    - n_question_slots: how many questions to process in parallel
+    - Each slot gets (1 + n_consistency) workers for gold + consistency traces
+    - Total workers = n_question_slots * (1 + n_consistency)
+
+    Worker indexing: worker_id = slot * traces_per_slot + trace_index
     """
 
     IMAGE_NAME = "csv-agent-sandbox"
@@ -136,7 +143,7 @@ SAFE_BUILTINS = {{
     "hash": hash, "id": id,
     "hasattr": hasattr, "getattr": getattr, "setattr": setattr, "delattr": delattr,
     "isinstance": isinstance, "issubclass": issubclass,
-    "callable": callable, "vars": vars, "dir": dir,
+    "callable": callable, "vars": vars, "dir": dir, "locals": locals, "globals": globals,
     "print": print, "input": None,
     "Exception": Exception, "BaseException": BaseException,
     "TypeError": TypeError, "ValueError": ValueError,
@@ -169,7 +176,10 @@ import statsmodels
 import statsmodels.api as sm
 
 # Load CSV - also shared via CoW (read-only)
-df = pd.read_csv("/data.csv")
+try:
+    df = pd.read_csv("/data.csv")
+except UnicodeDecodeError:
+    df = pd.read_csv("/data.csv", encoding='latin-1')
 print(f"Parent loaded CSV: {{df.shape[0]}} rows, {{df.shape[1]}} columns", file=sys.stderr)
 
 # Read setup code from file (written by host before fork)
@@ -323,20 +333,38 @@ for pid in children:
     def __init__(
         self,
         csv_path: str,
-        n_workers: int = 6,
+        n_workers: int | None = None,
+        n_question_slots: int = 1,
+        n_consistency: int = 7,
     ):
         """
         Initialize a multi-tenant container.
 
         Args:
             csv_path: Path to CSV file to load
-            n_workers: Number of worker processes (default: 6 for 1 gold + 5 consistency)
+            n_workers: Total worker count (legacy, overrides slot calculation if set)
+            n_question_slots: Number of parallel question slots (default: 1)
+            n_consistency: Consistency traces per question (default: 7)
+
+        Workers are organized as:
+            slot 0: workers 0..(n_consistency)      → question 1
+            slot 1: workers (n_consistency+1)..     → question 2
+            ...
         """
         self.csv_path = Path(csv_path).resolve()
         if not self.csv_path.exists():
             raise FileNotFoundError(f"CSV not found: {csv_path}")
 
-        self.n_workers = n_workers
+        self.n_question_slots = n_question_slots
+        self.n_consistency = n_consistency
+        self.traces_per_slot = 1 + n_consistency  # 1 gold + N consistency
+
+        # Calculate total workers (legacy n_workers overrides)
+        if n_workers is not None:
+            self.n_workers = n_workers
+        else:
+            self.n_workers = n_question_slots * self.traces_per_slot
+
         self.container_id: str | None = None
         self.workers: list[Slot] = []
         self._lock = asyncio.Lock()
@@ -529,6 +557,37 @@ with open('{slot.res_fifo}', 'r') as f:
         await asyncio.gather(*[
             self._reset_slot(worker) for worker in self.workers
         ])
+
+    def get_slot_workers(self, slot_index: int) -> list[Slot]:
+        """Get all workers for a specific question slot."""
+        if slot_index < 0 or slot_index >= self.n_question_slots:
+            raise IndexError(f"Slot {slot_index} not found (have {self.n_question_slots} slots)")
+        start = slot_index * self.traces_per_slot
+        end = start + self.traces_per_slot
+        return self.workers[start:end]
+
+    def get_slot_worker_ids(self, slot_index: int) -> list[int]:
+        """Get worker IDs for a specific question slot."""
+        start = slot_index * self.traces_per_slot
+        return list(range(start, start + self.traces_per_slot))
+
+    async def reset_slot(self, slot_index: int):
+        """Reset all workers in a specific slot for reuse."""
+        workers = self.get_slot_workers(slot_index)
+        await asyncio.gather(*[self._reset_slot(w) for w in workers])
+
+    def create_slot_pool(self, slot_index: int) -> list[tuple["WorkerAdapter", dict]]:
+        """
+        Create a container_pool for triangulate_teacher from a specific slot.
+
+        Returns list of (WorkerAdapter, state) tuples compatible with
+        triangulate_teacher's container_pool parameter.
+        """
+        worker_ids = self.get_slot_worker_ids(slot_index)
+        return [
+            (WorkerAdapter(self, wid), WorkerAdapter.create_state(wid))
+            for wid in worker_ids
+        ]
 
     async def _reset_slot(self, slot: Slot):
         """Reset a slot's namespace (internal)."""
