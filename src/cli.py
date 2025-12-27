@@ -96,6 +96,121 @@ def cmd_status():
     return 0
 
 
+def cmd_progress():
+    """Show detailed pipeline progress with estimates."""
+    import json
+    from datetime import datetime
+
+    from src.utils.stats import collect_questions_stats, collect_episodes_stats
+
+    q_stats = collect_questions_stats()
+    e_stats = collect_episodes_stats()
+
+    # Calculate totals
+    total_synth_q = q_stats["synthetic"]["total"]
+    total_llm_q = q_stats["llm"]["total"]
+    total_synth_e = e_stats["synthetic"]["total"]
+    total_llm_e = e_stats["llm"]["total"]
+
+    console.print()
+    console.print(Panel.fit("[bold]Pipeline Progress Report[/bold]", style="cyan"))
+
+    # Stage breakdown
+    table = Table(title="Stage Completion", show_header=True)
+    table.add_column("Stage", style="bold")
+    table.add_column("Synthetic", justify="right")
+    table.add_column("LLM", justify="right")
+    table.add_column("Progress", justify="center")
+
+    def progress_bar(done, total, width=20):
+        if total == 0:
+            return "[dim]no data[/dim]"
+        pct = done / total
+        filled = int(pct * width)
+        bar = "█" * filled + "░" * (width - filled)
+        return f"{bar} {pct*100:.0f}%"
+
+    # Questions (consider 100% if we have any)
+    synth_q_pct = 100 if total_synth_q > 0 else 0
+    llm_q_pct = 100 if total_llm_q > 0 else 0
+    table.add_row(
+        "1. Questions",
+        f"{total_synth_q:,}",
+        f"{total_llm_q:,}",
+        "[green]Complete[/green]" if total_synth_q + total_llm_q > 0 else "[red]Not started[/red]"
+    )
+
+    # Episodes
+    table.add_row(
+        "2. Episodes",
+        f"{total_synth_e:,} / {total_synth_q:,}",
+        f"{total_llm_e:,} / {total_llm_q:,}",
+        progress_bar(total_synth_e + total_llm_e, total_synth_q + total_llm_q)
+    )
+
+    console.print(table)
+
+    # Bottleneck analysis
+    console.print()
+    remaining_synth = total_synth_q - total_synth_e
+    remaining_llm = total_llm_q - total_llm_e
+    total_remaining = remaining_synth + remaining_llm
+
+    if total_remaining > 0:
+        console.print(f"[bold yellow]Bottleneck:[/bold yellow] Episode generation")
+        console.print(f"  Remaining: {remaining_synth:,} synthetic + {remaining_llm:,} LLM = [bold]{total_remaining:,}[/bold] episodes")
+
+        # Estimate based on episode file timestamps
+        synth_file = Path("data/episodes/episodes_synthetic.jsonl")
+        if synth_file.exists() and total_synth_e > 0:
+            # Get first and last episode timestamps
+            with open(synth_file) as f:
+                lines = f.readlines()
+            if len(lines) >= 2:
+                first = json.loads(lines[0])
+                last = json.loads(lines[-1])
+                first_ts = datetime.fromisoformat(first.get("timestamp", "2025-01-01"))
+                last_ts = datetime.fromisoformat(last.get("timestamp", "2025-01-01"))
+                elapsed = (last_ts - first_ts).total_seconds()
+                if elapsed > 0:
+                    rate = (len(lines) - 1) / elapsed * 3600  # episodes per hour
+                    if rate > 0:
+                        hours_remaining = total_remaining / rate
+                        console.print(f"  Estimated rate: {rate:.1f} episodes/hour")
+                        console.print(f"  Time to complete: ~{hours_remaining:.1f} hours")
+
+        # Show per-type estimates
+        console.print()
+        console.print("[bold]Time Estimates by Type:[/bold]")
+        console.print("  Synthetic: ~1 trace/question (fast, uses ground truth hash)")
+        console.print("  LLM:       ~8 traces/question (1 gold + 7 consistency)")
+        if remaining_synth > 0:
+            # Synthetic is roughly 8x faster
+            synth_hours = remaining_synth / (rate * 8) if rate > 0 else 0
+            console.print(f"  → Synthetic alone: ~{synth_hours:.1f} hours")
+        if remaining_llm > 0:
+            llm_hours = remaining_llm / rate if rate > 0 else 0
+            console.print(f"  → LLM alone: ~{llm_hours:.1f} hours")
+
+        console.print()
+        console.print("[bold]Speed Strategy:[/bold]")
+        console.print("  1. [green]Run synthetic first[/green] - 8x faster, has ground truth")
+        console.print("  2. Run LLM in parallel (separate terminal) if resources allow")
+        console.print("  3. Reduce n_consistency (config) for faster LLM validation")
+
+    console.print()
+
+    # Recommendations
+    console.print("[bold]Recommended Next Steps:[/bold]")
+    if total_synth_e < total_synth_q:
+        console.print(f"  [green]→[/green] csvagent generate episodes --synth  # {remaining_synth:,} remaining")
+    if total_llm_e < total_llm_q:
+        console.print(f"  [blue]→[/blue] csvagent generate episodes --llm   # {remaining_llm:,} remaining")
+
+    console.print()
+    return 0
+
+
 # ============= Generate Commands =============
 
 
@@ -513,6 +628,9 @@ Examples:
     # status
     subparsers.add_parser("status", help="View data inventory")
 
+    # progress
+    subparsers.add_parser("progress", help="Detailed progress with estimates")
+
     # generate
     gen_parser = subparsers.add_parser("generate", help="Generate questions or episodes")
     gen_sub = gen_parser.add_subparsers(dest="gen_type", required=True)
@@ -593,6 +711,9 @@ def main():
     # Dispatch to commands
     if args.command == "status":
         return cmd_status()
+
+    elif args.command == "progress":
+        return cmd_progress()
 
     elif args.command == "generate":
         if args.gen_type == "questions":
