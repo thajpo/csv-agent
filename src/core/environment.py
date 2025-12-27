@@ -380,10 +380,6 @@ class Environment:
         """
         Execute code in CSVAnalysisEnv sandbox and return execution result.
         """
-        assert self.state is not None, (
-            "Environment state not initialized. Call init_state() or rollout() first."
-        )
-
         # Execute via verifiers env.python()
         output = await self.env.python(
             code=code,
@@ -437,7 +433,7 @@ class Environment:
         except Exception as e:
             # Enrich error with context for debugging
             context = self._get_error_context(messages)
-            raise type(e)(f"{e}\n\n[Context] {context}") from e
+            raise RuntimeError(f"{e}\n\n[Context] {context}") from e
 
         return response
 
