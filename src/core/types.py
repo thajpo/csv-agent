@@ -205,49 +205,6 @@ class EpisodeJSONL(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
-# ============= Legacy Types (for backward compat during transition) =============
-
-
-class ExecutionTrace(BaseModel):
-    """Record of a code execution session (teacher or student).
-
-    DEPRECATED: Use TraceDict for new code. This exists for backward
-    compatibility during the transition period.
-    """
-
-    code_cells: list[str]  # Raw Python code per turn
-    final_answer: Any | None = None  # The submit() value
-    final_answer_hash: str | None = None
-    execution_success: bool
-
-    # Intermediate checkpoints for RL dense reward
-    hooks: list[Hook] = Field(default_factory=list)
-
-    # Metadata from submit(..., extra=...)
-    submission_metadata: dict[str, Any] = Field(default_factory=dict)
-
-    # Optional metadata (for debugging/analysis)
-    total_turns: int = 0
-    archived_turn_count: int = 0  # Turns purged from context
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    def to_trace_dict(self) -> TraceDict:
-        """Convert legacy ExecutionTrace to new TraceDict format.
-
-        Note: This loses turn-level granularity since ExecutionTrace
-        doesn't store per-turn data. Use only for migration.
-        """
-        # Can't reconstruct turns without per-turn data
-        # Return a single-turn trace as approximation
-        return TraceDict(
-            turns=[],  # Can't reconstruct
-            final_answer=self.final_answer,
-            final_answer_hash=self.final_answer_hash,
-            success=self.execution_success,
-        )
-
-
 # ============= Exploration Types =============
 
 
