@@ -7,6 +7,7 @@ Each template defines a code pattern that:
 3. Can be verbalized into a natural language question
 """
 
+import re
 import warnings
 from dataclasses import dataclass
 from typing import Any, Callable
