@@ -34,6 +34,7 @@ from src.core.types import (
 )
 from src.core.config import config
 from src.utils.docker import cleanup_csv_sandbox_containers
+from src.envs.container_pool import ContainerPool
 
 
 @dataclass
@@ -215,17 +216,21 @@ async def process_csv_task(
     float_tol: float,
     verified_only: bool,
     ui: EpisodeGenUI,
+    external_container: Any = None,
 ) -> list[EpisodeJSONL]:
     """
     Process a single CSV task and return generated episodes.
 
     This is the core worker function for both sequential and parallel modes.
-    Each CSV gets its own MultiTenantContainer with fork-based workers.
+
+    Args:
+        external_container: Optional pre-created container from ContainerPool.
+                           If provided, the container is reused instead of created.
     """
     # Generate data overview
     data_overview = generate_data_overview(task.csv_path)
 
-    # Run batch triangulation (creates container internally)
+    # Run batch triangulation (uses external container if provided)
     results = await batch_triangulate(
         csv_path=task.csv_path,
         questions=task.questions,
@@ -236,6 +241,7 @@ async def process_csv_task(
         data_overview=data_overview,
         max_turns=max_turns,
         sampling_args=sampling_args,
+        external_container=external_container,
         ui=ui,
         float_tol=float_tol,
     )
@@ -300,7 +306,6 @@ async def process_csv_task(
 
 
 async def main(
-    parallel: bool = False,
     questions_dir: str | None = None,
     output_path: str | None = None,
     n_consistency: int | None = None,
@@ -385,6 +390,10 @@ async def main(
         )
         return 1
 
+    # Cleanup any stale containers ONCE before starting (avoids race conditions in parallel mode)
+    ui.base.print_status("Cleaning up old containers...")
+    cleanup_csv_sandbox_containers()
+
     ui.base.print_section(f"Found {len(tasks)} CSV datasets to process")
     for task in tasks:
         ui.base.print_status(
@@ -393,42 +402,50 @@ async def main(
 
     all_episodes = []
 
-    if parallel and len(tasks) > 1:
-        # Parallel mode: process CSVs concurrently with throttling
-        max_concurrent = config.max_concurrent_containers
-        ui.base.print_section(
-            f"🚀 PARALLEL MODE: Processing {len(tasks)} CSVs (max {max_concurrent} concurrent)"
-        )
-        ui.base.print_info(
-            "Note", "Each CSV gets its own container with fork-based workers"
-        )
+    # Always use container pool for efficiency
+    max_concurrent = config.max_concurrent_containers
+    ui.base.print_section(
+        f"Processing {len(tasks)} CSVs ({max_concurrent} containers pooled)"
+    )
 
-        # Semaphore limits concurrent containers to avoid resource exhaustion
-        semaphore = asyncio.Semaphore(max_concurrent)
+    # Create container pool (containers created once, reused across CSVs)
+    pool = ContainerPool(
+        max_containers=max_concurrent,
+        n_question_slots=config.n_question_slots,
+        n_consistency=n_consistency,
+    )
+    await pool.start(initial_csv_path=tasks[0].csv_path)
 
-        async def process_task_wrapper(
-            task: CSVTask,
-        ) -> tuple[CSVTask, list[EpisodeJSONL]]:
-            async with semaphore:
-                episodes = await process_csv_task(
-                    task=task,
-                    teacher_model=teacher_model,
-                    n_consistency=n_consistency,
-                    max_turns=max_turns,
-                    sampling_args=sampling_args,
-                    float_tol=float_tol,
-                    verified_only=verified_only,
-                    ui=ui,  # Output may interleave in parallel mode
-                )
-                return (task, episodes)
+    async def process_task_wrapper(
+        task: CSVTask,
+    ) -> tuple[CSVTask, list[EpisodeJSONL]]:
+        # Acquire container from pool (blocks until one is available)
+        container = await pool.acquire(task.csv_path)
+        try:
+            episodes = await process_csv_task(
+                task=task,
+                teacher_model=teacher_model,
+                n_consistency=n_consistency,
+                max_turns=max_turns,
+                sampling_args=sampling_args,
+                float_tol=float_tol,
+                verified_only=verified_only,
+                ui=ui,
+                external_container=container,
+            )
+            return (task, episodes)
+        finally:
+            # Release container back to pool for reuse
+            await pool.release(container)
 
-        # Create tasks for asyncio.as_completed
-        pending_tasks = [
-            asyncio.create_task(process_task_wrapper(task)) for task in tasks
-        ]
+    # Create tasks for asyncio.as_completed
+    pending_tasks = [
+        asyncio.create_task(process_task_wrapper(task)) for task in tasks
+    ]
 
-        # Process as each completes (provides real-time progress)
-        completed_count = 0
+    # Process as each completes (provides real-time progress)
+    completed_count = 0
+    try:
         for coro in asyncio.as_completed(pending_tasks):
             task_result, episodes = await coro
             completed_count += 1
@@ -439,39 +456,9 @@ async def main(
                 f"{len(episodes)} episodes ({n_verified} verified)"
             )
             all_episodes.extend(episodes)
-
-    else:
-        # Sequential mode: process CSVs one at a time with full UI
-        for i, task in enumerate(tasks, 1):
-            ui.base.print_section(f"Processing CSV {i}/{len(tasks)}: {task.csv_path}")
-            ui.base.print_status(f"Loaded {len(task.questions)} questions")
-
-            # Display pipeline header for this CSV
-            ui.print_pipeline_header(
-                n_questions=len(task.questions),
-                n_consistency=n_consistency,
-                csv_path=task.csv_path,
-                model=teacher_model,
-                float_tol=float_tol,
-                output_file=str(output_jsonl),
-            )
-
-            episodes = await process_csv_task(
-                task=task,
-                teacher_model=teacher_model,
-                n_consistency=n_consistency,
-                max_turns=max_turns,
-                sampling_args=sampling_args,
-                float_tol=float_tol,
-                verified_only=verified_only,
-                ui=ui,
-            )
-
-            n_verified = sum(1 for ep in episodes if ep.verified)
-            ui.base.print_success(
-                f"✓ Saved {len(episodes)} episodes for {task.dataset_name} ({n_verified} verified)"
-            )
-            all_episodes.extend(episodes)
+    finally:
+        # Stop the pool (destroys all containers)
+        await pool.stop()
 
     # Write all episodes to output file
     total_verified = sum(1 for ep in all_episodes if ep.verified)
@@ -494,11 +481,6 @@ async def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Episode generation pipeline.")
-    parser.add_argument(
-        "--parallel",
-        action="store_true",
-        help="Process multiple CSVs in parallel (one container per CSV)",
-    )
     parser.add_argument(
         "--questions-dir",
         type=str,
@@ -541,7 +523,6 @@ if __name__ == "__main__":
         sys.exit(
             asyncio.run(
                 main(
-                    parallel=args.parallel,
                     questions_dir=args.questions_dir,
                     output_path=args.output,
                     n_consistency=args.n_consistency,

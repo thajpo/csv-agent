@@ -188,6 +188,7 @@ with open("/tmp/setup_code.py", "r") as _f:
 
 def run_worker(worker_id: int):
     """Worker process main loop."""
+    global df  # Needed because reload_csv assigns to df
     cmd_fifo = f"/tmp/worker_{{worker_id}}_cmd"
     res_fifo = f"/tmp/worker_{{worker_id}}_res"
     ready_flag = f"/tmp/worker_{{worker_id}}_ready"
@@ -246,6 +247,27 @@ def run_worker(worker_id: int):
                 execution_count = 0
                 with open(res_fifo, "w") as f:
                     f.write(json.dumps({{"status": "ok", "reset": True}}))
+                continue
+
+            if request.get("reload_csv"):
+                # Reload CSV and reset namespace (for switching to new dataset)
+                try:
+                    df = pd.read_csv("/data.csv")
+                except UnicodeDecodeError:
+                    df = pd.read_csv("/data.csv", encoding='latin-1')
+                namespace = create_restricted_namespace()
+                namespace["df"] = df
+                namespace["pd"] = pd
+                namespace["np"] = np
+                namespace["scipy"] = scipy
+                namespace["stats"] = stats
+                namespace["sklearn"] = sklearn
+                namespace["statsmodels"] = statsmodels
+                namespace["sm"] = sm
+                exec(SETUP_INJECT, namespace, namespace)
+                execution_count = 0
+                with open(res_fifo, "w") as f:
+                    f.write(json.dumps({{"status": "ok", "reload_csv": True, "shape": list(df.shape)}}))
                 continue
 
             code = request.get("code", "")
@@ -499,6 +521,61 @@ for pid in children:
         self.workers = []
         self._started = False
 
+    async def switch_csv(self, new_csv_path: str) -> dict:
+        """
+        Switch to a different CSV without recreating the container.
+
+        This is much faster than stop/start - just copies the new CSV
+        and tells workers to reload it.
+
+        Args:
+            new_csv_path: Path to the new CSV file
+
+        Returns:
+            Dict with new CSV shape info
+        """
+        new_path = Path(new_csv_path).resolve()
+        if not new_path.exists():
+            raise FileNotFoundError(f"CSV not found: {new_csv_path}")
+
+        # Copy new CSV to container (overwrites /data.csv)
+        await self._run_docker(
+            "cp", str(new_path), f"{self.container_id}:/data.csv"
+        )
+
+        # Tell all workers to reload the CSV
+        results = await asyncio.gather(*[
+            self._reload_csv_on_slot(worker) for worker in self.workers
+        ])
+
+        # Update internal state
+        self.csv_path = new_path
+
+        # Return shape from first worker's response
+        return results[0] if results else {}
+
+    async def _reload_csv_on_slot(self, slot: Slot) -> dict:
+        """Tell a worker to reload /data.csv and reset namespace."""
+        payload = json.dumps({"reload_csv": True})
+        payload_b64 = base64.b64encode(payload.encode()).decode()
+
+        send_cmd = f'''
+import base64
+import json
+data = base64.b64decode('{payload_b64}').decode()
+with open('{slot.cmd_fifo}', 'w') as f:
+    f.write(data)
+with open('{slot.res_fifo}', 'r') as f:
+    print(f.read())
+'''
+        stdout, _ = await self._run_docker(
+            "exec", slot.container_id, "python", "-c", send_cmd
+        )
+        try:
+            return json.loads(stdout.strip())
+        except json.JSONDecodeError:
+            return {"status": "error", "message": stdout}
+
     def get_worker(self, worker_id: int) -> Slot:
         """Get worker by index."""
         if worker_id < 0 or worker_id >= len(self.workers):
@@ -715,3 +792,180 @@ class WorkerAdapter:
         The container should be stopped via container.stop() after all work.
         """
         pass
+
+
+class ContainerPool:
+    """
+    Pool of reusable containers for processing multiple CSVs efficiently.
+
+    Instead of creating/destroying containers per CSV, this pool:
+    1. Creates N containers at startup (with a dummy CSV)
+    2. Reuses containers across CSVs via switch_csv()
+    3. Destroys all containers at shutdown
+
+    This avoids the overhead of container creation (~5-10s per container)
+    when processing many CSV datasets.
+
+    Usage:
+        pool = ContainerPool(max_containers=4, n_question_slots=4, n_consistency=7)
+        await pool.start()
+
+        # Process multiple CSVs
+        for csv_path in csv_paths:
+            container = await pool.acquire(csv_path)
+            try:
+                # Use container for triangulation
+                ...
+            finally:
+                await pool.release(container)
+
+        await pool.stop()
+    """
+
+    def __init__(
+        self,
+        max_containers: int = 4,
+        n_question_slots: int = 4,
+        n_consistency: int = 7,
+    ):
+        """
+        Initialize the container pool.
+
+        Args:
+            max_containers: Maximum number of containers in the pool
+            n_question_slots: Parallel question slots per container
+            n_consistency: Consistency traces per question
+        """
+        self.max_containers = max_containers
+        self.n_question_slots = n_question_slots
+        self.n_consistency = n_consistency
+
+        self._containers: list[MultiTenantContainer] = []
+        self._available: asyncio.Queue[MultiTenantContainer] = asyncio.Queue()
+        self._csv_by_container: dict[str, str] = {}  # container_id -> current csv_path
+        self._started = False
+        self._lock = asyncio.Lock()
+
+    async def start(self, initial_csv_path: str | None = None):
+        """
+        Start the pool by creating all containers.
+
+        Args:
+            initial_csv_path: Optional CSV to preload (otherwise uses a dummy)
+        """
+        if self._started:
+            return
+
+        # Use a real CSV if provided, otherwise we'll switch on first acquire
+        csv_path = initial_csv_path
+
+        # If no CSV provided, find any CSV to initialize with
+        if csv_path is None:
+            # Try common locations for a CSV to bootstrap with
+            from src.core.config import config
+            csv_sources = config.csv_sources
+            if isinstance(csv_sources, str):
+                csv_sources = [csv_sources]
+            if csv_sources:
+                csv_path = csv_sources[0]
+
+        if csv_path is None:
+            raise ValueError("ContainerPool requires at least one CSV path to initialize")
+
+        print(f"Creating container pool: {self.max_containers} containers...")
+
+        # Create all containers in parallel
+        create_tasks = []
+        for i in range(self.max_containers):
+            container = MultiTenantContainer(
+                csv_path=csv_path,
+                n_question_slots=self.n_question_slots,
+                n_consistency=self.n_consistency,
+            )
+            self._containers.append(container)
+            create_tasks.append(container.start())
+
+        await asyncio.gather(*create_tasks)
+
+        # All containers start available
+        for container in self._containers:
+            await self._available.put(container)
+            self._csv_by_container[container.container_id] = str(csv_path)
+
+        self._started = True
+        print(f"✓ Container pool ready: {self.max_containers} containers")
+
+    async def stop(self):
+        """Stop all containers in the pool."""
+        if not self._started:
+            return
+
+        print(f"Stopping container pool...")
+        stop_tasks = [c.stop() for c in self._containers]
+        await asyncio.gather(*stop_tasks, return_exceptions=True)
+
+        self._containers = []
+        self._available = asyncio.Queue()
+        self._csv_by_container = {}
+        self._started = False
+        print(f"✓ Container pool stopped")
+
+    async def acquire(self, csv_path: str) -> MultiTenantContainer:
+        """
+        Acquire a container for the given CSV.
+
+        If the container was last used with a different CSV, it will
+        automatically switch to the new CSV (much faster than recreating).
+
+        This blocks until a container is available.
+
+        Args:
+            csv_path: Path to the CSV to use
+
+        Returns:
+            A MultiTenantContainer ready for use with the specified CSV
+        """
+        container = await self._available.get()
+
+        # Check if we need to switch CSVs
+        current_csv = self._csv_by_container.get(container.container_id)
+        csv_path_resolved = str(Path(csv_path).resolve())
+
+        if current_csv != csv_path_resolved:
+            # Switch to new CSV (fast - just copy + reload)
+            await container.switch_csv(csv_path)
+            self._csv_by_container[container.container_id] = csv_path_resolved
+
+        return container
+
+    async def release(self, container: MultiTenantContainer):
+        """
+        Release a container back to the pool.
+
+        The container remains running and can be reused for another CSV.
+
+        Args:
+            container: The container to release
+        """
+        # Reset all workers' namespaces before returning to pool
+        await container.reset_all_workers()
+        await self._available.put(container)
+
+    @property
+    def available_count(self) -> int:
+        """Number of containers currently available."""
+        return self._available.qsize()
+
+    @property
+    def total_count(self) -> int:
+        """Total number of containers in the pool."""
+        return len(self._containers)
+
+    def get_stats(self) -> dict:
+        """Get pool statistics."""
+        return {
+            "total": self.total_count,
+            "available": self.available_count,
+            "in_use": self.total_count - self.available_count,
+            "started": self._started,
+        }

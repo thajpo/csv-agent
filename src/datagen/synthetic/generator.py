@@ -35,6 +35,7 @@ from src.datagen.synthetic.templates import (
 from src.datagen.synthetic.verbalizer import QuestionVerbalizer
 from src.envs.csv_env import LocalCSVAnalysisEnv
 from src.utils.hashing import hash_artifact
+from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
 
 
 def _dataset_is_viable(profile: dict) -> tuple[bool, str]:
@@ -489,8 +490,20 @@ def main() -> int:
         default=None,
         help=f"LLM model for verbalization (default: {config.question_gen_model})",
     )
+    parser.add_argument(
+        "--gui-progress",
+        type=str,
+        default=None,
+        help="Path to write progress JSON for GUI polling",
+    )
 
     args = parser.parse_args()
+
+    # Setup progress writer for GUI
+    if args.gui_progress:
+        progress = ProgressWriter(output_path=args.gui_progress, stage="synthetic_generator")
+    else:
+        progress = NoOpProgressWriter()
 
     # Auto-discover datasets if none specified
     csv_paths = args.csv if args.csv else config.csv_sources
@@ -504,7 +517,16 @@ def main() -> int:
     total_questions = 0
     failed_csvs = []
 
+    # Initialize progress tracking for each dataset
     for csv_path in csv_paths:
+        dataset_name = Path(csv_path).parent.name if Path(csv_path).name == "data.csv" else Path(csv_path).stem
+        progress.set_dataset(dataset_name, 1)  # 1 unit of work per dataset
+
+    for csv_path in csv_paths:
+        dataset_name = Path(csv_path).parent.name if Path(csv_path).name == "data.csv" else Path(csv_path).stem
+        progress.set_current(dataset_name)
+        progress.log(f"Processing: {dataset_name}")
+
         print(f"\n{'='*60}")
         print(f"Processing: {csv_path}")
         print("=" * 60)
@@ -520,13 +542,18 @@ def main() -> int:
             )
             total_questions += len(result["questions"])
             print(f"Generated {len(result['questions'])} questions")
+            progress.update_dataset(dataset_name, done=1, verified=len(result["questions"]))
+            progress.log(f"✓ {dataset_name}: {len(result['questions'])} questions")
 
         except KeyboardInterrupt:
             print("\nInterrupted")
+            progress.fail("Interrupted by user")
             return 1
         except Exception as e:
             print(f"FAILED: {e}")
             failed_csvs.append(csv_path)
+            progress.update_dataset(dataset_name, done=1, failed=1)
+            progress.log(f"✗ {dataset_name}: {e}")
             continue
 
     print(f"\n{'='*60}")
@@ -535,6 +562,9 @@ def main() -> int:
         print(f"Failed: {len(failed_csvs)} datasets")
         for f in failed_csvs:
             print(f"  - {f}")
+
+    progress.log(f"Complete: {total_questions} questions from {len(csv_paths) - len(failed_csvs)} datasets")
+    progress.complete()
     return 0 if not failed_csvs else 1
 
 

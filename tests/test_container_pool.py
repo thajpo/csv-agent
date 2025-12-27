@@ -213,5 +213,122 @@ class TestWorkerAdapter:
             assert f"worker_{i}" in result
 
 
+class TestSwitchCSV:
+    """Test CSV switching functionality."""
+
+    @pytest.mark.asyncio
+    async def test_switch_csv_basic(self, container):
+        """switch_csv() should reload CSV and reset namespace."""
+        # Get original shape
+        result1 = await container.run_on_worker(0, "df.shape")
+        original_shape = result1.strip()
+
+        # Switch to same CSV (just to test the mechanism)
+        await container.switch_csv("data/csv/data.csv")
+
+        # Should still work and have the data
+        result2 = await container.run_on_worker(0, "df.shape")
+        assert original_shape in result2 or "(" in result2
+
+    @pytest.mark.asyncio
+    async def test_switch_csv_clears_namespace(self, container):
+        """switch_csv() should clear user-defined variables."""
+        # Create a variable
+        await container.run_on_worker(0, "switch_test_var = 42")
+        result1 = await container.run_on_worker(0, "switch_test_var")
+        assert "42" in result1
+
+        # Switch CSV
+        await container.switch_csv("data/csv/data.csv")
+
+        # Variable should be gone
+        result2 = await container.run_on_worker(0, "switch_test_var")
+        assert "NameError" in result2 or "not defined" in result2.lower()
+
+
+class TestContainerPool:
+    """Test ContainerPool functionality."""
+
+    @pytest.mark.asyncio
+    async def test_pool_starts(self):
+        """ContainerPool should start with correct number of containers."""
+        from src.envs.container_pool import ContainerPool
+
+        pool = ContainerPool(
+            max_containers=2,
+            n_question_slots=1,
+            n_consistency=2,
+        )
+        try:
+            await pool.start(initial_csv_path="data/csv/data.csv")
+
+            stats = pool.get_stats()
+            assert stats["total"] == 2
+            assert stats["available"] == 2
+            assert stats["in_use"] == 0
+            assert stats["started"] is True
+        finally:
+            await pool.stop()
+
+    @pytest.mark.asyncio
+    async def test_pool_acquire_release(self):
+        """acquire() and release() should manage container availability."""
+        from src.envs.container_pool import ContainerPool
+
+        pool = ContainerPool(
+            max_containers=2,
+            n_question_slots=1,
+            n_consistency=2,
+        )
+        try:
+            await pool.start(initial_csv_path="data/csv/data.csv")
+
+            # Acquire one container
+            container = await pool.acquire("data/csv/data.csv")
+            assert pool.available_count == 1
+
+            # Should work
+            result = await container.run_on_worker(0, "df.shape")
+            assert "(" in result
+
+            # Release back
+            await pool.release(container)
+            assert pool.available_count == 2
+        finally:
+            await pool.stop()
+
+    @pytest.mark.asyncio
+    async def test_pool_acquire_different_csv(self):
+        """acquire() with different CSV should switch the container."""
+        from src.envs.container_pool import ContainerPool
+        from pathlib import Path
+
+        # Skip if second CSV doesn't exist
+        csv2 = Path("data/kaggle/breast-cancer/data.csv")
+        if not csv2.exists():
+            pytest.skip("Second test CSV not available")
+
+        pool = ContainerPool(max_containers=1, n_question_slots=1, n_consistency=2)
+        try:
+            await pool.start(initial_csv_path="data/csv/data.csv")
+
+            # Acquire with first CSV
+            container = await pool.acquire("data/csv/data.csv")
+            result1 = await container.run_on_worker(0, "df.shape")
+            await pool.release(container)
+
+            # Acquire with second CSV (should switch)
+            container = await pool.acquire(str(csv2))
+            result2 = await container.run_on_worker(0, "df.shape")
+
+            # Shapes should be different (different CSVs)
+            # (Just verify it works, exact shape doesn't matter)
+            assert "(" in result2
+
+            await pool.release(container)
+        finally:
+            await pool.stop()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

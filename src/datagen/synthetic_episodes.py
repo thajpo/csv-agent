@@ -46,6 +46,7 @@ from src.core.types import (
 from src.core.config import config
 from src.utils.docker import cleanup_csv_sandbox_containers
 from src.utils.hashing import hash_artifact
+from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
 
 
 def signal_handler(signum, frame):
@@ -299,10 +300,17 @@ async def main(
     max_questions: int | None = None,
     parallel: bool = False,
     n_workers: int = 4,
+    gui_progress: str | None = None,
 ):
     ui = EpisodeGenUI()
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+
+    # Setup progress writer for GUI
+    if gui_progress:
+        progress = ProgressWriter(output_path=gui_progress, stage="synthetic_episodes")
+    else:
+        progress = NoOpProgressWriter()
 
     teacher_model = config.teacher_model
     max_turns = config.max_turns
@@ -364,6 +372,10 @@ async def main(
 
         tasks_to_run.append((dataset_name, csv_path, questions))
 
+    # Initialize progress tracking for GUI
+    for name, _, questions in tasks_to_run:
+        progress.set_dataset(name, len(questions))
+
     all_episodes = []
     all_failures = []
     failure_by_template = defaultdict(int)
@@ -395,9 +407,19 @@ async def main(
             all_failures.extend(failures)
             for f in failures:
                 failure_by_template[f.get("template_name", "unknown")] += 1
+
+            # Update progress for GUI
+            progress.update_dataset(
+                dataset_name,
+                done=len(episodes) + len(failures),
+                verified=len(episodes),
+                failed=len(failures),
+            )
+            progress.log(f"✓ {dataset_name}: {len(episodes)} verified, {len(failures)} failed")
     else:
         # Sequential execution
         for name, csv_path, questions in tasks_to_run:
+            progress.set_current(name)
             _, episodes, failures = await process_dataset_task(
                 dataset_name=name,
                 csv_path=csv_path,
@@ -411,6 +433,15 @@ async def main(
             all_failures.extend(failures)
             for f in failures:
                 failure_by_template[f.get("template_name", "unknown")] += 1
+
+            # Update progress for GUI
+            progress.update_dataset(
+                name,
+                done=len(episodes) + len(failures),
+                verified=len(episodes),
+                failed=len(failures),
+            )
+            progress.log(f"✓ {name}: {len(episodes)} verified, {len(failures)} failed")
 
     # Write episodes
     with open(output_jsonl, "w") as f:
@@ -428,6 +459,10 @@ async def main(
         ui.base.print_status("Failures by template:")
         for template, count in sorted(failure_by_template.items(), key=lambda x: -x[1]):
             ui.base.print_status(f"  {template}: {count}")
+
+    # Mark progress complete
+    progress.log(f"Completed: {len(all_episodes)} episodes, {len(all_failures)} failures")
+    progress.complete()
 
     return 0 if not all_failures else 1
 
@@ -463,6 +498,12 @@ if __name__ == "__main__":
         default=4,
         help="Number of parallel workers (default: 4)",
     )
+    parser.add_argument(
+        "--gui-progress",
+        type=str,
+        default=None,
+        help="Path to write progress JSON for GUI polling",
+    )
     args = parser.parse_args()
 
     try:
@@ -474,6 +515,7 @@ if __name__ == "__main__":
                     max_questions=args.max_questions,
                     parallel=args.parallel,
                     n_workers=args.n_workers,
+                    gui_progress=args.gui_progress,
                 )
             )
         )

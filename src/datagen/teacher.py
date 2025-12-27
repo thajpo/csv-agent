@@ -17,8 +17,10 @@ import asyncio
 import json
 import re
 import time
-import pandas as pd
+from pathlib import Path
 from typing import Any, List
+
+import pandas as pd
 
 from src.core.environment import Environment
 from src.core.types import (
@@ -615,6 +617,7 @@ async def batch_triangulate(
     max_turns: int = 10,
     sampling_args: dict | None = None,
     use_container_pool: bool = True,  # Enable container reuse optimization
+    external_container: Any = None,  # Pre-created container from ContainerPool
     ui: Any,  # UI instance for Rich output (required)
     float_tol: float = 0.1,
 ) -> list[
@@ -656,17 +659,19 @@ async def batch_triangulate(
     results = []
     verified_count = [0]  # Use list for mutation in nested function
     container = None
+    owns_container = False  # Track if we created the container (vs external)
 
-    # Create multi-tenant container if enabled
-    if use_container_pool:
+    # Use external container if provided, otherwise create one
+    if external_container is not None:
+        container = external_container
+        owns_container = False
+        ui.base.print_status(f"Using pooled container for {Path(csv_path).name}")
+    elif use_container_pool:
         traces_per_slot = 1 + n_consistency
         total_workers = n_question_slots * traces_per_slot
 
-        # Cleanup existing containers first
-        ui.base.print_status("Cleaning up old containers...")
-        from src.utils.docker import cleanup_csv_sandbox_containers
-
-        cleanup_csv_sandbox_containers()
+        # NOTE: Container cleanup is now done ONCE at pipeline start (episode_gen.py)
+        # to avoid race conditions in parallel mode where one task cleans up another's container
 
         ui.base.print_status(
             f"Creating multi-tenant container ({n_question_slots} slots × {traces_per_slot} workers = {total_workers} workers)..."
@@ -679,6 +684,7 @@ async def batch_triangulate(
             n_consistency=n_consistency,
         )
         await container.start()
+        owns_container = True
 
         ui.base.print_success(f"✓ Container ready ({total_workers} workers in {n_question_slots} slots)")
 
@@ -774,8 +780,8 @@ async def batch_triangulate(
                 results.append(result)
 
     finally:
-        # Clean up container
-        if container:
+        # Only clean up container if we created it (not if external/pooled)
+        if container and owns_container:
             ui.base.print_status("Cleaning up container...")
             await container.stop()
 
