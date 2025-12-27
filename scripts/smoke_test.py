@@ -179,7 +179,7 @@ async def run_triangulation(
     n_consistency: int = 3,
 ) -> list | None:
     from src.datagen.teacher import triangulate_teacher
-    from src.datagen.ui import EpisodeGenUI
+    from src.datagen.pipeline_ui import EpisodeGenUI
     from src.datagen.synthetic.generator import load_dataset_description
     from src.core.config import config
     from src.core.prompts import generate_data_overview

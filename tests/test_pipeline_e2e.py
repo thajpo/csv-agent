@@ -127,7 +127,7 @@ class TestPipelineContract:
     async def test_synthetic_evaluator_with_fixture(self, expected_episode_path):
         """Test that SyntheticEvaluator works with fixture data."""
         from src.core.types import EpisodeJSONL
-        from src.eval.synthetic import SyntheticEvaluator
+        from src.eval.synthetic_eval import SyntheticEvaluator
 
         with open(expected_episode_path) as f:
             data = json.load(f)
