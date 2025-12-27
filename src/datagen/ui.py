@@ -204,8 +204,14 @@ class EpisodeGenUI:
             if result["success"]:
                 self.base.print_success("Code executed successfully")
                 stdout = result["stdout"]
-                if stdout.strip():
-                    self.console.print(f"[green]  Output:[/green] {stdout.strip()}")
+                # Filter out hook spam from display
+                display_lines = [
+                    line for line in stdout.split("\n")
+                    if not line.startswith("📍 Hook:")
+                ]
+                display_stdout = "\n".join(display_lines).strip()
+                if display_stdout:
+                    self.console.print(f"[green]  Output:[/green] {display_stdout}")
             else:
                 self.base.print_error("Execution failed")
                 stderr = result["stderr"]

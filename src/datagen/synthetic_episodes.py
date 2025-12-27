@@ -95,6 +95,7 @@ async def validate_single_question(
     sampling_args: dict,
     dataset_description: str,
     data_overview: str,
+    ui: EpisodeGenUI,
 ) -> tuple[bool, dict | None, float, str | None]:
     """
     Validate a single synthetic question by running teacher trace.
@@ -106,15 +107,16 @@ async def validate_single_question(
 
     try:
         # Run teacher trace WITH hint (gold mode)
-        trace, conversation, system_prompt = await execute_teacher_trace(
+        trace, conversation, system_prompt, elapsed_seconds = await execute_teacher_trace(
             csv_path=csv_path,
-            question=question_dict,
+            question=question_dict.get("question", ""),
             model=teacher_model,
+            hint=question_dict.get("hint"),  # Synthetic questions always use hint
             max_turns=max_turns,
             sampling_args=sampling_args,
             dataset_description=dataset_description,
             data_overview=data_overview,
-            use_hint=True,  # Synthetic questions always use hint
+            ui=ui,
         )
 
         elapsed = time.time() - start_time
@@ -128,13 +130,12 @@ async def validate_single_question(
         if expected_hash is None:
             return False, trace, elapsed, "No ground_truth_hash in question"
 
-        actual_hash = trace.get("answer_hash")
+        actual_hash = trace.get("final_answer_hash")
         if actual_hash != expected_hash:
-            # Try tolerant comparison if hashes don't match exactly
-            # (floating point differences can cause hash mismatches)
             expected_answer = question_dict.get("_ground_truth")
-            actual_answer = trace.get("answer")
+            actual_answer = trace.get("final_answer")
 
+            # Try tolerant comparison if hashes don't match exactly
             if expected_answer is not None and actual_answer is not None:
                 # Simple float tolerance check
                 try:
@@ -144,7 +145,11 @@ async def validate_single_question(
                 except (TypeError, ValueError):
                     pass
 
-            return False, trace, elapsed, f"Hash mismatch: expected {expected_hash[:16]}..., got {actual_hash[:16] if actual_hash else 'None'}..."
+            # Debug: show what differed
+            import json
+            exp_str = json.dumps(expected_answer, default=str)[:200] if expected_answer else "None"
+            act_str = json.dumps(actual_answer, default=str)[:200] if actual_answer else "None"
+            return False, trace, elapsed, f"Answer mismatch:\n      Expected: {exp_str}\n      Got:      {act_str}"
 
         return True, trace, elapsed, None
 
@@ -185,6 +190,7 @@ async def process_dataset(
             sampling_args=sampling_args,
             dataset_description=dataset_description,
             data_overview=data_overview,
+            ui=ui,
         )
 
         if success and trace:
