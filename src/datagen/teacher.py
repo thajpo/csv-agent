@@ -15,12 +15,15 @@ This filters out questions where:
 
 import asyncio
 import json
+import logging
 import re
 import time
 from pathlib import Path
 from typing import Any, List
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from src.core.environment import Environment
 from src.core.types import (
@@ -36,25 +39,35 @@ from src.utils.normalization import normalize_value
 def parse_hooks_from_stdout(stdout: str) -> list[HookDict]:
     """Extract hook JSON objects from execution stdout."""
     hooks = []
+    skipped = 0
     for line in stdout.split("\n"):
         if "📍 Hook:" in line:
             json_start = line.find("{")
-            if json_start != -1:
-                try:
-                    hook_data = json.loads(line[json_start:])
-                    if hook_data.get("__csv_agent_hook__"):
-                        hooks.append(
-                            HookDict(
-                                variable_name=hook_data.get("variable_name"),
-                                code_line=hook_data.get("code_line", ""),
-                                value=hook_data.get("value"),
-                                value_hash=hook_data.get("value_hash", ""),
-                                depends_on=hook_data.get("depends_on", []),
-                                description=hook_data.get("description"),
-                            )
+            if json_start == -1:
+                logger.warning(f"Hook line missing JSON: {line[:80]}")
+                skipped += 1
+                continue
+            try:
+                hook_data = json.loads(line[json_start:])
+                if hook_data.get("__csv_agent_hook__"):
+                    hooks.append(
+                        HookDict(
+                            variable_name=hook_data.get("variable_name"),
+                            code_line=hook_data.get("code_line", ""),
+                            value=hook_data.get("value"),
+                            value_hash=hook_data.get("value_hash", ""),
+                            depends_on=hook_data.get("depends_on", []),
+                            description=hook_data.get("description"),
                         )
-                except json.JSONDecodeError:
-                    continue
+                    )
+                else:
+                    logger.debug(f"Hook missing __csv_agent_hook__ marker: {line[:80]}")
+                    skipped += 1
+            except json.JSONDecodeError as e:
+                logger.warning(f"Malformed hook JSON: {e} in: {line[:80]}")
+                skipped += 1
+    if skipped:
+        logger.debug(f"Hook parsing: kept {len(hooks)}, skipped {skipped}")
     return hooks
 
 
@@ -77,12 +90,23 @@ def build_trace_dict(
     ]
     execution_results_per_turn = final_state.execution_results_per_turn
 
+    # Warn on turn count mismatch
+    if len(assistant_messages) != len(execution_results_per_turn):
+        logger.warning(
+            f"Turn count mismatch: {len(assistant_messages)} assistant messages "
+            f"vs {len(execution_results_per_turn)} execution results"
+        )
+
     for turn_idx, assistant_msg in enumerate(assistant_messages):
         response = assistant_msg["content"]
         reasoning = extract_reasoning_from_response(response)
 
         code_blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
         code = code_blocks[0] if code_blocks else ""
+
+        # Warn if code fence detected but regex didn't match
+        if not code_blocks and "```python" in response:
+            logger.warning(f"Turn {turn_idx}: code fence detected but regex found no blocks")
 
         exec_results = (
             execution_results_per_turn[turn_idx]
@@ -128,6 +152,112 @@ def build_trace_dict(
     )
 
 
+# ============= Answer Comparison Helpers =============
+
+
+def _floats_match(a: float, b: float, tol: float) -> bool:
+    """Compare two floats with tolerance."""
+    return abs(float(a) - float(b)) <= tol
+
+
+def _compare_dataframes(df1: pd.DataFrame, df2: pd.DataFrame, tol: float) -> bool:
+    """Compare DataFrames with sorting and tolerance."""
+    try:
+        # Sort columns
+        df1 = df1.sort_index(axis=1)
+        df2 = df2.sort_index(axis=1)
+
+        if df1.shape != df2.shape:
+            return False
+
+        # Sort rows by all columns for order-invariant comparison
+        df1 = df1.sort_values(by=list(df1.columns)).reset_index(drop=True)
+        df2 = df2.sort_values(by=list(df2.columns)).reset_index(drop=True)
+
+        pd.testing.assert_frame_equal(
+            df1, df2, check_dtype=False, check_like=True, atol=tol, rtol=tol
+        )
+        return True
+    except AssertionError:
+        return False
+    except Exception as e:
+        logger.debug(f"DataFrame comparison error: {e}")
+        return False
+
+
+def _compare_statistical_dict(
+    v1: dict, v2: dict, float_tol: float, p_value_tol: float
+) -> bool:
+    """Compare dicts with 'answer' and/or 'p_value' keys."""
+    if set(v1.keys()) != set(v2.keys()):
+        return False
+
+    # Compare "answer" field (case-insensitive string)
+    if "answer" in v1:
+        if str(v1["answer"]).lower().strip() != str(v2["answer"]).lower().strip():
+            return False
+
+    # Compare "p_value" field (stricter float tolerance)
+    if "p_value" in v1:
+        try:
+            if not _floats_match(v1["p_value"], v2["p_value"], p_value_tol):
+                return False
+        except (ValueError, TypeError):
+            # Fall back to string comparison if not numeric
+            if str(v1["p_value"]) != str(v2["p_value"]):
+                return False
+
+    # Compare remaining keys recursively
+    for k in v1.keys():
+        if k in ("answer", "p_value"):
+            continue
+        if not _values_match_recursive(v1[k], v2[k], float_tol, p_value_tol):
+            return False
+
+    return True
+
+
+def _values_match_recursive(
+    v1: Any, v2: Any, float_tol: float, p_value_tol: float
+) -> bool:
+    """Recursively compare values with type-appropriate tolerance."""
+    # Both floats/ints
+    if isinstance(v1, (int, float)) and isinstance(v2, (int, float)):
+        return _floats_match(v1, v2, float_tol)
+
+    # Both dicts
+    if isinstance(v1, dict) and isinstance(v2, dict):
+        special_keys = {"answer", "p_value"}
+        if special_keys.intersection(v1.keys()) or special_keys.intersection(v2.keys()):
+            return _compare_statistical_dict(v1, v2, float_tol, p_value_tol)
+
+        if set(v1.keys()) != set(v2.keys()):
+            return False
+        for k in v1.keys():
+            if not _values_match_recursive(v1[k], v2[k], float_tol, p_value_tol):
+                return False
+        return True
+
+    # Both lists/tuples
+    if isinstance(v1, (tuple, list)) and isinstance(v2, (tuple, list)):
+        if len(v1) != len(v2):
+            return False
+        for a, b in zip(v1, v2):
+            if not _values_match_recursive(a, b, float_tol, p_value_tol):
+                return False
+        return True
+
+    # Fallback: exact equality
+    try:
+        return v1 == v2
+    except Exception as e:
+        logger.debug(f"Equality comparison error: {e}")
+        return False
+
+
+# ============= Main Answer Matching =============
+
+
 def answers_match(
     hash1: str | None,
     hash2: str | None,
@@ -148,122 +278,24 @@ def answers_match(
     Returns:
         True if answers match within tolerance
     """
-    # 1. Exact hash match (fast path)
-    if hash1 is not None and hash2 is not None and hash1 == hash2:
+    # Fast path: exact hash match
+    if hash1 and hash2 and hash1 == hash2:
         return True
 
-    # 2. Tolerant comparison if we have raw values
-    if val1 is not None and val2 is not None:
-        # A. Direct DataFrame vs DataFrame (preserves sorting/testing logic)
-        if isinstance(val1, pd.DataFrame) and isinstance(val2, pd.DataFrame):
-            try:
-                # 1. Sort columns
-                df1 = val1.sort_index(axis=1)
-                df2 = val2.sort_index(axis=1)
+    if val1 is None or val2 is None:
+        return False
 
-                if df1.shape != df2.shape:
-                    return False
-
-                # 2. Sort rows by values to handle reordering
-                # We sort by all columns to be completely order-invariant
-                df1 = df1.sort_values(by=list(df1.columns)).reset_index(drop=True)
-                df2 = df2.sort_values(by=list(df2.columns)).reset_index(drop=True)
-
-                pd.testing.assert_frame_equal(
-                    df1,
-                    df2,
-                    check_dtype=False,
-                    check_like=True,
-                    atol=float_tol,
-                    rtol=float_tol,
-                )
-                return True
-            except (AssertionError, Exception):
-                pass  # DataFrame comparison failed, fall through to normalization
-
-        # B. Normalize and compare
-        v1 = normalize_value(val1)
-        v2 = normalize_value(val2)
-
-        # Both floats
-        if isinstance(v1, (int, float)) and isinstance(v2, (int, float)):
-            return abs(float(v1) - float(v2)) <= float_tol
-
-        # Both dicts: compare keys exactly, values with float tolerance
-        if isinstance(v1, dict) and isinstance(v2, dict):
-
-            def _values_match(a: Any, b: Any) -> bool:
-                if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-                    return abs(float(a) - float(b)) <= float_tol
-                return answers_match(
-                    None,
-                    None,
-                    a,
-                    b,
-                    float_tol=float_tol,
-                    p_value_tol=p_value_tol,
-                )
-
-            special_keys = {"answer", "p_value"}
-            has_special = any(k in v1 or k in v2 for k in special_keys)
-
-            # Structured statistical answers: compare required keys AND all other fields
-            if has_special:
-                if set(v1.keys()) != set(v2.keys()):
-                    return False
-
-                if "answer" in v1:
-                    if (
-                        str(v1["answer"]).lower().strip()
-                        != str(v2["answer"]).lower().strip()
-                    ):
-                        return False
-
-                if "p_value" in v1:
-                    try:
-                        p1 = float(v1["p_value"])
-                        p2 = float(v2["p_value"])
-                        if abs(p1 - p2) > p_value_tol:
-                            return False
-                    except (ValueError, TypeError):
-                        if str(v1["p_value"]) != str(v2["p_value"]):
-                            return False
-
-                for k in v1.keys():
-                    if k in special_keys:
-                        continue
-                    if not _values_match(v1[k], v2[k]):
-                        return False
-                return True
-
-            # Standard exact key match for other dicts
-            if set(v1.keys()) != set(v2.keys()):
-                return False
-            for k in v1.keys():
-                if not _values_match(v1[k], v2[k]):
-                    return False
+    # DataFrame comparison (before normalization)
+    if isinstance(val1, pd.DataFrame) and isinstance(val2, pd.DataFrame):
+        if _compare_dataframes(val1, val2, float_tol):
             return True
+        # Fall through to normalization if DataFrame compare fails
 
-        # Both tuples/lists: compare element-wise
-        if isinstance(v1, (tuple, list)) and isinstance(v2, (tuple, list)):
-            if len(v1) != len(v2):
-                return False
-            for a, b in zip(v1, v2):
-                if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-                    if abs(float(a) - float(b)) > float_tol:
-                        return False
-                elif a != b:
-                    return False
-            return True
+    # Normalize and compare recursively
+    v1 = normalize_value(val1)
+    v2 = normalize_value(val2)
 
-        # Exact equality for others
-        try:
-            if v1 == v2:
-                return True
-        except Exception:
-            return False
-
-    return False
+    return _values_match_recursive(v1, v2, float_tol, p_value_tol)
 
 
 def get_majority_answer(answers: list[Any], float_tol: float = 0.1) -> tuple[Any, int]:

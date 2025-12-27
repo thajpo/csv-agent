@@ -8,9 +8,14 @@ module for output, keeping the environment logic separate from presentation.
 Refactored to use a sandboxed Python environment for code execution.
 """
 
+import ast
+import json
+import logging
 import re
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from src.core.model import APILLM
 from src.utils.interaction import (
@@ -103,25 +108,27 @@ def parse_submitted_answer(output: str) -> str | None:
     Returns:
         The submitted answer value, or None if no submission found
     """
-    # Pattern: "✓ Submitted: <value>"
     match = re.search(r"✓ Submitted: (.+)", output)
-    if match:
-        answer_str = match.group(1).strip()
-        # Try to parse as JSON first (new format)
-        try:
-            import json
+    if not match:
+        return None
 
-            return json.loads(answer_str)
-        except (json.JSONDecodeError, ValueError):
-            # Fall back to ast.literal_eval for backward compatibility
-            try:
-                import ast
+    answer_str = match.group(1).strip()
 
-                return ast.literal_eval(answer_str)
-            except (ValueError, SyntaxError):
-                # Return as string if can't parse
-                return answer_str
-    return None
+    # Try JSON first (expected format)
+    try:
+        return json.loads(answer_str)
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Try Python literal (legacy format)
+    try:
+        return ast.literal_eval(answer_str)
+    except (ValueError, SyntaxError):
+        pass
+
+    # Fallback to raw string - log the unexpected format
+    logger.warning(f"Answer not parseable as JSON/literal, returning raw string: {answer_str[:100]}")
+    return answer_str
 
 
 # Keywords that suggest a statistical/hypothesis answer needing structured format
