@@ -99,6 +99,27 @@ uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --pri
 
 ---
 
+## Debugging & Inspection
+
+**Inspect outputs:**
+```bash
+uv run python -m src.utils.inspect questions               # Preview questions
+uv run python -m src.utils.inspect questions --show-hint   # With hints
+uv run python -m src.utils.inspect episodes --verified     # Show verified episodes
+uv run python -m src.utils.inspect trace abc123            # Deep-dive single episode
+```
+
+**Validate single question:**
+```bash
+uv run python -m src.datagen.validate_question \
+    --csv data/csv/data.csv \
+    --questions-file data/questions_synthetic/dataset/questions.json \
+    --index 0 \
+    --show-code
+```
+
+---
+
 ## Smoke Test
 
 Validate the pipeline end-to-end:
