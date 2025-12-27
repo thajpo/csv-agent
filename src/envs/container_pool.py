@@ -216,6 +216,8 @@ def run_worker(worker_id: int):
     exec(SETUP_INJECT, namespace, namespace)
 
     execution_count = 0
+    crash_count = 0
+    MAX_CRASHES = 3
 
     # Signal ready
     Path(ready_flag).write_text("ready")
@@ -226,6 +228,7 @@ def run_worker(worker_id: int):
                 payload = f.read()
             if not payload:
                 continue
+            crash_count = 0  # Reset on successful read
 
             request = json.loads(payload)
 
@@ -308,7 +311,23 @@ def run_worker(worker_id: int):
                 f.write(json.dumps(result))
 
         except Exception as e:
-            print(f"Worker {{worker_id}} error: {{e}}", file=sys.stderr)
+            crash_count += 1
+            print(f"Worker {{worker_id}} error ({crash_count}/{{MAX_CRASHES}}): {{e}}", file=sys.stderr)
+            if crash_count >= MAX_CRASHES:
+                print(f"Worker {{worker_id}} exceeded max crashes, exiting", file=sys.stderr)
+                break
+            # Reset namespace for recovery
+            namespace = create_restricted_namespace()
+            namespace["df"] = df
+            namespace["pd"] = pd
+            namespace["np"] = np
+            namespace["scipy"] = scipy
+            namespace["stats"] = stats
+            namespace["sklearn"] = sklearn
+            namespace["statsmodels"] = statsmodels
+            namespace["sm"] = sm
+            exec(SETUP_INJECT, namespace, namespace)
+            execution_count = 0
 
 # ============================================================================
 # MAIN: Fork workers
@@ -556,12 +575,21 @@ for pid in children:
             "cp", str(new_path), f"{self.container_id}:/data.csv"
         )
 
-        # Tell all workers to reload the CSV
-        results = await asyncio.gather(*[
-            self._reload_csv_on_slot(worker) for worker in self.workers
-        ])
+        # Tell all workers to reload the CSV (atomic: all must succeed)
+        results = await asyncio.gather(
+            *[self._reload_csv_on_slot(worker) for worker in self.workers],
+            return_exceptions=True
+        )
 
-        # Update internal state
+        # Check for failures before updating state
+        failures = [r for r in results if isinstance(r, Exception)]
+        if failures:
+            raise RuntimeError(
+                f"CSV switch failed for {len(failures)}/{len(self.workers)} workers. "
+                f"First error: {failures[0]}"
+            )
+
+        # Update internal state only after all workers succeeded
         self.csv_path = new_path
 
         # Return shape from first worker's response
@@ -656,10 +684,22 @@ with open('{slot.res_fifo}', 'r') as f:
         end = start + self.traces_per_slot
         return self.workers[start:end]
 
-    def get_slot_worker_ids(self, slot_index: int) -> list[int]:
+    def get_slot_worker_ids(
+        self, slot_index: int, n_consistency: int | None = None
+    ) -> list[int]:
         """Get worker IDs for a specific question slot."""
         start = slot_index * self.traces_per_slot
-        return list(range(start, start + self.traces_per_slot))
+        if n_consistency is None:
+            end = start + self.traces_per_slot
+        else:
+            if n_consistency < 0:
+                raise ValueError("n_consistency must be >= 0")
+            if n_consistency > self.n_consistency:
+                raise ValueError(
+                    f"n_consistency {n_consistency} exceeds container capacity {self.n_consistency}"
+                )
+            end = start + 1 + n_consistency
+        return list(range(start, end))
 
     async def reset_slot(self, slot_index: int):
         """Reset all workers in a specific slot for reuse."""
@@ -674,6 +714,20 @@ with open('{slot.res_fifo}', 'r') as f:
         triangulate_teacher's container_pool parameter.
         """
         worker_ids = self.get_slot_worker_ids(slot_index)
+        return [
+            (WorkerAdapter(self, wid), WorkerAdapter.create_state(wid))
+            for wid in worker_ids
+        ]
+
+    def create_slot_pool_for_consistency(
+        self, slot_index: int, n_consistency: int
+    ) -> list[tuple["WorkerAdapter", dict]]:
+        """
+        Create a container_pool using only the workers needed for n_consistency.
+        """
+        worker_ids = self.get_slot_worker_ids(
+            slot_index, n_consistency=n_consistency
+        )
         return [
             (WorkerAdapter(self, wid), WorkerAdapter.create_state(wid))
             for wid in worker_ids

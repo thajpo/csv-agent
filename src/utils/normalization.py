@@ -49,7 +49,10 @@ def normalize_value(val: Any) -> Any:
     if isinstance(val, pd.Series):
         if val.size == 1:
             return val.iloc[0]
-        return val.to_dict()
+        # Consistent with DataFrame: use dict if index meaningful, else list
+        if not isinstance(val.index, pd.RangeIndex):
+            return val.to_dict()
+        return val.tolist()
 
     if isinstance(val, np.generic):
         return val.item()

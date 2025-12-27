@@ -75,13 +75,24 @@ def parse_execution_result(output: str) -> CodeCellResult:
     if not output or output == "(no output)":
         return CodeCellResult(success=True, stdout="", stderr="", code=code)
     
-    # Check for error indicators (Python traceback)
+    # Check for error indicators (Python traceback patterns)
+    # More specific patterns to avoid false positives like "Standard Error: 0.5"
     error_indicators = [
         "Traceback (most recent call last):",
-        "Error:",
-        "Exception:",
+        "\nError: ",       # Newline + Error: space (common in tracebacks)
+        "Error:\n",        # Error: followed by newline
+        "\nException: ",   # Exception with context
+        "NameError:",
+        "TypeError:",
+        "ValueError:",
+        "KeyError:",
+        "IndexError:",
+        "AttributeError:",
+        "ImportError:",
+        "SyntaxError:",
+        "ZeroDivisionError:",
     ]
-    
+
     is_error = any(indicator in output for indicator in error_indicators)
     
     if is_error:
