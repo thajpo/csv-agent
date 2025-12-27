@@ -22,6 +22,32 @@ from src.datagen.pipeline_ui import QuestionGenUI
 from src.core.config import config
 
 from src.envs.csv_env import LocalCSVAnalysisEnv
+
+
+def get_datasets_with_episodes() -> set[str]:
+    """
+    Load csv_source values from existing episodes JSONL.
+
+    Returns set of csv paths that have episodes generated.
+    Used to prevent accidental question regeneration.
+    """
+    episodes_path = Path(config.episodes_llm_jsonl)
+    if not episodes_path.exists():
+        return set()
+
+    datasets = set()
+    with open(episodes_path) as f:
+        for line in f:
+            try:
+                ep = json.loads(line)
+                csv_source = ep.get("csv_source", "")
+                if csv_source:
+                    datasets.add(csv_source)
+            except json.JSONDecodeError:
+                continue
+    return datasets
+
+
 from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
 from src.core.types import ExplorationTurn, ExplorationTrace
@@ -368,11 +394,12 @@ async def process_single_dataset(
 async def run_parallel_generation(
     csv_sources: list[str],
     max_concurrent: int = 10,
-) -> tuple[int, int]:
+    regenerate: bool = False,
+) -> tuple[int, int, int]:
     """
     Run question generation for all CSVs with parallel execution.
 
-    Returns (success_count, failure_count)
+    Returns (success_count, failure_count, skipped_count)
     """
     # Common config
     temperature = config.sampling_args.temperature
@@ -380,6 +407,10 @@ async def run_parallel_generation(
     model = config.question_gen_model
     max_turns = config.question_gen_max_turns
     base_output_dir = Path(config.questions_llm_dir)
+
+    # Check for existing episodes (lock mechanism)
+    datasets_with_episodes = get_datasets_with_episodes() if not regenerate else set()
+    skipped_count = 0
 
     # Prepare tasks
     semaphore = asyncio.Semaphore(max_concurrent)
@@ -416,6 +447,14 @@ async def run_parallel_generation(
         else:
             dataset_name = csv_path.stem
 
+        # Skip if episodes already exist (unless --regenerate)
+        if csv_path_str in datasets_with_episodes:
+            ui.print_warning(
+                f"Skipping {dataset_name}: episodes already exist (use --regenerate to override)"
+            )
+            skipped_count += 1
+            continue
+
         # Output directory (per-dataset subfolder)
         output_dir = base_output_dir / dataset_name
 
@@ -436,7 +475,7 @@ async def run_parallel_generation(
         )
 
     if not tasks:
-        return 0, 0
+        return 0, 0, skipped_count
 
     # Run all tasks concurrently (semaphore limits actual parallelism)
     ui.print_header(
@@ -447,10 +486,10 @@ async def run_parallel_generation(
     success_count = sum(1 for _, success, _ in results if success)
     failure_count = sum(1 for _, success, _ in results if not success)
 
-    return success_count, failure_count
+    return success_count, failure_count, skipped_count
 
 
-def main(max_datasets: int | None = None):
+def main(max_datasets: int | None = None, regenerate: bool = False):
     csv_sources = config.csv_sources
     if isinstance(csv_sources, str):
         csv_sources = [csv_sources]
@@ -466,20 +505,23 @@ def main(max_datasets: int | None = None):
     max_concurrent = config.max_concurrent_containers
     ui.print_info("Datasets", str(len(csv_sources)))
     ui.print_info("Max concurrent", str(max_concurrent))
+    if regenerate:
+        ui.print_warning("Regenerate mode: will overwrite existing questions")
     ui.print_empty_line()
 
-    success_count, failure_count = asyncio.run(
-        run_parallel_generation(csv_sources, max_concurrent)
+    success_count, failure_count, skipped_count = asyncio.run(
+        run_parallel_generation(csv_sources, max_concurrent, regenerate=regenerate)
     )
 
     # Final summary
     ui.print_summary_header()
-    ui.print_status(
-        f"Processed {len(csv_sources)} sources: {success_count} success, {failure_count} failed"
-    )
+    summary_parts = [f"{success_count} success", f"{failure_count} failed"]
+    if skipped_count > 0:
+        summary_parts.append(f"{skipped_count} skipped (episodes exist)")
+    ui.print_status(f"Processed {len(csv_sources)} sources: {', '.join(summary_parts)}")
 
     # Exit codes: 0=success, 1=partial success (some data), 2=total failure
-    if success_count == 0:
+    if success_count == 0 and skipped_count == 0:
         return 2
     elif failure_count > 0:
         return 1
@@ -497,10 +539,15 @@ if __name__ == "__main__":
         default=None,
         help="Limit number of datasets to process (for testing)",
     )
+    parser.add_argument(
+        "--regenerate",
+        action="store_true",
+        help="Regenerate questions even if episodes already exist for the dataset",
+    )
     args = parser.parse_args()
 
     try:
-        sys.exit(main(max_datasets=args.max_datasets))
+        sys.exit(main(max_datasets=args.max_datasets, regenerate=args.regenerate))
     except KeyboardInterrupt:
         print("\n\n🛑 Interrupted by user")
         sys.exit(0)

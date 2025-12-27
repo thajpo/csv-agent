@@ -294,7 +294,11 @@ def cmd_progress():
 
 
 def cmd_generate_questions(
-    synth: bool, llm: bool, max_datasets: int | None, dry_run: bool
+    synth: bool,
+    llm: bool,
+    max_datasets: int | None,
+    dry_run: bool,
+    regenerate: bool = False,
 ):
     """Generate questions using synthetic templates or LLM exploration."""
     if not synth and not llm:
@@ -313,6 +317,8 @@ def cmd_generate_questions(
             console.print(f"  [blue]llm[/blue]: Will run LLM exploration")
             console.print(f"    Max datasets: {max_datasets or 'all'}")
             console.print(f"    Output: data/questions/")
+            if regenerate:
+                console.print(f"    [yellow]Mode: Regenerate (will overwrite)[/yellow]")
         console.print("\n[dim]No changes made (dry run)[/dim]")
         return 0
 
@@ -330,7 +336,7 @@ def cmd_generate_questions(
         console.print("[bold]Generating LLM questions...[/bold]")
         from src.datagen.question_gen import main as llm_gen_main
 
-        result = llm_gen_main(max_datasets=max_datasets)
+        result = llm_gen_main(max_datasets=max_datasets, regenerate=regenerate)
         if result != 0:
             exit_code = result
 
@@ -738,8 +744,19 @@ def _interactive_generate_questions():
     synth = source in ("synth", "both")
     llm = source in ("llm", "both")
 
+    # Only ask about regenerate if LLM mode is selected
+    regenerate = False
+    if llm:
+        regenerate = questionary.confirm(
+            "Regenerate questions even if episodes exist?", default=False
+        ).ask()
+
     cmd_generate_questions(
-        synth=synth, llm=llm, max_datasets=max_datasets, dry_run=dry_run
+        synth=synth,
+        llm=llm,
+        max_datasets=max_datasets,
+        dry_run=dry_run,
+        regenerate=regenerate,
     )
 
 
@@ -869,6 +886,11 @@ Examples:
     q_parser.add_argument("--llm", action="store_true", help="LLM exploration")
     q_parser.add_argument("--max-datasets", type=int, help="Limit datasets")
     q_parser.add_argument("--dry-run", action="store_true", help="Preview only")
+    q_parser.add_argument(
+        "--regenerate",
+        action="store_true",
+        help="Regenerate questions even if episodes exist (LLM only)",
+    )
 
     e_parser = gen_sub.add_parser("episodes", help="Generate episodes")
     e_parser.add_argument(
@@ -980,6 +1002,7 @@ def main():
                 llm=args.llm,
                 max_datasets=args.max_datasets,
                 dry_run=args.dry_run,
+                regenerate=args.regenerate,
             )
         elif args.gen_type == "episodes":
             return cmd_generate_episodes(
