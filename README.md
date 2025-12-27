@@ -33,7 +33,7 @@ uv run python -m src.datagen.run_all --synth               # Synthetic only
 uv run python -m src.datagen.run_all --llm                 # LLM only
 uv run python -m src.datagen.run_all --triangulate         # Episodes only (existing questions)
 uv run python -m src.datagen.run_all --synth --triangulate # Synthetic episodes only
-uv run python -m src.datagen.run_all --max-questions 3     # Quick test run
+uv run python -m src.datagen.run_all --test                # Quick e2e test (~30 seconds)
 ```
 
 ---
