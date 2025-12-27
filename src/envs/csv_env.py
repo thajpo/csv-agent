@@ -425,14 +425,21 @@ while True:
         self.pip_install_packages = pip_install_packages
         self.execution_count = 0
 
-    async def _run_docker(self, *args: str, check: bool = True) -> tuple[str, str]:
-        """Run a docker command asynchronously."""
+    async def _run_docker(
+        self, *args: str, check: bool = True, timeout: float | None = None
+    ) -> tuple[str, str]:
+        """Run a docker command asynchronously with optional timeout."""
         proc = await asyncio.create_subprocess_exec(
             "docker", *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise TimeoutError(f"Docker command timed out after {timeout}s: docker {' '.join(args[:3])}...")
         if check and proc.returncode != 0:
             raise RuntimeError(f"Docker command failed: {stderr.decode()}")
         return stdout.decode(), stderr.decode()
@@ -586,14 +593,21 @@ with open('{self._RESPONSE_FIFO}', 'r') as f:
     print(f.read())
 '''
         stdout, stderr = await self._run_docker(
-            "exec", sandbox_id, "python", "-c", send_command
+            "exec", sandbox_id, "python", "-c", send_command,
+            timeout=60.0  # Prevent indefinite hangs on FIFO deadlock
         )
-        
-        # Parse response
+
+        # Parse response with detailed error context
         try:
             response = json.loads(stdout.strip())
-        except json.JSONDecodeError:
-            return f"Error: Failed to parse worker response: {stdout}"
+        except json.JSONDecodeError as e:
+            stdout_preview = stdout[:200] if stdout else "(empty)"
+            stderr_preview = stderr[:200] if stderr else "(empty)"
+            return (
+                f"Error: Failed to parse worker response at position {e.pos}.\n"
+                f"stdout: {stdout_preview}\n"
+                f"stderr: {stderr_preview}"
+            )
         
         # Update execution count
         if python_state:

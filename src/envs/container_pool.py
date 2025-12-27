@@ -340,16 +340,29 @@ print("All workers ready", file=sys.stderr)
 
 # Parent waits for children (or handles signals)
 def handle_signal(signum, frame):
+    # Kill all children, handling already-dead processes
     for pid in children:
-        os.kill(pid, signal.SIGTERM)
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass  # Child already dead
+    # Reap children with WNOHANG to avoid blocking on zombies
+    for pid in children:
+        try:
+            os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            pass  # Already reaped
     sys.exit(0)
 
 signal.signal(signal.SIGTERM, handle_signal)
 signal.signal(signal.SIGINT, handle_signal)
 
-# Wait for children
+# Wait for children (normal operation)
 for pid in children:
-    os.waitpid(pid, 0)
+    try:
+        os.waitpid(pid, 0)
+    except ChildProcessError:
+        pass  # Child already reaped by signal handler
 '''
 
     def __init__(

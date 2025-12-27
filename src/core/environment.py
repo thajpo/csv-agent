@@ -398,9 +398,7 @@ class Environment:
                 self.submission_metadata = submitted
             else:
                 # Protocol violation: answer not wrapped
-                import logging
-
-                logging.error(
+                logger.error(
                     f"Protocol violation: Answer submitted without wrapper. "
                     f"Expected {{'__csv_agent_answer__': value}}, got {type(submitted).__name__}. "
                     f"Agent must use submit() function."
