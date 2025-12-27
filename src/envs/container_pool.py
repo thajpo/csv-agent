@@ -312,7 +312,7 @@ def run_worker(worker_id: int):
 
         except Exception as e:
             crash_count += 1
-            print(f"Worker {{worker_id}} error ({crash_count}/{{MAX_CRASHES}}): {{e}}", file=sys.stderr)
+            print(f"Worker {{worker_id}} error ({{crash_count}}/{{MAX_CRASHES}}): {{e}}", file=sys.stderr)
             if crash_count >= MAX_CRASHES:
                 print(f"Worker {{worker_id}} exceeded max crashes, exiting", file=sys.stderr)
                 break
@@ -672,9 +672,7 @@ with open('{slot.res_fifo}', 'r') as f:
 
     async def reset_all_workers(self):
         """Reset all workers' namespaces for reuse (e.g., between questions)."""
-        await asyncio.gather(*[
-            self._reset_slot(worker) for worker in self.workers
-        ])
+        await asyncio.gather(*[self._reset_slot(worker) for worker in self.workers])
 
     def get_slot_workers(self, slot_index: int) -> list[Slot]:
         """Get all workers for a specific question slot."""
@@ -840,6 +838,8 @@ class WorkerAdapter:
 
     async def reset_state(self, state: dict, **kwargs) -> dict:
         """Reset this worker's namespace for reuse between questions."""
+        if not self.container._started:
+            return state
         await self.container.reset_worker(self.worker_id)
         state["python_state"] = {"ready": True, "execution_count": 0}
         return state
@@ -850,6 +850,8 @@ class WorkerAdapter:
 
         Matches the LocalCSVAnalysisEnv.reset() interface.
         """
+        if not self.container._started:
+            return
         await self.container.reset_worker(self.worker_id)
 
     async def destroy_sandbox(self, sandbox_id: str) -> None:
