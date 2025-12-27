@@ -879,7 +879,7 @@ async def batch_triangulate(
                 verified_count=verified_count[0],
             )
 
-            return BatchTriangulationResult(question=q_dict, *result)
+            return BatchTriangulationResult(q_dict, *result)
         finally:
             # Release focus so next question can have it
             if has_focus:
