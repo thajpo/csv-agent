@@ -29,7 +29,7 @@ from src.core.prompts import (
     CONTINUE_MSG,
     FINAL_MSG,
 )
-from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
+from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig, config
 from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
 
@@ -376,9 +376,6 @@ class Environment:
         """Extract ```python...``` code blocks from response."""
         return extract_python_cells(response)
 
-    # Max output chars before truncation (~12.5K tokens at 4 chars/token)
-    MAX_OUTPUT_CHARS = 50_000
-
     async def execute_code_cell(self, code: str) -> CodeCellResult:
         """
         Execute code in CSVAnalysisEnv sandbox and return execution result.
@@ -392,7 +389,8 @@ class Environment:
 
         # Truncate massive outputs to prevent context overflow
         # Preserve the ✓ Submitted: line intact (it contains the answer JSON)
-        if len(output) > self.MAX_OUTPUT_CHARS:
+        max_output_chars = config.max_output_chars
+        if len(output) > max_output_chars:
             submit_marker = "✓ Submitted:"
             submit_idx = output.find(submit_marker)
 
@@ -403,8 +401,51 @@ class Environment:
                     submit_end = len(output)
                 submit_line = output[submit_idx:submit_end]
 
+                # If submit_line itself is too large, progressively truncate
+                max_submit_len = max_output_chars - 5000  # Leave room for context
+                if len(submit_line) > max_submit_len:
+                    json_start = submit_line.find("{")
+                    if json_start != -1:
+                        try:
+                            submit_json = json.loads(submit_line[json_start:])
+
+                            # Step 1: Truncate hooks to empty list
+                            if "hooks" in submit_json:
+                                submit_json["hooks"] = []
+                            truncated_json = json.dumps(submit_json, default=str)
+                            submit_line = submit_line[:json_start] + truncated_json
+                            logger.warning(
+                                f"Truncated hooks in submission (was too large for context)"
+                            )
+
+                            # Step 2: If still too large, the answer itself is huge
+                            if len(submit_line) > max_submit_len:
+                                answer = submit_json.get("__csv_agent_answer__")
+                                answer_str = json.dumps(answer, default=str)
+
+                                # Replace answer with a marker dict (NOT string)
+                                # This preserves protocol but ensures triangulation fails
+                                submit_json["__csv_agent_answer__"] = {
+                                    "__answer_truncated__": True,
+                                    "reason": "Answer too large to preserve",
+                                }
+                                truncated_json = json.dumps(submit_json, default=str)
+                                submit_line = submit_line[:json_start] + truncated_json
+                                logger.warning(
+                                    f"Answer value too large ({len(answer_str):,} chars), replaced with truncation marker"
+                                )
+                        except json.JSONDecodeError:
+                            # Can't parse - just truncate the line
+                            submit_line = submit_line[:max_submit_len] + "...[TRUNCATED]"
+                            logger.warning(
+                                f"Submission line too large and not parseable, truncating"
+                            )
+
                 # Keep start + submission line
-                keep_start = self.MAX_OUTPUT_CHARS - len(submit_line) - 100  # buffer
+                # CRITICAL: Don't include any part of the original submission in output[:keep_start]
+                # Otherwise the parser will find the truncated original instead of our clean version
+                keep_start = max(0, max_output_chars - len(submit_line) - 100)
+                keep_start = min(keep_start, submit_idx)  # Never include original submission
                 truncated_chars = len(output) - keep_start - len(submit_line)
                 logger.warning(
                     f"Truncating output: {len(output):,} chars -> ~{keep_start + len(submit_line):,} chars "
@@ -417,10 +458,10 @@ class Environment:
                 )
             else:
                 # No submission found, use middle-out truncation
-                truncated_chars = len(output) - self.MAX_OUTPUT_CHARS
-                keep_each = self.MAX_OUTPUT_CHARS // 2
+                truncated_chars = len(output) - max_output_chars
+                keep_each = max_output_chars // 2
                 logger.warning(
-                    f"Truncating output: {len(output):,} chars -> {self.MAX_OUTPUT_CHARS:,} chars "
+                    f"Truncating output: {len(output):,} chars -> {max_output_chars:,} chars "
                     f"(removed {truncated_chars:,} chars from middle)"
                 )
                 output = (
@@ -572,6 +613,9 @@ class Environment:
             return True, None  # Already at max retries, force-accept
 
         hooks = self.submission_metadata.get("hooks", [])
+        # Ensure hooks is a list (could be string if truncated in edge cases)
+        if not isinstance(hooks, list):
+            hooks = []
         grounded, ungrounded = validate_hooks_grounded(hooks, self.code_cells)
 
         # Get expected hook count from question

@@ -44,10 +44,10 @@ def _dataset_is_viable(profile: dict) -> tuple[bool, str]:
     rows = shape.get("rows", 0) or 0
     cols = shape.get("columns", 0) or 0
 
-    # Keep thresholds centralized for easy tuning.
-    if rows < 50:
+    # Thresholds from config for easy tuning
+    if rows < config.min_dataset_rows:
         return False, f"too few rows ({rows})"
-    if cols < 2:
+    if cols < config.min_dataset_columns:
         return False, f"too few columns ({cols})"
 
     eligible_numeric = get_eligible_numeric_columns(profile)
@@ -55,16 +55,16 @@ def _dataset_is_viable(profile: dict) -> tuple[bool, str]:
     if not eligible_numeric and not eligible_categorical:
         return False, "no eligible columns after filtering ids/degenerate fields"
 
-    # Skip datasets that are essentially empty.
+    # Skip datasets that are essentially empty
     columns = profile.get("columns", {})
     if columns:
         high_missing = [
             col
             for col, info in columns.items()
-            if info.get("missing_pct", 0) >= 95
+            if info.get("missing_pct", 0) >= config.max_missing_pct_per_column
         ]
         if len(high_missing) == cols:
-            return False, "all columns are >=95% missing"
+            return False, f"all columns are >={config.max_missing_pct_per_column}% missing"
 
     return True, "ok"
 

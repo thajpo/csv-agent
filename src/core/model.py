@@ -24,6 +24,8 @@ from datetime import datetime
 from pathlib import Path
 import httpx
 
+from src.core.config import config
+
 
 def has_gpu() -> bool:
     """Check if CUDA or ROCm GPU is available."""
@@ -50,11 +52,13 @@ class APILLM:
         *,  # Force remaining args to be keyword-only
         base_url: str = "https://openrouter.ai/api/v1",
         api_key: str | None = None,  # Falls back to OPENROUTER_API_KEY env var
-        timeout: float = 120.0,
+        timeout: float | None = None,  # Falls back to config.api_timeout_seconds
         sampling_args: dict,
     ):
         if api_key is None:
             api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if timeout is None:
+            timeout = config.api_timeout_seconds
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
@@ -72,7 +76,7 @@ class APILLM:
             messages = prompt
 
         # Retry logic for API errors
-        max_retries = 3
+        max_retries = config.api_max_retries
         for attempt in range(max_retries):
             try:
                 response = await self.client.post(
@@ -98,7 +102,7 @@ class APILLM:
                     error_code = json_response["error"].get("code")
                     if error_code == 500 and attempt < max_retries - 1:
                         # Retry on 500 errors
-                        wait_time = 2 ** attempt
+                        wait_time = config.api_retry_backoff_base ** attempt
                         await asyncio.sleep(wait_time)
                         continue
                     raise ValueError(f"API error: {json_response['error']}")
@@ -111,7 +115,7 @@ class APILLM:
             except httpx.HTTPStatusError as e:
                 if e.response.status_code >= 500 and attempt < max_retries - 1:
                     # Retry on 5xx errors
-                    wait_time = 2 ** attempt
+                    wait_time = config.api_retry_backoff_base ** attempt
                     await asyncio.sleep(wait_time)
                     continue
                 # Log the error response body for debugging 4xx errors
@@ -127,7 +131,7 @@ class APILLM:
             except (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException) as e:
                 # Retry on network errors (connection issues, timeouts, read errors)
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
+                    wait_time = config.api_retry_backoff_base ** attempt
                     print(f"⚠️  Network error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}. Retrying in {wait_time}s...")
                     await asyncio.sleep(wait_time)
                     continue

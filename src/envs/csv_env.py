@@ -42,7 +42,7 @@ def json_default(obj):
 # Storage for hooks captured during execution
 _captured_hooks = []
 
-MAX_HOOK_VALUE_CHARS = 2000  # Truncate large values in hooks
+MAX_HOOK_VALUE_CHARS = __MAX_HOOK_VALUE_CHARS__  # Injected from config
 
 def hook(value, code_line, name=None, description=None, depends_on=None):
     """
@@ -120,20 +120,26 @@ def submit(answer, **kwargs):
 def get_setup_code() -> str:
     """
     Generate setup code with normalize_value injected from shared source.
-    
+
     This ensures the container's normalize_value stays in sync with
     the host-side version used in teacher.py for answer comparison.
     """
     import inspect
     from src.utils.normalization import normalize_value
-    
+    from src.core.config import config
+
     # Get source, remove type hints that might not work in container
     source = inspect.getsource(normalize_value)
     # Remove the 'from typing import Any' dependency by simplifying signature
     source = source.replace(') -> Any:', '):')
     source = source.replace('val: Any', 'val')
-    
-    return _SETUP_IMPORTS + '\n' + source + '\n' + _SETUP_SUBMIT
+
+    # Inject config values into the setup code template
+    setup_submit = _SETUP_SUBMIT.replace(
+        '__MAX_HOOK_VALUE_CHARS__', str(config.max_hook_value_chars)
+    )
+
+    return _SETUP_IMPORTS + '\n' + source + '\n' + setup_submit
 
 
 # Legacy compatibility - but prefer get_setup_code() for dynamic generation

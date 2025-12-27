@@ -53,7 +53,8 @@ class ConversationHistory(BaseModel):
     archived_count: int = 0
     _cached_message_tokens: int = PrivateAttr(default=0)  # Incremental token count
 
-    # Limits
+    # Limits - these are set by Environment.init_state() from config
+    # Default values here are fallbacks only (config.max_active_turns * 2)
     max_messages: int = 10       # Max active messages (2 msgs/turn)
     max_context_tokens: int = 80_000
 

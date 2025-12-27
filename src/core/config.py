@@ -133,6 +133,20 @@ class Config(BaseModel):
     val_ratio: float = 0.1
     test_ratio: float = 0.1
 
+    # API / Network
+    api_timeout_seconds: float = 120.0
+    api_max_retries: int = 3
+    api_retry_backoff_base: float = 2.0
+
+    # Output truncation
+    max_output_chars: int = 50_000
+    max_hook_value_chars: int = 2000
+
+    # Dataset viability thresholds (for synthetic generation)
+    min_dataset_rows: int = 50
+    min_dataset_columns: int = 2
+    max_missing_pct_per_column: float = 95.0
+
     # Template-based generation (optional branch)
     template_questions_output: str = "questions.json"
     template_n_simple: int = 5
