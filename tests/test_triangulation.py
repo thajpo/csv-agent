@@ -7,6 +7,7 @@ This tests a single question to verify the triangulation logic works.
 import asyncio
 from src.datagen.teacher import triangulate_teacher
 from src.core.prompts import generate_data_overview, DEFAULT_DATASET_DESCRIPTION
+from src.datagen.pipeline_ui import EpisodeGenUI
 
 async def main():
     # Test question
@@ -16,45 +17,48 @@ async def main():
     # Generate data overview
     data_overview = generate_data_overview("data/csv/data.csv")
 
+    # Create UI for triangulation
+    ui = EpisodeGenUI()
+
     # Run triangulation (just 2 consistency traces for quick test)
     print("Running teacher triangulation...")
     print(f"Question: {question}")
     print(f"Hint: {hint}\n")
 
-    gold_trace, _, _, consistency_results, verified = await triangulate_teacher(
+    result = await triangulate_teacher(
         csv_path="data/csv/data.csv",
         question=question,
         hint=hint,
-        model="openai/gpt-oss-120b",  # Required positional arg (4th)
+        model="openai/gpt-4o-mini",
         n_consistency=2,  # Quick test with 2 traces
         dataset_description=DEFAULT_DATASET_DESCRIPTION,
         data_overview=data_overview,
         max_turns=5,
         sampling_args={"temperature": 0.7, "max_tokens": 1000},
+        ui=ui,
     )
 
-    consistency_traces = [t for t, _ in consistency_results]
+    consistency_traces = [t for t, _ in result.consistency_results]
 
     print("\n" + "="*60)
     print("RESULTS")
     print("="*60)
     print(f"\nGold Trace (with hint):")
-    print(f"  Success: {gold_trace.execution_success}")
-    print(f"  Final Answer: {gold_trace.final_answer}")
-    print(f"  Final Hash: {gold_trace.final_answer_hash}")
-    print(f"  Code Cells: {len(gold_trace.code_cells)}")
-    print(f"  Artifacts: {len(gold_trace.artifacts)}")
+    print(f"  Success: {result.gold_trace['success']}")
+    print(f"  Final Answer: {result.gold_trace['final_answer']}")
+    print(f"  Final Hash: {result.gold_trace['final_answer_hash']}")
+    print(f"  Turns: {len(result.gold_trace['turns'])}")
 
     print(f"\nConsistency Traces (without hint):")
     for i, trace in enumerate(consistency_traces, 1):
         print(f"  Trace {i}:")
-        print(f"    Success: {trace.execution_success}")
-        print(f"    Final Answer: {trace.final_answer}")
-        print(f"    Final Hash: {trace.final_answer_hash}")
+        print(f"    Success: {trace['success']}")
+        print(f"    Final Answer: {trace['final_answer']}")
+        print(f"    Final Hash: {trace['final_answer_hash']}")
 
-    print(f"\nVerification: {'✓ PASSED' if verified else '✗ FAILED'}")
+    print(f"\nVerification: {'PASSED' if result.verified else 'FAILED'}")
 
-    if verified:
+    if result.verified:
         print("\nThe gold trace matches the majority of consistency traces!")
         print("This question is verified and ready for training.")
     else:
