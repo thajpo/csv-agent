@@ -1,21 +1,20 @@
 """
 Episode generation pipeline.
 
-This script:
+This module:
 1. Loads questions from JSON files (one per dataset)
 2. Runs teacher triangulation on each question
 3. Saves verified episodes to disk
 
-Usage:
-    python -m src.datagen.episode_gen           # Sequential processing
-    python -m src.datagen.episode_gen --parallel  # Parallel CSV processing
+Usage (via CLI):
+    csvagent generate episodes --llm     # LLM episodes
+    csvagent generate episodes --synth   # Synthetic episodes
 """
 
 import asyncio
 import json
 import sys
 import signal
-import argparse
 from pathlib import Path
 from datetime import datetime
 import uuid
@@ -543,59 +542,3 @@ async def main(
     return 0
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Episode generation pipeline.")
-    parser.add_argument(
-        "--questions-dir",
-        type=str,
-        default=None,
-        help="Base directory for questions (default: from config)",
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default=None,
-        help="Output JSONL file path (default: from config)",
-    )
-    parser.add_argument(
-        "--n-consistency",
-        type=int,
-        default=None,
-        help="Number of consistency traces (default: from config)",
-    )
-    parser.add_argument(
-        "--max-questions",
-        type=int,
-        default=None,
-        help="Max questions per dataset (default: all)",
-    )
-    parser.add_argument(
-        "--skip-difficulty-filter",
-        action="store_true",
-        help="Skip difficulty distribution filtering (use all questions)",
-    )
-    parser.add_argument(
-        "--difficulties",
-        type=str,
-        nargs="+",
-        default=None,
-        help="Only include these difficulties (e.g., --difficulties HARD VERY_HARD)",
-    )
-    args = parser.parse_args()
-
-    try:
-        sys.exit(
-            asyncio.run(
-                main(
-                    questions_dir=args.questions_dir,
-                    output_path=args.output,
-                    n_consistency=args.n_consistency,
-                    max_questions=args.max_questions,
-                    skip_difficulty_filter=args.skip_difficulty_filter,
-                    difficulties=args.difficulties,
-                )
-            )
-        )
-    except KeyboardInterrupt:
-        # Already handled in signal_handler, but just in case
-        sys.exit(0)

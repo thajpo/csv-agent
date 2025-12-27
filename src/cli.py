@@ -10,9 +10,11 @@ Usage:
     csvagent inspect      # Preview data
     csvagent validate     # Debug single question
     csvagent stats        # Coverage report
+    csvagent profiler     # Diagnostics toolbox
 """
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -101,6 +103,7 @@ def cmd_progress():
     import json
     from datetime import datetime
 
+    from src.core.config import config
     from src.utils.stats import collect_questions_stats, collect_episodes_stats
 
     q_stats = collect_questions_stats()
@@ -150,6 +153,45 @@ def cmd_progress():
 
     console.print(table)
 
+    def load_per_trace_seconds(path: Path) -> float | None:
+        if not path.exists():
+            return None
+
+        per_trace = []
+        with open(path) as f:
+            for line in f:
+                try:
+                    ep = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                timing = ep.get("timing", {})
+                if not timing:
+                    continue
+                total_elapsed = timing.get("total_elapsed")
+                consistency_elapsed = timing.get("consistency_elapsed", [])
+                if total_elapsed is None:
+                    total_elapsed = timing.get("gold_elapsed")
+                if total_elapsed is None:
+                    continue
+                traces = 1 + len(consistency_elapsed)
+                per_trace.append(total_elapsed / traces)
+        if not per_trace:
+            return None
+        return sum(per_trace) / len(per_trace)
+
+    def estimate_llm_traces_remaining() -> int:
+        if not config.dynamic_triangulation:
+            return max(total_llm_q - total_llm_e, 0) * (1 + config.n_consistency)
+
+        total = 0
+        by_diff_q = q_stats["llm"]["by_difficulty"]
+        by_diff_e = e_stats["llm"]["by_difficulty"]
+        for diff, q_count in by_diff_q.items():
+            remaining = max(q_count - by_diff_e.get(diff, 0), 0)
+            n_cons = config.triangulation_by_difficulty.get(diff.upper(), config.n_consistency)
+            total += remaining * (1 + n_cons)
+        return total
+
     # Bottleneck analysis
     console.print()
     remaining_synth = total_synth_q - total_synth_e
@@ -162,8 +204,21 @@ def cmd_progress():
 
         # Estimate based on episode file timestamps
         synth_file = Path("data/episodes/episodes_synthetic.jsonl")
-        if synth_file.exists() and total_synth_e > 0:
-            # Get first and last episode timestamps
+        llm_file = Path("data/episodes/episodes_llm.jsonl")
+        synth_per_trace = load_per_trace_seconds(synth_file)
+        llm_per_trace = load_per_trace_seconds(llm_file)
+        llm_traces_remaining = estimate_llm_traces_remaining()
+
+        if synth_per_trace is not None:
+            synth_hours = (remaining_synth * synth_per_trace) / 3600
+            console.print(f"  Estimated synthetic time: ~{synth_hours:.1f} hours")
+
+        if llm_per_trace is not None:
+            llm_hours = (llm_traces_remaining * llm_per_trace) / 3600
+            console.print(f"  Estimated LLM time: ~{llm_hours:.1f} hours")
+
+        if synth_per_trace is None and llm_per_trace is None and synth_file.exists() and total_synth_e > 0:
+            # Fallback to timestamp-based throughput
             with open(synth_file) as f:
                 lines = f.readlines()
             if len(lines) >= 2:
@@ -183,20 +238,18 @@ def cmd_progress():
         console.print()
         console.print("[bold]Time Estimates by Type:[/bold]")
         console.print("  Synthetic: ~1 trace/question (fast, uses ground truth hash)")
-        console.print("  LLM:       ~8 traces/question (1 gold + 7 consistency)")
-        if remaining_synth > 0:
-            # Synthetic is roughly 8x faster
-            synth_hours = remaining_synth / (rate * 8) if rate > 0 else 0
-            console.print(f"  → Synthetic alone: ~{synth_hours:.1f} hours")
-        if remaining_llm > 0:
-            llm_hours = remaining_llm / rate if rate > 0 else 0
-            console.print(f"  → LLM alone: ~{llm_hours:.1f} hours")
+        if config.dynamic_triangulation and config.triangulation_by_difficulty:
+            diff_items = sorted(config.triangulation_by_difficulty.items())
+            diff_summary = ", ".join(f"{k}:{v}" for k, v in diff_items)
+            console.print(f"  LLM:       {diff_summary} (consistency traces by difficulty)")
+        else:
+            console.print(f"  LLM:       ~{1 + config.n_consistency} traces/question")
 
         console.print()
         console.print("[bold]Speed Strategy:[/bold]")
         console.print("  1. [green]Run synthetic first[/green] - 8x faster, has ground truth")
         console.print("  2. Run LLM in parallel (separate terminal) if resources allow")
-        console.print("  3. Reduce n_consistency (config) for faster LLM validation")
+        console.print("  3. Adjust triangulation_by_difficulty (config) for faster LLM validation")
 
     console.print()
 
@@ -252,48 +305,124 @@ def cmd_generate_questions(synth: bool, llm: bool, max_datasets: int | None, dry
     return exit_code
 
 
-def cmd_generate_episodes(synth: bool, llm: bool, max_questions: int | None, dry_run: bool):
+def _show_episode_preflight(source: str, questions_dir: Path, episodes_file: Path) -> tuple[int, int, set]:
+    """
+    Show pre-flight summary before episode generation.
+    Returns: (total_questions, existing_count, existing_question_ids)
+    """
+    import json
+
+    # Count total questions available
+    total_questions = 0
+    for qf in questions_dir.glob("*/questions.json"):
+        try:
+            with open(qf) as f:
+                data = json.load(f)
+            questions = data.get("questions", data if isinstance(data, list) else [])
+            total_questions += len(questions)
+        except Exception:
+            pass
+
+    # Load existing episode question IDs
+    existing_ids = set()
+    if episodes_file.exists():
+        try:
+            with open(episodes_file) as f:
+                for line in f:
+                    ep = json.loads(line)
+                    qid = ep.get("question", {}).get("id", "")
+                    if qid:
+                        existing_ids.add(qid)
+        except Exception:
+            pass
+
+    existing_count = len(existing_ids)
+    remaining = total_questions - existing_count
+    pct = (existing_count / max(total_questions, 1)) * 100
+
+    # Progress bar
+    bar_width = 30
+    filled = int(pct / 100 * bar_width)
+    bar = "█" * filled + "░" * (bar_width - filled)
+
+    # Display
+    color = "green" if source == "synthetic" else "blue"
+    console.print()
+    console.print(Panel(
+        f"[bold]Questions available:[/bold]    {total_questions:,}\n"
+        f"[bold]Already processed:[/bold]      {existing_count:,} ({pct:.0f}%)\n"
+        f"[bold]Remaining to generate:[/bold]  {remaining:,}\n\n"
+        f"Progress: [{color}]{bar}[/{color}] {pct:.0f}%",
+        title=f"Episode Generation - {source.capitalize()}",
+        border_style=color,
+    ))
+
+    return total_questions, existing_count, existing_ids
+
+
+def cmd_generate_episodes(synth: bool, llm: bool, max_questions: int | None, dry_run: bool, fresh: bool = False):
     """Generate verified episodes via teacher triangulation."""
     if not synth and not llm:
         console.print("[red]Specify --synth or --llm (or both)[/red]")
         return 1
 
-    if dry_run:
-        console.print("[bold]Dry Run - Generate Episodes[/bold]\n")
-        if synth:
-            console.print(f"  [green]synthetic[/green]: Will validate synthetic questions")
-            console.print(f"    Max questions: {max_questions or 'all'}")
-            console.print(f"    Output: data/episodes/episodes_synthetic.jsonl")
-        if llm:
-            console.print(f"  [blue]llm[/blue]: Will triangulate LLM questions")
-            console.print(f"    Max questions: {max_questions or 'all'}")
-            console.print(f"    Output: data/episodes/episodes_llm.jsonl")
-        console.print("\n[dim]No changes made (dry run)[/dim]")
-        return 0
-
     exit_code = 0
 
     if synth:
-        console.print("[bold]Generating synthetic episodes...[/bold]")
-        from src.datagen.synthetic_episodes import main as synth_ep_main
-        result = synth_ep_main(
-            questions_dir="data/questions_synthetic",
-            output="data/episodes/episodes_synthetic.jsonl",
-            max_questions=max_questions,
-        )
-        if result != 0:
-            exit_code = result
+        questions_dir = Path("data/questions_synthetic")
+        episodes_file = Path("data/episodes/episodes_synthetic.jsonl")
+
+        total_q, existing, existing_ids = _show_episode_preflight("synthetic", questions_dir, episodes_file)
+        remaining = total_q - existing
+
+        if remaining == 0:
+            console.print("\n[green]All synthetic questions already processed![/green]")
+        elif dry_run:
+            console.print(f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]")
+        else:
+            if not fresh and existing > 0:
+                console.print(f"\n[dim]Mode: Append (skipping {existing:,} existing)[/dim]")
+            elif fresh:
+                console.print(f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]")
+
+            console.print()
+            from src.datagen.synthetic_episodes import main as synth_ep_main
+            result = synth_ep_main(
+                questions_dir=str(questions_dir),
+                output_path=str(episodes_file),
+                max_questions=max_questions,
+                skip_existing=existing_ids if not fresh else set(),
+            )
+            if result != 0:
+                exit_code = result
 
     if llm:
-        console.print("[bold]Generating LLM episodes...[/bold]")
-        from src.datagen.episode_gen import main as llm_ep_main
-        result = llm_ep_main(
-            questions_dir="data/questions",
-            output="data/episodes/episodes_llm.jsonl",
-            max_questions=max_questions,
-        )
-        if result != 0:
-            exit_code = result
+        questions_dir = Path("data/questions")
+        episodes_file = Path("data/episodes/episodes_llm.jsonl")
+
+        total_q, existing, existing_ids = _show_episode_preflight("llm", questions_dir, episodes_file)
+        remaining = total_q - existing
+
+        if remaining == 0:
+            console.print("\n[green]All LLM questions already processed![/green]")
+        elif dry_run:
+            console.print(f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]")
+        else:
+            if not fresh and existing > 0:
+                console.print(f"\n[dim]Mode: Append (skipping {existing:,} existing)[/dim]")
+            elif fresh:
+                console.print(f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]")
+
+            console.print()
+            from src.datagen.episode_gen import main as llm_ep_main
+            result = llm_ep_main(
+                questions_dir=str(questions_dir),
+                output_path=str(episodes_file),
+                max_questions=max_questions,
+                skip_existing=existing_ids if not fresh else set(),
+            )
+            if result != 0:
+                exit_code = result
 
     return exit_code
 
@@ -406,6 +535,26 @@ def cmd_stats(questions: bool, episodes: bool, gaps: bool):
         show_gaps(q_stats, e_stats)
 
     return 0
+
+
+# ============= Profiler Command =============
+
+
+def cmd_profiler(tool: str, episodes_dir: str | None, max_k: int | None):
+    """Run pipeline profiler tools."""
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "pipeline_profiler.py"
+    if not script_path.exists():
+        console.print(f"[red]Profiler script not found: {script_path}[/red]")
+        return 1
+
+    cmd = [sys.executable, str(script_path), tool]
+    if episodes_dir:
+        cmd.extend(["--episodes-dir", episodes_dir])
+    if max_k is not None and tool == "triangulation":
+        cmd.extend(["--max-k", str(max_k)])
+
+    result = subprocess.run(cmd)
+    return result.returncode
 
 
 # ============= Interactive Menu =============
@@ -646,6 +795,7 @@ Examples:
     e_parser.add_argument("--llm", action="store_true", help="From LLM questions")
     e_parser.add_argument("--max-questions", type=int, help="Max per dataset")
     e_parser.add_argument("--dry-run", action="store_true", help="Preview only")
+    e_parser.add_argument("--fresh", action="store_true", help="Start fresh (overwrite existing)")
 
     # run
     run_parser = subparsers.add_parser("run", help="Run full pipeline")
@@ -693,6 +843,26 @@ Examples:
     stats_parser.add_argument("--episodes", action="store_true")
     stats_parser.add_argument("--gaps", action="store_true")
 
+    # profiler
+    prof_parser = subparsers.add_parser("profiler", help="Pipeline profiler toolbox")
+    prof_parser.add_argument(
+        "tool",
+        choices=[
+            "containers",
+            "episodes",
+            "hooks",
+            "timing",
+            "taxonomy",
+            "perf",
+            "triangulation",
+            "silent",
+            "all",
+        ],
+        help="Profiler tool to run",
+    )
+    prof_parser.add_argument("--episodes-dir", help="Episodes directory")
+    prof_parser.add_argument("--max-k", type=int, default=None, help="Max k for triangulation profiling")
+
     return parser
 
 
@@ -729,6 +899,7 @@ def main():
                 llm=args.llm,
                 max_questions=args.max_questions,
                 dry_run=args.dry_run,
+                fresh=args.fresh,
             )
 
     elif args.command == "run":
@@ -775,6 +946,12 @@ def main():
             questions=args.questions,
             episodes=args.episodes,
             gaps=args.gaps,
+        )
+    elif args.command == "profiler":
+        return cmd_profiler(
+            tool=args.tool,
+            episodes_dir=args.episodes_dir,
+            max_k=args.max_k,
         )
 
     return 0

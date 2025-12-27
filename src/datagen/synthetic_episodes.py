@@ -301,6 +301,7 @@ async def main(
     parallel: bool = False,
     n_workers: int = 4,
     gui_progress: str | None = None,
+    skip_existing: set | None = None,
 ):
     ui = EpisodeGenUI()
     signal.signal(signal.SIGINT, signal_handler)
@@ -352,7 +353,10 @@ async def main(
     # Output file
     output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
-    if output_jsonl.exists():
+
+    # Append mode if we're skipping existing, otherwise overwrite
+    append_mode = skip_existing is not None and len(skip_existing) > 0
+    if not append_mode and output_jsonl.exists():
         output_jsonl.unlink()
 
     # Prepare tasks
@@ -367,8 +371,19 @@ async def main(
 
         questions, _ = load_questions(str(qf))
 
+        # Filter out already-processed questions
+        if skip_existing:
+            original_count = len(questions)
+            questions = [q for q in questions if q.get("id", q.get("ground_truth_hash", "")) not in skip_existing]
+            skipped = original_count - len(questions)
+            if skipped > 0:
+                ui.base.console.print(f"  [dim]{dataset_name}: skipping {skipped} already processed[/dim]")
+
         if max_questions and len(questions) > max_questions:
             questions = questions[:max_questions]
+
+        if not questions:
+            continue  # Skip dataset if all questions already processed
 
         tasks_to_run.append((dataset_name, csv_path, questions))
 
@@ -444,7 +459,8 @@ async def main(
             progress.log(f"✓ {name}: {len(episodes)} verified, {len(failures)} failed")
 
     # Write episodes
-    with open(output_jsonl, "w") as f:
+    write_mode = "a" if append_mode else "w"
+    with open(output_jsonl, write_mode) as f:
         for episode in all_episodes:
             f.write(json.dumps(episode.model_dump(), default=str) + "\n")
 
