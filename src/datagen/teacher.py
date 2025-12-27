@@ -36,6 +36,43 @@ from src.utils.hashing import hash_artifact
 from src.utils.normalization import normalize_value
 
 
+def extract_trace_metrics(trace: TraceDict) -> dict:
+    """Extract metrics from a trace for debugging/observability.
+
+    Returns dict with:
+        - turn_count: Number of turns
+        - total_output_chars: Total chars in all stdout/stderr
+        - max_output_chars: Largest single output
+        - est_tokens: Estimated total tokens (reasoning + code + output)
+    """
+    turn_count = len(trace.get("turns", []))
+    total_output = 0
+    max_output = 0
+    total_content = 0
+
+    for turn in trace.get("turns", []):
+        # Count reasoning + code
+        reasoning = turn.get("reasoning", "")
+        code = turn.get("code", "")
+        total_content += len(reasoning) + len(code)
+
+        # Count execution output
+        execution = turn.get("execution", {})
+        stdout = execution.get("stdout", "")
+        stderr = execution.get("stderr", "")
+        output_chars = len(stdout) + len(stderr)
+        total_output += output_chars
+        max_output = max(max_output, output_chars)
+        total_content += output_chars
+
+    return {
+        "turn_count": turn_count,
+        "total_output_chars": total_output,
+        "max_output_chars": max_output,
+        "est_tokens": total_content // 4,
+    }
+
+
 def parse_hooks_from_stdout(stdout: str) -> tuple[list[HookDict], int]:
     """Extract hook JSON objects from execution stdout.
 
@@ -65,7 +102,9 @@ def parse_hooks_from_stdout(stdout: str) -> tuple[list[HookDict], int]:
                         )
                     )
                 else:
-                    logger.warning(f"Hook missing __csv_agent_hook__ marker: {line[:80]}")
+                    logger.warning(
+                        f"Hook missing __csv_agent_hook__ marker: {line[:80]}"
+                    )
                     skipped += 1
             except json.JSONDecodeError as e:
                 logger.warning(f"Malformed hook JSON: {e} in: {line[:80]}")
@@ -110,7 +149,9 @@ def build_trace_dict(
 
         # Warn if code fence detected but regex didn't match
         if not code_blocks and "```python" in response:
-            logger.warning(f"Turn {turn_idx}: code fence detected but regex found no blocks")
+            logger.warning(
+                f"Turn {turn_idx}: code fence detected but regex found no blocks"
+            )
 
         exec_results = (
             execution_results_per_turn[turn_idx]
@@ -256,7 +297,9 @@ def _values_match_recursive(
         if set(v1.keys()) != set(v2.keys()):
             return False
         for k in v1.keys():
-            if not _values_match_recursive(v1[k], v2[k], float_tol, p_value_tol, _visited):
+            if not _values_match_recursive(
+                v1[k], v2[k], float_tol, p_value_tol, _visited
+            ):
                 return False
         return True
 
@@ -613,13 +656,20 @@ async def triangulate_teacher(
     ]
     consistency_elapsed = [elapsed for _, _, elapsed in consistency_results_with_timing]
 
-    # Build timing metadata
+    # Build timing metadata with trace metrics for observability
     total_elapsed = gold_elapsed + sum(consistency_elapsed)
+    gold_metrics = extract_trace_metrics(gold_trace)
+    consistency_metrics = [
+        extract_trace_metrics(trace) for trace, _ in consistency_results
+    ]
     timing_metadata = {
         "gold_elapsed": gold_elapsed,
         "consistency_elapsed": consistency_elapsed,
         "total_elapsed": total_elapsed,
         "avg_elapsed": total_elapsed / (1 + n_consistency),
+        # Trace metrics for debugging context overflow issues
+        "gold_metrics": gold_metrics,
+        "consistency_metrics": consistency_metrics,
     }
 
     submitted_answers = [
@@ -727,6 +777,10 @@ async def batch_triangulate(
         List of tuples: (question_dict, gold_trace, gold_conversation, system_prompt, consistency_results, verified, timing_metadata, majority_answer_hash, majority_count)
     """
     from src.envs.container_pool import MultiTenantContainer
+    from src.datagen.pipeline_ui import EpisodeGenUI
+
+    # Reset focus so first question can acquire it
+    EpisodeGenUI.reset_focus()
 
     results = []
     verified_count = [0]  # Use list for mutation in nested function
@@ -768,7 +822,9 @@ async def batch_triangulate(
         await container.start()
         owns_container = True
 
-        ui.base.print_success(f"✓ Container ready ({total_workers} workers in {n_question_slots} slots)")
+        ui.base.print_success(
+            f"✓ Container ready ({total_workers} workers in {n_question_slots} slots)"
+        )
 
     # Track which slots are available
     available_slots = asyncio.Queue()
@@ -782,6 +838,10 @@ async def batch_triangulate(
         """Process a single question using an available slot."""
         # Get an available slot
         slot_index = await available_slots.get()
+
+        # Try to acquire focus (only first question succeeds)
+        focus_id = f"q{q_index}_slot{slot_index}"
+        has_focus = ui.acquire_focus(focus_id)
 
         try:
             ui.print_question_header(
@@ -859,6 +919,10 @@ async def batch_triangulate(
                 majority_count,
             )
         finally:
+            # Release focus so next question can have it
+            if has_focus:
+                ui.release_focus()
+
             # Reset this slot's workers for reuse even on failure
             if container:
                 try:
