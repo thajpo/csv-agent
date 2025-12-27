@@ -4,10 +4,10 @@ Full pipeline orchestrator.
 Runs all data generation stages sequentially to avoid resource conflicts.
 
 Usage:
-    uv run python -m src.datagen.run_all --both      # Full pipeline (default)
-    uv run python -m src.datagen.run_all --synth     # Just synthetic
-    uv run python -m src.datagen.run_all --llm       # Just LLM-based
-    uv run python -m src.datagen.run_all --skip-questions  # Skip question gen
+    uv run python -m src.datagen.run_all --both        # Full pipeline (default)
+    uv run python -m src.datagen.run_all --synth       # Just synthetic
+    uv run python -m src.datagen.run_all --llm         # Just LLM-based
+    uv run python -m src.datagen.run_all --triangulate # Episodes only (skip question gen)
 """
 
 import argparse
@@ -57,9 +57,9 @@ def main():
         help="Only run LLM pipeline",
     )
     parser.add_argument(
-        "--skip-questions",
+        "--triangulate",
         action="store_true",
-        help="Skip question generation (use existing questions)",
+        help="Skip question generation, only run triangulation/episodes",
     )
     parser.add_argument(
         "--max-questions",
@@ -81,7 +81,7 @@ def main():
     stages_failed = 0
 
     # Stage 1: Synthetic Questions
-    if run_synthetic and not args.skip_questions:
+    if run_synthetic and not args.triangulate:
         cmd = ["uv", "run", "python", "-m", "src.datagen.synthetic.generator"]
         if run_stage("Stage 1a: Generate Synthetic Questions", cmd):
             stages_run += 1
@@ -106,7 +106,7 @@ def main():
             stages_failed += 1
 
     # Stage 3: LLM Questions
-    if run_llm and not args.skip_questions:
+    if run_llm and not args.triangulate:
         cmd = ["uv", "run", "python", "-m", "src.datagen.question_gen"]
         if run_stage("Stage 1b: Generate LLM Questions", cmd):
             stages_run += 1

@@ -28,14 +28,14 @@ Settings are in `src/core/config.py` (Pydantic models). Key fields:
 Run the full pipeline with a single command:
 
 ```bash
-uv run python -m src.datagen.run_all           # Both synthetic + LLM
-uv run python -m src.datagen.run_all --synth   # Synthetic only (faster)
-uv run python -m src.datagen.run_all --llm     # LLM only
+uv run python -m src.datagen.run_all              # Both synthetic + LLM
+uv run python -m src.datagen.run_all --synth      # Synthetic only (faster)
+uv run python -m src.datagen.run_all --llm        # LLM only
+uv run python -m src.datagen.run_all --triangulate  # Episodes only (use existing questions)
 ```
 
 Options:
 ```bash
---skip-questions      # Skip question gen, use existing questions
 --max-questions N     # Limit per dataset (for testing)
 ```
 
