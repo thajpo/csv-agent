@@ -30,6 +30,7 @@ from src.core.types import (
     QADict,
     TriangulationMetadataDict,
     TimingMetadataDict,
+    BatchTriangulationResult,
 )
 from src.core.config import config
 from src.utils.docker import cleanup_csv_sandbox_containers
@@ -280,22 +281,12 @@ async def process_csv_task(
     )
 
     episodes = []
-    for (
-        q_dict,
-        gold_trace,
-        _gold_conversation,
-        _system_prompt,
-        consistency_results,
-        verified,
-        timing_metadata,
-        majority_answer_hash,
-        majority_count,
-    ) in results:
-        if verified_only and not verified:
+    for r in results:
+        if verified_only and not r.verified:
             continue
 
-        question_obj = Question.from_dict(q_dict)
-        consistency_traces = [trace for trace, _ in consistency_results]
+        question_obj = Question.from_dict(r.question)
+        consistency_traces = [trace for trace, _ in r.consistency_results]
         n_succeeded = sum(1 for t in consistency_traces if t["success"])
 
         episode_jsonl = EpisodeJSONL(
@@ -315,21 +306,21 @@ async def process_csv_task(
                 ground_truth_hash=question_obj.ground_truth_hash,
                 ground_truth=question_obj.ground_truth,
             ),
-            gold_trace=gold_trace,
+            gold_trace=r.gold_trace,
             consistency_traces=consistency_traces,
-            verified=verified,
+            verified=r.verified,
             triangulation=TriangulationMetadataDict(
                 n_consistency_runs=len(consistency_traces),
                 n_consistency_succeeded=n_succeeded,
-                majority_answer_hash=majority_answer_hash,
-                majority_count=majority_count,
-                gold_matches_majority=verified,
+                majority_answer_hash=r.majority_answer_hash,
+                majority_count=r.majority_count,
+                gold_matches_majority=r.verified,
             ),
             timing=TimingMetadataDict(
-                gold_elapsed=timing_metadata["gold_elapsed"],
-                consistency_elapsed=timing_metadata["consistency_elapsed"],
-                total_elapsed=timing_metadata["total_elapsed"],
-                avg_elapsed=timing_metadata["avg_elapsed"],
+                gold_elapsed=r.timing_metadata["gold_elapsed"],
+                consistency_elapsed=r.timing_metadata["consistency_elapsed"],
+                total_elapsed=r.timing_metadata["total_elapsed"],
+                avg_elapsed=r.timing_metadata["avg_elapsed"],
             ),
         )
 
