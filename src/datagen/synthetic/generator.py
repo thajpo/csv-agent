@@ -565,7 +565,8 @@ def main() -> int:
 
     progress.log(f"Complete: {total_questions} questions from {len(csv_paths) - len(failed_csvs)} datasets")
     progress.complete()
-    return 0 if not failed_csvs else 1
+    # Success if we generated any questions (some datasets may fail due to encoding, etc.)
+    return 0 if total_questions > 0 else 1
 
 
 if __name__ == "__main__":
