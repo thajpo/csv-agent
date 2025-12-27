@@ -18,7 +18,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 from src.core.model import APILLM
-from src.utils.interaction import (
+from src.utils.parsing import (
     get_turn_validation_feedback,
     parse_execution_result,
     extract_python_cells,
@@ -127,7 +127,9 @@ def parse_submitted_answer(output: str) -> str | None:
         pass
 
     # Fallback to raw string - log the unexpected format
-    logger.warning(f"Answer not parseable as JSON/literal, returning raw string: {answer_str[:100]}")
+    logger.warning(
+        f"Answer not parseable as JSON/literal, returning raw string: {answer_str[:100]}"
+    )
     return answer_str
 
 
@@ -339,7 +341,7 @@ class Environment:
             try:
                 self.df = pd.read_csv(self.csv_path)
             except UnicodeDecodeError:
-                self.df = pd.read_csv(self.csv_path, encoding='latin-1')
+                self.df = pd.read_csv(self.csv_path, encoding="latin-1")
 
     def init_state(self):
         self._load_csv()
@@ -429,9 +431,36 @@ class Environment:
     async def get_model_response(self) -> str:
         """Call model and log the interaction."""
         messages = self.conversation.to_openai_messages()
-        response = await self.model(messages)
+
+        try:
+            response = await self.model(messages)
+        except Exception as e:
+            # Enrich error with context for debugging
+            context = self._get_error_context(messages)
+            raise type(e)(f"{e}\n\n[Context] {context}") from e
 
         return response
+
+    def _get_error_context(self, messages: list[dict]) -> str:
+        """Build context string for error messages."""
+        from pathlib import Path
+
+        csv_name = Path(self.csv_path).stem if self.csv_path else "unknown"
+        q = self.task.question
+        question_id = (q.id or q.generate_id()) if q else "unknown"
+        question_text = (q.question_text[:50] + "...") if q else "unknown"
+        worker_id = self.state.get("sandbox_id", "unknown") if self.state else "unknown"
+        turn = getattr(self, "current_turn", "?")
+
+        # Estimate tokens (4 chars ~ 1 token)
+        total_chars = sum(len(m.get("content", "")) for m in messages)
+        est_tokens = total_chars // 4
+
+        return (
+            f"csv={csv_name}, question_id={question_id}, "
+            f"turn={turn}, worker={worker_id}, est_tokens={est_tokens:,}, "
+            f"question='{question_text}'"
+        )
 
     def response_is_valid(self, response: str, code_cells: list[str]) -> bool:
         """Response should have reasoning text and one code cell."""
@@ -546,7 +575,9 @@ class Environment:
         code_cells = self.extract_python_cells(response)
 
         # Execute
-        results, submitted = await self._execute_cells(code_cells) if code_cells else ([], None)
+        results, submitted = (
+            await self._execute_cells(code_cells) if code_cells else ([], None)
+        )
         feedback = self._build_execution_feedback(code_cells, results)
 
         # Validate submission

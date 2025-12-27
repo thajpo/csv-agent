@@ -11,6 +11,47 @@ from rich.syntax import Syntax
 from rich.markdown import Markdown
 
 
+def truncate_value(value: Any, max_len: int = 80) -> str:
+    """
+    Truncate large values for display.
+
+    - DataFrames: show shape only
+    - Dicts: show first 2 keys + "..."
+    - Lists: show first 2 items + "..."
+    - Strings: truncate with "..."
+    """
+    # Check for pandas DataFrame/Series
+    type_name = type(value).__name__
+    if type_name == "DataFrame":
+        return f"<DataFrame {value.shape[0]}×{value.shape[1]}>"
+    if type_name == "Series":
+        return f"<Series len={len(value)}>"
+    if type_name == "ndarray":
+        return f"<ndarray shape={value.shape}>"
+
+    if isinstance(value, dict):
+        if len(value) <= 2:
+            s = str(value)
+        else:
+            keys = list(value.keys())[:2]
+            preview = ", ".join(f"{k!r}: {truncate_value(value[k], 20)}" for k in keys)
+            s = "{" + preview + ", ...}"
+        return s[:max_len] + "..." if len(s) > max_len else s
+
+    if isinstance(value, (list, tuple)):
+        if len(value) <= 2:
+            s = str(value)
+        else:
+            preview = ", ".join(truncate_value(v, 20) for v in value[:2])
+            bracket = "[" if isinstance(value, list) else "("
+            end = "]" if isinstance(value, list) else ")"
+            s = f"{bracket}{preview}, ...{end}"
+        return s[:max_len] + "..." if len(s) > max_len else s
+
+    s = str(value)
+    return s[:max_len] + "..." if len(s) > max_len else s
+
+
 class ConsoleUI:
     """Base class for Rich console output with common formatting utilities."""
 
