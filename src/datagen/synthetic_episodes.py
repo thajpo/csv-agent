@@ -464,7 +464,13 @@ async def main(
     progress.log(f"Completed: {len(all_episodes)} episodes, {len(all_failures)} failures")
     progress.complete()
 
-    return 0 if not all_failures else 1
+    # Exit codes: 0=success, 1=partial success (some data), 2=total failure
+    if len(all_episodes) == 0:
+        return 2
+    elif len(all_failures) > 0:
+        return 1
+    else:
+        return 0
 
 
 if __name__ == "__main__":

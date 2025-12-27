@@ -426,14 +426,18 @@ async def run_parallel_generation(
     return success_count, failure_count
 
 
-def main():
+def main(max_datasets: int | None = None):
     csv_sources = config.csv_sources
     if isinstance(csv_sources, str):
         csv_sources = [csv_sources]
 
     if not csv_sources:
         ui.print_error("No CSV sources found in config (csv or csv_sources)")
-        return 1
+        return 2  # Total failure
+
+    # Limit datasets for testing
+    if max_datasets and len(csv_sources) > max_datasets:
+        csv_sources = csv_sources[:max_datasets]
 
     max_concurrent = config.max_concurrent_containers
     ui.print_info("Datasets", str(len(csv_sources)))
@@ -448,15 +452,27 @@ def main():
     ui.print_summary_header()
     ui.print_status(f"Processed {len(csv_sources)} sources: {success_count} success, {failure_count} failed")
 
-    return 1 if failure_count > 0 else 0
+    # Exit codes: 0=success, 1=partial success (some data), 2=total failure
+    if success_count == 0:
+        return 2
+    elif failure_count > 0:
+        return 1
+    else:
+        return 0
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LLM-based question generator for CSV datasets.")
-    parser.parse_args()
+    parser.add_argument(
+        "--max-datasets",
+        type=int,
+        default=None,
+        help="Limit number of datasets to process (for testing)",
+    )
+    args = parser.parse_args()
 
     try:
-        sys.exit(main())
+        sys.exit(main(max_datasets=args.max_datasets))
     except KeyboardInterrupt:
         print("\n\n🛑 Interrupted by user")
         sys.exit(0)

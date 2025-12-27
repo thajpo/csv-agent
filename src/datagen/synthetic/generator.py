@@ -496,6 +496,12 @@ def main() -> int:
         default=None,
         help="Path to write progress JSON for GUI polling",
     )
+    parser.add_argument(
+        "--max-datasets",
+        type=int,
+        default=None,
+        help="Limit number of datasets to process (for testing)",
+    )
 
     args = parser.parse_args()
 
@@ -509,6 +515,10 @@ def main() -> int:
     csv_paths = args.csv if args.csv else config.csv_sources
     if isinstance(csv_paths, str):
         csv_paths = [csv_paths]
+
+    # Limit datasets for testing
+    if args.max_datasets and len(csv_paths) > args.max_datasets:
+        csv_paths = csv_paths[:args.max_datasets]
 
     if not csv_paths:
         print("No CSV files found. Specify --csv or ensure data/kaggle/ has datasets.")

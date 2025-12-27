@@ -5,9 +5,10 @@ Runs all data generation stages sequentially to avoid resource conflicts.
 
 Usage:
     uv run python -m src.datagen.run_all --both        # Full pipeline (default)
-    uv run python -m src.datagen.run_all --synth       # Just synthetic
-    uv run python -m src.datagen.run_all --llm         # Just LLM-based
+    uv run python -m src.datagen.run_all --synth       # Synthetic only
+    uv run python -m src.datagen.run_all --llm         # LLM only
     uv run python -m src.datagen.run_all --triangulate # Episodes only (skip question gen)
+    uv run python -m src.datagen.run_all --test        # Quick e2e test (1 question, 1 trace)
 """
 
 import argparse
@@ -20,7 +21,17 @@ from src.core.config import config
 
 
 def run_stage(name: str, cmd: list[str]) -> bool:
-    """Run a pipeline stage, return True if successful."""
+    """
+    Run a pipeline stage.
+
+    Returns True if stage produced usable output (exit 0 or 1).
+    Returns False only if stage completely failed (exit 2+).
+
+    Exit codes:
+        0 = complete success
+        1 = partial success (some failures, but output generated)
+        2+ = total failure (no output)
+    """
     print(f"\n{'='*60}")
     print(f"  {name}")
     print(f"{'='*60}\n")
@@ -32,8 +43,11 @@ def run_stage(name: str, cmd: list[str]) -> bool:
     if result.returncode == 0:
         print(f"\n✓ {name} completed in {elapsed:.1f}s")
         return True
+    elif result.returncode == 1:
+        print(f"\n⚠ {name} completed with some failures in {elapsed:.1f}s (continuing)")
+        return True  # Partial success is still success
     else:
-        print(f"\n✗ {name} failed (exit code {result.returncode})")
+        print(f"\n✗ {name} failed completely (exit code {result.returncode})")
         return False
 
 
@@ -65,7 +79,12 @@ def main():
         "--max-questions",
         type=int,
         default=None,
-        help="Limit questions per dataset (for testing)",
+        help="Limit questions per dataset",
+    )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Quick e2e test: 1 dataset, 1 question, 1 consistency trace",
     )
     args = parser.parse_args()
 
@@ -77,18 +96,28 @@ def main():
         run_synthetic = True
         run_llm = True
 
+    # Test mode: minimal settings for fast iteration
+    max_questions = args.max_questions
+    n_consistency = None
+    max_datasets = None
+    if args.test:
+        max_questions = max_questions or 1
+        n_consistency = 1
+        max_datasets = 1
+        print("🧪 TEST MODE: 1 dataset, 1 question, 1 consistency trace\n")
+
     stages_run = 0
     stages_failed = 0
 
     # Stage 1: Synthetic Questions
     if run_synthetic and not args.triangulate:
         cmd = ["uv", "run", "python", "-m", "src.datagen.synthetic.generator"]
+        if max_datasets:
+            cmd.extend(["--max-datasets", str(max_datasets)])
         if run_stage("Stage 1a: Generate Synthetic Questions", cmd):
             stages_run += 1
         else:
             stages_failed += 1
-            print("Aborting: synthetic question generation failed")
-            return 1
 
     # Stage 2: Synthetic Episodes
     if run_synthetic:
@@ -97,8 +126,8 @@ def main():
             "--questions-dir", str(config.questions_synthetic_dir),
             "--output", str(config.episodes_synthetic_jsonl),
         ]
-        if args.max_questions:
-            cmd.extend(["--max-questions", str(args.max_questions)])
+        if max_questions:
+            cmd.extend(["--max-questions", str(max_questions)])
 
         if run_stage("Stage 2a: Generate Synthetic Episodes", cmd):
             stages_run += 1
@@ -108,12 +137,12 @@ def main():
     # Stage 3: LLM Questions
     if run_llm and not args.triangulate:
         cmd = ["uv", "run", "python", "-m", "src.datagen.question_gen"]
+        if max_datasets:
+            cmd.extend(["--max-datasets", str(max_datasets)])
         if run_stage("Stage 1b: Generate LLM Questions", cmd):
             stages_run += 1
         else:
             stages_failed += 1
-            print("Aborting: LLM question generation failed")
-            return 1
 
     # Stage 4: LLM Episodes (with triangulation)
     if run_llm:
@@ -123,8 +152,10 @@ def main():
             "--output", str(config.episodes_llm_jsonl),
             "--skip-difficulty-filter",
         ]
-        if args.max_questions:
-            cmd.extend(["--max-questions", str(args.max_questions)])
+        if max_questions:
+            cmd.extend(["--max-questions", str(max_questions)])
+        if n_consistency:
+            cmd.extend(["--n-consistency", str(n_consistency)])
 
         if run_stage("Stage 2b: Generate LLM Episodes (triangulated)", cmd):
             stages_run += 1
