@@ -378,6 +378,10 @@ class Environment:
         """
         Execute code in CSVAnalysisEnv sandbox and return execution result.
         """
+        assert self.state is not None, (
+            "Environment state not initialized. Call init_state() or rollout() first."
+        )
+
         # Execute via verifiers env.python()
         output = await self.env.python(
             code=code,
@@ -550,6 +554,7 @@ class Environment:
                 feedback = error
                 done = False
                 self.submitted_answer = None
+                self.submission_metadata = {}  # Symmetric cleanup
 
         if done:
             valid, error = self._validate_hooks()

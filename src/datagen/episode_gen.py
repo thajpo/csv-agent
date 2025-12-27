@@ -92,8 +92,25 @@ def filter_by_difficulty(
         success=False if any difficulty has insufficient questions
     """
     result = []
-    for difficulty, fraction in distribution.items():
-        count_needed = round(total_target * fraction)
+    allocations = []
+    base_total = 0
+
+    for idx, (difficulty, fraction) in enumerate(distribution.items()):
+        exact = total_target * fraction
+        base = int(exact)
+        allocations.append([idx, difficulty, base, exact - base])
+        base_total += base
+
+    remainder = total_target - base_total
+    if remainder > 0:
+        allocations.sort(key=lambda row: (-row[3], row[0]))
+        for i in range(remainder):
+            allocations[i][2] += 1
+
+    counts_by_difficulty = {difficulty: base for _, difficulty, base, _ in allocations}
+
+    for difficulty, _fraction in distribution.items():
+        count_needed = counts_by_difficulty.get(difficulty, 0)
         matching = [q for q in questions if q.get("difficulty") == difficulty]
         if len(matching) < count_needed:
             return [], False  # Insufficient questions for this difficulty
@@ -187,12 +204,15 @@ def gather_csv_tasks(
                 config.num_questions_to_generate,
             )
             if not filter_ok:
+                # Use all available questions instead of skipping the CSV entirely
                 ui.base.print_warning(
-                    f"Skipping {dataset_name}: insufficient questions for difficulty distribution "
-                    f"(need {config.num_questions_to_generate} total with distribution {config.question_difficulty_distribution})"
+                    f"{dataset_name}: insufficient questions for target distribution "
+                    f"(need {config.num_questions_to_generate} with {config.question_difficulty_distribution}). "
+                    f"Using all {len(questions)} available questions instead."
                 )
-                continue
-            questions = filtered_questions
+                # Don't filter - use all questions as-is
+            else:
+                questions = filtered_questions
 
         tasks.append(
             CSVTask(
@@ -237,6 +257,8 @@ async def process_csv_task(
         model=teacher_model,
         n_consistency=n_consistency,
         n_question_slots=config.n_question_slots,
+        dynamic_triangulation=config.dynamic_triangulation,
+        consistency_by_difficulty=config.triangulation_by_difficulty,
         dataset_description=task.dataset_description,
         data_overview=data_overview,
         max_turns=max_turns,
@@ -404,6 +426,20 @@ async def main(
 
     # Always use container pool for efficiency
     max_concurrent = config.max_concurrent_containers
+    if config.dynamic_triangulation and config.triangulation_by_difficulty:
+        from src.datagen.teacher import resolve_n_consistency
+
+        max_consistency = n_consistency
+        for task in tasks:
+            for q in task.questions:
+                max_consistency = max(
+                    max_consistency,
+                    resolve_n_consistency(
+                        q, n_consistency, config.triangulation_by_difficulty
+                    ),
+                )
+    else:
+        max_consistency = n_consistency
     ui.base.print_section(
         f"Processing {len(tasks)} CSVs ({max_concurrent} containers pooled)"
     )
@@ -412,7 +448,7 @@ async def main(
     pool = ContainerPool(
         max_containers=max_concurrent,
         n_question_slots=config.n_question_slots,
-        n_consistency=n_consistency,
+        n_consistency=max_consistency,
     )
     await pool.start(initial_csv_path=tasks[0].csv_path)
 

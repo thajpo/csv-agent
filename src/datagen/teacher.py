@@ -36,8 +36,12 @@ from src.utils.hashing import hash_artifact
 from src.utils.normalization import normalize_value
 
 
-def parse_hooks_from_stdout(stdout: str) -> list[HookDict]:
-    """Extract hook JSON objects from execution stdout."""
+def parse_hooks_from_stdout(stdout: str) -> tuple[list[HookDict], int]:
+    """Extract hook JSON objects from execution stdout.
+
+    Returns:
+        (hooks, skipped_count) - List of valid hooks and count of malformed/skipped hooks.
+    """
     hooks = []
     skipped = 0
     for line in stdout.split("\n"):
@@ -61,14 +65,14 @@ def parse_hooks_from_stdout(stdout: str) -> list[HookDict]:
                         )
                     )
                 else:
-                    logger.debug(f"Hook missing __csv_agent_hook__ marker: {line[:80]}")
+                    logger.warning(f"Hook missing __csv_agent_hook__ marker: {line[:80]}")
                     skipped += 1
             except json.JSONDecodeError as e:
                 logger.warning(f"Malformed hook JSON: {e} in: {line[:80]}")
                 skipped += 1
     if skipped:
-        logger.debug(f"Hook parsing: kept {len(hooks)}, skipped {skipped}")
-    return hooks
+        logger.warning(f"Hook parsing: kept {len(hooks)}, skipped {skipped} malformed")
+    return hooks, skipped
 
 
 def extract_reasoning_from_response(response: str) -> str:
@@ -116,7 +120,7 @@ def build_trace_dict(
 
         if exec_results:
             result = exec_results[0]
-            hooks = parse_hooks_from_stdout(result.stdout)
+            hooks, _skipped = parse_hooks_from_stdout(result.stdout)
             execution = ExecutionResultDict(
                 success=result.success,
                 stdout=result.stdout,
@@ -218,12 +222,30 @@ def _compare_statistical_dict(
 
 
 def _values_match_recursive(
-    v1: Any, v2: Any, float_tol: float, p_value_tol: float
+    v1: Any,
+    v2: Any,
+    float_tol: float,
+    p_value_tol: float,
+    _visited: set[tuple[int, int]] | None = None,
 ) -> bool:
-    """Recursively compare values with type-appropriate tolerance."""
+    """Recursively compare values with type-appropriate tolerance.
+
+    Uses cycle detection to handle circular references safely.
+    """
+    # Initialize visited set for cycle detection
+    if _visited is None:
+        _visited = set()
+
     # Both floats/ints
     if isinstance(v1, (int, float)) and isinstance(v2, (int, float)):
         return _floats_match(v1, v2, float_tol)
+
+    # Check for cycles before recursing into containers
+    if isinstance(v1, (dict, list, tuple)) and isinstance(v2, (dict, list, tuple)):
+        id_pair = (id(v1), id(v2))
+        if id_pair in _visited:
+            return True  # Circular ref - assume match (same structure)
+        _visited.add(id_pair)
 
     # Both dicts
     if isinstance(v1, dict) and isinstance(v2, dict):
@@ -234,7 +256,7 @@ def _values_match_recursive(
         if set(v1.keys()) != set(v2.keys()):
             return False
         for k in v1.keys():
-            if not _values_match_recursive(v1[k], v2[k], float_tol, p_value_tol):
+            if not _values_match_recursive(v1[k], v2[k], float_tol, p_value_tol, _visited):
                 return False
         return True
 
@@ -243,7 +265,7 @@ def _values_match_recursive(
         if len(v1) != len(v2):
             return False
         for a, b in zip(v1, v2):
-            if not _values_match_recursive(a, b, float_tol, p_value_tol):
+            if not _values_match_recursive(a, b, float_tol, p_value_tol, _visited):
                 return False
         return True
 
@@ -322,6 +344,20 @@ def get_majority_answer(answers: list[Any], float_tol: float = 0.1) -> tuple[Any
     # Sort by count descending
     clusters.sort(key=lambda x: x[1], reverse=True)
     return clusters[0][0], clusters[0][1]
+
+
+def resolve_n_consistency(
+    question: dict,
+    default_n_consistency: int,
+    consistency_by_difficulty: dict[str, int] | None = None,
+) -> int:
+    """Resolve consistency count based on question difficulty."""
+    if not consistency_by_difficulty:
+        return max(1, default_n_consistency)
+
+    difficulty = (question.get("difficulty") or "").upper()
+    n_consistency = consistency_by_difficulty.get(difficulty, default_n_consistency)
+    return max(1, n_consistency)
 
 
 async def execute_teacher_trace(
@@ -644,6 +680,8 @@ async def batch_triangulate(
     *,  # Force remaining args to be keyword-only
     n_consistency: int = 3,
     n_question_slots: int = 1,
+    dynamic_triangulation: bool = False,
+    consistency_by_difficulty: dict[str, int] | None = None,
     dataset_description: str = "",
     data_overview: str = "",
     max_turns: int = 10,
@@ -676,6 +714,8 @@ async def batch_triangulate(
         questions: List of question dicts (from question_gen.py)
         n_consistency: Number of consistency traces per question
         n_question_slots: Number of questions to process in parallel
+        dynamic_triangulation: If True, use per-difficulty consistency counts
+        consistency_by_difficulty: Mapping of difficulty -> n_consistency
         model: Model identifier
         dataset_description: Dataset description
         data_overview: Data overview
@@ -693,13 +733,23 @@ async def batch_triangulate(
     container = None
     owns_container = False  # Track if we created the container (vs external)
 
+    # Resolve container sizing for dynamic triangulation
+    if dynamic_triangulation:
+        per_question = [
+            resolve_n_consistency(q, n_consistency, consistency_by_difficulty)
+            for q in questions
+        ]
+        container_n_consistency = max(per_question) if per_question else n_consistency
+    else:
+        container_n_consistency = n_consistency
+
     # Use external container if provided, otherwise create one
     if external_container is not None:
         container = external_container
         owns_container = False
         ui.base.print_status(f"Using pooled container for {Path(csv_path).name}")
     elif use_container_pool:
-        traces_per_slot = 1 + n_consistency
+        traces_per_slot = 1 + container_n_consistency
         total_workers = n_question_slots * traces_per_slot
 
         # NOTE: Container cleanup is now done ONCE at pipeline start (episode_gen.py)
@@ -713,7 +763,7 @@ async def batch_triangulate(
         container = MultiTenantContainer(
             csv_path=csv_path,
             n_question_slots=n_question_slots,
-            n_consistency=n_consistency,
+            n_consistency=container_n_consistency,
         )
         await container.start()
         owns_container = True
@@ -738,8 +788,28 @@ async def batch_triangulate(
                 q_num=q_index + 1, total=len(questions), question=q_dict
             )
 
+            if dynamic_triangulation:
+                selected_n_consistency = resolve_n_consistency(
+                    q_dict, n_consistency, consistency_by_difficulty
+                )
+            else:
+                selected_n_consistency = n_consistency
+
             # Get container pool for this slot
-            container_pool = container.create_slot_pool(slot_index) if container else None
+            if container:
+                if selected_n_consistency > container.n_consistency:
+                    raise ValueError(
+                        f"Requested n_consistency={selected_n_consistency} exceeds container capacity "
+                        f"{container.n_consistency}"
+                    )
+                if dynamic_triangulation:
+                    container_pool = container.create_slot_pool_for_consistency(
+                        slot_index, selected_n_consistency
+                    )
+                else:
+                    container_pool = container.create_slot_pool(slot_index)
+            else:
+                container_pool = None
 
             (
                 gold_trace,
@@ -756,7 +826,7 @@ async def batch_triangulate(
                 hint=q_dict.get("hint", ""),
                 n_steps=q_dict.get("n_steps"),
                 difficulty=q_dict.get("difficulty"),
-                n_consistency=n_consistency,
+                n_consistency=selected_n_consistency,
                 model=model,
                 dataset_description=dataset_description,
                 data_overview=data_overview,
@@ -777,10 +847,6 @@ async def batch_triangulate(
                 verified_count=verified_count[0],
             )
 
-            # Reset this slot's workers for reuse
-            if container:
-                await container.reset_slot(slot_index)
-
             return (
                 q_dict,
                 gold_trace,
@@ -793,6 +859,12 @@ async def batch_triangulate(
                 majority_count,
             )
         finally:
+            # Reset this slot's workers for reuse even on failure
+            if container:
+                try:
+                    await container.reset_slot(slot_index)
+                except Exception as e:
+                    ui.base.print_warning(f"Failed to reset slot {slot_index}: {e}")
             # Return slot to pool
             await available_slots.put(slot_index)
 
