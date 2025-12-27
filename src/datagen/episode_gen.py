@@ -487,14 +487,28 @@ async def main(
     else:
         max_consistency = n_consistency
 
-    # Pre-flight resource check
+    # Pre-flight resource check - auto-adjust to safe container count
     resource_status = check_resource_availability(max_concurrent)
-    if resource_status.warning:
-        ui.base.print_warning(f"⚠️  {resource_status.warning}")
-        if resource_status.recommended_max_containers < max_concurrent:
-            ui.base.print_warning(
-                f"   Consider: --max-concurrent {resource_status.recommended_max_containers}"
-            )
+    if resource_status.recommended_max_containers < 1:
+        # No room at all - must wait
+        ui.base.print_error(
+            f"❌ Insufficient resources: {resource_status.available_memory_gb:.1f}GB available, "
+            f"{resource_status.existing_containers} containers already running."
+        )
+        ui.base.print_error(
+            "   Wait for other scripts to finish, or run: "
+            "uv run python -c \"from src.utils.docker import cleanup_csv_sandbox_containers; cleanup_csv_sandbox_containers()\""
+        )
+        return 1
+    elif resource_status.recommended_max_containers < max_concurrent:
+        # Reduce parallelism to safe level
+        original = max_concurrent
+        max_concurrent = resource_status.recommended_max_containers
+        ui.base.print_warning(
+            f"⚠️  Reducing parallelism: {original} → {max_concurrent} containers "
+            f"({resource_status.available_memory_gb:.1f}GB available, "
+            f"{resource_status.existing_containers} containers from other sessions)"
+        )
     elif resource_status.existing_containers > 0:
         ui.base.print_status(
             f"Note: {resource_status.existing_containers} containers from other sessions, "
