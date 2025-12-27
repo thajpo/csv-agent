@@ -101,6 +101,12 @@ uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --pri
 
 ## Debugging & Inspection
 
+**Data stats:**
+```bash
+uv run python -m src.utils.stats           # Coverage report
+uv run python -m src.utils.stats --gaps    # Show missing data
+```
+
 **Inspect outputs:**
 ```bash
 uv run python -m src.utils.inspect questions               # Preview questions
