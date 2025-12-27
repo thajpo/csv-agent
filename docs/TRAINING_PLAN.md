@@ -172,17 +172,9 @@ uv run python -m scripts.evaluate_model \
 
 ---
 
-## Files to Create
+## Implementation Status
 
-| File | Purpose |
-|------|---------|
-| `src/training/train_sft.py` | Main training script |
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `pyproject.toml` | Add `[dependency-groups] training = [...]` |
+Training script implemented in standalone `training/` package (see `training/train_sft.py`).
 
 ---
 

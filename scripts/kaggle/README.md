@@ -42,7 +42,7 @@ chmod 600 ~/.config/kaggle/kaggle.json
 ### Download Popular Tabular Datasets (Default)
 
 ```bash
-uv run python kaggle/download_datasets.py
+uv run python scripts/kaggle/download_datasets.py
 ```
 
 This downloads popular CSV datasets from Kaggle.
@@ -64,21 +64,21 @@ Create a JSON file with dataset refs:
 Then run:
 
 ```bash
-uv run python kaggle/download_datasets.py --from-list kaggle/curated_datasets.json
+uv run python scripts/kaggle/download_datasets.py --from-list scripts/kaggle/curated_datasets.json
 ```
 
 ### Limit Number of Datasets
 
 ```bash
-uv run python kaggle/download_datasets.py --limit 10
+uv run python scripts/kaggle/download_datasets.py --limit 10
 ```
 
 ## Output Structure
 
-Downloaded datasets appear in `kaggle/downloaded/`:
+Downloaded datasets appear in `data/kaggle/`:
 
 ```
-kaggle/downloaded/
+data/kaggle/
 ├── hugomathien_soccer.csv
 ├── hugomathien_soccer.meta.json
 ├── uciml_iris.csv
@@ -123,7 +123,7 @@ Point your training pipeline at downloaded CSVs:
 
 ```bash
 # Generate questions for a Kaggle dataset
-uv run python scripts/generate_questions.py --csv kaggle/downloaded/hugomathien_soccer.csv
+uv run python -m src.datagen.question_gen --csv data/kaggle/hugomathien_soccer.csv
 ```
 
 The metadata in `*.meta.json` provides context for question generation.

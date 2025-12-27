@@ -7,7 +7,7 @@ Validate the full pipeline with test fixtures (no API key needed for data prep):
 ```bash
 # 1. Verify SFT data formatting works
 uv run python -m src.training.prepare_finetune_data \
-  --input test_fixtures/mock_episodes.jsonl \
+  --input data/fixtures/mock_episodes.jsonl \
   --provider openai \
   --output /tmp/test_openai.jsonl
 
@@ -32,7 +32,7 @@ uv run python -m src.training.prepare_finetune_data \
 # Evaluate fine-tuned model (use your fine-tuned model ID)
 uv run python -m scripts.evaluate_model \
   --model <your-fine-tuned-model> \
-  --episodes test_fixtures/mock_episodes.jsonl
+  --episodes data/fixtures/mock_episodes.jsonl
 ```
 
 ---
@@ -134,5 +134,4 @@ wc -l training_data/train_openai.jsonl
 ## Documentation
 
 - Full docs: `src/training/README.md`
-- Implementation summary: `IMPLEMENTATION_SUMMARY.md`
 - Source code: `src/training/prepare_finetune_data.py`
