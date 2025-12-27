@@ -270,15 +270,18 @@ async def process_dataset(
             episodes.append(episode)
             ui.base.print_success(f"    ✓ Validated ({elapsed:.1f}s)")
         else:
-            failures.append(
-                {
-                    "question": q_dict.get("question", "")[:100],
-                    "template_name": q_dict.get("template_name"),
-                    "variant_index": q_dict.get("variant_index"),
-                    "error": error,
-                    "elapsed": elapsed,
-                }
-            )
+            failure_record = {
+                "question": q_dict.get("question", "")[:100],
+                "template_name": q_dict.get("template_name"),
+                "variant_index": q_dict.get("variant_index"),
+                "error": error,
+                "elapsed": elapsed,
+            }
+            # Include full expected/actual for mismatch analysis
+            if "Answer mismatch" in (error or ""):
+                failure_record["expected"] = q_dict.get("_ground_truth")
+                failure_record["actual"] = trace.get("final_answer") if trace else None
+            failures.append(failure_record)
             ui.base.print_warning(f"    ✗ Failed: {error}")
 
     return episodes, failures
@@ -518,6 +521,13 @@ async def main(
         ui.base.print_status("Failures by template:")
         for template, count in sorted(failure_by_template.items(), key=lambda x: -x[1]):
             ui.base.print_status(f"  {template}: {count}")
+
+        # Write failures to log file for later investigation
+        failures_log = output_jsonl.parent / "failures_synthetic.jsonl"
+        with open(failures_log, "w") as f:
+            for failure in all_failures:
+                f.write(json.dumps(failure, default=str) + "\n")
+        ui.base.print_status(f"Failures logged to: {failures_log}")
 
     # Mark progress complete
     progress.log(

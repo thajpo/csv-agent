@@ -281,9 +281,20 @@ async def process_csv_task(
     )
 
     episodes = []
+    failures = []
     for r in results:
-        if verified_only and not r.verified:
-            continue
+        if not r.verified:
+            # Log unverified for later analysis
+            failures.append({
+                "question": r.question.get("question_text", r.question.get("question", ""))[:100],
+                "gold_answer": r.gold_trace.get("final_answer") if r.gold_trace else None,
+                "gold_success": r.gold_trace.get("success") if r.gold_trace else False,
+                "majority_answer": r.majority_answer_hash,
+                "majority_count": r.majority_count,
+                "n_consistency": len(r.consistency_results),
+            })
+            if verified_only:
+                continue
 
         question_obj = Question.from_dict(r.question)
         consistency_traces = [trace for trace, _ in r.consistency_results]
@@ -326,7 +337,7 @@ async def process_csv_task(
 
         episodes.append(episode_jsonl)
 
-    return episodes
+    return episodes, failures
 
 
 async def main(
@@ -476,11 +487,11 @@ async def main(
 
     async def process_task_wrapper(
         task: CSVTask,
-    ) -> tuple[CSVTask, list[EpisodeJSONL]]:
+    ) -> tuple[CSVTask, list[EpisodeJSONL], list[dict]]:
         # Acquire container from pool (blocks until one is available)
         container = await pool.acquire(task.csv_path)
         try:
-            episodes = await process_csv_task(
+            episodes, failures = await process_csv_task(
                 task=task,
                 teacher_model=teacher_model,
                 n_consistency=n_consistency,
@@ -491,7 +502,7 @@ async def main(
                 ui=ui,
                 external_container=container,
             )
-            return (task, episodes)
+            return (task, episodes, failures)
         finally:
             # Release container back to pool for reuse
             await pool.release(container)
@@ -501,10 +512,11 @@ async def main(
 
     # Process as each completes (provides real-time progress)
     completed_count = 0
+    all_failures = []
     had_error = False
     try:
         for coro in asyncio.as_completed(pending_tasks):
-            task_result, episodes = await coro
+            task_result, episodes, failures = await coro
             completed_count += 1
 
             n_verified = sum(1 for ep in episodes if ep.verified)
@@ -513,6 +525,10 @@ async def main(
                 f"{len(episodes)} episodes ({n_verified} verified)"
             )
             all_episodes.extend(episodes)
+            # Tag failures with dataset for analysis
+            for f in failures:
+                f["dataset"] = task_result.dataset_name
+            all_failures.extend(failures)
     except Exception as e:
         had_error = True
         ui.base.print_error(f"ERROR: Episode generation failed: {e}")
@@ -543,6 +559,15 @@ async def main(
     ui.base.print_key_value("Total sources", len(tasks))
     ui.base.print_key_value("Total episodes saved", len(all_episodes))
     ui.base.print_key_value("Total verified", total_verified)
+    ui.base.print_key_value("Total unverified", len(all_failures))
+
+    # Write failures to log file for later investigation
+    if all_failures:
+        failures_log = output_jsonl.parent / "failures_llm.jsonl"
+        with open(failures_log, "w") as f:
+            for failure in all_failures:
+                f.write(json.dumps(failure, default=str) + "\n")
+        ui.base.print_status(f"Failures logged to: {failures_log}")
 
     ui.base.print_empty_line()
 

@@ -1599,7 +1599,7 @@ else:
 RANK_CATEGORIES_BY_TARGET_MEAN = CompositionTemplate(
     name="rank_categories_by_target_mean",
     description="Rank categories by mean of target variable, filtering by minimum sample size",
-    output_schema='A JSON object with exactly 5 keys: "category_column" (string), "target_column" (string), "min_n" (integer), "top_k" (integer), and "ranking" (list of up to top_k objects, each with "category", "mean" rounded to 4 decimals, and "n", sorted by mean descending). Example: {"category_column": "region", "target_column": "sales", "min_n": 10, "top_k": 3, "ranking": [{"category": "West", "mean": 1234.5678, "n": 42}, {"category": "North", "mean": 1150.0000, "n": 31}]}',
+    output_schema='A JSON object with exactly 3 keys: "category_column" (string), "target_column" (string), and "ranking" (list of top category objects, each with "category", "mean" rounded to 4 decimals, and "n", sorted by mean descending). Example: {"category_column": "region", "target_column": "sales", "ranking": [{"category": "West", "mean": 1234.5678, "n": 42}, {"category": "North", "mean": 1150.0000, "n": 31}]}',
     code_template="""
 # Step 1: Find suitable categorical column (moderate cardinality)
 cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
@@ -1645,8 +1645,6 @@ else:
     submit({
         "category_column": suitable_cat,
         "target_column": target_col,
-        "min_n": min_n,
-        "top_k": top_k,
         "ranking": ranking
     })
 """.strip(),
@@ -1655,9 +1653,8 @@ else:
     n_steps=6,
     difficulty="HARD",
     param_sets=[
+        # Use consistent params for triangulation
         {"min_n": 10, "top_k": 3},
-        {"min_n": 20, "top_k": 3},
-        {"min_n": 5, "top_k": 5},
     ],
 )
 
@@ -1750,7 +1747,7 @@ else:
 QUANTILE_BIN_BEST_MEAN = CompositionTemplate(
     name="quantile_bin_best_mean",
     description="Bin a numeric column into quantiles, find which bin has highest mean of target",
-    output_schema='A JSON object with exactly 6 keys: "binning_column" (string), "target_column" (string), "n_bins" (integer), "best_bin" (string label), "best_bin_mean" (rounded to 4 decimals), and "bin_means" (dict mapping bin labels to means rounded to 4 decimals). Example: {"binning_column": "age", "target_column": "income", "n_bins": 4, "best_bin": "(45.0, 60.0]", "best_bin_mean": 75000.1234, "bin_means": {"(18.0, 30.0]": 45000.0, "(30.0, 45.0]": 52000.0}}',
+    output_schema='A JSON object with exactly 5 keys: "binning_column" (string), "target_column" (string), "best_bin" (string label), "best_bin_mean" (rounded to 4 decimals), and "bin_means" (dict mapping bin labels to means rounded to 4 decimals). Example: {"binning_column": "age", "target_column": "income", "best_bin": "(45.0, 60.0]", "best_bin_mean": 75000.1234, "bin_means": {"(18.0, 30.0]": 45000.0, "(30.0, 45.0]": 52000.0}}',
     code_template="""
 # Step 1: Choose binning column (most skewed - more interesting bins)
 numeric_cols = df.select_dtypes('number').columns.tolist()
@@ -1793,7 +1790,6 @@ else:
         submit({
             "binning_column": bin_col,
             "target_column": target_col,
-            "n_bins": n_bins,
             "best_bin": str(best_bin),
             "best_bin_mean": round(float(best_mean), 4),
             "bin_means": bin_means_dict
@@ -1804,16 +1800,15 @@ else:
     n_steps=7,
     difficulty="HARD",
     param_sets=[
+        # Use consistent params for triangulation
         {"n_bins": 4},
-        {"n_bins": 5},
-        {"n_bins": 3},
     ],
 )
 
 ITERATIVE_OUTLIER_REMOVAL = CompositionTemplate(
     name="iterative_outlier_removal",
     description="Iteratively remove outliers until mean stabilizes, report convergence",
-    output_schema='A JSON object with exactly 7 keys: "column" (string), "z_threshold" (number), "max_iterations" (integer), "iterations_used" (integer), "total_removed" (integer), "initial_mean" (rounded to 4 decimals), and "final_mean" (rounded to 4 decimals). Example: {"column": "price", "z_threshold": 3.0, "max_iterations": 5, "iterations_used": 3, "total_removed": 18, "initial_mean": 123.4567, "final_mean": 118.9012}',
+    output_schema='A JSON object with exactly 5 keys: "column" (string), "iterations_used" (integer), "total_removed" (integer), "initial_mean" (rounded to 4 decimals), and "final_mean" (rounded to 4 decimals). Example: {"column": "price", "iterations_used": 3, "total_removed": 18, "initial_mean": 123.4567, "final_mean": 118.9012}',
     code_template="""
 # Step 1: Pick column with highest CV (most likely to have meaningful outliers)
 numeric_cols = df.select_dtypes('number').columns.tolist()
@@ -1878,8 +1873,6 @@ else:
 
     submit({
         "column": target_col,
-        "z_threshold": z_threshold,
-        "max_iterations": max_iter,
         "iterations_used": iterations_used,
         "total_removed": int(total_removed),
         "initial_mean": round(float(initial_mean), 4),
@@ -1891,8 +1884,9 @@ else:
     n_steps=9,
     difficulty="VERY_HARD",
     param_sets=[
-        {"z_threshold": 3.0, "max_iter": 5, "eps": 0.001},
-        {"z_threshold": 2.5, "max_iter": 7, "eps": 0.001},
+        # Use consistent params - unhinted model may choose different values
+        # but computed outputs should match given the same algorithm
+        {"z_threshold": 3.0, "max_iter": 10, "eps": 0.001},
     ],
 )
 
