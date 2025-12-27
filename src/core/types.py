@@ -10,7 +10,7 @@ All shared types in one place:
 """
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Any, TypedDict, TYPE_CHECKING
+from typing import Any, NamedTuple, TypedDict, TYPE_CHECKING
 from datetime import datetime
 
 if TYPE_CHECKING:
@@ -99,6 +99,36 @@ class TimingMetadataDict(TypedDict):
     consistency_elapsed: list[float]
     total_elapsed: float
     avg_elapsed: float
+
+
+# ============= Result Types (NamedTuples) =============
+
+
+class TriangulationResult(NamedTuple):
+    """Result from triangulate_teacher()."""
+
+    gold_trace: "TraceDict"
+    gold_conversation: list[dict]
+    system_prompt: str
+    consistency_results: list[tuple["TraceDict", list[dict]]]
+    verified: bool
+    timing_metadata: dict
+    majority_answer_hash: str | None
+    majority_count: int
+
+
+class BatchTriangulationResult(NamedTuple):
+    """Result from batch_triangulate() - includes the question."""
+
+    question: dict
+    gold_trace: "TraceDict"
+    gold_conversation: list[dict]
+    system_prompt: str
+    consistency_results: list[tuple["TraceDict", list[dict]]]
+    verified: bool
+    timing_metadata: dict
+    majority_answer_hash: str | None
+    majority_count: int
 
 
 # ============= Core Pydantic Models =============
