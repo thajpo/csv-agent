@@ -1,0 +1,411 @@
+{
+  "dataset_columns": [
+    "Rank",
+    "Name",
+    "Platform",
+    "Year",
+    "Genre",
+    "Publisher",
+    "NA_Sales",
+    "EU_Sales",
+    "JP_Sales",
+    "Other_Sales",
+    "Global_Sales"
+  ],
+  "questions": [
+    {
+      "question": "Which numeric measurement with the greatest variability can be explained by other numeric features, and which three predictors show the strongest relationships? Return as JSON with keys: target, predictors, r_squared, adj_r_squared, n_significant, coefficients, p_values.",
+      "hint": "Identify the numeric column with highest variance, compute absolute correlations to find the top three predictors, fit an OLS regression, and report model fit and significance.",
+      "n_steps": 10,
+      "difficulty": "VERY_HARD",
+      "template_name": "multiple_regression_top_predictors",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"predictors\" (list of 3 column names), \"r_squared\" (rounded to 4 decimals), \"adj_r_squared\" (rounded to 4 decimals), \"n_significant\" (integer count of predictors with p < 0.05), \"coefficients\" (dict mapping predictor names to coefficients rounded to 4 decimals), and \"p_values\" (dict mapping predictor names to p-values rounded to 6 decimals). Example: {\"target\": \"price\", \"predictors\": [\"sqft\", \"bedrooms\", \"age\"], \"r_squared\": 0.7234, \"adj_r_squared\": 0.7156, \"n_significant\": 2, \"coefficients\": {\"sqft\": 123.45, \"bedrooms\": 5000.12, \"age\": -200.34}, \"p_values\": {\"sqft\": 0.000001, \"bedrooms\": 0.023456, \"age\": 0.156789}}",
+      "ground_truth_hash": "fe4cc6e3a7e85489",
+      "_ground_truth": {
+        "target": "Rank",
+        "predictors": [
+          "Global_Sales",
+          "NA_Sales",
+          "EU_Sales"
+        ],
+        "r_squared": 0.1831,
+        "adj_r_squared": 0.183,
+        "n_significant": 2,
+        "coefficients": {
+          "Global_Sales": -1621.6508,
+          "NA_Sales": 288.1861,
+          "EU_Sales": 552.6815
+        },
+        "p_values": {
+          "Global_Sales": 0.0,
+          "NA_Sales": 0.050348,
+          "EU_Sales": 0.00316
+        }
+      },
+      "_template": "multiple_regression_top_predictors"
+    },
+    {
+      "question": "Which numeric column in the video game sales data is the most skewed, and what are its mean and 95% confidence interval? Return as JSON with keys: column, skewness, mean, ci_lower, ci_upper, std_error, n_bootstrap.",
+      "hint": "Calculate absolute skewness for all numeric columns, select the highest, then bootstrap the mean to obtain its confidence interval and standard error.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "bootstrap_ci_discovered",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (name of most skewed column), \"skewness\" (rounded to 4 decimals), \"mean\" (rounded to 4 decimals), \"ci_lower\" (lower bound of 95% CI, rounded to 4 decimals), \"ci_upper\" (upper bound, rounded to 4 decimals), \"std_error\" (bootstrap standard error, rounded to 4 decimals), and \"n_bootstrap\" (integer, the number of bootstrap samples). Example: {\"column\": \"income\", \"skewness\": 2.3456, \"mean\": 50000.1234, \"ci_lower\": 48500.5678, \"ci_upper\": 51500.9012, \"std_error\": 750.3456, \"n_bootstrap\": 1000}",
+      "ground_truth_hash": "186d2b4b8f6b88b0",
+      "_ground_truth": {
+        "column": "Other_Sales",
+        "skewness": 24.2339,
+        "mean": 0.0481,
+        "ci_lower": 0.0454,
+        "ci_upper": 0.0512,
+        "std_error": 0.0015,
+        "n_bootstrap": 1000
+      },
+      "_template": "bootstrap_ci_discovered"
+    },
+    {
+      "question": "Which numeric feature most strongly predicts a game's ranking? Return as JSON with keys: target, best_predictor, correlation, r_squared, coefficient, p_value.",
+      "hint": "Identify the numeric column with the highest variance, compute absolute correlations with it, pick the strongest, and fit a simple OLS regression.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "regression_most_predictive",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"best_predictor\" (column name), \"correlation\" (rounded to 3 decimals), \"r_squared\" (rounded to 4 decimals), \"coefficient\" (rounded to 4 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target\": \"price\", \"best_predictor\": \"sqft\", \"correlation\": 0.834, \"r_squared\": 0.6956, \"coefficient\": 135.2847, \"p_value\": 0.000001}",
+      "ground_truth_hash": "a02482d4f8788146",
+      "_ground_truth": {
+        "target": "Rank",
+        "best_predictor": "Global_Sales",
+        "correlation": 0.427,
+        "r_squared": 0.1827,
+        "coefficient": -1317.0632,
+        "p_value": 0.0
+      },
+      "_template": "regression_most_predictive"
+    },
+    {
+      "question": "Is there any numeric column in the video game sales dataset that appears to follow a normal distribution?",
+      "hint": "Find the numeric column with the smallest skewness, perform a K\u2011S normality test on its standardized values, and return as JSON with keys: column, ks_statistic, p_value, is_normal, sample_mean, sample_std.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM",
+      "template_name": "ks_normality_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (tested column), \"ks_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"is_normal\" (boolean, true if p >= 0.05), \"sample_mean\" (rounded to 4 decimals), and \"sample_std\" (rounded to 4 decimals). Example: {\"column\": \"height\", \"ks_statistic\": 0.0456, \"p_value\": 0.234567, \"is_normal\": true, \"sample_mean\": 170.1234, \"sample_std\": 10.5678}",
+      "ground_truth_hash": "d178922407fc5ea4",
+      "_ground_truth": {
+        "column": "Rank",
+        "ks_statistic": 0.0572,
+        "p_value": 0.0,
+        "is_normal": "False",
+        "sample_mean": 8300.6053,
+        "sample_std": 4791.8539
+      },
+      "_template": "ks_normality_test"
+    },
+    {
+      "question": "Does the most skewed sales figure vary significantly between games with low versus high values of another metric? Return as JSON with keys: target_column, grouping_column, group1, group2, median1, median2, u_statistic, p_value.",
+      "hint": "Find the numeric column with highest absolute skewness, create a binary group from the median of another numeric column (or use an existing binary), then compare the groups with a Mann\u2011Whitney U test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "mann_whitney_u_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 8 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"median1\" (rounded to 4 decimals), \"median2\" (rounded to 4 decimals), \"u_statistic\" (rounded to 2 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"treatment\", \"group1\": \"control\", \"group2\": \"experimental\", \"median1\": 72.5000, \"median2\": 78.0000, \"u_statistic\": 1234.50, \"p_value\": 0.034567}",
+      "ground_truth_hash": "2ba3eeb448b8b2d6",
+      "_ground_truth": {
+        "target_column": "Other_Sales",
+        "grouping_column": "_binary_group",
+        "group1": "low",
+        "group2": "high",
+        "median1": 0.03,
+        "median2": 0.0,
+        "u_statistic": 61325816.5,
+        "p_value": 0.0
+      },
+      "_template": "mann_whitney_u_test"
+    },
+    {
+      "question": "Which two numeric variables show the strongest monotonic correlation? Return as JSON with keys: columns, spearman_rho, p_value, interpretation.",
+      "hint": "Compute the Spearman correlation matrix for all numeric columns, find the pair with the highest absolute correlation, and report the rho, p-value, and interpretation.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "spearman_rank_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"spearman_rho\" (correlation coefficient rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), and \"interpretation\" (string: \"strong\", \"moderate\", \"weak\", or \"negligible\"). Example: {\"columns\": [\"age\", \"income\"], \"spearman_rho\": 0.7234, \"p_value\": 0.000001, \"interpretation\": \"strong\"}",
+      "ground_truth_hash": "dd2088b5a3a371b8",
+      "_ground_truth": {
+        "columns": [
+          "Global_Sales",
+          "Rank"
+        ],
+        "spearman_rho": -0.9996,
+        "p_value": 0.0,
+        "interpretation": "strong"
+      },
+      "_template": "spearman_rank_correlation"
+    },
+    {
+      "question": "Which numeric attribute in the video game sales data shows the greatest variability, and does it contain any extreme outliers? Return as JSON with keys: column, q1, q3, iqr, lower_fence, upper_fence, n_outliers.",
+      "hint": "Identify the numeric column with the highest variance, then compute its Q1, Q3, IQR, lower and upper fences, and count the outliers.",
+      "n_steps": 5,
+      "difficulty": "EASY",
+      "template_name": "iqr_outlier_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (analyzed column), \"q1\" (25th percentile rounded to 4 decimals), \"q3\" (75th percentile rounded to 4 decimals), \"iqr\" (rounded to 4 decimals), \"lower_fence\" (rounded to 4 decimals), \"upper_fence\" (rounded to 4 decimals), and \"n_outliers\" (integer count). Example: {\"column\": \"salary\", \"q1\": 45000.0000, \"q3\": 75000.0000, \"iqr\": 30000.0000, \"lower_fence\": 0.0000, \"upper_fence\": 120000.0000, \"n_outliers\": 23}",
+      "ground_truth_hash": "92e6885c60bf80fb",
+      "_ground_truth": {
+        "column": "Rank",
+        "q1": 4151.25,
+        "q3": 12449.75,
+        "iqr": 8298.5,
+        "lower_fence": -8296.5,
+        "upper_fence": 24897.5,
+        "n_outliers": 0
+      },
+      "_template": "iqr_outlier_analysis"
+    },
+    {
+      "question": "Which categorical attribute tends to have the highest average rank among games? Return as JSON with keys: category_column, best_category, target_column, mean_value.",
+      "hint": "Find the numeric column with the greatest variance, then compute its mean for each category of a suitable low\u2011cardinality categorical column and pick the category with the highest mean.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "category_highest_target_mean",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"category_column\" (the grouping column name), \"best_category\" (the category value with highest mean), \"target_column\" (the numeric column analyzed), and \"mean_value\" (rounded to 3 decimal places). Example: {\"category_column\": \"region\", \"best_category\": \"West\", \"target_column\": \"sales\", \"mean_value\": 1234.567}",
+      "ground_truth_hash": "74bbdacd318be827",
+      "_ground_truth": {
+        "category_column": "Genre",
+        "best_category": "Adventure",
+        "target_column": "Rank",
+        "mean_value": 11532.788
+      },
+      "_template": "category_highest_target_mean"
+    },
+    {
+      "question": "Which pair of numeric sales figures shows the strongest correlation, and how does that relationship change after discarding extreme outliers? Return as JSON with keys: columns, original_correlation, outliers_removed, clean_correlation.",
+      "hint": "Calculate absolute correlations among numeric columns, identify the highest pair, remove rows beyond 3 standard deviations for both columns, then recompute the correlation.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "correlation_after_outlier_removal",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"original_correlation\" (rounded to 3 decimals), \"outliers_removed\" (integer count), and \"clean_correlation\" (rounded to 3 decimals). Example: {\"columns\": [\"col_a\", \"col_b\"], \"original_correlation\": 0.847, \"outliers_removed\": 12, \"clean_correlation\": 0.891}",
+      "ground_truth_hash": "dc8ecdb74e1c881f",
+      "_ground_truth": {
+        "columns": [
+          "Global_Sales",
+          "NA_Sales"
+        ],
+        "original_correlation": 0.941,
+        "outliers_removed": 215,
+        "clean_correlation": 0.874
+      },
+      "_template": "correlation_after_outlier_removal"
+    },
+    {
+      "question": "How many numeric columns have outliers and what is the total number of outlier observations across the dataset? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, flag values that lie more than 3 standard deviations away from the mean, then count columns with any flagged values and sum all flagged values.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "fe4fcd2a3592ee47",
+      "_ground_truth": {
+        "columns_with_outliers": 6,
+        "total_outliers": 1172
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "I wonder how many numeric columns have outliers and what the total number of outlier values is across the dataset. Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, flag values that deviate more than a chosen number of standard deviations (e.g., 2.5). Count how many columns contain any flagged values and sum all flagged instances.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "8325b1eb6491cf6c",
+      "_ground_truth": {
+        "columns_with_outliers": 6,
+        "total_outliers": 1529
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Which numeric column in the video game sales dataset shows the greatest relative variability?",
+      "hint": "Calculate the coefficient of variation (std/mean*100) for each numeric column and identify the one with the highest value. Return as JSON with keys: column, cv, mean, std.",
+      "n_steps": 4,
+      "difficulty": "EASY",
+      "template_name": "coefficient_of_variation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"column\" (name of column with highest CV), \"cv\" (coefficient of variation as percentage rounded to 2 decimals), \"mean\" (rounded to 4 decimals), and \"std\" (rounded to 4 decimals). Example: {\"column\": \"price\", \"cv\": 45.23, \"mean\": 1234.5678, \"std\": 558.4567}",
+      "ground_truth_hash": "7b0b803e6393ea8b",
+      "_ground_truth": {
+        "column": "JP_Sales",
+        "cv": 397.64,
+        "mean": 0.0778,
+        "std": 0.3093
+      },
+      "_template": "coefficient_of_variation"
+    },
+    {
+      "question": "Which two numeric variables in the video game sales data are most strongly related? Return as JSON with keys: columns, correlation.",
+      "hint": "Compute the correlation matrix of the numeric columns and identify the pair with the highest absolute correlation.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "strongest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the correlation coefficient rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.847}",
+      "ground_truth_hash": "f0c3a38590db8c81",
+      "_ground_truth": {
+        "columns": [
+          "Global_Sales",
+          "NA_Sales"
+        ],
+        "correlation": 0.941
+      },
+      "_template": "strongest_correlation"
+    },
+    {
+      "question": "Which two numeric variables have the weakest relationship in this video game sales dataset? Return as JSON with keys: columns, correlation.",
+      "hint": "Calculate the absolute correlation matrix for numeric columns and identify the smallest non\u2011zero off\u2011diagonal correlation.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "weakest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the absolute correlation value rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.012}",
+      "ground_truth_hash": "9c3d9f196348c823",
+      "_ground_truth": {
+        "columns": [
+          "EU_Sales",
+          "Year"
+        ],
+        "correlation": 0.006
+      },
+      "_template": "weakest_correlation"
+    },
+    {
+      "question": "Which numeric attribute varies the most across all games, and what is its average value? Return as JSON with key: result.",
+      "hint": "Find the numeric column with the highest variance, then calculate its mean.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "max_variance_mean",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the mean), rounded to 3 decimal places",
+      "ground_truth_hash": "f6068116d638c768",
+      "_ground_truth": 8300.605,
+      "_template": "max_variance_mean"
+    },
+    {
+      "question": "Which numeric column has the lowest average value, and what is its standard deviation? Return as JSON with key: std.",
+      "hint": "Identify the numeric column with the smallest mean, then compute its standard deviation.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "min_mean_column_std",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the standard deviation), rounded to 3 decimal places",
+      "ground_truth_hash": "a0c5572617966024",
+      "_ground_truth": 0.189,
+      "_template": "min_mean_column_std"
+    },
+    {
+      "question": "Are there any columns in the dataset with a high proportion of missing values? Return as JSON with keys: count, columns.",
+      "hint": "Calculate the percentage of missing values for each column and list those exceeding a 5% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "2c42c4348e535666",
+      "_ground_truth": {
+        "count": 0,
+        "columns": []
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Are there any columns in the dataset that have a high proportion of missing values (e.g., above 10%)? Return as JSON with keys: count, columns.",
+      "hint": "Calculate the percentage of missing values per column and identify those exceeding the threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "2c42c4348e535666",
+      "_ground_truth": {
+        "count": 0,
+        "columns": []
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which numeric column in the video game sales dataset has the largest range, and what are its 10th, 25th, 50th, 75th, and 90th percentiles? Return as JSON with keys: column, p10, p25, p50, p75, p90.",
+      "hint": "Find the numeric column with the greatest max\u2011min difference, then compute the specified percentiles for that column.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "percentile_ranking",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (analyzed column), \"p10\" (10th percentile rounded to 4 decimals), \"p25\" (25th percentile), \"p50\" (median), \"p75\" (75th percentile), and \"p90\" (90th percentile). Example: {\"column\": \"income\", \"p10\": 25000.0000, \"p25\": 40000.0000, \"p50\": 55000.0000, \"p75\": 75000.0000, \"p90\": 100000.0000}",
+      "ground_truth_hash": "4e1e8cef1d6463ca",
+      "_ground_truth": {
+        "column": "Rank",
+        "p10": 1661.7,
+        "p25": 4151.25,
+        "p50": 8300.5,
+        "p75": 12449.75,
+        "p90": 14940.3
+      },
+      "_template": "percentile_ranking"
+    },
+    {
+      "question": "Which numeric attribute in the video game sales dataset varies the most, and what are its key descriptive statistics? Return as JSON with keys: column, count, mean, std, min, max, median, skewness, kurtosis.",
+      "hint": "Identify the numeric column with the highest variance, then compute count, mean, std, min, max, median, skewness, and kurtosis for that column.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "descriptive_summary",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"column\", \"count\" (integer), \"mean\" (rounded to 4 decimals), \"std\", \"min\", \"max\", \"median\", \"skewness\", and \"kurtosis\" (all rounded to 4 decimals). Example: {\"column\": \"age\", \"count\": 1000, \"mean\": 35.4567, \"std\": 12.3456, \"min\": 18.0000, \"max\": 85.0000, \"median\": 34.0000, \"skewness\": 0.5678, \"kurtosis\": -0.2345}",
+      "ground_truth_hash": "e17513815d0dfd52",
+      "_ground_truth": {
+        "column": "Rank",
+        "count": 16598,
+        "mean": 8300.6053,
+        "std": 4791.8539,
+        "min": 1.0,
+        "max": 16600.0,
+        "median": 8300.5,
+        "skewness": 0.0001,
+        "kurtosis": -1.1999
+      },
+      "_template": "descriptive_summary"
+    }
+  ]
+}

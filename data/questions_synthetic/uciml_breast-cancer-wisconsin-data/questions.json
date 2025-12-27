@@ -1,0 +1,502 @@
+{
+  "dataset_columns": [
+    "id",
+    "diagnosis",
+    "radius_mean",
+    "texture_mean",
+    "perimeter_mean",
+    "area_mean",
+    "smoothness_mean",
+    "compactness_mean",
+    "concavity_mean",
+    "concave points_mean",
+    "symmetry_mean",
+    "fractal_dimension_mean",
+    "radius_se",
+    "texture_se",
+    "perimeter_se",
+    "area_se",
+    "smoothness_se",
+    "compactness_se",
+    "concavity_se",
+    "concave points_se",
+    "symmetry_se",
+    "fractal_dimension_se",
+    "radius_worst",
+    "texture_worst",
+    "perimeter_worst",
+    "area_worst",
+    "smoothness_worst",
+    "compactness_worst",
+    "concavity_worst",
+    "concave points_worst",
+    "symmetry_worst",
+    "fractal_dimension_worst",
+    "Unnamed: 32"
+  ],
+  "questions": [
+    {
+      "question": "Can the numeric variable with the greatest variability be explained by a small set of other measurements? Return as JSON with keys: target, predictors, r_squared, adj_r_squared, n_significant, coefficients, p_values.",
+      "hint": "Find the numeric column with highest variance, compute absolute correlations with the others, pick the top three, fit an OLS regression and report the model statistics.",
+      "n_steps": 10,
+      "difficulty": "VERY_HARD",
+      "template_name": "multiple_regression_top_predictors",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"predictors\" (list of 3 column names), \"r_squared\" (rounded to 4 decimals), \"adj_r_squared\" (rounded to 4 decimals), \"n_significant\" (integer count of predictors with p < 0.05), \"coefficients\" (dict mapping predictor names to coefficients rounded to 4 decimals), and \"p_values\" (dict mapping predictor names to p-values rounded to 6 decimals). Example: {\"target\": \"price\", \"predictors\": [\"sqft\", \"bedrooms\", \"age\"], \"r_squared\": 0.7234, \"adj_r_squared\": 0.7156, \"n_significant\": 2, \"coefficients\": {\"sqft\": 123.45, \"bedrooms\": 5000.12, \"age\": -200.34}, \"p_values\": {\"sqft\": 0.000001, \"bedrooms\": 0.023456, \"age\": 0.156789}}",
+      "ground_truth_hash": "067f50d0461d389a",
+      "_ground_truth": {
+        "target": "id",
+        "predictors": [
+          "area_se",
+          "radius_se",
+          "perimeter_se"
+        ],
+        "r_squared": 0.0398,
+        "adj_r_squared": 0.0347,
+        "n_significant": 1,
+        "coefficients": {
+          "area_se": 1261547.4034,
+          "radius_se": -73614584.9826,
+          "perimeter_se": -8300838.0709
+        },
+        "p_values": {
+          "area_se": 0.00081,
+          "radius_se": 0.424945,
+          "perimeter_se": 0.457142
+        }
+      },
+      "_template": "multiple_regression_top_predictors"
+    },
+    {
+      "question": "Which numeric feature in the dataset is the most skewed, and what is its estimated mean with a 95% confidence interval?",
+      "hint": "Calculate absolute skewness for all numeric columns, identify the highest, then use bootstrap resampling to estimate its mean, confidence interval, and standard error.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "bootstrap_ci_discovered",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (name of most skewed column), \"skewness\" (rounded to 4 decimals), \"mean\" (rounded to 4 decimals), \"ci_lower\" (lower bound of 95% CI, rounded to 4 decimals), \"ci_upper\" (upper bound, rounded to 4 decimals), \"std_error\" (bootstrap standard error, rounded to 4 decimals), and \"n_bootstrap\" (integer, the number of bootstrap samples). Example: {\"column\": \"income\", \"skewness\": 2.3456, \"mean\": 50000.1234, \"ci_lower\": 48500.5678, \"ci_upper\": 51500.9012, \"std_error\": 750.3456, \"n_bootstrap\": 1000}",
+      "ground_truth_hash": "1e2a4f5b3b05420a",
+      "_ground_truth": {
+        "column": "id",
+        "skewness": 6.4738,
+        "mean": 30371831.4323,
+        "ci_lower": 20741151.3067,
+        "ci_upper": 40851671.621,
+        "std_error": 5169520.3229,
+        "n_bootstrap": 1000
+      },
+      "_template": "bootstrap_ci_discovered"
+    },
+    {
+      "question": "Which numeric feature best predicts the column with the highest variance in this dataset? Return as JSON with keys: target, best_predictor, correlation, r_squared, coefficient, p_value.",
+      "hint": "Identify the numeric column with the largest variance, compute absolute correlations with all other numeric columns, select the strongest, then fit a simple OLS regression to report the stats.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "regression_most_predictive",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"best_predictor\" (column name), \"correlation\" (rounded to 3 decimals), \"r_squared\" (rounded to 4 decimals), \"coefficient\" (rounded to 4 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target\": \"price\", \"best_predictor\": \"sqft\", \"correlation\": 0.834, \"r_squared\": 0.6956, \"coefficient\": 135.2847, \"p_value\": 0.000001}",
+      "ground_truth_hash": "b8a5122548e54a74",
+      "_ground_truth": {
+        "target": "id",
+        "best_predictor": "area_se",
+        "correlation": 0.178,
+        "r_squared": 0.0316,
+        "coefficient": 488478.9438,
+        "p_value": 2e-05
+      },
+      "_template": "regression_most_predictive"
+    },
+    {
+      "question": "Is the most variable numeric measurement different between the two diagnosis categories? Return as JSON with keys: target_column, grouping_column, group1, group2, mean1, mean2, t_statistic, p_value, significant.",
+      "hint": "Identify the numeric column with the highest variance, use the diagnosis column as the binary grouping, compute group means and perform an independent t\u2011test.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "ttest_discovered_groups",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"mean1\" (rounded to 4 decimals), \"mean2\" (rounded to 4 decimals), \"t_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), and \"significant\" (boolean, true if p < 0.05). Example: {\"target_column\": \"score\", \"grouping_column\": \"gender\", \"group1\": \"M\", \"group2\": \"F\", \"mean1\": 75.4321, \"mean2\": 78.1234, \"t_statistic\": -2.3456, \"p_value\": 0.019234, \"significant\": true}",
+      "ground_truth_hash": "3f565b335bcb3326",
+      "_ground_truth": {
+        "target_column": "id",
+        "grouping_column": "diagnosis",
+        "group1": "M",
+        "group2": "B",
+        "mean1": 36818050.4434,
+        "mean2": 26543824.6246,
+        "t_statistic": 0.9477,
+        "p_value": 0.343682,
+        "significant": "False"
+      },
+      "_template": "ttest_discovered_groups"
+    },
+    {
+      "question": "Which numeric feature has the lowest skewness and does it appear to follow a normal distribution? Return as JSON with keys: column, ks_statistic, p_value, is_normal, sample_mean, sample_std.",
+      "hint": "Calculate absolute skewness for all numeric columns, pick the one with the smallest value, then run a Kolmogorov\u2011Smirnov test on its standardized values.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM",
+      "template_name": "ks_normality_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (tested column), \"ks_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"is_normal\" (boolean, true if p >= 0.05), \"sample_mean\" (rounded to 4 decimals), and \"sample_std\" (rounded to 4 decimals). Example: {\"column\": \"height\", \"ks_statistic\": 0.0456, \"p_value\": 0.234567, \"is_normal\": true, \"sample_mean\": 170.1234, \"sample_std\": 10.5678}",
+      "ground_truth_hash": "6972014c9852f051",
+      "_ground_truth": {
+        "column": "smoothness_worst",
+        "ks_statistic": 0.0355,
+        "p_value": 0.460781,
+        "is_normal": "True",
+        "sample_mean": 0.1324,
+        "sample_std": 0.0228
+      },
+      "_template": "ks_normality_test"
+    },
+    {
+      "question": "Do the variances of the most variable numeric measurement differ between the diagnosis groups? Return as JSON with keys: target_column, grouping_column, n_groups, levene_statistic, p_value, variances_equal, group_variances.",
+      "hint": "Find the numeric column with the highest variance, then test variance equality across the diagnosis categories using Levene's test.",
+      "n_steps": 7,
+      "difficulty": "HARD",
+      "template_name": "levene_variance_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"target_column\", \"grouping_column\", \"n_groups\" (integer), \"levene_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"variances_equal\" (boolean, true if p >= 0.05), and \"group_variances\" (dict mapping group names to variance rounded to 4 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"class\", \"n_groups\": 3, \"levene_statistic\": 2.3456, \"p_value\": 0.098765, \"variances_equal\": true, \"group_variances\": {\"A\": 123.4567, \"B\": 145.6789, \"C\": 112.3456}}",
+      "ground_truth_hash": "eba36154afc8c8c7",
+      "_ground_truth": {
+        "target_column": "id",
+        "grouping_column": "diagnosis",
+        "n_groups": 2,
+        "levene_statistic": 0.8984,
+        "p_value": 0.343604,
+        "variances_equal": "True",
+        "group_variances": {
+          "B": 1.3628148690161474e+16,
+          "M": 1.9015458403133984e+16
+        }
+      },
+      "_template": "levene_variance_test"
+    },
+    {
+      "question": "Does the most skewed numeric measurement differ between malignant and benign tumors? Return as JSON with keys: target_column, grouping_column, group1, group2, median1, median2, u_statistic, p_value.",
+      "hint": "Identify the numeric column with the highest absolute skewness, then compare its values between the two diagnosis groups using a non\u2011parametric test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "mann_whitney_u_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 8 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"median1\" (rounded to 4 decimals), \"median2\" (rounded to 4 decimals), \"u_statistic\" (rounded to 2 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"treatment\", \"group1\": \"control\", \"group2\": \"experimental\", \"median1\": 72.5000, \"median2\": 78.0000, \"u_statistic\": 1234.50, \"p_value\": 0.034567}",
+      "ground_truth_hash": "780fc333a10e201a",
+      "_ground_truth": {
+        "target_column": "id",
+        "grouping_column": "diagnosis",
+        "group1": "M",
+        "group2": "B",
+        "median1": 895366.5,
+        "median2": 908916.0,
+        "u_statistic": 34233.0,
+        "p_value": 0.057018
+      },
+      "_template": "mann_whitney_u_test"
+    },
+    {
+      "question": "Which pair of numeric measurements in the dataset shows the strongest monotonic relationship? Return as JSON with keys: columns, spearman_rho, p_value, interpretation.",
+      "hint": "Calculate Spearman correlation for all numeric columns and pick the pair with the highest absolute correlation.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "spearman_rank_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"spearman_rho\" (correlation coefficient rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), and \"interpretation\" (string: \"strong\", \"moderate\", \"weak\", or \"negligible\"). Example: {\"columns\": [\"age\", \"income\"], \"spearman_rho\": 0.7234, \"p_value\": 0.000001, \"interpretation\": \"strong\"}",
+      "ground_truth_hash": "4c11bbbdc52c1d57",
+      "_ground_truth": {
+        "columns": [
+          "area_mean",
+          "radius_mean"
+        ],
+        "spearman_rho": 0.9996,
+        "p_value": 0.0,
+        "interpretation": "strong"
+      },
+      "_template": "spearman_rank_correlation"
+    },
+    {
+      "question": "Do the two most skewed positive measurements show a different relationship after a log transformation? Return as JSON with keys: columns, original_correlation, log_correlation, improvement, transformation_helpful.",
+      "hint": "Find the two numeric columns with highest absolute skewness, compute their Pearson correlation, apply a log1p transform to both, recompute correlation, and compare the absolute values.",
+      "n_steps": 6,
+      "difficulty": "HARD",
+      "template_name": "correlation_change_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 5 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"original_correlation\" (Pearson, rounded to 4 decimals), \"log_correlation\" (after log transform, rounded to 4 decimals), \"improvement\" (absolute difference, rounded to 4 decimals), and \"transformation_helpful\" (boolean, true if |log_corr| > |orig_corr|). Example: {\"columns\": [\"income\", \"spending\"], \"original_correlation\": 0.4567, \"log_correlation\": 0.7234, \"improvement\": 0.2667, \"transformation_helpful\": true}",
+      "ground_truth_hash": "060b8a90af50dae5",
+      "_ground_truth": {
+        "columns": [
+          "area_se",
+          "id"
+        ],
+        "original_correlation": 0.1777,
+        "log_correlation": 0.1024,
+        "improvement": 0.0754,
+        "transformation_helpful": "False"
+      },
+      "_template": "correlation_change_analysis"
+    },
+    {
+      "question": "Which numeric variable in the dataset has the widest spread, and how many extreme values does it contain? Return as JSON with keys: column, q1, q3, iqr, lower_fence, upper_fence, n_outliers.",
+      "hint": "Identify the numeric column with the highest variance, compute its Q1, Q3, IQR, then apply the 1.5*IQR rule to count outliers.",
+      "n_steps": 5,
+      "difficulty": "EASY",
+      "template_name": "iqr_outlier_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (analyzed column), \"q1\" (25th percentile rounded to 4 decimals), \"q3\" (75th percentile rounded to 4 decimals), \"iqr\" (rounded to 4 decimals), \"lower_fence\" (rounded to 4 decimals), \"upper_fence\" (rounded to 4 decimals), and \"n_outliers\" (integer count). Example: {\"column\": \"salary\", \"q1\": 45000.0000, \"q3\": 75000.0000, \"iqr\": 30000.0000, \"lower_fence\": 0.0000, \"upper_fence\": 120000.0000, \"n_outliers\": 23}",
+      "ground_truth_hash": "731a8497e20f2622",
+      "_ground_truth": {
+        "column": "id",
+        "q1": 869218.0,
+        "q3": 8813129.0,
+        "iqr": 7943911.0,
+        "lower_fence": -11046648.5,
+        "upper_fence": 20728995.5,
+        "n_outliers": 81
+      },
+      "_template": "iqr_outlier_analysis"
+    },
+    {
+      "question": "What is the distribution shape of the most variable numeric measurement in this breast cancer dataset? Return as JSON with keys: distribution, median, iqr.",
+      "hint": "Find the numeric column with the highest variance, test its normality with a Shapiro\u2011Wilk test, and if non\u2011normal report the median and inter\u2011quartile range.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "conditional_normality",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 3 keys. If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}. If non-normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}. The \"iqr\" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.",
+      "ground_truth_hash": "6d836fb322537573",
+      "_ground_truth": {
+        "distribution": "non-normal",
+        "median": 906024.0,
+        "iqr": 7943911.0
+      },
+      "_template": "conditional_normality"
+    },
+    {
+      "question": "Which category has the highest average of the most variable numeric column? Return as JSON with keys: category_column, best_category, target_column, mean_value.",
+      "hint": "Identify the numeric column with the greatest variance, then calculate its mean for each categorical group and select the group with the highest mean.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "category_highest_target_mean",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"category_column\" (the grouping column name), \"best_category\" (the category value with highest mean), \"target_column\" (the numeric column analyzed), and \"mean_value\" (rounded to 3 decimal places). Example: {\"category_column\": \"region\", \"best_category\": \"West\", \"target_column\": \"sales\", \"mean_value\": 1234.567}",
+      "ground_truth_hash": "369d09f4130a56b5",
+      "_ground_truth": {
+        "category_column": "diagnosis",
+        "best_category": "M",
+        "target_column": "id",
+        "mean_value": 36818050.443
+      },
+      "_template": "category_highest_target_mean"
+    },
+    {
+      "question": "How many numeric features have extreme outlier values and what is the total number of outlier observations across all features? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "Treat values beyond 3 standard deviations from the mean as outliers, count per column, then aggregate.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "bb065a0c79d2f6f2",
+      "_ground_truth": {
+        "columns_with_outliers": 30,
+        "total_outliers": 222
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "How many numeric features have extreme outlier values and what is the total count of those outliers? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column compute mean and standard deviation, flag values farther than 2.5\u202f\u00d7\u202fstd, then aggregate counts.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "1d99c19644151fec",
+      "_ground_truth": {
+        "columns_with_outliers": 31,
+        "total_outliers": 399
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Which numeric measurement shows the greatest relative variability across patients? Return as JSON with keys: column, cv, mean, std.",
+      "hint": "Calculate the coefficient of variation (std/mean * 100) for each numeric column and select the one with the highest value.",
+      "n_steps": 4,
+      "difficulty": "EASY",
+      "template_name": "coefficient_of_variation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"column\" (name of column with highest CV), \"cv\" (coefficient of variation as percentage rounded to 2 decimals), \"mean\" (rounded to 4 decimals), and \"std\" (rounded to 4 decimals). Example: {\"column\": \"price\", \"cv\": 45.23, \"mean\": 1234.5678, \"std\": 558.4567}",
+      "ground_truth_hash": "9a7c50283ccc3b83",
+      "_ground_truth": {
+        "column": "id",
+        "cv": 411.63,
+        "mean": 30371831.4323,
+        "std": 125020585.6122
+      },
+      "_template": "coefficient_of_variation"
+    },
+    {
+      "question": "Which two measurements in the dataset are most strongly linearly related? Return as JSON with keys: columns, correlation.",
+      "hint": "Calculate the absolute correlation matrix for numeric columns and identify the pair with the highest off\u2011diagonal correlation.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "strongest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the correlation coefficient rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.847}",
+      "ground_truth_hash": "8798b6294605fd4d",
+      "_ground_truth": {
+        "columns": [
+          "perimeter_mean",
+          "radius_mean"
+        ],
+        "correlation": 0.998
+      },
+      "_template": "strongest_correlation"
+    },
+    {
+      "question": "Which two numeric features show the weakest correlation in the data? Return as JSON with keys: columns, correlation.",
+      "hint": "Calculate the absolute correlation matrix for numeric columns, ignore the diagonal, and locate the smallest non\u2011zero value.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "weakest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the absolute correlation value rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.012}",
+      "ground_truth_hash": "cac0c10aacaa7507",
+      "_ground_truth": {
+        "columns": [
+          "compactness_mean",
+          "id"
+        ],
+        "correlation": 0.0
+      },
+      "_template": "weakest_correlation"
+    },
+    {
+      "question": "Which numeric feature shows the greatest variability, and what is its mean value? Return as JSON with keys: result.",
+      "hint": "Identify the numeric column with the highest variance and compute its mean.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "max_variance_mean",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the mean), rounded to 3 decimal places",
+      "ground_truth_hash": "c713b66a46799cfd",
+      "_ground_truth": 30371831.432,
+      "_template": "max_variance_mean"
+    },
+    {
+      "question": "Which numeric measurement has the lowest average value, and what is its standard deviation? Return as JSON with keys: result.",
+      "hint": "Identify the numeric column with the minimum mean, then compute its standard deviation.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "min_mean_column_std",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the standard deviation), rounded to 3 decimal places",
+      "ground_truth_hash": "414369a18b9a0bb5",
+      "_ground_truth": 0.003,
+      "_template": "min_mean_column_std"
+    },
+    {
+      "question": "Which columns in the dataset have a substantial amount of missing data? Return as JSON with keys: count, columns.",
+      "hint": "Calculate the missing\u2011value percentage for each column and list those above a 5% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "511a2b8ffadfdde9",
+      "_ground_truth": {
+        "count": 1,
+        "columns": [
+          "Unnamed: 32"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which columns in the dataset have a high proportion of missing values? Return as JSON with keys: count, columns.",
+      "hint": "Compute the missing percentage for each column and list those above a 10% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "511a2b8ffadfdde9",
+      "_ground_truth": {
+        "count": 1,
+        "columns": [
+          "Unnamed: 32"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which numeric column in the dataset has the largest range, and what are its 10th, 25th, 50th, 75th, and 90th percentiles? Return as JSON with keys: column, p10, p25, p50, p75, p90.",
+      "hint": "Identify the numeric column with the greatest max\u2011min difference, then compute the specified percentiles for that column.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "percentile_ranking",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (analyzed column), \"p10\" (10th percentile rounded to 4 decimals), \"p25\" (25th percentile), \"p50\" (median), \"p75\" (75th percentile), and \"p90\" (90th percentile). Example: {\"column\": \"income\", \"p10\": 25000.0000, \"p25\": 40000.0000, \"p50\": 55000.0000, \"p75\": 75000.0000, \"p90\": 100000.0000}",
+      "ground_truth_hash": "54178fc794a3cccc",
+      "_ground_truth": {
+        "column": "id",
+        "p10": 853155.4,
+        "p25": 869218.0,
+        "p50": 906024.0,
+        "p75": 8813129.0,
+        "p90": 88144221.8
+      },
+      "_template": "percentile_ranking"
+    },
+    {
+      "question": "Which numeric column in the dataset has the greatest variability, and what are its key descriptive statistics? Return as JSON with keys: column, count, mean, std, min, max, median, skewness, kurtosis.",
+      "hint": "Identify the numeric column with the highest variance, then calculate its count, mean, standard deviation, min, max, median, skewness, and kurtosis.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "descriptive_summary",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"column\", \"count\" (integer), \"mean\" (rounded to 4 decimals), \"std\", \"min\", \"max\", \"median\", \"skewness\", and \"kurtosis\" (all rounded to 4 decimals). Example: {\"column\": \"age\", \"count\": 1000, \"mean\": 35.4567, \"std\": 12.3456, \"min\": 18.0000, \"max\": 85.0000, \"median\": 34.0000, \"skewness\": 0.5678, \"kurtosis\": -0.2345}",
+      "ground_truth_hash": "323ca721bfa37111",
+      "_ground_truth": {
+        "column": "id",
+        "count": 569,
+        "mean": 30371831.4323,
+        "std": 125020585.6122,
+        "min": 8670.0,
+        "max": 911320502.0,
+        "median": 906024.0,
+        "skewness": 6.4738,
+        "kurtosis": 42.1932
+      },
+      "_template": "descriptive_summary"
+    }
+  ]
+}

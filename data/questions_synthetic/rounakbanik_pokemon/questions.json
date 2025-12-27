@@ -1,0 +1,469 @@
+{
+  "dataset_columns": [
+    "abilities",
+    "against_bug",
+    "against_dark",
+    "against_dragon",
+    "against_electric",
+    "against_fairy",
+    "against_fight",
+    "against_fire",
+    "against_flying",
+    "against_ghost",
+    "against_grass",
+    "against_ground",
+    "against_ice",
+    "against_normal",
+    "against_poison",
+    "against_psychic",
+    "against_rock",
+    "against_steel",
+    "against_water",
+    "attack",
+    "base_egg_steps",
+    "base_happiness",
+    "base_total",
+    "capture_rate",
+    "classfication",
+    "defense",
+    "experience_growth",
+    "height_m",
+    "hp",
+    "japanese_name",
+    "name",
+    "percentage_male",
+    "pokedex_number",
+    "sp_attack",
+    "sp_defense",
+    "speed",
+    "type1",
+    "type2",
+    "weight_kg",
+    "generation",
+    "is_legendary"
+  ],
+  "questions": [
+    {
+      "question": "Which numeric attribute with the greatest variability can be predicted by a few other measurements? Return as JSON with keys: target, predictors, r_squared, adj_r_squared, n_significant, coefficients, p_values.",
+      "hint": "Identify the numeric column with the highest variance, find its three most correlated numeric features, fit an OLS regression, and report the model fit and significance.",
+      "n_steps": 10,
+      "difficulty": "VERY_HARD",
+      "template_name": "multiple_regression_top_predictors",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"predictors\" (list of 3 column names), \"r_squared\" (rounded to 4 decimals), \"adj_r_squared\" (rounded to 4 decimals), \"n_significant\" (integer count of predictors with p < 0.05), \"coefficients\" (dict mapping predictor names to coefficients rounded to 4 decimals), and \"p_values\" (dict mapping predictor names to p-values rounded to 6 decimals). Example: {\"target\": \"price\", \"predictors\": [\"sqft\", \"bedrooms\", \"age\"], \"r_squared\": 0.7234, \"adj_r_squared\": 0.7156, \"n_significant\": 2, \"coefficients\": {\"sqft\": 123.45, \"bedrooms\": 5000.12, \"age\": -200.34}, \"p_values\": {\"sqft\": 0.000001, \"bedrooms\": 0.023456, \"age\": 0.156789}}",
+      "ground_truth_hash": "3965d4ec3fbe36e1",
+      "_ground_truth": {
+        "target": "experience_growth",
+        "predictors": [
+          "base_egg_steps",
+          "is_legendary",
+          "base_happiness"
+        ],
+        "r_squared": 0.1604,
+        "adj_r_squared": 0.1572,
+        "n_significant": 3,
+        "coefficients": {
+          "base_egg_steps": 3.5352,
+          "is_legendary": 98472.9477,
+          "base_happiness": -1207.9247
+        },
+        "p_values": {
+          "base_egg_steps": 0.044058,
+          "is_legendary": 0.009798,
+          "base_happiness": 0.000127
+        }
+      },
+      "_template": "multiple_regression_top_predictors"
+    },
+    {
+      "question": "Which numeric attribute in the Pok\u00e9mon data is the most skewed, and what are its mean and 95% confidence interval? Return as JSON with keys: column, skewness, mean, ci_lower, ci_upper, std_error, n_bootstrap.",
+      "hint": "Calculate absolute skewness for all numeric columns, select the highest, then use bootstrap resampling to estimate the mean, its confidence interval, and standard error.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "bootstrap_ci_discovered",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (name of most skewed column), \"skewness\" (rounded to 4 decimals), \"mean\" (rounded to 4 decimals), \"ci_lower\" (lower bound of 95% CI, rounded to 4 decimals), \"ci_upper\" (upper bound, rounded to 4 decimals), \"std_error\" (bootstrap standard error, rounded to 4 decimals), and \"n_bootstrap\" (integer, the number of bootstrap samples). Example: {\"column\": \"income\", \"skewness\": 2.3456, \"mean\": 50000.1234, \"ci_lower\": 48500.5678, \"ci_upper\": 51500.9012, \"std_error\": 750.3456, \"n_bootstrap\": 1000}",
+      "ground_truth_hash": "1c09b7224f733584",
+      "_ground_truth": {
+        "column": "height_m",
+        "skewness": 5.08,
+        "mean": 1.1639,
+        "ci_lower": 1.0924,
+        "ci_upper": 1.2371,
+        "std_error": 0.0381,
+        "n_bootstrap": 1000
+      },
+      "_template": "bootstrap_ci_discovered"
+    },
+    {
+      "question": "Which numeric measurement shows the greatest variability and what other numeric feature best explains it? Return as JSON with keys: target, best_predictor, correlation, r_squared, coefficient, p_value.",
+      "hint": "Find the numeric column with the highest variance, compute absolute correlations with the other numeric columns, select the strongest correlate, and fit a simple linear regression.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "regression_most_predictive",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"best_predictor\" (column name), \"correlation\" (rounded to 3 decimals), \"r_squared\" (rounded to 4 decimals), \"coefficient\" (rounded to 4 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target\": \"price\", \"best_predictor\": \"sqft\", \"correlation\": 0.834, \"r_squared\": 0.6956, \"coefficient\": 135.2847, \"p_value\": 0.000001}",
+      "ground_truth_hash": "bab6ecc2f3c34d16",
+      "_ground_truth": {
+        "target": "experience_growth",
+        "best_predictor": "base_egg_steps",
+        "correlation": 0.374,
+        "r_squared": 0.1398,
+        "coefficient": 9.135,
+        "p_value": 0.0
+      },
+      "_template": "regression_most_predictive"
+    },
+    {
+      "question": "Does the most variable numeric attribute differ between two groups formed by splitting another numeric feature at its median? Return as JSON with keys: target_column, grouping_column, group1, group2, mean1, mean2, t_statistic, p_value, significant.",
+      "hint": "Identify the numeric column with the highest variance, create a binary grouping by median of another numeric column, then compare the groups' means with a t\u2011test.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "ttest_discovered_groups",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"mean1\" (rounded to 4 decimals), \"mean2\" (rounded to 4 decimals), \"t_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), and \"significant\" (boolean, true if p < 0.05). Example: {\"target_column\": \"score\", \"grouping_column\": \"gender\", \"group1\": \"M\", \"group2\": \"F\", \"mean1\": 75.4321, \"mean2\": 78.1234, \"t_statistic\": -2.3456, \"p_value\": 0.019234, \"significant\": true}",
+      "ground_truth_hash": "ca3bd8961f9aaaff",
+      "_ground_truth": {
+        "target_column": "experience_growth",
+        "grouping_column": "_binary_group",
+        "group1": "low",
+        "group2": "high",
+        "mean1": 1053096.2406,
+        "mean2": 1064284.7059,
+        "t_statistic": -0.7416,
+        "p_value": 0.458518,
+        "significant": "False"
+      },
+      "_template": "ttest_discovered_groups"
+    },
+    {
+      "question": "Is there a numeric attribute in the Pok\u00e9mon data that appears to follow a normal distribution? Return as JSON with keys: column, ks_statistic, p_value, is_normal, sample_mean, sample_std.",
+      "hint": "Find the numeric column with the smallest absolute skewness, compute its mean and standard deviation, standardize the values, then apply a Kolmogorov\u2011Smirnov test against a standard normal distribution.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM",
+      "template_name": "ks_normality_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (tested column), \"ks_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"is_normal\" (boolean, true if p >= 0.05), \"sample_mean\" (rounded to 4 decimals), and \"sample_std\" (rounded to 4 decimals). Example: {\"column\": \"height\", \"ks_statistic\": 0.0456, \"p_value\": 0.234567, \"is_normal\": true, \"sample_mean\": 170.1234, \"sample_std\": 10.5678}",
+      "ground_truth_hash": "cb8544cb4f785ce0",
+      "_ground_truth": {
+        "column": "pokedex_number",
+        "ks_statistic": 0.0577,
+        "p_value": 0.00929,
+        "is_normal": "False",
+        "sample_mean": 401.0,
+        "sample_std": 231.3731
+      },
+      "_template": "ks_normality_test"
+    },
+    {
+      "question": "Is the most skewed numeric attribute different between Pok\u00e9mon grouped by high versus low values of another measurement? Return as JSON with keys: target_column, grouping_column, group1, group2, median1, median2, u_statistic, p_value.",
+      "hint": "Find the numeric column with the greatest absolute skewness, create a binary split on another numeric column (e.g., median), then compare the groups using a Mann\u2011Whitney U test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "mann_whitney_u_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 8 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"median1\" (rounded to 4 decimals), \"median2\" (rounded to 4 decimals), \"u_statistic\" (rounded to 2 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"treatment\", \"group1\": \"control\", \"group2\": \"experimental\", \"median1\": 72.5000, \"median2\": 78.0000, \"u_statistic\": 1234.50, \"p_value\": 0.034567}",
+      "ground_truth_hash": "011c7187b13293fb",
+      "_ground_truth": {
+        "target_column": "height_m",
+        "grouping_column": "_binary_group",
+        "group1": "low",
+        "group2": "high",
+        "median1": 1.0,
+        "median2": 1.0,
+        "u_statistic": 46101.0,
+        "p_value": 0.294379
+      },
+      "_template": "mann_whitney_u_test"
+    },
+    {
+      "question": "Which pair of numeric attributes in the Pok\u00e9mon dataset shows the strongest monotonic relationship? Return as JSON with keys: columns, spearman_rho, p_value, interpretation.",
+      "hint": "Calculate the Spearman correlation matrix for all numeric columns, set the diagonal to zero, and pick the pair with the highest absolute correlation.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "spearman_rank_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"spearman_rho\" (correlation coefficient rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), and \"interpretation\" (string: \"strong\", \"moderate\", \"weak\", or \"negligible\"). Example: {\"columns\": [\"age\", \"income\"], \"spearman_rho\": 0.7234, \"p_value\": 0.000001, \"interpretation\": \"strong\"}",
+      "ground_truth_hash": "cba8da8aa1bee7fd",
+      "_ground_truth": {
+        "columns": [
+          "generation",
+          "pokedex_number"
+        ],
+        "spearman_rho": 0.9875,
+        "p_value": 0.0,
+        "interpretation": "strong"
+      },
+      "_template": "spearman_rank_correlation"
+    },
+    {
+      "question": "Which numeric attribute shows the greatest spread and does it contain many extreme values? Return as JSON with keys: column, q1, q3, iqr, lower_fence, upper_fence, n_outliers.",
+      "hint": "Identify the numeric column with the highest variance, compute its Q1, Q3, IQR, then calculate lower and upper fences to count outliers.",
+      "n_steps": 5,
+      "difficulty": "EASY",
+      "template_name": "iqr_outlier_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (analyzed column), \"q1\" (25th percentile rounded to 4 decimals), \"q3\" (75th percentile rounded to 4 decimals), \"iqr\" (rounded to 4 decimals), \"lower_fence\" (rounded to 4 decimals), \"upper_fence\" (rounded to 4 decimals), and \"n_outliers\" (integer count). Example: {\"column\": \"salary\", \"q1\": 45000.0000, \"q3\": 75000.0000, \"iqr\": 30000.0000, \"lower_fence\": 0.0000, \"upper_fence\": 120000.0000, \"n_outliers\": 23}",
+      "ground_truth_hash": "f0623942be2a351d",
+      "_ground_truth": {
+        "column": "experience_growth",
+        "q1": 1000000.0,
+        "q3": 1059860.0,
+        "iqr": 59860.0,
+        "lower_fence": 910210.0,
+        "upper_fence": 1149650.0,
+        "n_outliers": 264
+      },
+      "_template": "iqr_outlier_analysis"
+    },
+    {
+      "question": "Which numeric attribute in the Pok\u00e9mon data varies the most, and is its distribution normal?",
+      "hint": "Find the numeric column with highest variance, run a Shapiro-Wilk test, and report normal or non\u2011normal summary statistics.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "conditional_normality",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 3 keys. If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}. If non-normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}. The \"iqr\" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.",
+      "ground_truth_hash": "33d2eeb34acf1d21",
+      "_ground_truth": {
+        "distribution": "non-normal",
+        "median": 1000000.0,
+        "iqr": 59860.0
+      },
+      "_template": "conditional_normality"
+    },
+    {
+      "question": "Which Pok\u00e9mon type shows the highest average for the most variable numeric measurement? Return as JSON with keys: category_column, best_category, target_column, mean_value.",
+      "hint": "Identify the numeric column with the greatest variance, choose a categorical column with moderate cardinality, compute the mean of that numeric column for each category, and report the category with the highest mean.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "category_highest_target_mean",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"category_column\" (the grouping column name), \"best_category\" (the category value with highest mean), \"target_column\" (the numeric column analyzed), and \"mean_value\" (rounded to 3 decimal places). Example: {\"category_column\": \"region\", \"best_category\": \"West\", \"target_column\": \"sales\", \"mean_value\": 1234.567}",
+      "ground_truth_hash": "b035081b132129ed",
+      "_ground_truth": {
+        "category_column": "type1",
+        "best_category": "dragon",
+        "target_column": "experience_growth",
+        "mean_value": 1216666.667
+      },
+      "_template": "category_highest_target_mean"
+    },
+    {
+      "question": "Which pair of numeric Pok\u00e9mon features shows the strongest correlation, and does that relationship stay the same after removing extreme outliers? Return as JSON with keys: columns, original_correlation, outliers_removed, clean_correlation.",
+      "hint": "Compute absolute Pearson correlations across numeric columns, find the highest pair, drop rows more than 3 standard deviations away in either column, then recompute the correlation.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "correlation_after_outlier_removal",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"original_correlation\" (rounded to 3 decimals), \"outliers_removed\" (integer count), and \"clean_correlation\" (rounded to 3 decimals). Example: {\"columns\": [\"col_a\", \"col_b\"], \"original_correlation\": 0.847, \"outliers_removed\": 12, \"clean_correlation\": 0.891}",
+      "ground_truth_hash": "ccf1d12cc96e2f25",
+      "_ground_truth": {
+        "columns": [
+          "generation",
+          "pokedex_number"
+        ],
+        "original_correlation": 0.986,
+        "outliers_removed": 0,
+        "clean_correlation": 0.986
+      },
+      "_template": "correlation_after_outlier_removal"
+    },
+    {
+      "question": "How many numeric columns have any outlier values and what is the total number of outlier observations in the dataset? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "Use a 3\u2011standard\u2011deviation rule on each numeric column to flag outliers, then count columns with at least one and sum all outlier counts.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "85903c2b2685ea7d",
+      "_ground_truth": {
+        "columns_with_outliers": 29,
+        "total_outliers": 464
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "How many numeric columns have outliers and what is the total number of outlier values in the dataset? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, flag values beyond mean \u00b1 2.5*std, then count columns with any flags and sum all flagged values.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "7f49e7538d8aa368",
+      "_ground_truth": {
+        "columns_with_outliers": 32,
+        "total_outliers": 662
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Which pair of numeric features in the Pok\u00e9mon dataset have the strongest linear relationship? Return as JSON with keys: columns, correlation.",
+      "hint": "Calculate the absolute correlation matrix for numeric columns and identify the highest off\u2011diagonal value.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "strongest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the correlation coefficient rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.847}",
+      "ground_truth_hash": "c3fbb47ba7b635ef",
+      "_ground_truth": {
+        "columns": [
+          "generation",
+          "pokedex_number"
+        ],
+        "correlation": 0.986
+      },
+      "_template": "strongest_correlation"
+    },
+    {
+      "question": "Which two numeric attributes in the Pok\u00e9mon dataset are the least correlated with each other? Return as JSON with keys: columns, correlation.",
+      "hint": "Compute the absolute correlation matrix for all numeric columns, ignore the diagonal, and locate the pair with the smallest value.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "weakest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the absolute correlation value rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.012}",
+      "ground_truth_hash": "dc4a7cd96d52506b",
+      "_ground_truth": {
+        "columns": [
+          "against_dark",
+          "speed"
+        ],
+        "correlation": 0.0
+      },
+      "_template": "weakest_correlation"
+    },
+    {
+      "question": "Which numeric attribute shows the greatest variation among the Pok\u00e9mon, and what is its average value? Return as JSON with keys: mean.",
+      "hint": "Identify the numeric column with the highest variance, then compute its mean.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "max_variance_mean",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the mean), rounded to 3 decimal places",
+      "ground_truth_hash": "9e16bd54c8c67e4d",
+      "_ground_truth": 1054995.905,
+      "_template": "max_variance_mean"
+    },
+    {
+      "question": "Which numeric attribute has the smallest average value, and what is its variability? Return as JSON with keys: std.",
+      "hint": "Identify the column with the lowest mean, then compute its standard deviation.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "min_mean_column_std",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the standard deviation), rounded to 3 decimal places",
+      "ground_truth_hash": "a80251fe7c1492b4",
+      "_ground_truth": 0.283,
+      "_template": "min_mean_column_std"
+    },
+    {
+      "question": "Which columns in the Pok\u00e9mon dataset have a relatively high proportion of missing values? Return as JSON with keys: count, columns.",
+      "hint": "Calculate the percentage of missing values per column, identify those above a 5% threshold, count them and list their names alphabetically.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "f8f8830938738f32",
+      "_ground_truth": {
+        "count": 2,
+        "columns": [
+          "percentage_male",
+          "type2"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which columns in the Pok\u00e9mon dataset have a high proportion of missing values? Return as JSON with keys: count, columns.",
+      "hint": "Compute the missing percentage for each column and identify those above a 10% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "f8f8830938738f32",
+      "_ground_truth": {
+        "count": 2,
+        "columns": [
+          "percentage_male",
+          "type2"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which numeric attribute varies the most across the Pok\u00e9mon dataset, and what are its 10th, 25th, 50th, 75th, and 90th percentiles? Return as JSON with keys: column, p10, p25, p50, p75, p90.",
+      "hint": "Identify the numeric column with the largest range, then compute its 10th, 25th, 50th, 75th, and 90th percentile values.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "percentile_ranking",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (analyzed column), \"p10\" (10th percentile rounded to 4 decimals), \"p25\" (25th percentile), \"p50\" (median), \"p75\" (75th percentile), and \"p90\" (90th percentile). Example: {\"column\": \"income\", \"p10\": 25000.0000, \"p25\": 40000.0000, \"p50\": 55000.0000, \"p75\": 75000.0000, \"p90\": 100000.0000}",
+      "ground_truth_hash": "c6e9017b190b43be",
+      "_ground_truth": {
+        "column": "experience_growth",
+        "p10": 1000000.0,
+        "p25": 1000000.0,
+        "p50": 1000000.0,
+        "p75": 1059860.0,
+        "p90": 1250000.0
+      },
+      "_template": "percentile_ranking"
+    },
+    {
+      "question": "Which numeric attribute varies the most across all Pok\u00e9mon? Return as JSON with keys: column, count, mean, std, min, max, median, skewness, kurtosis.",
+      "hint": "Identify the numeric column with the highest variance, then calculate its descriptive statistics.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "descriptive_summary",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"column\", \"count\" (integer), \"mean\" (rounded to 4 decimals), \"std\", \"min\", \"max\", \"median\", \"skewness\", and \"kurtosis\" (all rounded to 4 decimals). Example: {\"column\": \"age\", \"count\": 1000, \"mean\": 35.4567, \"std\": 12.3456, \"min\": 18.0000, \"max\": 85.0000, \"median\": 34.0000, \"skewness\": 0.5678, \"kurtosis\": -0.2345}",
+      "ground_truth_hash": "c21c5db33b30c6cd",
+      "_ground_truth": {
+        "column": "experience_growth",
+        "count": 801,
+        "mean": 1054995.9051,
+        "std": 160255.8351,
+        "min": 600000.0,
+        "max": 1640000.0,
+        "median": 1000000.0,
+        "skewness": 0.3111,
+        "kurtosis": 2.8529
+      },
+      "_template": "descriptive_summary"
+    }
+  ]
+}

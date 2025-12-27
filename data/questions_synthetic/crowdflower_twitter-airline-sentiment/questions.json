@@ -1,0 +1,459 @@
+{
+  "dataset_columns": [
+    "tweet_id",
+    "airline_sentiment",
+    "airline_sentiment_confidence",
+    "negativereason",
+    "negativereason_confidence",
+    "airline",
+    "airline_sentiment_gold",
+    "name",
+    "negativereason_gold",
+    "retweet_count",
+    "text",
+    "tweet_coord",
+    "tweet_created",
+    "tweet_location",
+    "user_timezone"
+  ],
+  "questions": [
+    {
+      "question": "Which numeric field varies the most and can it be explained by a few other numeric measurements? Return as JSON with keys: target, predictors, r_squared, adj_r_squared, n_significant, coefficients, p_values.",
+      "hint": "Identify the numeric column with the highest variance, find its three most correlated numeric partners, fit an OLS regression, and report the model statistics.",
+      "n_steps": 10,
+      "difficulty": "VERY_HARD",
+      "template_name": "multiple_regression_top_predictors",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"predictors\" (list of 3 column names), \"r_squared\" (rounded to 4 decimals), \"adj_r_squared\" (rounded to 4 decimals), \"n_significant\" (integer count of predictors with p < 0.05), \"coefficients\" (dict mapping predictor names to coefficients rounded to 4 decimals), and \"p_values\" (dict mapping predictor names to p-values rounded to 6 decimals). Example: {\"target\": \"price\", \"predictors\": [\"sqft\", \"bedrooms\", \"age\"], \"r_squared\": 0.7234, \"adj_r_squared\": 0.7156, \"n_significant\": 2, \"coefficients\": {\"sqft\": 123.45, \"bedrooms\": 5000.12, \"age\": -200.34}, \"p_values\": {\"sqft\": 0.000001, \"bedrooms\": 0.023456, \"age\": 0.156789}}",
+      "ground_truth_hash": "ab56c7693ac74eee",
+      "_ground_truth": {
+        "target": "tweet_id",
+        "predictors": [
+          "airline_sentiment_confidence",
+          "negativereason_confidence",
+          "retweet_count"
+        ],
+        "r_squared": 0.0013,
+        "adj_r_squared": 0.001,
+        "n_significant": 1,
+        "coefficients": {
+          "airline_sentiment_confidence": 156884244519359.66,
+          "negativereason_confidence": -4482677878918.99,
+          "retweet_count": -12993408747448.49
+        },
+        "p_values": {
+          "airline_sentiment_confidence": 0.00974,
+          "negativereason_confidence": 0.885059,
+          "retweet_count": 0.186161
+        }
+      },
+      "_template": "multiple_regression_top_predictors"
+    },
+    {
+      "question": "Which numeric column in the February 2015 airline tweet data is the most skewed, and what are its average value and 95% confidence interval? Return as JSON with keys: column, skewness, mean, ci_lower, ci_upper, std_error, n_bootstrap.",
+      "hint": "Compute skewness for all numeric columns, pick the one with highest absolute skewness, then bootstrap its mean to get the confidence interval and standard error.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "bootstrap_ci_discovered",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (name of most skewed column), \"skewness\" (rounded to 4 decimals), \"mean\" (rounded to 4 decimals), \"ci_lower\" (lower bound of 95% CI, rounded to 4 decimals), \"ci_upper\" (upper bound, rounded to 4 decimals), \"std_error\" (bootstrap standard error, rounded to 4 decimals), and \"n_bootstrap\" (integer, the number of bootstrap samples). Example: {\"column\": \"income\", \"skewness\": 2.3456, \"mean\": 50000.1234, \"ci_lower\": 48500.5678, \"ci_upper\": 51500.9012, \"std_error\": 750.3456, \"n_bootstrap\": 1000}",
+      "ground_truth_hash": "555ac79994f33fec",
+      "_ground_truth": {
+        "column": "retweet_count",
+        "skewness": 33.9129,
+        "mean": 0.0827,
+        "ci_lower": 0.0719,
+        "ci_upper": 0.0954,
+        "std_error": 0.0061,
+        "n_bootstrap": 1000
+      },
+      "_template": "bootstrap_ci_discovered"
+    },
+    {
+      "question": "Do the most variable numeric measurements differ across the sentiment categories? Return as JSON with keys: target_column, grouping_column, n_groups, f_statistic, p_value, significant, best_group, best_mean, worst_group, worst_mean, eta_squared.",
+      "hint": "Find the numeric column with highest variance, pick a categorical column with 3\u201110 unique values, then run a one\u2011way ANOVA to compare group means.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "anova_discovered_groups",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 11 keys: \"target_column\", \"grouping_column\", \"n_groups\" (integer), \"f_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"significant\" (boolean), \"best_group\" (category with highest mean), \"best_mean\" (rounded to 4 decimals), \"worst_group\" (category with lowest mean), \"worst_mean\" (rounded to 4 decimals), and \"eta_squared\" (effect size, rounded to 4 decimals). Example: {\"target_column\": \"sales\", \"grouping_column\": \"region\", \"n_groups\": 4, \"f_statistic\": 15.2345, \"p_value\": 0.000012, \"significant\": true, \"best_group\": \"West\", \"best_mean\": 1234.5678, \"worst_group\": \"East\", \"worst_mean\": 890.1234, \"eta_squared\": 0.1523}",
+      "ground_truth_hash": "82d9b7e22bd28a75",
+      "_ground_truth": {
+        "target_column": "tweet_id",
+        "grouping_column": "airline_sentiment",
+        "n_groups": 3,
+        "f_statistic": 43.5071,
+        "p_value": 0.0,
+        "significant": "True",
+        "best_group": "negative",
+        "best_mean": 5.692602339571603e+17,
+        "worst_group": "positive",
+        "worst_mean": 5.6910056266763616e+17,
+        "eta_squared": 0.0059
+      },
+      "_template": "anova_discovered_groups"
+    },
+    {
+      "question": "Which numeric feature most strongly predicts the most variable measurement in the February 2015 traveler tweets? Return as JSON with keys: target, best_predictor, correlation, r_squared, coefficient, p_value.",
+      "hint": "Find the numeric column with the highest variance, compute absolute correlations with the other numeric columns, select the strongest, fit a simple OLS regression and report the statistics.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "regression_most_predictive",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"best_predictor\" (column name), \"correlation\" (rounded to 3 decimals), \"r_squared\" (rounded to 4 decimals), \"coefficient\" (rounded to 4 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target\": \"price\", \"best_predictor\": \"sqft\", \"correlation\": 0.834, \"r_squared\": 0.6956, \"coefficient\": 135.2847, \"p_value\": 0.000001}",
+      "ground_truth_hash": "0ff660d9b64f0eec",
+      "_ground_truth": {
+        "target": "tweet_id",
+        "best_predictor": "airline_sentiment_confidence",
+        "correlation": 0.025,
+        "r_squared": 0.0006,
+        "coefficient": 118856813315694.0,
+        "p_value": 0.002649
+      },
+      "_template": "regression_most_predictive"
+    },
+    {
+      "question": "Which numeric field in the February 2015 traveler tweets appears to follow a normal distribution? Return as JSON with keys: column, ks_statistic, p_value, is_normal, sample_mean, sample_std.",
+      "hint": "Find the numeric column with the lowest absolute skewness, compute its mean and standard deviation, standardize the data, and run a Kolmogorov\u2011Smirnov test against a standard normal distribution.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM",
+      "template_name": "ks_normality_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (tested column), \"ks_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"is_normal\" (boolean, true if p >= 0.05), \"sample_mean\" (rounded to 4 decimals), and \"sample_std\" (rounded to 4 decimals). Example: {\"column\": \"height\", \"ks_statistic\": 0.0456, \"p_value\": 0.234567, \"is_normal\": true, \"sample_mean\": 170.1234, \"sample_std\": 10.5678}",
+      "ground_truth_hash": "d937488afb9370c7",
+      "_ground_truth": {
+        "column": "tweet_id",
+        "ks_statistic": 0.1342,
+        "p_value": 0.0,
+        "is_normal": "False",
+        "sample_mean": 5.692183517674992e+17,
+        "sample_std": 779111158481835.9
+      },
+      "_template": "ks_normality_test"
+    },
+    {
+      "question": "Is the variability of the most dispersed numeric field consistent across the different sentiment groups? Return as JSON with keys: target_column, grouping_column, n_groups, levene_statistic, p_value, variances_equal, group_variances.",
+      "hint": "Find the numeric column with the highest variance, select a categorical column with a small number of distinct values, and compare group variances using Levene's test.",
+      "n_steps": 7,
+      "difficulty": "HARD",
+      "template_name": "levene_variance_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"target_column\", \"grouping_column\", \"n_groups\" (integer), \"levene_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"variances_equal\" (boolean, true if p >= 0.05), and \"group_variances\" (dict mapping group names to variance rounded to 4 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"class\", \"n_groups\": 3, \"levene_statistic\": 2.3456, \"p_value\": 0.098765, \"variances_equal\": true, \"group_variances\": {\"A\": 123.4567, \"B\": 145.6789, \"C\": 112.3456}}",
+      "ground_truth_hash": "2696ce40aadbc5a4",
+      "_ground_truth": {
+        "target_column": "tweet_id",
+        "grouping_column": "airline_sentiment",
+        "n_groups": 3,
+        "levene_statistic": 67.4734,
+        "p_value": 0.0,
+        "variances_equal": "False",
+        "group_variances": {
+          "negative": 5.7342367695873656e+29,
+          "neutral": 6.509916709389159e+29,
+          "positive": 6.581226191072296e+29
+        }
+      },
+      "_template": "levene_variance_test"
+    },
+    {
+      "question": "Do the categories of tweet sentiment influence the types of complaints reported? Return as JSON with keys: column1, column2, chi_squared, p_value, degrees_of_freedom, expected_min, independent.",
+      "hint": "Create a contingency table of two low\u2011cardinality categorical columns and run a chi\u2011squared test for independence.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "chi_squared_independence",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column1\" (first categorical column), \"column2\" (second categorical column), \"chi_squared\" (test statistic rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"degrees_of_freedom\" (integer), \"expected_min\" (minimum expected frequency rounded to 2 decimals), and \"independent\" (boolean, true if p >= 0.05). Example: {\"column1\": \"gender\", \"column2\": \"product\", \"chi_squared\": 15.2345, \"p_value\": 0.004321, \"degrees_of_freedom\": 4, \"expected_min\": 5.23, \"independent\": false}",
+      "ground_truth_hash": "9bdca81194d2a3fd",
+      "_ground_truth": {
+        "column1": "airline_sentiment",
+        "column2": "negativereason",
+        "chi_squared": 0.0,
+        "p_value": 1.0,
+        "degrees_of_freedom": 0,
+        "expected_min": 74.0,
+        "independent": true
+      },
+      "_template": "chi_squared_independence"
+    },
+    {
+      "question": "Do the two most skewed numeric fields in the February 2015 airline tweet data exhibit a notable correlation, and does applying a log transform change that relationship? Return as JSON with keys: columns, original_correlation, log_correlation, improvement, transformation_helpful.",
+      "hint": "Select numeric columns, find the two with highest absolute skewness, compute Pearson correlation, apply a log1p transform, recompute correlation, compare absolute values.",
+      "n_steps": 6,
+      "difficulty": "HARD",
+      "template_name": "correlation_change_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 5 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"original_correlation\" (Pearson, rounded to 4 decimals), \"log_correlation\" (after log transform, rounded to 4 decimals), \"improvement\" (absolute difference, rounded to 4 decimals), and \"transformation_helpful\" (boolean, true if |log_corr| > |orig_corr|). Example: {\"columns\": [\"income\", \"spending\"], \"original_correlation\": 0.4567, \"log_correlation\": 0.7234, \"improvement\": 0.2667, \"transformation_helpful\": true}",
+      "ground_truth_hash": "ff24a78331ed0c2e",
+      "_ground_truth": {
+        "columns": [
+          "airline_sentiment_confidence",
+          "tweet_id"
+        ],
+        "original_correlation": 0.0248,
+        "log_correlation": 0.0206,
+        "improvement": 0.0043,
+        "transformation_helpful": "False"
+      },
+      "_template": "correlation_change_analysis"
+    },
+    {
+      "question": "Which numeric attribute in the February 2015 airline tweet data shows the greatest variability, and does it contain any extreme outliers? Return as JSON with keys: column, q1, q3, iqr, lower_fence, upper_fence, n_outliers.",
+      "hint": "Find the numeric column with the highest variance, then compute its Q1, Q3, IQR, lower/upper fences, and count outliers.",
+      "n_steps": 5,
+      "difficulty": "EASY",
+      "template_name": "iqr_outlier_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (analyzed column), \"q1\" (25th percentile rounded to 4 decimals), \"q3\" (75th percentile rounded to 4 decimals), \"iqr\" (rounded to 4 decimals), \"lower_fence\" (rounded to 4 decimals), \"upper_fence\" (rounded to 4 decimals), and \"n_outliers\" (integer count). Example: {\"column\": \"salary\", \"q1\": 45000.0000, \"q3\": 75000.0000, \"iqr\": 30000.0000, \"lower_fence\": 0.0000, \"upper_fence\": 120000.0000, \"n_outliers\": 23}",
+      "ground_truth_hash": "c4609ed0a8274a5d",
+      "_ground_truth": {
+        "column": "tweet_id",
+        "q1": 5.685591781014395e+17,
+        "q3": 5.6989047328900096e+17,
+        "iqr": 1331295187561472.0,
+        "lower_fence": 5.665622353200973e+17,
+        "upper_fence": 5.718874160703432e+17,
+        "n_outliers": 0
+      },
+      "_template": "iqr_outlier_analysis"
+    },
+    {
+      "question": "Which numeric column shows the greatest variability in the February 2015 travel tweets, and is its distribution normal? Return as JSON with keys: distribution, median, iqr.",
+      "hint": "Find the numeric column with the highest variance, perform a normality test (e.g., Shapiro\u2011Wilk), and if non\u2011normal report median and IQR.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "conditional_normality",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 3 keys. If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}. If non-normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}. The \"iqr\" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.",
+      "ground_truth_hash": "55661da6d091cd8e",
+      "_ground_truth": {
+        "distribution": "non-normal",
+        "median": 5.694778579231109e+17,
+        "iqr": 1331295187561472.0
+      },
+      "_template": "conditional_normality"
+    },
+    {
+      "question": "Which tweet category has the highest average tweet ID? Return as JSON with keys: category_column, best_category, target_column, mean_value.",
+      "hint": "Identify the numeric column with the greatest variance, then compute its mean for each categorical column and select the category with the highest mean.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "category_highest_target_mean",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"category_column\" (the grouping column name), \"best_category\" (the category value with highest mean), \"target_column\" (the numeric column analyzed), and \"mean_value\" (rounded to 3 decimal places). Example: {\"category_column\": \"region\", \"best_category\": \"West\", \"target_column\": \"sales\", \"mean_value\": 1234.567}",
+      "ground_truth_hash": "532b6c83d5c39e7c",
+      "_ground_truth": {
+        "category_column": "airline_sentiment",
+        "best_category": "negative",
+        "target_column": "tweet_id",
+        "mean_value": 5.692602339571603e+17
+      },
+      "_template": "category_highest_target_mean"
+    },
+    {
+      "question": "How many numeric columns have outlier values and what is the total count of outliers across all numeric features? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, flag values farther than 3 standard deviations from the mean, then tally columns with any outliers and sum all outlier instances.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "b69e3fcb963382ca",
+      "_ground_truth": {
+        "columns_with_outliers": 2,
+        "total_outliers": 297
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "How many numeric columns have outliers and what is the total number of outlier values in the data? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, calculate mean and standard deviation, then count values whose absolute deviation exceeds 2.5\u202f\u00d7\u202fstd. Summarize the number of columns with any such values and the overall count.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "6f14922fb83ff738",
+      "_ground_truth": {
+        "columns_with_outliers": 2,
+        "total_outliers": 363
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Which two numeric measurements in the February 2015 traveler tweets are most strongly correlated? Return as JSON with keys: columns, correlation.",
+      "hint": "Calculate the absolute correlation matrix for numeric columns and identify the off\u2011diagonal pair with the highest value.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "strongest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the correlation coefficient rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.847}",
+      "ground_truth_hash": "e57ede419f4876e5",
+      "_ground_truth": {
+        "columns": [
+          "airline_sentiment_confidence",
+          "negativereason_confidence"
+        ],
+        "correlation": 0.686
+      },
+      "_template": "strongest_correlation"
+    },
+    {
+      "question": "Which two numeric fields in the February 2015 traveler tweets are the least correlated? Return as JSON with keys: columns, correlation.",
+      "hint": "Compute the absolute correlation matrix for numeric columns and identify the pair with the smallest non\u2011zero correlation.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "weakest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the absolute correlation value rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.012}",
+      "ground_truth_hash": "f37cdcf2899646c0",
+      "_ground_truth": {
+        "columns": [
+          "retweet_count",
+          "tweet_id"
+        ],
+        "correlation": 0.009
+      },
+      "_template": "weakest_correlation"
+    },
+    {
+      "question": "Which measurement in the February 2015 airline tweets shows the greatest variability, and what is its average value? Return as JSON with keys: mean.",
+      "hint": "Identify the numeric column with the highest variance and compute its mean.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "max_variance_mean",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the mean), rounded to 3 decimal places",
+      "ground_truth_hash": "302a37c5594586ee",
+      "_ground_truth": 5.692183517674992e+17,
+      "_template": "max_variance_mean"
+    },
+    {
+      "question": "Which numeric column has the lowest average value, and what is its standard deviation? Return as JSON with key: std.",
+      "hint": "Compute the mean of each numeric column, pick the one with the smallest mean, then calculate its standard deviation.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "min_mean_column_std",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the standard deviation), rounded to 3 decimal places",
+      "ground_truth_hash": "0b6578bcf4d96378",
+      "_ground_truth": 0.746,
+      "_template": "min_mean_column_std"
+    },
+    {
+      "question": "Which columns in the February 2015 travel tweets have a high proportion of missing data (over 5%)? Return as JSON with keys: count, columns.",
+      "hint": "Calculate the missing percentage for each column and list those exceeding a 5% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "d20aa13e8fca8adb",
+      "_ground_truth": {
+        "count": 7,
+        "columns": [
+          "airline_sentiment_gold",
+          "negativereason",
+          "negativereason_confidence",
+          "negativereason_gold",
+          "tweet_coord",
+          "tweet_location",
+          "user_timezone"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which columns in the February 2015 travelers dataset have a high proportion of missing values (over 10%)? Return as JSON with keys: count, columns.",
+      "hint": "Compute missing percentages per column, filter those above 10%, count them and list the column names alphabetically.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "d20aa13e8fca8adb",
+      "_ground_truth": {
+        "count": 7,
+        "columns": [
+          "airline_sentiment_gold",
+          "negativereason",
+          "negativereason_confidence",
+          "negativereason_gold",
+          "tweet_coord",
+          "tweet_location",
+          "user_timezone"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which numeric field shows the greatest spread in the dataset, and what are its 10th, 25th, 50th, 75th, and 90th percentiles? Return as JSON with keys: column, p10, p25, p50, p75, p90.",
+      "hint": "Find the numeric column with the largest range, then calculate its specified percentiles.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "percentile_ranking",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (analyzed column), \"p10\" (10th percentile rounded to 4 decimals), \"p25\" (25th percentile), \"p50\" (median), \"p75\" (75th percentile), and \"p90\" (90th percentile). Example: {\"column\": \"income\", \"p10\": 25000.0000, \"p25\": 40000.0000, \"p50\": 55000.0000, \"p75\": 75000.0000, \"p90\": 100000.0000}",
+      "ground_truth_hash": "a1fd3520a3403445",
+      "_ground_truth": {
+        "column": "tweet_id",
+        "p10": 5.6801307317399226e+17,
+        "p25": 5.685591781014395e+17,
+        "p50": 5.694778579231109e+17,
+        "p75": 5.6989047328900096e+17,
+        "p90": 5.700985915628438e+17
+      },
+      "_template": "percentile_ranking"
+    },
+    {
+      "question": "Which numeric column in the February 2015 airline tweets varies the most, and what are its basic descriptive statistics? Return as JSON with keys: column, count, mean, std, min, max, median, skewness, kurtosis.",
+      "hint": "Find the numeric field with the highest variance, then calculate its count, mean, standard deviation, min, max, median, skewness, and kurtosis.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "descriptive_summary",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"column\", \"count\" (integer), \"mean\" (rounded to 4 decimals), \"std\", \"min\", \"max\", \"median\", \"skewness\", and \"kurtosis\" (all rounded to 4 decimals). Example: {\"column\": \"age\", \"count\": 1000, \"mean\": 35.4567, \"std\": 12.3456, \"min\": 18.0000, \"max\": 85.0000, \"median\": 34.0000, \"skewness\": 0.5678, \"kurtosis\": -0.2345}",
+      "ground_truth_hash": "8804c5ac973a02a0",
+      "_ground_truth": {
+        "column": "tweet_id",
+        "count": 14640,
+        "mean": 5.692183517674992e+17,
+        "std": 779111158481835.9,
+        "min": 5.675882788752138e+17,
+        "max": 5.703106004605256e+17,
+        "median": 5.694778579231109e+17,
+        "skewness": -0.4751,
+        "kurtosis": -1.0488
+      },
+      "_template": "descriptive_summary"
+    }
+  ]
+}

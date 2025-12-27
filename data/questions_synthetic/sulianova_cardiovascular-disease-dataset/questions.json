@@ -1,0 +1,43 @@
+{
+  "dataset_columns": [
+    "id;age;gender;height;weight;ap_hi;ap_lo;cholesterol;gluc;smoke;alco;active;cardio"
+  ],
+  "questions": [
+    {
+      "question": "Are there any features in the dataset that have a substantial amount of missing data? Return as JSON with keys: count, columns.",
+      "hint": "Compute the missing percentage for each column and list those exceeding a 5% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "2c42c4348e535666",
+      "_ground_truth": {
+        "count": 0,
+        "columns": []
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Are there any columns in this patient dataset that have a high proportion of missing values? Return as JSON with keys: count, columns.",
+      "hint": "Calculate the missing percentage for each column and list those exceeding a 10% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "2c42c4348e535666",
+      "_ground_truth": {
+        "count": 0,
+        "columns": []
+      },
+      "_template": "count_high_missing_columns"
+    }
+  ]
+}

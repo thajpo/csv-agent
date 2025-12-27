@@ -1,0 +1,261 @@
+{
+  "dataset_columns": [
+    "show_id",
+    "type",
+    "title",
+    "director",
+    "cast",
+    "country",
+    "date_added",
+    "release_year",
+    "rating",
+    "duration",
+    "listed_in",
+    "description"
+  ],
+  "questions": [
+    {
+      "question": "Is there a numeric field in the Netflix dataset that is approximately normally distributed? Return as JSON with keys: column, ks_statistic, p_value, is_normal, sample_mean, sample_std.",
+      "hint": "Find the numeric column with the smallest absolute skewness, standardize its values, and run a Kolmogorov\u2011Smirnov test against the normal distribution.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM",
+      "template_name": "ks_normality_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (tested column), \"ks_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"is_normal\" (boolean, true if p >= 0.05), \"sample_mean\" (rounded to 4 decimals), and \"sample_std\" (rounded to 4 decimals). Example: {\"column\": \"height\", \"ks_statistic\": 0.0456, \"p_value\": 0.234567, \"is_normal\": true, \"sample_mean\": 170.1234, \"sample_std\": 10.5678}",
+      "ground_truth_hash": "a36039a08258c393",
+      "_ground_truth": {
+        "column": "release_year",
+        "ks_statistic": 0.2428,
+        "p_value": 0.0,
+        "is_normal": "False",
+        "sample_mean": 2014.1802,
+        "sample_std": 8.8193
+      },
+      "_template": "ks_normality_test"
+    },
+    {
+      "question": "Is the most variable numeric attribute's spread different across the two content types? Return as JSON with keys: target_column, grouping_column, n_groups, levene_statistic, p_value, variances_equal, group_variances.",
+      "hint": "Find the numeric column with highest variance, pick a categorical column with 2\u20116 groups, then perform Levene's test to compare group variances.",
+      "n_steps": 7,
+      "difficulty": "HARD",
+      "template_name": "levene_variance_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"target_column\", \"grouping_column\", \"n_groups\" (integer), \"levene_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"variances_equal\" (boolean, true if p >= 0.05), and \"group_variances\" (dict mapping group names to variance rounded to 4 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"class\", \"n_groups\": 3, \"levene_statistic\": 2.3456, \"p_value\": 0.098765, \"variances_equal\": true, \"group_variances\": {\"A\": 123.4567, \"B\": 145.6789, \"C\": 112.3456}}",
+      "ground_truth_hash": "b45ce53bba736d12",
+      "_ground_truth": {
+        "target_column": "release_year",
+        "grouping_column": "type",
+        "n_groups": 2,
+        "levene_statistic": 171.8829,
+        "p_value": 0.0,
+        "variances_equal": "False",
+        "group_variances": {
+          "Movie": 93.667,
+          "TV Show": 32.9492
+        }
+      },
+      "_template": "levene_variance_test"
+    },
+    {
+      "question": "Is there a significant difference in the release year between movies and TV shows? Return as JSON with keys: target_column, grouping_column, group1, group2, median1, median2, u_statistic, p_value.",
+      "hint": "Compare the medians of the most skewed numeric column across the two content types using a non\u2011parametric test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "mann_whitney_u_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 8 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"median1\" (rounded to 4 decimals), \"median2\" (rounded to 4 decimals), \"u_statistic\" (rounded to 2 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"treatment\", \"group1\": \"control\", \"group2\": \"experimental\", \"median1\": 72.5000, \"median2\": 78.0000, \"u_statistic\": 1234.50, \"p_value\": 0.034567}",
+      "ground_truth_hash": "157832b7c503726a",
+      "_ground_truth": {
+        "target_column": "release_year",
+        "grouping_column": "type",
+        "group1": "Movie",
+        "group2": "TV Show",
+        "median1": 2016.0,
+        "median2": 2018.0,
+        "u_statistic": 5820528.0,
+        "p_value": 0.0
+      },
+      "_template": "mann_whitney_u_test"
+    },
+    {
+      "question": "Which numeric attribute in the Netflix dataset shows the most spread, and how many extreme values does it contain? Return as JSON with keys: column, q1, q3, iqr, lower_fence, upper_fence, n_outliers.",
+      "hint": "Find the numeric column with the highest variance, then compute its quartiles, IQR, fences, and count outliers.",
+      "n_steps": 5,
+      "difficulty": "EASY",
+      "template_name": "iqr_outlier_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (analyzed column), \"q1\" (25th percentile rounded to 4 decimals), \"q3\" (75th percentile rounded to 4 decimals), \"iqr\" (rounded to 4 decimals), \"lower_fence\" (rounded to 4 decimals), \"upper_fence\" (rounded to 4 decimals), and \"n_outliers\" (integer count). Example: {\"column\": \"salary\", \"q1\": 45000.0000, \"q3\": 75000.0000, \"iqr\": 30000.0000, \"lower_fence\": 0.0000, \"upper_fence\": 120000.0000, \"n_outliers\": 23}",
+      "ground_truth_hash": "560931289a0b6d81",
+      "_ground_truth": {
+        "column": "release_year",
+        "q1": 2013.0,
+        "q3": 2019.0,
+        "iqr": 6.0,
+        "lower_fence": 2004.0,
+        "upper_fence": 2028.0,
+        "n_outliers": 719
+      },
+      "_template": "iqr_outlier_analysis"
+    },
+    {
+      "question": "What does the distribution look like for the numeric attribute that varies the most, and what are its key summary statistics? Return as JSON with keys: distribution, median, iqr.",
+      "hint": "Find the numeric column with the highest variance, assess normality (e.g., Shapiro-Wilk), then report mean/std if normal or median/IQR if not.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "conditional_normality",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 3 keys. If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}. If non-normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}. The \"iqr\" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.",
+      "ground_truth_hash": "778a9600b1a3f172",
+      "_ground_truth": {
+        "distribution": "non-normal",
+        "median": 2017.0,
+        "iqr": 6.0
+      },
+      "_template": "conditional_normality"
+    },
+    {
+      "question": "Which kind of Netflix titles are, on average, the newest? Return as JSON with keys: category_column, best_category, target_column, mean_value.",
+      "hint": "Identify the numeric column with the highest variance, then compute its average for each categorical column and select the category with the highest mean.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "category_highest_target_mean",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"category_column\" (the grouping column name), \"best_category\" (the category value with highest mean), \"target_column\" (the numeric column analyzed), and \"mean_value\" (rounded to 3 decimal places). Example: {\"category_column\": \"region\", \"best_category\": \"West\", \"target_column\": \"sales\", \"mean_value\": 1234.567}",
+      "ground_truth_hash": "916e4e6e0a318645",
+      "_ground_truth": {
+        "category_column": "type",
+        "best_category": "TV Show",
+        "target_column": "release_year",
+        "mean_value": 2016.606
+      },
+      "_template": "category_highest_target_mean"
+    },
+    {
+      "question": "I wonder how many numeric fields contain extreme values and how many outliers there are in total. Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column compute mean and standard deviation, flag values farther than 3\u202f\u00d7\u202fstd, then count columns with any flags and sum all flagged values.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "6c597984441af56d",
+      "_ground_truth": {
+        "columns_with_outliers": 1,
+        "total_outliers": 217
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Are there any unusual values in the numeric data that stand out as outliers? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, compare values to the mean and flag those beyond 2.5\u202f\u00d7\u202fstandard deviation.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "9382c09345712639",
+      "_ground_truth": {
+        "columns_with_outliers": 1,
+        "total_outliers": 313
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Which columns in the dataset have more than 5% missing values? Return as JSON with keys: count, columns.",
+      "hint": "Calculate the missing percentage for each column, filter those above 5%, count them and list the column names alphabetically.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "d9adfff12278f02b",
+      "_ground_truth": {
+        "count": 3,
+        "columns": [
+          "cast",
+          "country",
+          "director"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which columns in the dataset have a high proportion of missing values (e.g., above 10%)? Return as JSON with keys: count, columns.",
+      "hint": "Compute the missing percentage for each column and list those exceeding the threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "710dbc9cd0c34df6",
+      "_ground_truth": {
+        "count": 1,
+        "columns": [
+          "director"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which numeric attribute varies the most across the Netflix titles, and what are its key percentiles? Return as JSON with keys: column, p10, p25, p50, p75, p90.",
+      "hint": "Find the numeric column with the largest range, then compute its 10th, 25th, 50th, 75th, and 90th percentiles.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "percentile_ranking",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (analyzed column), \"p10\" (10th percentile rounded to 4 decimals), \"p25\" (25th percentile), \"p50\" (median), \"p75\" (75th percentile), and \"p90\" (90th percentile). Example: {\"column\": \"income\", \"p10\": 25000.0000, \"p25\": 40000.0000, \"p50\": 55000.0000, \"p75\": 75000.0000, \"p90\": 100000.0000}",
+      "ground_truth_hash": "c30ca4d497418084",
+      "_ground_truth": {
+        "column": "release_year",
+        "p10": 2006.0,
+        "p25": 2013.0,
+        "p50": 2017.0,
+        "p75": 2019.0,
+        "p90": 2020.0
+      },
+      "_template": "percentile_ranking"
+    },
+    {
+      "question": "Which numeric attribute shows the greatest variability and what are its key descriptive statistics? Return as JSON with keys: column, count, mean, std, min, max, median, skewness, kurtosis.",
+      "hint": "Identify the numeric column with the highest variance, then compute its count, mean, standard deviation, min, max, median, skewness, and kurtosis.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "descriptive_summary",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"column\", \"count\" (integer), \"mean\" (rounded to 4 decimals), \"std\", \"min\", \"max\", \"median\", \"skewness\", and \"kurtosis\" (all rounded to 4 decimals). Example: {\"column\": \"age\", \"count\": 1000, \"mean\": 35.4567, \"std\": 12.3456, \"min\": 18.0000, \"max\": 85.0000, \"median\": 34.0000, \"skewness\": 0.5678, \"kurtosis\": -0.2345}",
+      "ground_truth_hash": "208895b32e3bfbc5",
+      "_ground_truth": {
+        "column": "release_year",
+        "count": 8807,
+        "mean": 2014.1802,
+        "std": 8.8193,
+        "min": 1925.0,
+        "max": 2021.0,
+        "median": 2017.0,
+        "skewness": -3.4466,
+        "kurtosis": 16.2322
+      },
+      "_template": "descriptive_summary"
+    }
+  ]
+}

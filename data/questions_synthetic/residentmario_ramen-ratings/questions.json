@@ -1,0 +1,212 @@
+{
+  "dataset_columns": [
+    "Review #",
+    "Brand",
+    "Variety",
+    "Style",
+    "Country",
+    "Stars",
+    "Top Ten"
+  ],
+  "questions": [
+    {
+      "question": "Is any numeric column in the ramen dataset close to a normal distribution? Return as JSON with keys: column, ks_statistic, p_value, is_normal, sample_mean, sample_std.",
+      "hint": "Identify the numeric column with the smallest absolute skewness, standardize its values, and run a Kolmogorov\u2011Smirnov test against a standard normal.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM",
+      "template_name": "ks_normality_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (tested column), \"ks_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"is_normal\" (boolean, true if p >= 0.05), \"sample_mean\" (rounded to 4 decimals), and \"sample_std\" (rounded to 4 decimals). Example: {\"column\": \"height\", \"ks_statistic\": 0.0456, \"p_value\": 0.234567, \"is_normal\": true, \"sample_mean\": 170.1234, \"sample_std\": 10.5678}",
+      "ground_truth_hash": "3caac2684106eb4a",
+      "_ground_truth": {
+        "column": "Review #",
+        "ks_statistic": 0.0574,
+        "p_value": 0.0,
+        "is_normal": "False",
+        "sample_mean": 1290.5,
+        "sample_std": 744.9262
+      },
+      "_template": "ks_normality_test"
+    },
+    {
+      "question": "Is there a significant difference in the most skewed numeric measurement between two groups formed by a binary split of another variable? Return as JSON with keys: target_column, grouping_column, group1, group2, median1, median2, u_statistic, p_value.",
+      "hint": "Find the numeric column with the highest absolute skewness, create a binary grouping (or use an existing two\u2011level column), then compare group medians with a Mann\u2011Whitney U test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "mann_whitney_u_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 8 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"median1\" (rounded to 4 decimals), \"median2\" (rounded to 4 decimals), \"u_statistic\" (rounded to 2 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"treatment\", \"group1\": \"control\", \"group2\": \"experimental\", \"median1\": 72.5000, \"median2\": 78.0000, \"u_statistic\": 1234.50, \"p_value\": 0.034567}",
+      "ground_truth_hash": "fd256727fd98ffd4",
+      "_ground_truth": {
+        "target_column": "Review #",
+        "grouping_column": "_binary_group",
+        "group1": "high",
+        "group2": "low",
+        "median1": 1935.5,
+        "median2": 645.5,
+        "u_statistic": 1664100.0,
+        "p_value": 0.0
+      },
+      "_template": "mann_whitney_u_test"
+    },
+    {
+      "question": "Which numeric field in the ramen dataset varies the most, and what are its quartiles and outlier limits? Return as JSON with keys: column, q1, q3, iqr, lower_fence, upper_fence, n_outliers.",
+      "hint": "Find the numeric column with the highest variance, compute its Q1, Q3, IQR, then derive the lower and upper fences (1.5\u202f\u00d7\u202fIQR) and count any outliers.",
+      "n_steps": 5,
+      "difficulty": "EASY",
+      "template_name": "iqr_outlier_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (analyzed column), \"q1\" (25th percentile rounded to 4 decimals), \"q3\" (75th percentile rounded to 4 decimals), \"iqr\" (rounded to 4 decimals), \"lower_fence\" (rounded to 4 decimals), \"upper_fence\" (rounded to 4 decimals), and \"n_outliers\" (integer count). Example: {\"column\": \"salary\", \"q1\": 45000.0000, \"q3\": 75000.0000, \"iqr\": 30000.0000, \"lower_fence\": 0.0000, \"upper_fence\": 120000.0000, \"n_outliers\": 23}",
+      "ground_truth_hash": "9d59dd621da84980",
+      "_ground_truth": {
+        "column": "Review #",
+        "q1": 645.75,
+        "q3": 1935.25,
+        "iqr": 1289.5,
+        "lower_fence": -1288.5,
+        "upper_fence": 3869.5,
+        "n_outliers": 0
+      },
+      "_template": "iqr_outlier_analysis"
+    },
+    {
+      "question": "Which numeric column in the ramen ratings dataset has the highest variability, and what does its distribution look like? Return as JSON with keys: distribution, median, iqr.",
+      "hint": "Find the numeric column with the largest variance, assess normality (e.g., Shapiro\u2011Wilk), then report median and IQR for a non\u2011normal distribution or mean and std for a normal one.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "conditional_normality",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 3 keys. If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}. If non-normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}. The \"iqr\" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.",
+      "ground_truth_hash": "52fb599a064e2382",
+      "_ground_truth": {
+        "distribution": "non-normal",
+        "median": 1290.5,
+        "iqr": 1289.5
+      },
+      "_template": "conditional_normality"
+    },
+    {
+      "question": "Do any of the numeric columns contain extreme values that could be considered outliers? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "Identify values that lie more than 3 standard deviations away from the column mean for each numeric column.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "7b20706b846c187f",
+      "_ground_truth": {
+        "columns_with_outliers": 0,
+        "total_outliers": 0
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Do any of the numeric columns contain outlier values, and if so, how many columns have at least one outlier and what is the total number of outliers? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, compare values to the mean \u00b1 2.5\u202f\u00d7\u202fstd to flag outliers, then count columns with any and sum all outliers.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "7b20706b846c187f",
+      "_ground_truth": {
+        "columns_with_outliers": 0,
+        "total_outliers": 0
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Which columns in the ramen dataset contain a large share of missing entries? Return as JSON with keys: count, columns.",
+      "hint": "Compute the missing\u2011value percentage for each column and list those exceeding 5%.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "0cfe8fd073dcdb69",
+      "_ground_truth": {
+        "count": 1,
+        "columns": [
+          "Top Ten"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Are there any columns in the ramen ratings dataset that have more than 10% missing values? Return as JSON with keys: count, columns.",
+      "hint": "Compute the missing percentage for each column, identify those above a 10% threshold, count them and list their names alphabetically.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "0cfe8fd073dcdb69",
+      "_ground_truth": {
+        "count": 1,
+        "columns": [
+          "Top Ten"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which numeric field in the ramen ratings varies the most, and what are its key percentile values? Return as JSON with keys: column, p10, p25, p50, p75, p90.",
+      "hint": "Identify the numeric column with the largest range, then calculate its 10th, 25th, 50th, 75th, and 90th percentiles.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "percentile_ranking",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (analyzed column), \"p10\" (10th percentile rounded to 4 decimals), \"p25\" (25th percentile), \"p50\" (median), \"p75\" (75th percentile), and \"p90\" (90th percentile). Example: {\"column\": \"income\", \"p10\": 25000.0000, \"p25\": 40000.0000, \"p50\": 55000.0000, \"p75\": 75000.0000, \"p90\": 100000.0000}",
+      "ground_truth_hash": "a1cece2475fe8cd4",
+      "_ground_truth": {
+        "column": "Review #",
+        "p10": 258.9,
+        "p25": 645.75,
+        "p50": 1290.5,
+        "p75": 1935.25,
+        "p90": 2322.1
+      },
+      "_template": "percentile_ranking"
+    },
+    {
+      "question": "Which numeric column in the ramen ratings dataset shows the greatest variability, and what are its key descriptive statistics? Return as JSON with keys: column, count, mean, std, min, max, median, skewness, kurtosis.",
+      "hint": "Find the numeric column with the highest variance, then compute its count, mean, standard deviation, minimum, maximum, median, skewness, and kurtosis.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "descriptive_summary",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"column\", \"count\" (integer), \"mean\" (rounded to 4 decimals), \"std\", \"min\", \"max\", \"median\", \"skewness\", and \"kurtosis\" (all rounded to 4 decimals). Example: {\"column\": \"age\", \"count\": 1000, \"mean\": 35.4567, \"std\": 12.3456, \"min\": 18.0000, \"max\": 85.0000, \"median\": 34.0000, \"skewness\": 0.5678, \"kurtosis\": -0.2345}",
+      "ground_truth_hash": "c4d93248d45c29ca",
+      "_ground_truth": {
+        "column": "Review #",
+        "count": 2580,
+        "mean": 1290.5,
+        "std": 744.9262,
+        "min": 1.0,
+        "max": 2580.0,
+        "median": 1290.5,
+        "skewness": 0.0,
+        "kurtosis": -1.2
+      },
+      "_template": "descriptive_summary"
+    }
+  ]
+}

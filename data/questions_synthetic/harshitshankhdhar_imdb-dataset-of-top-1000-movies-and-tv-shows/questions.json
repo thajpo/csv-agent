@@ -1,0 +1,391 @@
+{
+  "dataset_columns": [
+    "Poster_Link",
+    "Series_Title",
+    "Released_Year",
+    "Certificate",
+    "Runtime",
+    "Genre",
+    "IMDB_Rating",
+    "Overview",
+    "Meta_score",
+    "Director",
+    "Star1",
+    "Star2",
+    "Star3",
+    "Star4",
+    "No_of_Votes",
+    "Gross"
+  ],
+  "questions": [
+    {
+      "question": "Which numeric feature in the movie dataset shows the greatest skewness, and what are its mean and 95% confidence interval estimated by bootstrapping? Return as JSON with keys: column, skewness, mean, ci_lower, ci_upper, std_error, n_bootstrap.",
+      "hint": "Compute absolute skewness for all numeric columns, pick the column with the highest skewness, then perform bootstrap resampling to estimate its mean, 95% CI, and standard error.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "bootstrap_ci_discovered",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (name of most skewed column), \"skewness\" (rounded to 4 decimals), \"mean\" (rounded to 4 decimals), \"ci_lower\" (lower bound of 95% CI, rounded to 4 decimals), \"ci_upper\" (upper bound, rounded to 4 decimals), \"std_error\" (bootstrap standard error, rounded to 4 decimals), and \"n_bootstrap\" (integer, the number of bootstrap samples). Example: {\"column\": \"income\", \"skewness\": 2.3456, \"mean\": 50000.1234, \"ci_lower\": 48500.5678, \"ci_upper\": 51500.9012, \"std_error\": 750.3456, \"n_bootstrap\": 1000}",
+      "ground_truth_hash": "7c481128f18f60ac",
+      "_ground_truth": {
+        "column": "No_of_Votes",
+        "skewness": 2.3,
+        "mean": 273692.911,
+        "ci_lower": 255007.9327,
+        "ci_upper": 292579.6616,
+        "std_error": 9839.938,
+        "n_bootstrap": 1000
+      },
+      "_template": "bootstrap_ci_discovered"
+    },
+    {
+      "question": "Which numeric attribute most strongly predicts the variable with the greatest spread in this movies dataset? Return as JSON with keys: target, best_predictor, correlation, r_squared, coefficient, p_value.",
+      "hint": "Identify the numeric column with highest variance, compute absolute correlations with other numeric columns, select the strongest, fit a simple OLS regression and report the statistics.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "regression_most_predictive",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"best_predictor\" (column name), \"correlation\" (rounded to 3 decimals), \"r_squared\" (rounded to 4 decimals), \"coefficient\" (rounded to 4 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target\": \"price\", \"best_predictor\": \"sqft\", \"correlation\": 0.834, \"r_squared\": 0.6956, \"coefficient\": 135.2847, \"p_value\": 0.000001}",
+      "ground_truth_hash": "2a5ac49477921bdb",
+      "_ground_truth": {
+        "target": "No_of_Votes",
+        "best_predictor": "IMDB_Rating",
+        "correlation": 0.495,
+        "r_squared": 0.245,
+        "coefficient": 588195.033,
+        "p_value": 0.0
+      },
+      "_template": "regression_most_predictive"
+    },
+    {
+      "question": "Which numeric attribute in the movies dataset appears to be closest to a normal distribution? Return as JSON with keys: column, ks_statistic, p_value, is_normal, sample_mean, sample_std.",
+      "hint": "Compute absolute skewness for each numeric column, select the one with the smallest value, then standardize its non\u2011missing values and apply a Kolmogorov\u2011Smirnov test against a standard normal.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM",
+      "template_name": "ks_normality_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (tested column), \"ks_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"is_normal\" (boolean, true if p >= 0.05), \"sample_mean\" (rounded to 4 decimals), and \"sample_std\" (rounded to 4 decimals). Example: {\"column\": \"height\", \"ks_statistic\": 0.0456, \"p_value\": 0.234567, \"is_normal\": true, \"sample_mean\": 170.1234, \"sample_std\": 10.5678}",
+      "ground_truth_hash": "99db585b6691a79b",
+      "_ground_truth": {
+        "column": "Meta_score",
+        "ks_statistic": 0.0504,
+        "p_value": 0.026727,
+        "is_normal": "False",
+        "sample_mean": 77.9715,
+        "sample_std": 12.3761
+      },
+      "_template": "ks_normality_test"
+    },
+    {
+      "question": "Do movies that earned more tend to have different popularity measures than those that earned less? Return as JSON with keys: target_column, grouping_column, group1, group2, median1, median2, u_statistic, p_value.",
+      "hint": "Identify the most skewed numeric column, create a binary split on another numeric column (e.g., median split), then compare the groups' medians using a Mann\u2011Whitney U test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "mann_whitney_u_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 8 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"median1\" (rounded to 4 decimals), \"median2\" (rounded to 4 decimals), \"u_statistic\" (rounded to 2 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"treatment\", \"group1\": \"control\", \"group2\": \"experimental\", \"median1\": 72.5000, \"median2\": 78.0000, \"u_statistic\": 1234.50, \"p_value\": 0.034567}",
+      "ground_truth_hash": "6747ae35de45e4ec",
+      "_ground_truth": {
+        "target_column": "No_of_Votes",
+        "grouping_column": "_binary_group",
+        "group1": "high",
+        "group2": "low",
+        "median1": 167839.0,
+        "median2": 112704.0,
+        "u_statistic": 148948.5,
+        "p_value": 0.0
+      },
+      "_template": "mann_whitney_u_test"
+    },
+    {
+      "question": "Do the two most skewed numeric measurements in this movie dataset show a strong relationship, and does applying a log transformation improve that correlation? Return as JSON with keys: columns, original_correlation, log_correlation, improvement, transformation_helpful.",
+      "hint": "Identify numeric columns, pick the two with highest absolute skewness, compute Pearson correlation, apply log1p transformation, recompute correlation, then compare absolute values.",
+      "n_steps": 6,
+      "difficulty": "HARD",
+      "template_name": "correlation_change_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 5 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"original_correlation\" (Pearson, rounded to 4 decimals), \"log_correlation\" (after log transform, rounded to 4 decimals), \"improvement\" (absolute difference, rounded to 4 decimals), and \"transformation_helpful\" (boolean, true if |log_corr| > |orig_corr|). Example: {\"columns\": [\"income\", \"spending\"], \"original_correlation\": 0.4567, \"log_correlation\": 0.7234, \"improvement\": 0.2667, \"transformation_helpful\": true}",
+      "ground_truth_hash": "852acb1af307b8c0",
+      "_ground_truth": {
+        "columns": [
+          "IMDB_Rating",
+          "No_of_Votes"
+        ],
+        "original_correlation": 0.495,
+        "log_correlation": 0.2495,
+        "improvement": 0.2455,
+        "transformation_helpful": "False"
+      },
+      "_template": "correlation_change_analysis"
+    },
+    {
+      "question": "Which numeric attribute has the highest variability and what are its Q1, Q3, IQR, lower and upper fences, and outlier count? Return as JSON with keys: column, q1, q3, iqr, lower_fence, upper_fence, n_outliers.",
+      "hint": "Find the numeric column with the largest variance, then compute its quartiles, IQR, fences (1.5*IQR), and count values outside the fences.",
+      "n_steps": 5,
+      "difficulty": "EASY",
+      "template_name": "iqr_outlier_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (analyzed column), \"q1\" (25th percentile rounded to 4 decimals), \"q3\" (75th percentile rounded to 4 decimals), \"iqr\" (rounded to 4 decimals), \"lower_fence\" (rounded to 4 decimals), \"upper_fence\" (rounded to 4 decimals), and \"n_outliers\" (integer count). Example: {\"column\": \"salary\", \"q1\": 45000.0000, \"q3\": 75000.0000, \"iqr\": 30000.0000, \"lower_fence\": 0.0000, \"upper_fence\": 120000.0000, \"n_outliers\": 23}",
+      "ground_truth_hash": "357a8f73ea3ed672",
+      "_ground_truth": {
+        "column": "No_of_Votes",
+        "q1": 55526.25,
+        "q3": 374161.25,
+        "iqr": 318635.0,
+        "lower_fence": -422426.25,
+        "upper_fence": 852113.75,
+        "n_outliers": 67
+      },
+      "_template": "iqr_outlier_analysis"
+    },
+    {
+      "question": "Is the most variable numeric measurement in this movie dataset normally distributed? Return as JSON with keys: distribution, median, iqr (or mean, std if normal).",
+      "hint": "Find the numeric column with the highest variance, test its normality (e.g., Shapiro-Wilk), and report either mean/std for normal or median/IQR for non\u2011normal.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "conditional_normality",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 3 keys. If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}. If non-normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}. The \"iqr\" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.",
+      "ground_truth_hash": "b0b1d132bdb07ff0",
+      "_ground_truth": {
+        "distribution": "non-normal",
+        "median": 138548.5,
+        "iqr": 318635.0
+      },
+      "_template": "conditional_normality"
+    },
+    {
+      "question": "Which two numeric attributes in the movies dataset are most strongly related, and how does removing extreme values affect their association? Return as JSON with keys: columns, original_correlation, outliers_removed, clean_correlation.",
+      "hint": "Find the pair with highest absolute Pearson correlation among numeric columns, drop rows where either value is beyond 3 standard deviations, then recompute the correlation.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "correlation_after_outlier_removal",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"original_correlation\" (rounded to 3 decimals), \"outliers_removed\" (integer count), and \"clean_correlation\" (rounded to 3 decimals). Example: {\"columns\": [\"col_a\", \"col_b\"], \"original_correlation\": 0.847, \"outliers_removed\": 12, \"clean_correlation\": 0.891}",
+      "ground_truth_hash": "0fd137df94341493",
+      "_ground_truth": {
+        "columns": [
+          "IMDB_Rating",
+          "No_of_Votes"
+        ],
+        "original_correlation": 0.495,
+        "outliers_removed": 24,
+        "clean_correlation": 0.325
+      },
+      "_template": "correlation_after_outlier_removal"
+    },
+    {
+      "question": "I wonder how many numeric fields have extreme values and what the total number of outliers is. Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, calculate mean and standard deviation, flag values farther than 3\u202f\u00d7\u202fstd from the mean as outliers, then count columns with any outliers and sum all outlier occurrences.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "50376a9fe93ade62",
+      "_ground_truth": {
+        "columns_with_outliers": 3,
+        "total_outliers": 38
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "I wonder how many numeric fields contain extreme values and how many extreme values exist in total. Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "Flag values beyond 2.5 standard deviations from the mean for each numeric column, then count per column and sum.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "3c89e6c519a4db81",
+      "_ground_truth": {
+        "columns_with_outliers": 3,
+        "total_outliers": 65
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Which numeric attribute shows the greatest relative variability in the movie dataset? Return as JSON with keys: column, cv, mean, std.",
+      "hint": "Compute the coefficient of variation (std/mean*100) for each numeric column and select the one with the highest value.",
+      "n_steps": 4,
+      "difficulty": "EASY",
+      "template_name": "coefficient_of_variation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"column\" (name of column with highest CV), \"cv\" (coefficient of variation as percentage rounded to 2 decimals), \"mean\" (rounded to 4 decimals), and \"std\" (rounded to 4 decimals). Example: {\"column\": \"price\", \"cv\": 45.23, \"mean\": 1234.5678, \"std\": 558.4567}",
+      "ground_truth_hash": "feb6897eff0cabb1",
+      "_ground_truth": {
+        "column": "No_of_Votes",
+        "cv": 119.61,
+        "mean": 273692.911,
+        "std": 327372.7039
+      },
+      "_template": "coefficient_of_variation"
+    },
+    {
+      "question": "Which two numeric variables in the movie dataset are most strongly correlated? Return as JSON with keys: columns, correlation.",
+      "hint": "Calculate the absolute correlation matrix for numeric columns, zero out the diagonal, and identify the pair with the highest value.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "strongest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the correlation coefficient rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.847}",
+      "ground_truth_hash": "464b7bc131195f47",
+      "_ground_truth": {
+        "columns": [
+          "IMDB_Rating",
+          "No_of_Votes"
+        ],
+        "correlation": 0.495
+      },
+      "_template": "strongest_correlation"
+    },
+    {
+      "question": "Which two numeric attributes in the movie dataset show the weakest correlation? Return as JSON with keys: columns, correlation.",
+      "hint": "Calculate the absolute correlation matrix for all numeric columns, mask the diagonal, then locate the smallest non\u2011zero correlation.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "weakest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the absolute correlation value rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.012}",
+      "ground_truth_hash": "075184f66ce26323",
+      "_ground_truth": {
+        "columns": [
+          "Meta_score",
+          "No_of_Votes"
+        ],
+        "correlation": 0.019
+      },
+      "_template": "weakest_correlation"
+    },
+    {
+      "question": "What is the average value of the most variable numeric measurement in the movie dataset? Return as JSON with keys: mean.",
+      "hint": "Identify the numeric column with the highest variance, then compute its mean.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "max_variance_mean",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the mean), rounded to 3 decimal places",
+      "ground_truth_hash": "5b7ad3cc147d1819",
+      "_ground_truth": 273692.911,
+      "_template": "max_variance_mean"
+    },
+    {
+      "question": "Which numeric column has the smallest average value and what is its standard deviation? Return as JSON with key: std.",
+      "hint": "Compute the mean of each numeric column, pick the one with the lowest mean, then calculate its standard deviation.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "min_mean_column_std",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the standard deviation), rounded to 3 decimal places",
+      "ground_truth_hash": "1bd77e962f3a0649",
+      "_ground_truth": 0.275,
+      "_template": "min_mean_column_std"
+    },
+    {
+      "question": "Which columns in the movies dataset contain a high proportion of missing values? Return as JSON with keys: count, columns.",
+      "hint": "Calculate missing percentages for each column and list those exceeding a 5% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "41a0eb2e7b8a8ec2",
+      "_ground_truth": {
+        "count": 3,
+        "columns": [
+          "Certificate",
+          "Gross",
+          "Meta_score"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which columns in the dataset have a high proportion of missing values (over 10%)? Return as JSON with keys: count, columns.",
+      "hint": "Compute the missing\u2011value percentage for each column, count those exceeding 10%, and list their names alphabetically.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "41a0eb2e7b8a8ec2",
+      "_ground_truth": {
+        "count": 3,
+        "columns": [
+          "Certificate",
+          "Gross",
+          "Meta_score"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which numeric measurement varies the most across movies, and what are its key percentile values? Return as JSON with keys: column, p10, p25, p50, p75, p90.",
+      "hint": "Identify the numeric column with the greatest range, then compute its 10th, 25th, 50th, 75th, and 90th percentiles.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "percentile_ranking",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (analyzed column), \"p10\" (10th percentile rounded to 4 decimals), \"p25\" (25th percentile), \"p50\" (median), \"p75\" (75th percentile), and \"p90\" (90th percentile). Example: {\"column\": \"income\", \"p10\": 25000.0000, \"p25\": 40000.0000, \"p50\": 55000.0000, \"p75\": 75000.0000, \"p90\": 100000.0000}",
+      "ground_truth_hash": "8b3eca403e28d342",
+      "_ground_truth": {
+        "column": "No_of_Votes",
+        "p10": 34065.7,
+        "p25": 55526.25,
+        "p50": 138548.5,
+        "p75": 374161.25,
+        "p90": 699297.7
+      },
+      "_template": "percentile_ranking"
+    },
+    {
+      "question": "Which numeric attribute in the movies dataset exhibits the most variability, and what are its basic descriptive statistics? Return as JSON with keys: column, count, mean, std, min, max, median, skewness, kurtosis.",
+      "hint": "Identify the numeric column with the highest variance, then compute its count, mean, standard deviation, min, max, median, skewness, and kurtosis.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "descriptive_summary",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"column\", \"count\" (integer), \"mean\" (rounded to 4 decimals), \"std\", \"min\", \"max\", \"median\", \"skewness\", and \"kurtosis\" (all rounded to 4 decimals). Example: {\"column\": \"age\", \"count\": 1000, \"mean\": 35.4567, \"std\": 12.3456, \"min\": 18.0000, \"max\": 85.0000, \"median\": 34.0000, \"skewness\": 0.5678, \"kurtosis\": -0.2345}",
+      "ground_truth_hash": "51a131ad0911da24",
+      "_ground_truth": {
+        "column": "No_of_Votes",
+        "count": 1000,
+        "mean": 273692.911,
+        "std": 327372.7039,
+        "min": 25088.0,
+        "max": 2343110.0,
+        "median": 138548.5,
+        "skewness": 2.3,
+        "kurtosis": 6.8951
+      },
+      "_template": "descriptive_summary"
+    }
+  ]
+}

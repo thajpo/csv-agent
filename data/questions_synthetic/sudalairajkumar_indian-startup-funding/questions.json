@@ -1,0 +1,222 @@
+{
+  "dataset_columns": [
+    "Sr No",
+    "Date dd/mm/yyyy",
+    "Startup Name",
+    "Industry Vertical",
+    "SubVertical",
+    "City  Location",
+    "Investors Name",
+    "InvestmentnType",
+    "Amount in USD",
+    "Remarks"
+  ],
+  "questions": [
+    {
+      "question": "Is there any numeric field in the startup funding dataset that appears to follow a normal distribution? Return as JSON with keys: column, ks_statistic, p_value, is_normal, sample_mean, sample_std.",
+      "hint": "Identify the numeric column with the smallest absolute skewness, compute its mean and standard deviation, standardize the data, and perform a Kolmogorov\u2011Smirnov test against a standard normal distribution.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM",
+      "template_name": "ks_normality_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (tested column), \"ks_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"is_normal\" (boolean, true if p >= 0.05), \"sample_mean\" (rounded to 4 decimals), and \"sample_std\" (rounded to 4 decimals). Example: {\"column\": \"height\", \"ks_statistic\": 0.0456, \"p_value\": 0.234567, \"is_normal\": true, \"sample_mean\": 170.1234, \"sample_std\": 10.5678}",
+      "ground_truth_hash": "1fa325fa6f198e01",
+      "_ground_truth": {
+        "column": "Sr No",
+        "ks_statistic": 0.0573,
+        "p_value": 0.0,
+        "is_normal": "False",
+        "sample_mean": 1522.5,
+        "sample_std": 878.8714
+      },
+      "_template": "ks_normality_test"
+    },
+    {
+      "question": "Is the most skewed numeric field distributed differently between low and high groups formed by a median split of another numeric variable? Return as JSON with keys: target_column, grouping_column, group1, group2, median1, median2, u_statistic, p_value.",
+      "hint": "Identify the numeric column with the highest absolute skewness, create a binary group using the median of another numeric column, then compare the groups with a Mann-Whitney U test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "mann_whitney_u_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 8 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"median1\" (rounded to 4 decimals), \"median2\" (rounded to 4 decimals), \"u_statistic\" (rounded to 2 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"treatment\", \"group1\": \"control\", \"group2\": \"experimental\", \"median1\": 72.5000, \"median2\": 78.0000, \"u_statistic\": 1234.50, \"p_value\": 0.034567}",
+      "ground_truth_hash": "4e3a233a5d6dbf2f",
+      "_ground_truth": {
+        "target_column": "Sr No",
+        "grouping_column": "_binary_group",
+        "group1": "low",
+        "group2": "high",
+        "median1": 761.5,
+        "median2": 2283.5,
+        "u_statistic": 0.0,
+        "p_value": 0.0
+      },
+      "_template": "mann_whitney_u_test"
+    },
+    {
+      "question": "Which numeric column in the startup funding dataset has the most variability, and does it contain any extreme outliers? Return as JSON with keys: column, q1, q3, iqr, lower_fence, upper_fence, n_outliers.",
+      "hint": "Find the numeric column with the highest variance, then compute its Q1, Q3, IQR and the lower/upper fences to count outliers.",
+      "n_steps": 5,
+      "difficulty": "EASY",
+      "template_name": "iqr_outlier_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (analyzed column), \"q1\" (25th percentile rounded to 4 decimals), \"q3\" (75th percentile rounded to 4 decimals), \"iqr\" (rounded to 4 decimals), \"lower_fence\" (rounded to 4 decimals), \"upper_fence\" (rounded to 4 decimals), and \"n_outliers\" (integer count). Example: {\"column\": \"salary\", \"q1\": 45000.0000, \"q3\": 75000.0000, \"iqr\": 30000.0000, \"lower_fence\": 0.0000, \"upper_fence\": 120000.0000, \"n_outliers\": 23}",
+      "ground_truth_hash": "a1fae0d44d3f40eb",
+      "_ground_truth": {
+        "column": "Sr No",
+        "q1": 761.75,
+        "q3": 2283.25,
+        "iqr": 1521.5,
+        "lower_fence": -1520.5,
+        "upper_fence": 4565.5,
+        "n_outliers": 0
+      },
+      "_template": "iqr_outlier_analysis"
+    },
+    {
+      "question": "Which date grouping shows the highest average row index? Return as JSON with keys: category_column, best_category, target_column, mean_value.",
+      "hint": "Find the numeric column with the greatest variance, calculate its mean for each date, and report the date with the highest mean.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "category_highest_target_mean",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"category_column\" (the grouping column name), \"best_category\" (the category value with highest mean), \"target_column\" (the numeric column analyzed), and \"mean_value\" (rounded to 3 decimal places). Example: {\"category_column\": \"region\", \"best_category\": \"West\", \"target_column\": \"sales\", \"mean_value\": 1234.567}",
+      "ground_truth_hash": "3a19ce3b09103636",
+      "_ground_truth": {
+        "category_column": "Date dd/mm/yyyy",
+        "best_category": "31/01/2015",
+        "target_column": "Sr No",
+        "mean_value": 3044.0
+      },
+      "_template": "category_highest_target_mean"
+    },
+    {
+      "question": "I wonder if any of the numeric fields in this startup funding dataset contain extreme values that could affect analysis. Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "Flag values that lie beyond three standard deviations from the mean for each numeric column, then count columns with at least one such value and the total number of outliers.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "7b20706b846c187f",
+      "_ground_truth": {
+        "columns_with_outliers": 0,
+        "total_outliers": 0
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "I wonder if any numeric fields contain unusually extreme values. Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, compute mean and standard deviation, then count values that deviate more than 2.5\u202f\u00d7\u202fstd; summarize how many columns have such outliers and the total number of outlier entries.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "7b20706b846c187f",
+      "_ground_truth": {
+        "columns_with_outliers": 0,
+        "total_outliers": 0
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Which columns in the startup funding dataset have more than 5% missing values? Return as JSON with keys: count, columns.",
+      "hint": "Calculate the missing percentage for each column, filter those above 5%, count them and list the column names alphabetically.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "86434edd0b804aa0",
+      "_ground_truth": {
+        "count": 5,
+        "columns": [
+          "Amount in USD",
+          "City  Location",
+          "Industry Vertical",
+          "Remarks",
+          "SubVertical"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which columns in the startup funding dataset have a high proportion of missing values? Return as JSON with keys: count, columns.",
+      "hint": "Compute the missing percentage for each column and list those exceeding a 10% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "e5796c3101b52998",
+      "_ground_truth": {
+        "count": 3,
+        "columns": [
+          "Amount in USD",
+          "Remarks",
+          "SubVertical"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which numeric column in this startup funding dataset spans the widest range, and what are its key percentiles? Return as JSON with keys: column, p10, p25, p50, p75, p90.",
+      "hint": "Find the numeric column with the largest max\u2011min difference, then calculate its 10th, 25th, 50th, 75th, and 90th percentiles.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "percentile_ranking",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (analyzed column), \"p10\" (10th percentile rounded to 4 decimals), \"p25\" (25th percentile), \"p50\" (median), \"p75\" (75th percentile), and \"p90\" (90th percentile). Example: {\"column\": \"income\", \"p10\": 25000.0000, \"p25\": 40000.0000, \"p50\": 55000.0000, \"p75\": 75000.0000, \"p90\": 100000.0000}",
+      "ground_truth_hash": "1824ad066e2b2080",
+      "_ground_truth": {
+        "column": "Sr No",
+        "p10": 305.3,
+        "p25": 761.75,
+        "p50": 1522.5,
+        "p75": 2283.25,
+        "p90": 2739.7
+      },
+      "_template": "percentile_ranking"
+    },
+    {
+      "question": "Which numeric attribute in the startup funding data shows the greatest variability, and what are its key descriptive statistics? Return as JSON with keys: column, count, mean, std, min, max, median, skewness, kurtosis.",
+      "hint": "Find the numeric column with the highest variance, then compute count, mean, standard deviation, min, max, median, skewness, and kurtosis for that column.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "descriptive_summary",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"column\", \"count\" (integer), \"mean\" (rounded to 4 decimals), \"std\", \"min\", \"max\", \"median\", \"skewness\", and \"kurtosis\" (all rounded to 4 decimals). Example: {\"column\": \"age\", \"count\": 1000, \"mean\": 35.4567, \"std\": 12.3456, \"min\": 18.0000, \"max\": 85.0000, \"median\": 34.0000, \"skewness\": 0.5678, \"kurtosis\": -0.2345}",
+      "ground_truth_hash": "15941de85a2a0553",
+      "_ground_truth": {
+        "column": "Sr No",
+        "count": 3044,
+        "mean": 1522.5,
+        "std": 878.8714,
+        "min": 1.0,
+        "max": 3044.0,
+        "median": 1522.5,
+        "skewness": 0.0,
+        "kurtosis": -1.2
+      },
+      "_template": "descriptive_summary"
+    }
+  ]
+}

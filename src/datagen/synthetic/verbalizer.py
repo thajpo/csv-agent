@@ -30,8 +30,17 @@ VERBALIZATION_PROMPT = '''You are writing questions for a data science training 
 ## ANSWER:
 {ground_truth}
 
+## BANNED WORDS (DO NOT USE these terms in the question):
+{banned_words}
+
 ## YOUR TASK:
 Write a SHORT question (1-2 sentences) that expresses genuine curiosity and would lead someone to perform this analysis.
+
+The agent should DISCOVER which method to use - don't give it away! Rephrase method-specific concepts:
+- Instead of "bootstrap confidence interval" → "how certain can we be about this estimate?"
+- Instead of "t-test" → "is there a significant difference between groups?"
+- Instead of "regression" → "can we predict X from other features?"
+- Instead of "Pearson correlation" → "how strongly related are these measurements?"
 
 GOOD QUESTIONS (short, curious, don't describe the method):
 - "Which numeric feature best predicts the target variable?"
@@ -46,7 +55,7 @@ BAD QUESTIONS (long, mechanical, describe the algorithm):
 RULES:
 1. Question must be 1-2 sentences MAX
 2. Express curiosity, not instructions
-3. Don't describe the method or steps
+3. Don't describe the method or steps - the agent must discover these
 4. Don't mention specific column names
 5. The hint can mention the approach
 6. Append output format BRIEFLY at the end: "Return as JSON with keys: x, y, z."
@@ -81,6 +90,7 @@ class QuestionVerbalizer:
         output_schema: str = "",
         data_overview: str = "",
         dataset_description: str = "",
+        banned_words: list[str] | None = None,
     ) -> tuple[str, str]:
         """
         Convert code into a natural language question.
@@ -92,6 +102,7 @@ class QuestionVerbalizer:
             output_schema: Description of the exact expected output format
             data_overview: Text summary of the dataset (from generate_data_overview)
             dataset_description: Human description of what the dataset contains
+            banned_words: List of method terms to avoid in the question
 
         Returns:
             Tuple of (question_text, hint)
@@ -102,6 +113,9 @@ class QuestionVerbalizer:
         else:
             gt_str = str(ground_truth)
 
+        # Format banned words for prompt
+        banned_str = ", ".join(banned_words) if banned_words else "None"
+
         # Build prompt with enriched context
         prompt = VERBALIZATION_PROMPT.format(
             code=code.strip(),
@@ -109,6 +123,7 @@ class QuestionVerbalizer:
             output_schema=output_schema or "Not specified",
             data_overview=data_overview or "Not available",
             dataset_description=dataset_description or "No description provided",
+            banned_words=banned_str,
         )
 
         # Call LLM

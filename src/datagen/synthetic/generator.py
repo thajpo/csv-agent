@@ -68,6 +68,31 @@ def _dataset_is_viable(profile: dict) -> tuple[bool, str]:
     return True, "ok"
 
 
+# Method terms that leak the solution approach - shared with verbalizer
+FORBIDDEN_METHOD_TERMS = [
+    "regression",
+    "t-test",
+    "anova",
+    "p-value",
+    "chi-square",
+    "bootstrap",
+    "cross-validation",
+    "k-fold",
+    "random_state",
+    "train-test",
+    "ols",
+    "pearson",
+    "spearman",
+    "ks test",
+    "kolmogorov",
+    "levene",
+    "mann-whitney",
+    "propensity",
+    "matching",
+    "confidence interval",
+]
+
+
 def _question_is_viable(question: str, profile: dict) -> tuple[bool, str]:
     """Reject questions that leak method details or column names."""
     if not question or not question.strip():
@@ -79,28 +104,7 @@ def _question_is_viable(question: str, profile: dict) -> tuple[bool, str]:
         return False, "too many sentences"
 
     lowered = question.lower()
-    forbidden_terms = [
-        "regression",
-        "t-test",
-        "anova",
-        "p-value",
-        "chi-square",
-        "bootstrap",
-        "cross-validation",
-        "k-fold",
-        "random_state",
-        "train-test",
-        "ols",
-        "pearson",
-        "spearman",
-        "ks test",
-        "kolmogorov",
-        "levene",
-        "mann-whitney",
-        "propensity",
-        "matching",
-    ]
-    if any(term in lowered for term in forbidden_terms):
+    if any(term in lowered for term in FORBIDDEN_METHOD_TERMS):
         return False, "mentions method details"
 
     # Avoid explicit column names in questions to keep them property-based.
@@ -255,6 +259,7 @@ class CompositionalQuestionGenerator:
                     output_schema=item["template"].output_schema,
                     data_overview=self.data_overview,
                     dataset_description=self.dataset_description,
+                    banned_words=FORBIDDEN_METHOD_TERMS,
                 )
 
                 if not question_text or question_text.startswith("[VERBALIZATION FAILED"):

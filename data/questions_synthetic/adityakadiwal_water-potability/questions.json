@@ -1,0 +1,416 @@
+{
+  "dataset_columns": [
+    "ph",
+    "Hardness",
+    "Solids",
+    "Chloramines",
+    "Sulfate",
+    "Conductivity",
+    "Organic_carbon",
+    "Trihalomethanes",
+    "Turbidity",
+    "Potability"
+  ],
+  "questions": [
+    {
+      "question": "Which water quality measurement shows the greatest variability and can be explained by a few other numeric parameters? Return as JSON with keys: target, predictors, r_squared, adj_r_squared, n_significant, coefficients, p_values.",
+      "hint": "Pick the numeric column with the highest variance as the target, find the three most correlated numeric features, fit an OLS regression, and report the model statistics.",
+      "n_steps": 10,
+      "difficulty": "VERY_HARD",
+      "template_name": "multiple_regression_top_predictors",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"predictors\" (list of 3 column names), \"r_squared\" (rounded to 4 decimals), \"adj_r_squared\" (rounded to 4 decimals), \"n_significant\" (integer count of predictors with p < 0.05), \"coefficients\" (dict mapping predictor names to coefficients rounded to 4 decimals), and \"p_values\" (dict mapping predictor names to p-values rounded to 6 decimals). Example: {\"target\": \"price\", \"predictors\": [\"sqft\", \"bedrooms\", \"age\"], \"r_squared\": 0.7234, \"adj_r_squared\": 0.7156, \"n_significant\": 2, \"coefficients\": {\"sqft\": 123.45, \"bedrooms\": 5000.12, \"age\": -200.34}, \"p_values\": {\"sqft\": 0.000001, \"bedrooms\": 0.023456, \"age\": 0.156789}}",
+      "ground_truth_hash": "fea9c560a1a070fe",
+      "_ground_truth": {
+        "target": "Solids",
+        "predictors": [
+          "Sulfate",
+          "ph",
+          "Chloramines"
+        ],
+        "r_squared": 0.0377,
+        "adj_r_squared": 0.0363,
+        "n_significant": 3,
+        "coefficients": {
+          "Sulfate": -34.6788,
+          "ph": -459.3531,
+          "Chloramines": -322.7624
+        },
+        "p_values": {
+          "Sulfate": 0.0,
+          "ph": 8.9e-05,
+          "Chloramines": 0.005741
+        }
+      },
+      "_template": "multiple_regression_top_predictors"
+    },
+    {
+      "question": "Which measurement in the water quality data shows the greatest asymmetry, and what is its average value with a 95% confidence interval? Return as JSON with keys: column, skewness, mean, ci_lower, ci_upper, std_error, n_bootstrap.",
+      "hint": "Compute absolute skewness for all numeric columns, pick the one with the highest value, then use bootstrap resampling (e.g., 1000 samples) on its non\u2011missing values to estimate the mean, standard error, and a 95% confidence interval.",
+      "n_steps": 9,
+      "difficulty": "VERY_HARD",
+      "template_name": "bootstrap_ci_discovered",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (name of most skewed column), \"skewness\" (rounded to 4 decimals), \"mean\" (rounded to 4 decimals), \"ci_lower\" (lower bound of 95% CI, rounded to 4 decimals), \"ci_upper\" (upper bound, rounded to 4 decimals), \"std_error\" (bootstrap standard error, rounded to 4 decimals), and \"n_bootstrap\" (integer, the number of bootstrap samples). Example: {\"column\": \"income\", \"skewness\": 2.3456, \"mean\": 50000.1234, \"ci_lower\": 48500.5678, \"ci_upper\": 51500.9012, \"std_error\": 750.3456, \"n_bootstrap\": 1000}",
+      "ground_truth_hash": "0b363646ba09c0d5",
+      "_ground_truth": {
+        "column": "Solids",
+        "skewness": 0.6216,
+        "mean": 22014.0925,
+        "ci_lower": 21728.6706,
+        "ci_upper": 22325.3665,
+        "std_error": 150.9115,
+        "n_bootstrap": 1000
+      },
+      "_template": "bootstrap_ci_discovered"
+    },
+    {
+      "question": "Which numeric variable shows the highest variance and can be best predicted by another measurement? Return as JSON with keys: target, best_predictor, correlation, r_squared, coefficient, p_value.",
+      "hint": "Identify the column with the largest variance, compute absolute correlations with the others, pick the strongest, and fit a simple linear regression.",
+      "n_steps": 8,
+      "difficulty": "HARD",
+      "template_name": "regression_most_predictive",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"target\" (column name), \"best_predictor\" (column name), \"correlation\" (rounded to 3 decimals), \"r_squared\" (rounded to 4 decimals), \"coefficient\" (rounded to 4 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target\": \"price\", \"best_predictor\": \"sqft\", \"correlation\": 0.834, \"r_squared\": 0.6956, \"coefficient\": 135.2847, \"p_value\": 0.000001}",
+      "ground_truth_hash": "eb90887e97f90db7",
+      "_ground_truth": {
+        "target": "Solids",
+        "best_predictor": "Sulfate",
+        "correlation": 0.172,
+        "r_squared": 0.0295,
+        "coefficient": -36.3527,
+        "p_value": 0.0
+      },
+      "_template": "regression_most_predictive"
+    },
+    {
+      "question": "Is there a numeric measurement in the water quality dataset that appears to follow a normal distribution? Return as JSON with keys: column, ks_statistic, p_value, is_normal, sample_mean, sample_std.",
+      "hint": "Identify the numeric column with the smallest absolute skewness, clean missing values, compute its mean and std, standardize the data, and apply a one-sample Kolmogorov\u2013Smirnov test against a standard normal distribution.",
+      "n_steps": 7,
+      "difficulty": "MEDIUM",
+      "template_name": "ks_normality_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (tested column), \"ks_statistic\" (rounded to 4 decimals), \"p_value\" (rounded to 6 decimals), \"is_normal\" (boolean, true if p >= 0.05), \"sample_mean\" (rounded to 4 decimals), and \"sample_std\" (rounded to 4 decimals). Example: {\"column\": \"height\", \"ks_statistic\": 0.0456, \"p_value\": 0.234567, \"is_normal\": true, \"sample_mean\": 170.1234, \"sample_std\": 10.5678}",
+      "ground_truth_hash": "6e977e83012f5be8",
+      "_ground_truth": {
+        "column": "Turbidity",
+        "ks_statistic": 0.0083,
+        "p_value": 0.976408,
+        "is_normal": "True",
+        "sample_mean": 3.9668,
+        "sample_std": 0.7804
+      },
+      "_template": "ks_normality_test"
+    },
+    {
+      "question": "Does the most skewed water quality measurement differ between low and high levels of another measurement? Return as JSON with keys: target_column, grouping_column, group1, group2, median1, median2, u_statistic, p_value.",
+      "hint": "Find the numeric column with the greatest absolute skewness, create a binary group by median\u2011splitting another numeric column, then compare the two groups with a Mann\u2011Whitney U test.",
+      "n_steps": 6,
+      "difficulty": "MEDIUM",
+      "template_name": "mann_whitney_u_test",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 8 keys: \"target_column\", \"grouping_column\", \"group1\", \"group2\", \"median1\" (rounded to 4 decimals), \"median2\" (rounded to 4 decimals), \"u_statistic\" (rounded to 2 decimals), and \"p_value\" (rounded to 6 decimals). Example: {\"target_column\": \"score\", \"grouping_column\": \"treatment\", \"group1\": \"control\", \"group2\": \"experimental\", \"median1\": 72.5000, \"median2\": 78.0000, \"u_statistic\": 1234.50, \"p_value\": 0.034567}",
+      "ground_truth_hash": "9605215af9c6a7e3",
+      "_ground_truth": {
+        "target_column": "Solids",
+        "grouping_column": "_binary_group",
+        "group1": "low",
+        "group2": "high",
+        "median1": 21166.5454,
+        "median2": 20432.5062,
+        "u_statistic": 1370022.0,
+        "p_value": 0.02812
+      },
+      "_template": "mann_whitney_u_test"
+    },
+    {
+      "question": "Which two numeric measurements in the water quality data are most skewed and how does a log transformation affect their correlation? Return as JSON with keys: columns, original_correlation, log_correlation, improvement, transformation_helpful.",
+      "hint": "Find the two most skewed positive columns, compute their Pearson correlation, apply a log1p transform, recompute the correlation, and compare the absolute values.",
+      "n_steps": 6,
+      "difficulty": "HARD",
+      "template_name": "correlation_change_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 5 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"original_correlation\" (Pearson, rounded to 4 decimals), \"log_correlation\" (after log transform, rounded to 4 decimals), \"improvement\" (absolute difference, rounded to 4 decimals), and \"transformation_helpful\" (boolean, true if |log_corr| > |orig_corr|). Example: {\"columns\": [\"income\", \"spending\"], \"original_correlation\": 0.4567, \"log_correlation\": 0.7234, \"improvement\": 0.2667, \"transformation_helpful\": true}",
+      "ground_truth_hash": "09b001633e5b2a66",
+      "_ground_truth": {
+        "columns": [
+          "Conductivity",
+          "Solids"
+        ],
+        "original_correlation": 0.0138,
+        "log_correlation": 0.0208,
+        "improvement": 0.007,
+        "transformation_helpful": "True"
+      },
+      "_template": "correlation_change_analysis"
+    },
+    {
+      "question": "Which numeric measurement in the water quality data shows the greatest variability, and what are its quartiles and outlier limits? Return as JSON with keys: column, q1, q3, iqr, lower_fence, upper_fence, n_outliers.",
+      "hint": "Identify the numeric column with the highest variance, then compute its 25th and 75th percentiles, IQR, fences, and count outliers.",
+      "n_steps": 5,
+      "difficulty": "EASY",
+      "template_name": "iqr_outlier_analysis",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 7 keys: \"column\" (analyzed column), \"q1\" (25th percentile rounded to 4 decimals), \"q3\" (75th percentile rounded to 4 decimals), \"iqr\" (rounded to 4 decimals), \"lower_fence\" (rounded to 4 decimals), \"upper_fence\" (rounded to 4 decimals), and \"n_outliers\" (integer count). Example: {\"column\": \"salary\", \"q1\": 45000.0000, \"q3\": 75000.0000, \"iqr\": 30000.0000, \"lower_fence\": 0.0000, \"upper_fence\": 120000.0000, \"n_outliers\": 23}",
+      "ground_truth_hash": "e4dbd5fe4546540a",
+      "_ground_truth": {
+        "column": "Solids",
+        "q1": 15666.6903,
+        "q3": 27332.7621,
+        "iqr": 11666.0718,
+        "lower_fence": -1832.4174,
+        "upper_fence": 44831.8699,
+        "n_outliers": 47
+      },
+      "_template": "iqr_outlier_analysis"
+    },
+    {
+      "question": "What is the shape of the distribution for the most variable measurement in the water quality data? Return as JSON with keys: distribution, median, iqr.",
+      "hint": "Identify the column with highest variance, test its normality (e.g., Shapiro-Wilk), and report median and IQR if non\u2011normal.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "conditional_normality",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 3 keys. If normal: {\"distribution\": \"normal\", \"mean\": <number>, \"std\": <number>}. If non-normal: {\"distribution\": \"non-normal\", \"median\": <number>, \"iqr\": <number>}. The \"iqr\" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.",
+      "ground_truth_hash": "35fa393d96934487",
+      "_ground_truth": {
+        "distribution": "non-normal",
+        "median": 20927.834,
+        "iqr": 11666.072
+      },
+      "_template": "conditional_normality"
+    },
+    {
+      "question": "Which pair of numeric water quality measurements shows the strongest correlation, and how does it change after removing extreme outliers? Return as JSON with keys: columns, original_correlation, outliers_removed, clean_correlation.",
+      "hint": "Find the highest absolute correlation among numeric features, drop rows where either value is more than three standard deviations from its mean, then recompute the correlation.",
+      "n_steps": 5,
+      "difficulty": "HARD",
+      "template_name": "correlation_after_outlier_removal",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"columns\" (list of 2 column names, alphabetically sorted), \"original_correlation\" (rounded to 3 decimals), \"outliers_removed\" (integer count), and \"clean_correlation\" (rounded to 3 decimals). Example: {\"columns\": [\"col_a\", \"col_b\"], \"original_correlation\": 0.847, \"outliers_removed\": 12, \"clean_correlation\": 0.891}",
+      "ground_truth_hash": "ce49da9010bad061",
+      "_ground_truth": {
+        "columns": [
+          "Solids",
+          "Sulfate"
+        ],
+        "original_correlation": 0.172,
+        "outliers_removed": 811,
+        "clean_correlation": -0.149
+      },
+      "_template": "correlation_after_outlier_removal"
+    },
+    {
+      "question": "How many numeric measurements have extreme outlier values, and what is the total count of such outliers across the dataset? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "Flag values that lie more than 3 standard deviations from the mean for each numeric column, then count columns with any flags and sum all flagged values.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 3.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "fe0ac82eaa9acc59",
+      "_ground_truth": {
+        "columns_with_outliers": 9,
+        "total_outliers": 122
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "How many numeric measurements in the water quality dataset contain outlier values, and what is the total number of outliers across all features? Return as JSON with keys: columns_with_outliers, total_outliers.",
+      "hint": "For each numeric column, flag values farther than 2.5 standard deviations from the mean, then count columns with any flags and sum all flagged entries.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "count_outlier_columns",
+      "template_params": {
+        "z_threshold": 2.5
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"columns_with_outliers\" (integer count of columns containing at least one outlier) and \"total_outliers\" (integer total count of outlier values across all columns). Example: {\"columns_with_outliers\": 3, \"total_outliers\": 47}",
+      "ground_truth_hash": "ff4c7a759fb9af12",
+      "_ground_truth": {
+        "columns_with_outliers": 9,
+        "total_outliers": 443
+      },
+      "_template": "count_outlier_columns"
+    },
+    {
+      "question": "Which numeric attribute in the drinking water dataset exhibits the greatest relative variability? Return as JSON with keys: column, cv, mean, std.",
+      "hint": "Compute the coefficient of variation (std/mean*100) for each numeric column, find the column with the highest CV, then report its mean and standard deviation.",
+      "n_steps": 4,
+      "difficulty": "EASY",
+      "template_name": "coefficient_of_variation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 4 keys: \"column\" (name of column with highest CV), \"cv\" (coefficient of variation as percentage rounded to 2 decimals), \"mean\" (rounded to 4 decimals), and \"std\" (rounded to 4 decimals). Example: {\"column\": \"price\", \"cv\": 45.23, \"mean\": 1234.5678, \"std\": 558.4567}",
+      "ground_truth_hash": "d6062b51e87df800",
+      "_ground_truth": {
+        "column": "Potability",
+        "cv": 125.05,
+        "mean": 0.3901,
+        "std": 0.4878
+      },
+      "_template": "coefficient_of_variation"
+    },
+    {
+      "question": "Which pair of numeric measurements in the water quality data are most strongly correlated? Return as JSON with keys: columns, correlation.",
+      "hint": "Compute the absolute correlation matrix for numeric columns, zero out the diagonal, and identify the maximum off\u2011diagonal value.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "strongest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the correlation coefficient rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.847}",
+      "ground_truth_hash": "048175468b2d4151",
+      "_ground_truth": {
+        "columns": [
+          "Solids",
+          "Sulfate"
+        ],
+        "correlation": 0.172
+      },
+      "_template": "strongest_correlation"
+    },
+    {
+      "question": "Which two numeric measurements in the water quality dataset have the weakest correlation? Return as JSON with keys: columns, correlation.",
+      "hint": "Calculate the absolute correlation matrix for all numeric features and identify the pair with the smallest non\u2011zero correlation.",
+      "n_steps": 4,
+      "difficulty": "MEDIUM",
+      "template_name": "weakest_correlation",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly two keys: \"columns\" (a list of the two column names, alphabetically sorted) and \"correlation\" (the absolute correlation value rounded to 3 decimal places). Example: {\"columns\": [\"col_a\", \"col_b\"], \"correlation\": 0.012}",
+      "ground_truth_hash": "7f236f3cd197b367",
+      "_ground_truth": {
+        "columns": [
+          "Conductivity",
+          "Trihalomethanes"
+        ],
+        "correlation": 0.001
+      },
+      "_template": "weakest_correlation"
+    },
+    {
+      "question": "Which numeric water quality measurement shows the greatest variability, and what is its average value? Return as JSON with keys: mean.",
+      "hint": "Identify the column with the highest variance, then compute its mean.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "max_variance_mean",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the mean), rounded to 3 decimal places",
+      "ground_truth_hash": "46abfb46468f7441",
+      "_ground_truth": 22014.093,
+      "_template": "max_variance_mean"
+    },
+    {
+      "question": "Which numeric column has the smallest average value and what is its standard deviation? Return as JSON with keys: std.",
+      "hint": "Compute the mean of each numeric column, select the column with the lowest mean, then calculate its standard deviation.",
+      "n_steps": 3,
+      "difficulty": "MEDIUM",
+      "template_name": "min_mean_column_std",
+      "template_params": null,
+      "output_type": "scalar",
+      "output_schema": "A single number (the standard deviation), rounded to 3 decimal places",
+      "ground_truth_hash": "f604d33d20146a73",
+      "_ground_truth": 0.488,
+      "_template": "min_mean_column_std"
+    },
+    {
+      "question": "Which features in the water quality dataset have a high proportion of missing values? Return as JSON with keys: count, columns.",
+      "hint": "Calculate missing percentages for each column and list those above a 5% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 5.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "65f6df996f7b2974",
+      "_ground_truth": {
+        "count": 2,
+        "columns": [
+          "Sulfate",
+          "ph"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which features in the water quality dataset have a high proportion of missing values? Return as JSON with keys: count, columns.",
+      "hint": "Calculate missing percentages for each column and identify those above a 10% threshold.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "count_high_missing_columns",
+      "template_params": {
+        "missing_threshold": 10.0
+      },
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 2 keys: \"count\" (integer) and \"columns\" (list of column names, alphabetically sorted). Example: {\"count\": 3, \"columns\": [\"col_a\", \"col_b\", \"col_c\"]}",
+      "ground_truth_hash": "65f6df996f7b2974",
+      "_ground_truth": {
+        "count": 2,
+        "columns": [
+          "Sulfate",
+          "ph"
+        ]
+      },
+      "_template": "count_high_missing_columns"
+    },
+    {
+      "question": "Which numeric measurement varies the most across the water samples, and what are its key percentile values? Return as JSON with keys: column, p10, p25, p50, p75, p90.",
+      "hint": "Identify the numeric column with the largest range, then compute its 10th, 25th, 50th, 75th, and 90th percentiles.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "percentile_ranking",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 6 keys: \"column\" (analyzed column), \"p10\" (10th percentile rounded to 4 decimals), \"p25\" (25th percentile), \"p50\" (median), \"p75\" (75th percentile), and \"p90\" (90th percentile). Example: {\"column\": \"income\", \"p10\": 25000.0000, \"p25\": 40000.0000, \"p50\": 55000.0000, \"p75\": 75000.0000, \"p90\": 100000.0000}",
+      "ground_truth_hash": "76e0dc8da31315b2",
+      "_ground_truth": {
+        "column": "Solids",
+        "p10": 11740.5282,
+        "p25": 15666.6903,
+        "p50": 20927.8336,
+        "p75": 27332.7621,
+        "p90": 33814.9352
+      },
+      "_template": "percentile_ranking"
+    },
+    {
+      "question": "Which water quality measurement shows the greatest variability across samples? Return as JSON with keys: column, count, mean, std, min, max, median, skewness, kurtosis.",
+      "hint": "Find the numeric column with the highest variance, then calculate its descriptive statistics.",
+      "n_steps": 3,
+      "difficulty": "EASY",
+      "template_name": "descriptive_summary",
+      "template_params": null,
+      "output_type": "dict",
+      "output_schema": "A JSON object with exactly 9 keys: \"column\", \"count\" (integer), \"mean\" (rounded to 4 decimals), \"std\", \"min\", \"max\", \"median\", \"skewness\", and \"kurtosis\" (all rounded to 4 decimals). Example: {\"column\": \"age\", \"count\": 1000, \"mean\": 35.4567, \"std\": 12.3456, \"min\": 18.0000, \"max\": 85.0000, \"median\": 34.0000, \"skewness\": 0.5678, \"kurtosis\": -0.2345}",
+      "ground_truth_hash": "6c4e5772c525d5c9",
+      "_ground_truth": {
+        "column": "Solids",
+        "count": 3276,
+        "mean": 22014.0925,
+        "std": 8768.5708,
+        "min": 320.9426,
+        "max": 61227.196,
+        "median": 20927.8336,
+        "skewness": 0.6216,
+        "kurtosis": 0.4428
+      },
+      "_template": "descriptive_summary"
+    }
+  ]
+}
