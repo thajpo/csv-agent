@@ -28,6 +28,8 @@ import sys
 import signal
 import argparse
 from pathlib import Path
+
+from src.datagen.teacher import answers_match
 from datetime import datetime
 import uuid
 from collections import defaultdict
@@ -156,24 +158,18 @@ async def validate_single_question(
             expected_answer = question_dict.get("_ground_truth")
             actual_answer = trace.get("final_answer")
 
-            # Try tolerant comparison if hashes don't match exactly
+            # Use tolerant comparison with all value types
             if expected_answer is not None and actual_answer is not None:
-                # Simple float tolerance check
-                try:
-                    if isinstance(expected_answer, (int, float)) and isinstance(
-                        actual_answer, (int, float)
-                    ):
-                        if (
-                            abs(expected_answer - actual_answer)
-                            <= config.float_tolerance
-                        ):
-                            return True, trace, elapsed, None
-                except (TypeError, ValueError):
-                    pass
+                if answers_match(
+                    expected_hash,
+                    actual_hash,
+                    expected_answer,
+                    actual_answer,
+                    float_tol=config.float_tolerance,
+                ):
+                    return True, trace, elapsed, None
 
             # Debug: show what differed
-            import json
-
             exp_str = (
                 json.dumps(expected_answer, default=str)[:200]
                 if expected_answer

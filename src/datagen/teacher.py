@@ -264,6 +264,33 @@ def _compare_statistical_dict(
     return True
 
 
+def _normalize_string(s: str) -> str:
+    """Normalize string for flexible comparison.
+
+    Handles:
+    - Unicode hyphens (U+2010, U+2011, U+2012, U+2013, U+2014, U+2015) → ASCII hyphen
+    - Other unicode variations via NFKC
+    """
+    import unicodedata
+    # Normalize unicode first
+    s = unicodedata.normalize('NFKC', s)
+    # Explicitly replace unicode hyphens/dashes with ASCII hyphen
+    hyphen_chars = '\u2010\u2011\u2012\u2013\u2014\u2015\u2212'  # Various dashes/minus
+    for h in hyphen_chars:
+        s = s.replace(h, '-')
+    return s
+
+
+def _normalize_boolean_string(v: Any) -> Any:
+    """Convert string booleans to actual booleans."""
+    if isinstance(v, str):
+        if v.lower() == 'true':
+            return True
+        if v.lower() == 'false':
+            return False
+    return v
+
+
 def _values_match_recursive(
     v1: Any,
     v2: Any,
@@ -279,9 +306,17 @@ def _values_match_recursive(
     if _visited is None:
         _visited = set()
 
+    # Normalize boolean strings ("True"/"False" → True/False)
+    v1 = _normalize_boolean_string(v1)
+    v2 = _normalize_boolean_string(v2)
+
     # Both floats/ints
     if isinstance(v1, (int, float)) and isinstance(v2, (int, float)):
         return _floats_match(v1, v2, float_tol)
+
+    # Both strings - normalize unicode and compare
+    if isinstance(v1, str) and isinstance(v2, str):
+        return _normalize_string(v1) == _normalize_string(v2)
 
     # Check for cycles before recursing into containers
     if isinstance(v1, (dict, list, tuple)) and isinstance(v2, (dict, list, tuple)):
@@ -309,6 +344,24 @@ def _values_match_recursive(
     if isinstance(v1, (tuple, list)) and isinstance(v2, (tuple, list)):
         if len(v1) != len(v2):
             return False
+
+        # If all elements are strings, try sorted comparison for order-independence
+        if all(isinstance(x, str) for x in v1) and all(isinstance(x, str) for x in v2):
+            # Try exact order first
+            exact_match = all(
+                _values_match_recursive(a, b, float_tol, p_value_tol, _visited)
+                for a, b in zip(v1, v2)
+            )
+            if exact_match:
+                return True
+            # Try sorted order for column pairs etc.
+            sorted_match = all(
+                _values_match_recursive(a, b, float_tol, p_value_tol, _visited)
+                for a, b in zip(sorted(v1), sorted(v2))
+            )
+            return sorted_match
+
+        # For non-string lists, require exact order
         for a, b in zip(v1, v2):
             if not _values_match_recursive(a, b, float_tol, p_value_tol, _visited):
                 return False
