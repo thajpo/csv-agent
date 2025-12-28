@@ -42,7 +42,56 @@ def json_default(obj):
 # Storage for hooks captured during execution
 _captured_hooks = []
 
-MAX_VALUE_SIZE_BYTES = 1_000_000  # 1MB limit for non-scalar hook values
+MAX_OTHER_VALUE_BYTES = 100_000  # 100KB limit for non-DataFrame complex types
+
+def summarize_df(df):
+    """
+    Create bounded summary of DataFrame for PRM training.
+
+    Returns a dict with shape, columns, dtypes, sample rows, and numeric stats.
+    Size is bounded regardless of DataFrame row count.
+    """
+    summary = {
+        "type": "DataFrame",
+        "shape": list(df.shape),
+        "columns": list(df.columns),
+        "dtypes": {col: str(dtype) for col, dtype in df.dtypes.items()},
+        "head": df.head(3).values.tolist(),
+    }
+    # Add numeric summary for up to 5 numeric columns
+    numeric_cols = list(df.select_dtypes(include='number').columns[:5])
+    if numeric_cols:
+        summary["numeric_summary"] = {}
+        for col in numeric_cols:
+            col_data = df[col].dropna()
+            if len(col_data) > 0:
+                summary["numeric_summary"][col] = {
+                    "mean": float(col_data.mean()),
+                    "min": float(col_data.min()),
+                    "max": float(col_data.max()),
+                }
+    return summary
+
+def summarize_series(s):
+    """
+    Create bounded summary of Series for PRM training.
+    """
+    summary = {
+        "type": "Series",
+        "name": s.name,
+        "shape": list(s.shape),
+        "dtype": str(s.dtype),
+        "head": s.head(5).tolist(),
+    }
+    if s.dtype.kind in 'iufb':  # int, uint, float, bool
+        non_null = s.dropna()
+        if len(non_null) > 0:
+            summary["stats"] = {
+                "mean": float(non_null.mean()),
+                "min": float(non_null.min()),
+                "max": float(non_null.max()),
+            }
+    return summary
 
 def hook(value, code_line, name=None, description=None, depends_on=None):
     """
@@ -60,7 +109,8 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
 
     Value storage policy (for PRM training):
         - Scalars (int, float, str, bool, None): Always stored in full
-        - Complex objects (DataFrame, dict, list): Stored if < 1MB, else hash-only
+        - DataFrame/Series: Bounded summary (shape, dtypes, head, stats)
+        - Other complex types (dict, list): Stored if < 100KB, else type+size only
 
     Example:
         df_filtered = df[df['TR'] == 'control']
@@ -72,20 +122,28 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
         submit(mean_val)
     """
     import hashlib
+
+    # Get normalized value for hashing (always hash the full value)
     normalized = normalize_value(value)
     full_json = json.dumps(normalized, sort_keys=True, default=json_default)
     value_hash = hashlib.sha256(full_json.encode()).hexdigest()[:16]
 
-    # Determine whether to store full value or hash-only
-    # Scalars always stored; complex objects stored if < 1MB
-    is_scalar = isinstance(normalized, (int, float, str, bool, type(None)))
-    value_size = len(full_json.encode('utf-8'))
-
-    if is_scalar or value_size <= MAX_VALUE_SIZE_BYTES:
+    # Determine stored value based on type
+    if isinstance(value, pd.DataFrame):
+        stored_value = summarize_df(value)
+    elif isinstance(value, pd.Series):
+        stored_value = summarize_series(value)
+    elif isinstance(normalized, (int, float, str, bool, type(None))):
+        # Scalars: store as-is
         stored_value = normalized
     else:
-        # Too large - store None, rely on hash for verification
-        stored_value = None
+        # Other complex types (lists, dicts, numpy arrays)
+        value_size = len(full_json.encode('utf-8'))
+        if value_size <= MAX_OTHER_VALUE_BYTES:
+            stored_value = normalized
+        else:
+            # Too large - store metadata only
+            stored_value = {"type": type(value).__name__, "size_bytes": value_size}
 
     hook_data = {
         "__csv_agent_hook__": True,

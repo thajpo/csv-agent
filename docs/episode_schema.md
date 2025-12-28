@@ -96,15 +96,26 @@ Result of executing one code cell.
 Intermediate checkpoint for PRM/RL training.
 
 **Value storage policy:**
-- Scalars (int, float, str, bool, None): Always stored in `value`
-- Complex objects (DataFrame, dict, list): Stored if < 1MB, else `null`
-- When `value` is `null`, use `value_hash` for verification only
+- Scalars (int, float, str, bool, None): Stored in full
+- DataFrame/Series: Bounded summary (shape, dtypes, head rows, numeric stats)
+- Other complex types (dict, list): Stored if < 100KB, else type+size metadata
+- `value_hash` always computed on full normalized value for verification
 
+**DataFrame summary example:**
 ```json
 {
     "variable_name": "df_filtered",
     "code_line": "df_filtered = df[df['target'] == 1]",
-    "value": {"shape": [303, 14]},
+    "value": {
+        "type": "DataFrame",
+        "shape": [303, 14],
+        "columns": ["age", "sex", "cp", "trestbps", "..."],
+        "dtypes": {"age": "int64", "sex": "int64", "...": "..."},
+        "head": [[63, 1, 3, 145], [37, 1, 2, 130], [41, 0, 1, 130]],
+        "numeric_summary": {
+            "age": {"mean": 54.3, "min": 29, "max": 77}
+        }
+    },
     "value_hash": "b2c3d4e5f6789012",
     "depends_on": [],
     "description": "Filtered dataframe for heart disease patients"

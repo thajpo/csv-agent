@@ -41,15 +41,16 @@ class HookDict(TypedDict, total=False):
     """Captured intermediate state during execution.
 
     Value storage policy (for PRM training):
-        - Scalars (int, float, str, bool, None): Always stored in `value`
-        - Complex objects (DataFrame, dict, list): Stored if < 1MB, else None
-        - When value is None, use value_hash for verification only
+        - Scalars (int, float, str, bool, None): Stored in full
+        - DataFrame/Series: Bounded summary (shape, dtypes, head rows, numeric stats)
+        - Other complex types (dict, list): Stored if < 100KB, else type+size metadata
+        - value_hash always computed on full normalized value for verification
     """
 
     variable_name: str | None
     code_line: str  # The code that produced this value
-    value: Any | None  # Normalized value for PRM training; None if >1MB
-    value_hash: str  # Hash for comparison (always present)
+    value: Any  # Scalar, summary dict, or type metadata (always present for PRM)
+    value_hash: str  # Hash of full normalized value for verification
     depends_on: list[str]  # DAG edges to prior hooks
     description: str | None
 
@@ -197,15 +198,16 @@ class Hook(BaseModel):
     The depends_on field tracks which previous hooks must be computed first.
 
     Value storage policy (for PRM training):
-        - Scalars (int, float, str, bool, None): Always stored in `value`
-        - Complex objects (DataFrame, dict, list): Stored if < 1MB, else None
-        - When value is None, use value_hash for verification only
+        - Scalars (int, float, str, bool, None): Stored in full
+        - DataFrame/Series: Bounded summary (shape, dtypes, head rows, numeric stats)
+        - Other complex types (dict, list): Stored if < 100KB, else type+size metadata
+        - value_hash always computed on full normalized value for verification
     """
 
     code_line: str  # The code that produced this
     variable_name: str | None = None  # e.g., 'df_filtered'
-    value_hash: str  # Hash of the value at this point
-    value: Any | None = None  # Normalized value for PRM; None if >1MB
+    value_hash: str  # Hash of full normalized value for verification
+    value: Any = None  # Scalar, summary dict, or type metadata (always present)
     description: str | None = None  # Optional semantic description
     depends_on: list[str] = Field(
         default_factory=list
