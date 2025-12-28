@@ -1,72 +1,8 @@
 """
-Type definitions for CSV Agent.
+DEPRECATED: This module has been migrated to the `csv-spec` package.
+All types should now be imported from `csv_spec`.
 
-DEPRECATED: This module re-exports from csv_spec for backward compatibility.
-New code should import directly from csv_spec.
-
-Example:
-    # Old (still works):
-    from src.core.types import EpisodeJSONL
-
-    # New (preferred):
-    from csv_spec import EpisodeJSONL
+This shim is kept temporarily but contains no code.
 """
 
-# Re-export everything from csv_spec for backward compatibility
-from csv_spec import (
-    # Core types
-    Question,
-    Hook,
-    # TypedDicts
-    QADict,
-    HookDict,
-    ExecutionResultDict,
-    TurnDict,
-    TraceDict,
-    CorrectionDict,
-    CodeDiffDict,
-    TriangulationMetadataDict,
-    TimingMetadataDict,
-    # Episode
-    EpisodeJSONL,
-    # Exploration
-    ExplorationTurn,
-    ExplorationTrace,
-    # Results
-    TriangulationResult,
-    BatchTriangulationResult,
-    # Contract types (NEW)
-    CodeAction,
-    SubmitAction,
-    ActionSpec,
-    StepResult,
-)
-
-__all__ = [
-    # Core types
-    "Question",
-    "Hook",
-    # TypedDicts
-    "QADict",
-    "HookDict",
-    "ExecutionResultDict",
-    "TurnDict",
-    "TraceDict",
-    "CorrectionDict",
-    "CodeDiffDict",
-    "TriangulationMetadataDict",
-    "TimingMetadataDict",
-    # Episode
-    "EpisodeJSONL",
-    # Exploration
-    "ExplorationTurn",
-    "ExplorationTrace",
-    # Results
-    "TriangulationResult",
-    "BatchTriangulationResult",
-    # Contract types
-    "CodeAction",
-    "SubmitAction",
-    "ActionSpec",
-    "StepResult",
-]
+# CLEAR: All types moved to csv_spec

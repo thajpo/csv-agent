@@ -1,18 +1,8 @@
 """
-Artifact hashing utilities for state matching.
+DEPRECATED: This module has been migrated to the `csv-spec` package.
+Import `hash_artifact` from `csv_spec` instead.
 
-DEPRECATED: This module re-exports from csv_spec for backward compatibility.
-New code should import directly from csv_spec.
-
-Example:
-    # Old (still works):
-    from src.utils.hashing import hash_artifact
-
-    # New (preferred):
-    from csv_spec import hash_artifact
+This shim is kept temporarily but contains no code.
 """
 
-# Re-export from csv_spec for backward compatibility
-from csv_spec import hash_artifact
-
-__all__ = ["hash_artifact"]
+# CLEAR: hash_artifact moved to csv_spec

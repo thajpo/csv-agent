@@ -1,18 +1,8 @@
 """
-Value normalization utilities.
+DEPRECATED: This module has been migrated to the `csv-spec` package.
+Import `normalize_value` from `csv_spec` instead.
 
-DEPRECATED: This module re-exports from csv_spec for backward compatibility.
-New code should import directly from csv_spec.
-
-Example:
-    # Old (still works):
-    from src.utils.normalization import normalize_value
-
-    # New (preferred):
-    from csv_spec import normalize_value
+This shim is kept temporarily but contains no code.
 """
 
-# Re-export from csv_spec for backward compatibility
-from csv_spec import normalize_value
-
-__all__ = ["normalize_value"]
+# CLEAR: normalize_value moved to csv_spec
