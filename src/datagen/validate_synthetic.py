@@ -148,46 +148,51 @@ async def validate_single_question(
                 f"Trace failed: {trace.get('error', 'unknown')}",
             )
 
-        # Compare answer hash to ground truth
-        expected_hash = question_dict.get("ground_truth_hash")
-        if expected_hash is None:
+        # Compare answer hash to ground truth (supports multiple valid answers)
+        expected_hashes = question_dict.get("ground_truth_hashes") or [question_dict.get("ground_truth_hash")]
+        expected_hashes = [h for h in expected_hashes if h is not None]
+        if not expected_hashes:
             return False, trace, elapsed, "No ground_truth_hash in question"
 
         actual_hash = trace.get("final_answer_hash")
-        if actual_hash != expected_hash:
-            expected_answer = question_dict.get("_ground_truth")
-            actual_answer = trace.get("final_answer")
+        actual_answer = trace.get("final_answer")
 
-            # Use tolerant comparison with all value types
-            if expected_answer is not None and actual_answer is not None:
+        # Fast path: exact hash match against any valid answer
+        if actual_hash in expected_hashes:
+            return True, trace, elapsed, None
+
+        # Tolerant comparison: check against all valid answers
+        expected_answers = question_dict.get("_ground_truths") or [question_dict.get("_ground_truth")]
+        expected_answers = [a for a in expected_answers if a is not None]
+
+        if actual_answer is not None:
+            for exp_hash, exp_answer in zip(expected_hashes, expected_answers):
                 if answers_match(
-                    expected_hash,
+                    exp_hash,
                     actual_hash,
-                    expected_answer,
+                    exp_answer,
                     actual_answer,
                     float_tol=config.float_tolerance,
                 ):
                     return True, trace, elapsed, None
 
-            # Debug: show what differed
-            exp_str = (
-                json.dumps(expected_answer, default=str)[:200]
-                if expected_answer
-                else "None"
-            )
-            act_str = (
-                json.dumps(actual_answer, default=str)[:200]
-                if actual_answer
-                else "None"
-            )
-            return (
-                False,
-                trace,
-                elapsed,
-                f"Answer mismatch:\n      Expected: {exp_str}\n      Got:      {act_str}",
-            )
-
-        return True, trace, elapsed, None
+        # Debug: show what differed (use primary expected answer)
+        exp_str = (
+            json.dumps(expected_answers[0], default=str)[:200]
+            if expected_answers
+            else "None"
+        )
+        act_str = (
+            json.dumps(actual_answer, default=str)[:200]
+            if actual_answer
+            else "None"
+        )
+        return (
+            False,
+            trace,
+            elapsed,
+            f"Answer mismatch:\n      Expected: {exp_str}\n      Got:      {act_str}",
+        )
 
     except Exception as e:
         elapsed = time.time() - start_time

@@ -26,6 +26,9 @@ class CompositionTemplate:
     n_steps: int
     difficulty: str  # EASY, MEDIUM, HARD, VERY_HARD
     param_sets: list[dict[str, Any]] | None = None
+    # Alternative code templates for ambiguous interpretations (e.g., variance vs CV)
+    # Each alternative produces a different valid answer for the same question
+    alternative_code_templates: list[str] | None = None
 
     def is_applicable(self, profile: dict) -> bool:
         try:
@@ -83,6 +86,55 @@ def _is_index_column(col_name):
         code = helper_code + code
 
         return code
+
+    def instantiate_alternatives(self, profile: dict, params: dict[str, Any] | None = None) -> list[str]:
+        """Instantiate all alternative code templates with same transformations as primary."""
+        if not self.alternative_code_templates:
+            return []
+
+        results = []
+        for alt_template in self.alternative_code_templates:
+            # Apply same transformations as instantiate()
+            numeric_cols = _eligible_numeric_cols(profile)
+            categorical_cols = _eligible_categorical_cols(profile)
+            target_col = numeric_cols[0] if numeric_cols else None
+
+            code = alt_template
+            if target_col:
+                code = code.replace("{target_col}", target_col)
+            if numeric_cols:
+                code = code.replace("{numeric_cols}", str(numeric_cols))
+            if categorical_cols:
+                code = code.replace("{categorical_cols}", str(categorical_cols))
+            if params:
+                for key, value in params.items():
+                    code = code.replace(f"{{{key}}}", repr(value))
+
+            # Inject id-like column exclusions
+            id_like_cols = _id_like_cols(profile)
+            drop_expr = f".drop(columns={id_like_cols}, errors='ignore')"
+            code = code.replace("df.select_dtypes('number')", f"df.select_dtypes('number'){drop_expr}")
+            code = code.replace(
+                "df.select_dtypes(include=['object', 'category'])",
+                f"df.select_dtypes(include=['object', 'category']){drop_expr}",
+            )
+
+            # Prepend helper function
+            helper_code = '''
+import re as _re
+def _is_index_column(col_name):
+    """Check if column is index-like (Unnamed, ID, Person ID, etc.)."""
+    lowered = col_name.lower().strip()
+    patterns = [
+        r'^unnamed:\\s*\\d+$', r'^index$', r'^id$', r'^_id$',
+        r'^row.?id$', r'^person.?id$', r'^serial.?no$', r'^sr.?no$'
+    ]
+    return any(_re.match(p, lowered) for p in patterns)
+'''
+            code = helper_code + code
+            results.append(code)
+
+        return results
 
     def iter_param_sets(self) -> list[dict[str, Any]]:
         """Return all parameter sets for this template."""
@@ -297,6 +349,44 @@ submit(round(result, 3))
     applicable_when=lambda p: _count_numeric_cols(p) >= 2,
     n_steps=3,
     difficulty="MEDIUM",
+    alternative_code_templates=[
+        # CV-based alternative: "most variable" interpreted as highest coefficient of variation
+        """
+# Step 1: Find the column with highest coefficient of variation (CV)
+numeric_cols = df.select_dtypes('number')
+means = numeric_cols.mean()
+stds = numeric_cols.std()
+# CV = std / |mean|, only for columns with non-zero mean
+cv = stds / means.abs()
+cv = cv.replace([float('inf'), float('-inf')], float('nan')).dropna()
+max_cv_col = cv.idxmax()
+hook(max_cv_col, "max_cv_col = cv.idxmax()", name='max_cv_col')
+print(f"Column with highest CV: {max_cv_col} (CV: {cv[max_cv_col]:.4f})")
+
+# Step 2: Compute the mean of that column
+result = df[max_cv_col].mean()
+hook(result, "result = df[max_cv_col].mean()", name='result', depends_on=['max_cv_col'])
+print(f"Mean of {max_cv_col}: {result:.4f}")
+
+submit(round(result, 3))
+""".strip(),
+        # Std-based alternative: "most variable" interpreted as highest standard deviation
+        """
+# Step 1: Find the column with highest standard deviation
+numeric_cols = df.select_dtypes('number')
+stds = numeric_cols.std()
+max_std_col = stds.idxmax()
+hook(max_std_col, "max_std_col = stds.idxmax()", name='max_std_col')
+print(f"Column with highest std: {max_std_col} (std: {stds[max_std_col]:.4f})")
+
+# Step 2: Compute the mean of that column
+result = df[max_std_col].mean()
+hook(result, "result = df[max_std_col].mean()", name='result', depends_on=['max_std_col'])
+print(f"Mean of {max_std_col}: {result:.4f}")
+
+submit(round(result, 3))
+""".strip(),
+    ],
 )
 
 MIN_MEAN_COLUMN_STD = CompositionTemplate(
@@ -734,6 +824,64 @@ submit({
     applicable_when=lambda p: _count_numeric_cols(p) >= 3,
     n_steps=8,
     difficulty="HARD",
+    alternative_code_templates=[
+        # CV-based target selection
+        """
+# Step 1: Identify numeric columns (exclude index-like columns)
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not _is_index_column(c)]
+hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
+print(f"Numeric columns: {len(numeric_cols)}")
+
+# Step 2: Use the column with highest CV as target
+means = df[numeric_cols].mean()
+stds = df[numeric_cols].std()
+cv = stds / means.abs()
+cv = cv.replace([float('inf'), float('-inf')], float('nan')).dropna()
+target_col = cv.idxmax()
+hook(target_col, "target column (highest CV)", name='target_col')
+print(f"Target column: {target_col}")
+
+# Step 3: Compute correlations with target
+other_cols = [c for c in numeric_cols if c != target_col]
+correlations = df[other_cols].corrwith(df[target_col]).abs()
+hook(correlations.to_dict(), "correlations with target", name='correlations', depends_on=['target_col'])
+print(f"Top correlations:\\n{correlations.sort_values(ascending=False).head()}")
+
+# Step 4: Identify most predictive feature
+best_predictor = correlations.idxmax()
+best_corr = correlations.max()
+hook(best_predictor, "most predictive feature", name='best_predictor', depends_on=['correlations'])
+print(f"Best predictor: {best_predictor} (r={best_corr:.4f})")
+
+# Step 5: Prepare data for regression (drop NaN)
+reg_data = df[[best_predictor, target_col]].dropna()
+X = reg_data[[best_predictor]]
+y = reg_data[target_col]
+hook(len(reg_data), "samples for regression", name='n_samples', depends_on=['best_predictor'])
+
+# Step 6: Fit OLS regression
+X_with_const = sm.add_constant(X)
+model = sm.OLS(y, X_with_const).fit()
+r_squared = model.rsquared
+hook(r_squared, "R-squared from OLS", name='r_squared', depends_on=['n_samples'])
+print(f"R-squared: {r_squared:.4f}")
+
+# Step 7: Get coefficient and p-value
+coef = model.params[best_predictor]
+p_value = model.pvalues[best_predictor]
+hook({"coef": float(coef), "p_value": float(p_value)}, "regression stats", name='reg_stats', depends_on=['r_squared'])
+
+submit({
+    "target": target_col,
+    "best_predictor": best_predictor,
+    "correlation": round(float(best_corr), 4),
+    "r_squared": round(float(r_squared), 4),
+    "coefficient": round(float(coef), 4),
+    "p_value": round(float(p_value), 6)
+})
+""".strip(),
+    ],
 )
 
 TTEST_DISCOVERED_GROUPS = CompositionTemplate(
@@ -813,6 +961,81 @@ else:
     applicable_when=lambda p: _count_numeric_cols(p) >= 2,
     n_steps=8,
     difficulty="HARD",
+    alternative_code_templates=[
+        # CV-based target selection
+        """
+# Step 1: Find numeric column with highest coefficient of variation
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not _is_index_column(c)]
+means = df[numeric_cols].mean()
+stds = df[numeric_cols].std()
+cv = stds / means.abs()
+cv = cv.replace([float('inf'), float('-inf')], float('nan')).dropna()
+target_col = cv.idxmax()
+hook(target_col, "target column (highest CV)", name='target_col')
+print(f"Target: {target_col}")
+
+# Step 2: Find a binary categorical column
+cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+binary_col = None
+for col in cat_cols:
+    if df[col].nunique() == 2:
+        binary_col = col
+        break
+
+if binary_col is None:
+    # Create binary from numeric if no categorical
+    for col in numeric_cols:
+        if col != target_col:
+            median_val = df[col].median()
+            df['_binary_group'] = (df[col] > median_val).map({True: 'high', False: 'low'})
+            binary_col = '_binary_group'
+            break
+
+if binary_col is None:
+    submit({"error": "No binary grouping column available"})
+else:
+    hook(binary_col, "binary grouping column", name='binary_col')
+    print(f"Grouping by: {binary_col}")
+
+    # Step 3: Get the two groups
+    groups = df[binary_col].dropna().unique()
+    group1_name, group2_name = groups[0], groups[1]
+    hook([str(group1_name), str(group2_name)], "group names", name='group_names', depends_on=['binary_col'])
+
+    # Step 4: Extract data for each group
+    group1_data = df[df[binary_col] == group1_name][target_col].dropna()
+    group2_data = df[df[binary_col] == group2_name][target_col].dropna()
+    hook({"group1_n": len(group1_data), "group2_n": len(group2_data)}, "group sizes", name='group_sizes', depends_on=['group_names'])
+    print(f"Group sizes: {len(group1_data)} vs {len(group2_data)}")
+
+    # Step 5: Compute group means
+    mean1, mean2 = group1_data.mean(), group2_data.mean()
+    hook({"mean1": float(mean1), "mean2": float(mean2)}, "group means", name='group_means', depends_on=['group_sizes'])
+    print(f"Means: {mean1:.4f} vs {mean2:.4f}")
+
+    # Step 6: Perform t-test
+    t_stat, p_value = scipy.stats.ttest_ind(group1_data, group2_data)
+    hook({"t_stat": float(t_stat), "p_value": float(p_value)}, "t-test results", name='ttest', depends_on=['group_means'])
+    print(f"T-test: t={t_stat:.4f}, p={p_value:.6f}")
+
+    # Step 7: Determine significance
+    is_significant = p_value < 0.05
+    hook(is_significant, "significance at alpha=0.05", name='is_significant', depends_on=['ttest'])
+
+    submit({
+        "target_column": target_col,
+        "grouping_column": binary_col,
+        "group1": str(group1_name),
+        "group2": str(group2_name),
+        "mean1": round(float(mean1), 4),
+        "mean2": round(float(mean2), 4),
+        "t_statistic": round(float(t_stat), 4),
+        "p_value": round(float(p_value), 6),
+        "significant": is_significant
+    })
+""".strip(),
+    ],
 )
 
 BOOTSTRAP_CI_DISCOVERED = CompositionTemplate(
@@ -1306,6 +1529,50 @@ submit({
     applicable_when=lambda p: _count_numeric_cols(p) >= 1,
     n_steps=5,
     difficulty="EASY",
+    alternative_code_templates=[
+        # CV-based alternative
+        """
+# Step 1: Find column with highest coefficient of variation
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not _is_index_column(c)]
+means = df[numeric_cols].mean()
+stds = df[numeric_cols].std()
+cv = stds / means.abs()
+cv = cv.replace([float('inf'), float('-inf')], float('nan')).dropna()
+target_col = cv.idxmax()
+hook(target_col, "target column (highest CV)", name='target_col')
+print(f"Analyzing: {target_col}")
+
+# Step 2: Compute quartiles
+q1 = df[target_col].quantile(0.25)
+q3 = df[target_col].quantile(0.75)
+iqr = q3 - q1
+hook({"q1": float(q1), "q3": float(q3), "iqr": float(iqr)}, "quartile info", name='quartiles', depends_on=['target_col'])
+print(f"Q1: {q1:.4f}, Q3: {q3:.4f}, IQR: {iqr:.4f}")
+
+# Step 3: Calculate fences
+lower_fence = q1 - 1.5 * iqr
+upper_fence = q3 + 1.5 * iqr
+hook({"lower": float(lower_fence), "upper": float(upper_fence)}, "fences", name='fences', depends_on=['quartiles'])
+print(f"Fences: [{lower_fence:.4f}, {upper_fence:.4f}]")
+
+# Step 4: Count outliers
+data = df[target_col].dropna()
+outliers = ((data < lower_fence) | (data > upper_fence)).sum()
+hook(outliers, "outlier count", name='n_outliers', depends_on=['fences'])
+print(f"Outliers: {outliers} ({100*outliers/len(data):.2f}%)")
+
+submit({
+    "column": target_col,
+    "q1": round(float(q1), 4),
+    "q3": round(float(q3), 4),
+    "iqr": round(float(iqr), 4),
+    "lower_fence": round(float(lower_fence), 4),
+    "upper_fence": round(float(upper_fence), 4),
+    "n_outliers": int(outliers)
+})
+""".strip(),
+    ],
 )
 
 PERCENTILE_RANKING = CompositionTemplate(
@@ -1389,6 +1656,49 @@ submit({
     applicable_when=lambda p: _count_numeric_cols(p) >= 1,
     n_steps=3,
     difficulty="EASY",
+    alternative_code_templates=[
+        # CV-based alternative
+        """
+# Step 1: Find column with highest coefficient of variation
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not _is_index_column(c)]
+means = df[numeric_cols].mean()
+stds = df[numeric_cols].std()
+cv = stds / means.abs()
+cv = cv.replace([float('inf'), float('-inf')], float('nan')).dropna()
+target_col = cv.idxmax()
+hook(target_col, "target column (highest CV)", name='target_col')
+print(f"Summarizing: {target_col}")
+
+# Step 2: Compute all descriptive statistics
+data = df[target_col].dropna()
+stats_dict = {
+    "count": len(data),
+    "mean": data.mean(),
+    "std": data.std(),
+    "min": data.min(),
+    "max": data.max(),
+    "median": data.median(),
+    "skewness": data.skew(),
+    "kurtosis": data.kurtosis()
+}
+hook(stats_dict, "descriptive statistics", name='stats', depends_on=['target_col'])
+for k, v in stats_dict.items():
+    print(f"  {k}: {v:.4f}" if isinstance(v, float) else f"  {k}: {v}")
+
+submit({
+    "column": target_col,
+    "count": int(stats_dict["count"]),
+    "mean": round(float(stats_dict["mean"]), 4),
+    "std": round(float(stats_dict["std"]), 4),
+    "min": round(float(stats_dict["min"]), 4),
+    "max": round(float(stats_dict["max"]), 4),
+    "median": round(float(stats_dict["median"]), 4),
+    "skewness": round(float(stats_dict["skewness"]), 4),
+    "kurtosis": round(float(stats_dict["kurtosis"]), 4)
+})
+""".strip(),
+    ],
 )
 
 LEVENE_VARIANCE_TEST = CompositionTemplate(

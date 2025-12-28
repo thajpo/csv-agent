@@ -238,14 +238,39 @@ class CompositionalQuestionGenerator:
                     if isinstance(ground_truth, dict) and "error" in ground_truth:
                         print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) - skipped (template error)")
                         continue
+
+                    # Collect all valid answers (primary + alternatives)
+                    ground_truths = [ground_truth]
+                    answer_hashes = [answer_hash]
+
+                    # Execute alternative code templates if present
+                    alt_codes = template.instantiate_alternatives(profile, params)
+                    for alt_code in alt_codes:
+                        try:
+                            alt_result = await self._execute_code(alt_code)
+                            if alt_result:
+                                alt_gt, alt_hash = alt_result
+                                # Skip error answers and duplicates
+                                if not (isinstance(alt_gt, dict) and "error" in alt_gt):
+                                    if alt_hash not in answer_hashes:
+                                        ground_truths.append(alt_gt)
+                                        answer_hashes.append(alt_hash)
+                        except Exception:
+                            pass  # Silently skip failed alternatives
+
+                    n_alts = len(ground_truths) - 1
+                    alt_suffix = f" (+{n_alts} alt)" if n_alts > 0 else ""
+
                     execution_results.append({
                         "template": template,
                         "params": params,
                         "code": code,
-                        "ground_truth": ground_truth,
-                        "answer_hash": answer_hash,
+                        "ground_truth": ground_truth,  # Primary for verbalization
+                        "ground_truths": ground_truths,  # All valid answers
+                        "answer_hash": answer_hash,  # Primary hash
+                        "answer_hashes": answer_hashes,  # All valid hashes
                     })
-                    print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) ✓")
+                    print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) ✓{alt_suffix}")
                 else:
                     print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) - no answer")
             except Exception as e:
@@ -279,8 +304,12 @@ class CompositionalQuestionGenerator:
                     "template_params": item["params"] or None,
                     "output_type": item["template"].output_type,
                     "output_schema": item["template"].output_schema,
+                    # Primary answer (for backward compatibility)
                     "ground_truth_hash": item["answer_hash"],
                     "_ground_truth": item["ground_truth"],
+                    # All valid answers (for multi-outcome validation)
+                    "ground_truth_hashes": item["answer_hashes"],
+                    "_ground_truths": item["ground_truths"],
                     "_template": item["template"].name,
                 }
             except Exception as e:
@@ -446,7 +475,7 @@ async def generate_questions(
             for q in result["questions"]:
                 clean_q = {
                     k: v for k, v in q.items()
-                    if k in ("_ground_truth", "_template") or not k.startswith("_")
+                    if k in ("_ground_truth", "_ground_truths", "_template") or not k.startswith("_")
                 }
                 clean_questions.append(clean_q)
 
