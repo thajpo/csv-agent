@@ -249,7 +249,7 @@ class TestPromptContract:
             question=question,
         )
 
-        assert "MANDATORY" in prompt
+        assert "HOOKS REQUIRED" in prompt
         assert "hook(" in prompt
         assert "submit(" in prompt
         assert "What is the mean?" in prompt

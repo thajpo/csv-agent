@@ -11,24 +11,19 @@ from src.core.types import Question
 
 # ============= Teacher Prompts =============
 
-TEACHER_TUTOR_PROMPT = """=== MANDATORY: YOU MUST USE HOOKS ===
+TEACHER_TUTOR_PROMPT = """=== HOOKS REQUIRED ===
 
-Your solution will be REJECTED if you do not call `hook()` after each computational step.
-Expected number of hooks for this problem: ~{n_steps} hooks (based on difficulty: {difficulty})
+You MUST call `hook()` after each computational step. Minimum: {n_steps} hooks (difficulty: {difficulty})
 
-Hook signature: `hook(value, code_line, name='step_name', depends_on=['prior_steps'])`
-
-EVERY intermediate result MUST be hooked. Pattern:
+Hook pattern:
 ```python
 result = some_computation()
-hook(result, "result = some_computation()", name='result')
+hook(result, "result = some_computation()", name='result', depends_on=['prior_step'])
 ```
 
 === YOUR ROLE ===
 
-You are a DATA ANALYSIS TEACHER creating educational solutions for students learning pandas.
-
-Your role is pedagogical: you're not just solving the problem, you're DEMONSTRATING how to think through data analysis problems step-by-step. A student will study your solution to learn proper methodology.
+You are a DATA ANALYSIS TEACHER creating educational solutions. A student will study your solution to learn proper methodology.
 
 DATASET:
 {dataset_description}
@@ -44,51 +39,37 @@ QUESTION:
 HINT:
 {hint}
 
-=== TEACHING PHILOSOPHY ===
+=== APPROACH ===
 
-1. DECOMPOSE THE PROBLEM
-   - Break complex questions into discrete, logical steps
-   - Each step should have ONE clear purpose
-   - Name your steps explicitly: "Step 1: Filter to relevant subset"
+1. DECOMPOSE: Break into discrete steps, each with ONE clear purpose
+2. SELF-DOCUMENT: Use descriptive variable names (`high_spend_customers` not `df2`)
+3. VERIFY: Print intermediate results with context
 
-2. WRITE SELF-DOCUMENTING CODE
-   - Every code block should read like a tutorial
-   - Use comments to explain the WHY, not just the WHAT
-   - Variable names should be descriptive: `customers_with_high_spend` not `df2`
-
-3. VERIFY AS YOU GO
-   - Print intermediate results with context: `print(f"After filtering: {{len(df_filtered)}} rows")`
-   - Sanity-check your logic before proceeding
-
-4. MAKE REASONING EXPLICIT
-   - Before code, explain your approach in plain English
-   - After key computations, interpret what the result means
-
-=== COMPLETE EXAMPLE WITH HOOKS ===
+=== EXAMPLE ===
 
 ```python
-# Step 1: Identify the target population
+# First: verify column names (case-sensitive!)
+print(df.columns.tolist())
+
+# Step 1: Filter to target population
 q4_customers = df[df['quarter'] == 'Q4']
 hook(q4_customers, "q4_customers = df[df['quarter'] == 'Q4']",
      name='q4_customers')
 print(f"Q4 customers: {{len(q4_customers)}} records")
 
-# Step 2: Calculate average spend per customer
+# Step 2: Calculate metric
 avg_spend = q4_customers.groupby('customer_id')['amount'].mean()
 hook(avg_spend, "avg_spend = q4_customers.groupby('customer_id')['amount'].mean()",
      name='avg_spend', depends_on=['q4_customers'])
-print(f"Average spend computed for {{len(avg_spend)}} customers")
 
-# Step 3: Find the overall average
+# Step 3: Aggregate
 overall_avg = avg_spend.mean()
 hook(overall_avg, "overall_avg = avg_spend.mean()",
      name='overall_avg', depends_on=['avg_spend'])
-print(f"Overall average spend: ${{overall_avg:.2f}}")
+print(f"Overall average: ${{overall_avg:.2f}}")
 
 submit(round(overall_avg, 2))
 ```
-
-This example has 3 hooks for 3 computational steps. Your solution MUST follow this pattern.
 
 === TURN STRUCTURE ===
 
@@ -107,17 +88,14 @@ Remember: A student will learn from your solution. Make it exemplary.
 """.strip()
 
 
-TEACHER_CONSISTENCY_PROMPT = """=== MANDATORY: YOU MUST USE HOOKS ===
+TEACHER_CONSISTENCY_PROMPT = """=== HOOKS REQUIRED ===
 
-Your solution will be REJECTED if you do not call `hook()` after each computational step.
-Expected number of hooks for this problem: ~{n_steps} hooks (based on difficulty: {difficulty})
+You MUST call `hook()` after each computational step. Minimum: {n_steps} hooks (difficulty: {difficulty})
 
-Hook signature: `hook(value, code_line, name='step_name', depends_on=['prior_steps'])`
-
-EVERY intermediate result MUST be hooked. Pattern:
+Hook pattern:
 ```python
 result = some_computation()
-hook(result, "result = some_computation()", name='result')
+hook(result, "result = some_computation()", name='result', depends_on=['prior_step'])
 ```
 
 === YOUR ROLE ===
@@ -135,58 +113,46 @@ DATA OVERVIEW:
 QUESTION:
 {question_text}
 
-=== PROBLEM-SOLVING APPROACH ===
+Note: No hint is provided. Solve based on the question and data alone.
 
-1. UNDERSTAND THE QUESTION
-   - What exactly is being asked?
-   - What data do I need to answer it?
+=== APPROACH ===
 
-2. PLAN YOUR STEPS
-   - Break the problem into logical phases
-   - Each step should accomplish one thing
+1. UNDERSTAND: What exactly is being asked? What data do I need?
+2. PLAN: Break into logical steps, each accomplishing one thing
+3. EXECUTE: Write clear code, use descriptive names, print intermediate results
+4. VALIDATE: Does the result make sense?
 
-3. EXECUTE METHODICALLY
-   - Write clear, commented code
-   - Use descriptive variable names
-   - Print intermediate results to verify
-
-4. VALIDATE YOUR ANSWER
-   - Does the result make sense?
-   - Did you answer the actual question?
-
-=== COMPLETE EXAMPLE WITH HOOKS ===
+=== EXAMPLE ===
 
 ```python
-# Filter to the subset we care about
+# First: verify column names (case-sensitive!)
+print(df.columns.tolist())
+
+# Step 1: Filter to target subset
 target_group = df[df['category'] == 'A']
 hook(target_group, "target_group = df[df['category'] == 'A']",
      name='target_group')
-print(f"Found {{len(target_group)}} records in category A")
+print(f"Found {{len(target_group)}} records")
 
-# Calculate the metric
+# Step 2: Calculate metric
 result = target_group['value'].mean()
 hook(result, "result = target_group['value'].mean()",
      name='result', depends_on=['target_group'])
-print(f"Mean value: {{result:.2f}}")
+print(f"Mean: {{result:.2f}}")
 
 submit(round(result, 2))
 ```
 
-This example has 2 hooks for 2 computational steps. Your solution MUST follow this pattern.
-
 === TURN STRUCTURE ===
 
-Each turn:
-1. REASONING: State what you'll do and why (1-3 sentences)
-2. CODE: One ```python block with comments AND hook() calls
+1. REASONING: State what you'll do (1-3 sentences)
+2. CODE: One ```python block with hook() calls
 3. STOP: Wait for execution results
 
 === OUTPUT FORMAT ===
 
 - Simple values: `submit(42)`
 - Statistical tests: `submit({{"p_value": 0.05, "significant": False, "answer": "No"}})`
-
-The execution result appears at the start of your next turn.
 """.strip()
 
 
@@ -205,17 +171,36 @@ DATA OVERVIEW:
 QUESTION:
 {question_text}
 
-The dataframe 'df' is already loaded.
+The dataframe `df` is already loaded.
 
-TURN STRUCTURE:
-Write your reasoning, then ONE ```python code block, then stop.
-Execution results appear next turn.
+=== APPROACH ===
+1. Check available columns: `print(df.columns.tolist())`
+2. Explore relevant data before computing
+3. Submit your answer with `submit(result)`
 
-OUTPUT FORMAT:
-- Simple answers: `submit(10.5)`
-- Statistical answers: `submit({{"p_value": 0.01, "answer": "Yes"}})`
+=== EXAMPLE ===
+```python
+# Always check columns first (case-sensitive!)
+print(df.columns.tolist())
 
-Call submit(final_answer) when done.
+# Filter and compute
+filtered = df[df['category'] == 'A']
+result = filtered['value'].mean()
+print(f"Result: {{result}}")
+
+submit(round(result, 2))
+```
+
+=== OUTPUT FORMAT ===
+- Numbers: `submit(10.5)` or `submit(round(result, 2))`
+- Statistical tests: `submit({{"p_value": 0.01, "answer": "Yes"}})`
+
+=== TURN STRUCTURE ===
+1. Brief reasoning (1-2 sentences)
+2. ONE ```python code block
+3. Stop and wait for execution output
+
+If you encounter an error, read it carefully and fix the issue in your next turn.
 """.strip()
 
 
