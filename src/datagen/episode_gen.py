@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from src.datagen.teacher import batch_triangulate
 from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
-from src.core.types import (
+from csv_spec import (
     EpisodeJSONL,
     Question,
     QADict,

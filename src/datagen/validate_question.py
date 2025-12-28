@@ -39,7 +39,7 @@ from src.datagen.teacher import execute_teacher_trace
 from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
 from src.core.config import config
-from src.utils.hashing import hash_artifact
+from csv_spec import hash_artifact
 
 
 console = Console()

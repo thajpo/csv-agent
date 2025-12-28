@@ -20,7 +20,7 @@ from typing import List, Tuple
 from collections import defaultdict, Counter
 import random
 
-from src.core.types import EpisodeJSONL
+from csv_spec import EpisodeJSONL
 from src.core.config import config
 
 logger = logging.getLogger(__name__)

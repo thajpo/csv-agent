@@ -191,7 +191,7 @@ def get_setup_code() -> str:
     the host-side version used in teacher.py for answer comparison.
     """
     import inspect
-    from src.utils.normalization import normalize_value
+    from csv_spec import normalize_value
 
     # Get source, remove type hints that might not work in container
     source = inspect.getsource(normalize_value)

@@ -26,7 +26,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 from src.core.environment import Environment
-from src.core.types import (
+from csv_spec import (
     TraceDict,
     TurnDict,
     ExecutionResultDict,
@@ -36,8 +36,8 @@ from src.core.types import (
     TriangulationResult,
     BatchTriangulationResult,
 )
-from src.utils.hashing import hash_artifact
-from src.utils.normalization import normalize_value
+from csv_spec import hash_artifact
+from csv_spec import normalize_value
 
 
 def extract_trace_metrics(trace: TraceDict) -> dict:

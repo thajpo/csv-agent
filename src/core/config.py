@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 from typing import List, Literal, Union, Dict, Any, Optional
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from src.core.types import Question
+from csv_spec import Question
 
 
 def discover_kaggle_datasets(kaggle_dir: str = "data/kaggle") -> list[str]:

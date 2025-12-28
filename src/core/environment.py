@@ -300,7 +300,7 @@ class Environment:
         Returns:
             Initialized Environment ready for rollout
         """
-        from src.core.types import Question
+        from csv_spec import Question
 
         # Build question object if provided
         question_obj = (

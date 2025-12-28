@@ -51,7 +51,7 @@ def get_datasets_with_episodes() -> set[str]:
 
 from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
-from src.core.types import ExplorationTurn, ExplorationTrace
+from csv_spec import ExplorationTurn, ExplorationTrace
 from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, get_exploration_continue_msg
 from src.utils.parsing import parse_execution_result, extract_python_cells
 

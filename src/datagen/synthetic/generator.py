@@ -34,7 +34,7 @@ from src.datagen.synthetic.templates import (
 )
 from src.datagen.synthetic.verbalizer import QuestionVerbalizer
 from src.envs.csv_env import LocalCSVAnalysisEnv
-from src.utils.hashing import hash_artifact
+from csv_spec import hash_artifact
 from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
 
 # Dataset viability thresholds

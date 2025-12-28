@@ -16,7 +16,7 @@ from src.datagen.teacher import answers_match
 from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.synthetic.templates import ALL_TEMPLATES, CompositionTemplate
 from src.envs.csv_env import LocalCSVAnalysisEnv
-from src.utils.hashing import hash_artifact
+from csv_spec import hash_artifact
 
 
 _KEY_ALIASES: dict[str, list[str]] = {

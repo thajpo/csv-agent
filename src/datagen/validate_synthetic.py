@@ -38,7 +38,7 @@ import time
 from src.datagen.teacher import execute_teacher_trace
 from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
-from src.core.types import (
+from csv_spec import (
     EpisodeJSONL,
     Question,
     QADict,
@@ -47,7 +47,7 @@ from src.core.types import (
 )
 from src.core.config import config
 from src.utils.docker import cleanup_csv_sandbox_containers, cleanup_session, generate_session_id
-from src.utils.hashing import hash_artifact
+from csv_spec import hash_artifact
 from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
 
 

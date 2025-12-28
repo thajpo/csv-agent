@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from src.core.environment import Environment
-from src.core.types import EpisodeJSONL
+from csv_spec import EpisodeJSONL
 from src.datagen.teacher import answers_match
 from src.eval.metrics import EvalResult, EvalMetrics
 

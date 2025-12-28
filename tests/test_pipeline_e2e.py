@@ -66,7 +66,7 @@ class TestPipelineContract:
         This is a CONTRACT TEST: if the schema changes, this test fails
         and you must update the fixture to match the new schema.
         """
-        from src.core.types import EpisodeJSONL
+        from csv_spec import EpisodeJSONL
 
         with open(expected_episode_path) as f:
             data = json.load(f)
@@ -83,7 +83,7 @@ class TestPipelineContract:
 
     def test_episode_roundtrip_serialization(self, expected_episode_path):
         """Test that episodes can be serialized and deserialized."""
-        from src.core.types import EpisodeJSONL
+        from csv_spec import EpisodeJSONL
 
         with open(expected_episode_path) as f:
             data = json.load(f)
@@ -101,7 +101,7 @@ class TestPipelineContract:
 
     def test_episode_jsonl_format(self, expected_episode_path):
         """Test that episodes work in JSONL format (one per line)."""
-        from src.core.types import EpisodeJSONL
+        from csv_spec import EpisodeJSONL
 
         with open(expected_episode_path) as f:
             data = json.load(f)
@@ -126,7 +126,7 @@ class TestPipelineContract:
     @pytest.mark.asyncio
     async def test_synthetic_evaluator_with_fixture(self, expected_episode_path):
         """Test that SyntheticEvaluator works with fixture data."""
-        from src.core.types import EpisodeJSONL
+        from csv_spec import EpisodeJSONL
         from src.eval.synthetic_eval import SyntheticEvaluator
 
         with open(expected_episode_path) as f:
@@ -234,7 +234,7 @@ class TestPromptContract:
 
     def test_teacher_tutor_prompt_structure(self):
         from src.core.prompts import build_system_prompt
-        from src.core.types import Question
+        from csv_spec import Question
 
         question = Question(
             question_text="What is the mean?",
@@ -257,7 +257,7 @@ class TestPromptContract:
 
     def test_teacher_consistency_prompt_has_no_hint(self):
         from src.core.prompts import build_system_prompt
-        from src.core.types import Question
+        from csv_spec import Question
 
         question = Question(
             question_text="What is the mean?",
