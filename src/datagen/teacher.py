@@ -31,6 +31,8 @@ from src.core.types import (
     TurnDict,
     ExecutionResultDict,
     HookDict,
+    CorrectionDict,
+    CodeDiffDict,
     TriangulationResult,
     BatchTriangulationResult,
 )
@@ -116,6 +118,55 @@ def parse_hooks_from_stdout(stdout: str) -> tuple[list[HookDict], int]:
     return hooks, skipped
 
 
+def parse_error_from_stderr(stderr: str) -> tuple[str | None, str | None]:
+    """Extract error type and message from stderr.
+
+    Returns:
+        (error_type, error_message) - e.g., ("KeyError", "'Age'")
+        Returns (None, None) if no recognizable error found.
+    """
+    if not stderr:
+        return None, None
+
+    # Common Python exception patterns
+    # Matches: "KeyError: 'Age'" or "ValueError: invalid literal..."
+    # Look for the last exception in the traceback (most specific)
+    patterns = [
+        # Standard format: ExceptionType: message
+        r"(\w+Error): (.+?)(?:\n|$)",
+        r"(\w+Exception): (.+?)(?:\n|$)",
+        # SyntaxError has different format
+        r"(SyntaxError): (.+?)(?:\n|$)",
+    ]
+
+    error_type, error_message = None, None
+    for pattern in patterns:
+        matches = re.findall(pattern, stderr)
+        if matches:
+            # Take the last match (innermost exception)
+            error_type, error_message = matches[-1]
+            break
+
+    return error_type, error_message.strip() if error_message else None
+
+
+def compute_code_diff(failed_code: str, fixed_code: str) -> CodeDiffDict:
+    """Compute simple line-level diff between failed and fixed code.
+
+    Returns dict with removed_lines and added_lines.
+    """
+    failed_lines = set(line.strip() for line in failed_code.splitlines() if line.strip())
+    fixed_lines = set(line.strip() for line in fixed_code.splitlines() if line.strip())
+
+    removed = list(failed_lines - fixed_lines)
+    added = list(fixed_lines - failed_lines)
+
+    return CodeDiffDict(
+        removed_lines=sorted(removed),
+        added_lines=sorted(added),
+    )
+
+
 def extract_reasoning_from_response(response: str) -> str:
     """Extract reasoning text from assistant response (everything before code block)."""
     code_pattern = r"```python\n.*?```"
@@ -127,7 +178,12 @@ def build_trace_dict(
     final_state,
     conversation_messages: list[dict],
 ) -> TraceDict:
-    """Build TraceDict from environment final state and conversation."""
+    """Build TraceDict from environment final state and conversation.
+
+    Includes self-correction metadata: when a turn successfully fixes
+    a previous failed turn, the correction field is populated with
+    error details and code diff.
+    """
     turns: list[TurnDict] = []
 
     assistant_messages = [
@@ -141,6 +197,11 @@ def build_trace_dict(
             f"Turn count mismatch: {len(assistant_messages)} assistant messages "
             f"vs {len(execution_results_per_turn)} execution results"
         )
+
+    # Track the most recent failed turn for self-correction detection
+    last_failed_turn_idx: int | None = None
+    last_failed_code: str = ""
+    last_failed_stderr: str = ""
 
     for turn_idx, assistant_msg in enumerate(assistant_messages):
         response = assistant_msg["content"]
@@ -180,14 +241,40 @@ def build_trace_dict(
                 submitted_answer=None,
             )
 
-        turns.append(
-            TurnDict(
-                turn_index=turn_idx,
-                reasoning=reasoning,
-                code=code,
-                execution=execution,
-            )
+        # Build the turn dict
+        turn = TurnDict(
+            turn_index=turn_idx,
+            reasoning=reasoning,
+            code=code,
+            execution=execution,
         )
+
+        # Detect self-correction: this turn succeeds and follows a failure
+        if execution["success"] and last_failed_turn_idx is not None:
+            error_type, error_message = parse_error_from_stderr(last_failed_stderr)
+            code_diff = compute_code_diff(last_failed_code, code)
+
+            # Only add correction metadata if there's actually a diff
+            if code_diff["removed_lines"] or code_diff["added_lines"]:
+                turn["correction"] = CorrectionDict(
+                    corrects_turn=last_failed_turn_idx,
+                    error_type=error_type or "Unknown",
+                    error_message=error_message or last_failed_stderr[:100],
+                    attempts_since_error=turn_idx - last_failed_turn_idx,
+                    code_diff=code_diff,
+                )
+            # Clear the failure tracking after successful correction
+            last_failed_turn_idx = None
+            last_failed_code = ""
+            last_failed_stderr = ""
+
+        # Track failures for potential correction in next turn
+        if not execution["success"]:
+            last_failed_turn_idx = turn_idx
+            last_failed_code = code
+            last_failed_stderr = execution.get("stderr", "")
+
+        turns.append(turn)
 
     return TraceDict(
         turns=turns,

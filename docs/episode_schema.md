@@ -73,9 +73,34 @@ Single turn = model reasoning + code + execution result.
     "turn_index": 0,
     "reasoning": "I need to filter the dataframe for patients with heart disease...",
     "code": "df_filtered = df[df['target'] == 1]\nmean_age = df_filtered['age'].mean()\nsubmit(mean_age)",
-    "execution": { /* ExecutionResultDict */ }
+    "execution": { /* ExecutionResultDict */ },
+    "correction": null  /* or CorrectionDict if this turn fixes a previous failure */
 }
 ```
+
+### CorrectionDict (optional)
+
+Present when this turn successfully fixes a previous failed turn. Useful for training self-correction behavior.
+
+```json
+{
+    "corrects_turn": 0,
+    "error_type": "KeyError",
+    "error_message": "'Age'",
+    "attempts_since_error": 1,
+    "code_diff": {
+        "removed_lines": ["mean_age = df['Age'].mean()"],
+        "added_lines": ["mean_age = df['age'].mean()"]
+    }
+}
+```
+
+**Fields:**
+- `corrects_turn`: Index of the failed turn this corrects
+- `error_type`: Exception class (KeyError, ValueError, SyntaxError, etc.)
+- `error_message`: The specific error message from stderr
+- `attempts_since_error`: Number of turns between failure and fix (usually 1)
+- `code_diff`: Lines removed from failed code and added in fixed code
 
 ### ExecutionResultDict
 
@@ -205,6 +230,27 @@ for turn in gold_trace["turns"]:
             "label": 1.0 if verified else 0.0
         })
 ```
+
+### Self-Correction Training
+
+Train model to recover from errors:
+```python
+samples = []
+for turn in gold_trace["turns"]:
+    if turn.get("correction"):
+        c = turn["correction"]
+        failed_turn = gold_trace["turns"][c["corrects_turn"]]
+        samples.append({
+            "failed_code": failed_turn["code"],
+            "error_type": c["error_type"],
+            "error_message": c["error_message"],
+            "error_feedback": failed_turn["execution"]["stderr"],
+            "fixed_code": turn["code"],
+            "code_diff": c["code_diff"],
+        })
+```
+
+Filter episodes with corrections: `[ep for ep in episodes if any(t.get("correction") for t in ep["gold_trace"]["turns"])]`
 
 ---
 

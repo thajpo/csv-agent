@@ -68,13 +68,41 @@ class ExecutionResultDict(TypedDict):
     submitted_answer: Any | None  # If submit() was called in this cell
 
 
-class TurnDict(TypedDict):
-    """Single turn = model output + execution result."""
+class CodeDiffDict(TypedDict):
+    """Simple diff showing what changed between failed and fixed code."""
+
+    removed_lines: list[str]  # Lines in failed code but not in fixed
+    added_lines: list[str]  # Lines in fixed code but not in failed
+
+
+class CorrectionDict(TypedDict, total=False):
+    """Metadata about a self-correction (when this turn fixes a previous failure).
+
+    This enables training models on error recovery behavior:
+    - Recognize errors from feedback
+    - Diagnose the issue
+    - Generate appropriate fixes
+    """
+
+    corrects_turn: int  # Index of the failed turn this corrects
+    error_type: str  # Exception class: "KeyError", "ValueError", "SyntaxError", etc.
+    error_message: str  # The specific error message
+    attempts_since_error: int  # How many turns since the error (usually 1)
+    code_diff: CodeDiffDict  # What changed between failed and fixed code
+
+
+class TurnDict(TypedDict, total=False):
+    """Single turn = model output + execution result.
+
+    Optional `correction` field is present when this turn successfully
+    fixes a previous failed turn - useful for self-correction training.
+    """
 
     turn_index: int
     reasoning: str  # Model's thinking/explanation
     code: str  # Code block (single cell for now)
     execution: ExecutionResultDict  # What happened when code ran
+    correction: CorrectionDict | None  # Present if this turn fixes a previous failure
 
 
 class TraceDict(TypedDict):
