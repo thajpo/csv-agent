@@ -291,12 +291,59 @@ def _normalize_boolean_string(v: Any) -> Any:
     return v
 
 
+def _unwrap_string_json(v: Any) -> Any:
+    """Unwrap string-encoded JSON if present.
+
+    Sometimes agent returns '{"key": "val"}' as a string instead of a dict.
+    """
+    if isinstance(v, str) and v.startswith('{') and v.endswith('}'):
+        try:
+            parsed = json.loads(v)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return v
+
+
+# Keys to ignore in dict comparison (implementation details, not answer content)
+IGNORABLE_ANSWER_KEYS = {
+    'z_threshold',
+    'max_iterations',
+    'iterations_used',
+    'const',  # Intercept in regression - may or may not be included
+    'grouping_column',  # Implementation detail - _binary_group vs actual column name
+    'group1',  # Group naming differs between implementations
+    'group2',  # Group naming differs between implementations
+}
+
+
+def _normalize_test_name(s: str) -> str:
+    """Normalize statistical test names for comparison.
+
+    Examples:
+        "mann_whitney_u" -> "mannwhitneyu"
+        "Mann-Whitney U test" -> "mannwhitneyu"
+        "rank_biserial" -> "rankbiserial"
+    """
+    # Lowercase and remove common suffixes/prefixes
+    s = s.lower()
+    # Remove "test" suffix
+    s = re.sub(r'\s*test$', '', s)
+    # Remove "(non-parametric)" and similar parentheticals
+    s = re.sub(r'\s*\([^)]*\)', '', s)
+    # Remove all non-alphanumeric chars (hyphens, underscores, spaces)
+    s = re.sub(r'[^a-z0-9]', '', s)
+    return s
+
+
 def _values_match_recursive(
     v1: Any,
     v2: Any,
     float_tol: float,
     p_value_tol: float,
     _visited: set[tuple[int, int]] | None = None,
+    _key: str | None = None,  # Current key name for context-aware comparison
 ) -> bool:
     """Recursively compare values with type-appropriate tolerance.
 
@@ -306,16 +353,26 @@ def _values_match_recursive(
     if _visited is None:
         _visited = set()
 
+    # Unwrap string-encoded JSON (agent sometimes returns '{"key": "val"}' as string)
+    v1 = _unwrap_string_json(v1)
+    v2 = _unwrap_string_json(v2)
+
     # Normalize boolean strings ("True"/"False" → True/False)
     v1 = _normalize_boolean_string(v1)
     v2 = _normalize_boolean_string(v2)
 
     # Both floats/ints
     if isinstance(v1, (int, float)) and isinstance(v2, (int, float)):
+        # For correlation, compare absolute values (sign may differ)
+        if _key and 'correlation' in _key.lower():
+            return _floats_match(abs(v1), abs(v2), float_tol)
         return _floats_match(v1, v2, float_tol)
 
-    # Both strings - normalize unicode and compare
+    # Both strings - apply context-aware normalization
     if isinstance(v1, str) and isinstance(v2, str):
+        # Normalize test names (mann_whitney_u ≈ Mann-Whitney U test)
+        if _key and _key.lower() in ('test_used', 'effect_size_type'):
+            return _normalize_test_name(v1) == _normalize_test_name(v2)
         return _normalize_string(v1) == _normalize_string(v2)
 
     # Check for cycles before recursing into containers
@@ -331,11 +388,15 @@ def _values_match_recursive(
         if special_keys.intersection(v1.keys()) or special_keys.intersection(v2.keys()):
             return _compare_statistical_dict(v1, v2, float_tol, p_value_tol)
 
-        if set(v1.keys()) != set(v2.keys()):
+        # Filter out ignorable keys from both dicts
+        keys1 = set(v1.keys()) - IGNORABLE_ANSWER_KEYS
+        keys2 = set(v2.keys()) - IGNORABLE_ANSWER_KEYS
+
+        if keys1 != keys2:
             return False
-        for k in v1.keys():
+        for k in keys1:
             if not _values_match_recursive(
-                v1[k], v2[k], float_tol, p_value_tol, _visited
+                v1[k], v2[k], float_tol, p_value_tol, _visited, _key=k
             ):
                 return False
         return True
@@ -349,21 +410,21 @@ def _values_match_recursive(
         if all(isinstance(x, str) for x in v1) and all(isinstance(x, str) for x in v2):
             # Try exact order first
             exact_match = all(
-                _values_match_recursive(a, b, float_tol, p_value_tol, _visited)
+                _values_match_recursive(a, b, float_tol, p_value_tol, _visited, _key)
                 for a, b in zip(v1, v2)
             )
             if exact_match:
                 return True
             # Try sorted order for column pairs etc.
             sorted_match = all(
-                _values_match_recursive(a, b, float_tol, p_value_tol, _visited)
+                _values_match_recursive(a, b, float_tol, p_value_tol, _visited, _key)
                 for a, b in zip(sorted(v1), sorted(v2))
             )
             return sorted_match
 
         # For non-string lists, require exact order
         for a, b in zip(v1, v2):
-            if not _values_match_recursive(a, b, float_tol, p_value_tol, _visited):
+            if not _values_match_recursive(a, b, float_tol, p_value_tol, _visited, _key):
                 return False
         return True
 

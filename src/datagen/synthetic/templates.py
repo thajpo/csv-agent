@@ -68,6 +68,20 @@ class CompositionTemplate:
             f"df.select_dtypes(include=['object', 'category']){drop_expr}",
         )
 
+        # Prepend helper function for index-like column detection (used in column filtering)
+        helper_code = '''
+import re as _re
+def _is_index_column(col_name):
+    """Check if column is index-like (Unnamed, ID, Person ID, etc.)."""
+    lowered = col_name.lower().strip()
+    patterns = [
+        r'^unnamed:\\s*\\d+$', r'^index$', r'^id$', r'^_id$',
+        r'^row.?id$', r'^person.?id$', r'^serial.?no$', r'^sr.?no$'
+    ]
+    return any(_re.match(p, lowered) for p in patterns)
+'''
+        code = helper_code + code
+
         return code
 
     def iter_param_sets(self) -> list[dict[str, Any]]:
@@ -89,8 +103,14 @@ def _is_id_like_column(name: str, info: dict, row_count: int) -> bool:
     """Heuristic: exclude identifiers and near-unique columns from analysis targets."""
     if not name:
         return False
+
+    # Check the profiler's is_index_like flag first (most reliable)
+    if info.get("is_index_like", False):
+        return True
+
     lowered = name.strip().lower()
-    if re.search(r"(^id$|_id$|^id_|uuid|guid|index$)", lowered):
+    # Expanded patterns: Unnamed: 0, Person ID, Row ID, etc.
+    if re.search(r"(^id$|_id$|^id_|uuid|guid|index$|^unnamed:\s*\d+$|person.?id|row.?id|serial.?no|sr.?no)", lowered):
         return True
     unique_count = info.get("unique_count")
     if row_count and isinstance(unique_count, int):
@@ -661,7 +681,7 @@ REGRESSION_MOST_PREDICTIVE = CompositionTemplate(
     code_template="""
 # Step 1: Identify numeric columns (exclude index-like columns)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
 print(f"Numeric columns: {len(numeric_cols)}")
 
@@ -723,7 +743,7 @@ TTEST_DISCOVERED_GROUPS = CompositionTemplate(
     code_template="""
 # Step 1: Find numeric column with highest variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column (highest variance)", name='target_col')
@@ -802,7 +822,7 @@ BOOTSTRAP_CI_DISCOVERED = CompositionTemplate(
     code_template="""
 # Step 1: Identify numeric columns
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
 
 # Step 2: Compute skewness for each column
@@ -875,7 +895,7 @@ ANOVA_DISCOVERED_GROUPS = CompositionTemplate(
     code_template="""
 # Step 1: Find numeric column with highest variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column (highest variance)", name='target_col')
@@ -955,7 +975,7 @@ MULTIPLE_REGRESSION_TOP_PREDICTORS = CompositionTemplate(
     code_template="""
 # Step 1: Identify numeric columns
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 hook(len(numeric_cols), "number of numeric columns", name='n_numeric')
 print(f"Numeric columns: {len(numeric_cols)}")
 
@@ -1082,7 +1102,7 @@ MANN_WHITNEY_U_TEST = CompositionTemplate(
     code_template="""
 # Step 1: Find most skewed numeric column (non-parametric tests suit skewed data)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 skewness = {col: abs(df[col].skew()) for col in numeric_cols if not df[col].isna().all()}
 target_col = max(skewness, key=skewness.get)
 hook({"target": target_col, "skewness": skewness[target_col]}, "target column (most skewed)", name='target_col')
@@ -1148,7 +1168,7 @@ SPEARMAN_RANK_CORRELATION = CompositionTemplate(
     code_template="""
 # Step 1: Get numeric columns
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 hook(len(numeric_cols), "number of numeric columns", name='n_cols')
 print(f"Numeric columns: {len(numeric_cols)}")
 
@@ -1200,7 +1220,7 @@ COEFFICIENT_OF_VARIATION = CompositionTemplate(
     code_template="""
 # Step 1: Get numeric columns with non-zero means
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 cv_values = {}
 
 for col in numeric_cols:
@@ -1247,7 +1267,7 @@ IQR_OUTLIER_ANALYSIS = CompositionTemplate(
     code_template="""
 # Step 1: Find column with highest variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column (highest variance)", name='target_col')
@@ -1295,7 +1315,7 @@ PERCENTILE_RANKING = CompositionTemplate(
     code_template="""
 # Step 1: Find column with largest range
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 ranges = {col: df[col].max() - df[col].min() for col in numeric_cols}
 target_col = max(ranges, key=ranges.get)
 hook({"column": target_col, "range": ranges[target_col]}, "column with largest range", name='target_col')
@@ -1331,7 +1351,7 @@ DESCRIPTIVE_SUMMARY = CompositionTemplate(
     code_template="""
 # Step 1: Find column with highest variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column", name='target_col')
@@ -1378,7 +1398,7 @@ LEVENE_VARIANCE_TEST = CompositionTemplate(
     code_template="""
 # Step 1: Find numeric column with high variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 variances = df[numeric_cols].var()
 target_col = variances.idxmax()
 hook(target_col, "target column", name='target_col')
@@ -1443,7 +1463,7 @@ KOLMOGOROV_SMIRNOV_NORMALITY = CompositionTemplate(
     code_template="""
 # Step 1: Find column closest to normal (lowest skewness)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 skewness = {col: abs(df[col].skew()) for col in numeric_cols}
 target_col = min(skewness, key=skewness.get)
 hook(target_col, "target column (lowest skewness)", name='target_col')
@@ -1497,7 +1517,7 @@ PAIRED_COLUMNS_CORRELATION_CHANGE = CompositionTemplate(
     code_template="""
 # Step 1: Find two most skewed positive columns
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 # Filter to positive columns (can take log)
 positive_cols = [c for c in numeric_cols if (df[c] > 0).all()]
 if len(positive_cols) < 2:
@@ -1557,7 +1577,7 @@ AUDIT_MISSING_IMPUTATION_EFFECT = CompositionTemplate(
     code_template="""
 # Step 1: Find numeric column with highest missing percentage
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 missing_pcts = {col: df[col].isna().mean() * 100 for col in numeric_cols}
 target_col = max(missing_pcts, key=missing_pcts.get)
 missing_pct = missing_pcts[target_col]
@@ -1626,7 +1646,7 @@ else:
 
     # Step 2: Find target column (highest variance numeric)
     numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
     variances = df[numeric_cols].var()
     target_col = variances.idxmax()
     hook(target_col, "target column", name='target_col', depends_on=['cat_col'])
@@ -1674,7 +1694,7 @@ ADAPTIVE_TWO_SAMPLE_TEST = CompositionTemplate(
     code_template="""
 # Step 1: Find target column (prefer less skewed for interesting test choice)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 skewness = {col: abs(df[col].skew()) for col in numeric_cols}
 target_col = min(skewness, key=skewness.get)
 hook(target_col, "target column (least skewed)", name='target_col')
@@ -1761,7 +1781,7 @@ QUANTILE_BIN_BEST_MEAN = CompositionTemplate(
     code_template="""
 # Step 1: Choose binning column (most skewed - more interesting bins)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 if len(numeric_cols) < 2:
     submit({"error": "Need at least 2 numeric columns"})
 else:
@@ -1823,7 +1843,7 @@ ITERATIVE_OUTLIER_REMOVAL = CompositionTemplate(
     code_template="""
 # Step 1: Pick column with highest CV (most likely to have meaningful outliers)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
 cv_values = {}
 for col in numeric_cols:
     mean = df[col].mean()
@@ -1924,7 +1944,7 @@ else:
 
     # Step 2: Find target column (highest variance)
     numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not c.lower().startswith('unnamed') and c.lower() not in ('index', 'id')]
+                if not _is_index_column(c)]
     variances = df[numeric_cols].var()
     target_col = variances.idxmax()
     hook(target_col, "target column", name='target_col', depends_on=['cat_col'])

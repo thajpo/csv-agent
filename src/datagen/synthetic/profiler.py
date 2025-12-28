@@ -14,6 +14,54 @@ from scipy import stats
 
 
 
+# Column name patterns that indicate index/identifier columns (not data columns)
+INDEX_LIKE_PATTERNS = [
+    r'^unnamed:\s*\d+$',  # Unnamed: 0, Unnamed: 1, etc.
+    r'^index$',
+    r'^id$',
+    r'^_id$',
+    r'^row_?id$',
+    r'^row_?num(ber)?$',
+    r'^serial_?no$',
+    r'^sr_?no$',
+    r'^person_?id$',
+]
+
+
+def is_index_like_column(col_name: str, series: pd.Series) -> bool:
+    """Detect if a column is likely an index/identifier rather than data.
+
+    Criteria:
+    1. Column name matches known index patterns (Unnamed: 0, ID, etc.)
+    2. Column is integer sequential (0, 1, 2, ... or 1, 2, 3, ...)
+    """
+    import re
+    col_lower = col_name.lower().strip()
+
+    # Check name patterns
+    for pattern in INDEX_LIKE_PATTERNS:
+        if re.match(pattern, col_lower):
+            return True
+
+    # Check if column is sequential integers (likely row numbers)
+    if pd.api.types.is_integer_dtype(series):
+        clean = series.dropna()
+        if len(clean) > 10:  # Need enough data points
+            sorted_vals = clean.sort_values().values
+            # Check if it's a perfect sequence (0-indexed or 1-indexed)
+            if len(sorted_vals) == len(clean):
+                expected_0 = np.arange(len(sorted_vals))
+                expected_1 = np.arange(1, len(sorted_vals) + 1)
+                is_sequential = (
+                    np.array_equal(sorted_vals, expected_0) or
+                    np.array_equal(sorted_vals, expected_1)
+                )
+                if is_sequential:
+                    return True
+
+    return False
+
+
 class DataProfiler:
     """Analyzes a CSV dataset to produce a dense fact bundle."""
 
@@ -53,7 +101,7 @@ class DataProfiler:
 
             # Column Analysis
             for col in df.columns:
-                profile["columns"][col] = self._analyze_column(df[col])
+                profile["columns"][col] = self._analyze_column(col, df[col])
 
             # Multivariate Analysis (Correlations)
             profile["correlations"] = self._compute_correlations(df)
@@ -93,13 +141,14 @@ class DataProfiler:
                 
         return df
 
-    def _analyze_column(self, series: pd.Series) -> Dict[str, Any]:
+    def _analyze_column(self, col_name: str, series: pd.Series) -> Dict[str, Any]:
         """Compute stats for a single column."""
         stats_dict = {
             "dtype": str(series.dtype),
             "missing_count": int(series.isnull().sum()),
             "missing_pct": round(series.isnull().mean() * 100, 2),
             "unique_count": int(series.nunique()),
+            "is_index_like": is_index_like_column(col_name, series),
         }
 
         # Numeric Stats
