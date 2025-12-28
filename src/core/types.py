@@ -38,12 +38,18 @@ class QADict(TypedDict, total=False):
 
 
 class HookDict(TypedDict, total=False):
-    """Captured intermediate state during execution."""
+    """Captured intermediate state during execution.
+
+    Value storage policy (for PRM training):
+        - Scalars (int, float, str, bool, None): Always stored in `value`
+        - Complex objects (DataFrame, dict, list): Stored if < 1MB, else None
+        - When value is None, use value_hash for verification only
+    """
 
     variable_name: str | None
     code_line: str  # The code that produced this value
-    value: Any  # Raw normalized value (for PRM training)
-    value_hash: str  # Hash for comparison
+    value: Any | None  # Normalized value for PRM training; None if >1MB
+    value_hash: str  # Hash for comparison (always present)
     depends_on: list[str]  # DAG edges to prior hooks
     description: str | None
 
@@ -189,12 +195,17 @@ class Hook(BaseModel):
     Hooks capture intermediate states during code execution for RL reward.
     The value_hash allows verification without storing the actual value.
     The depends_on field tracks which previous hooks must be computed first.
+
+    Value storage policy (for PRM training):
+        - Scalars (int, float, str, bool, None): Always stored in `value`
+        - Complex objects (DataFrame, dict, list): Stored if < 1MB, else None
+        - When value is None, use value_hash for verification only
     """
 
     code_line: str  # The code that produced this
     variable_name: str | None = None  # e.g., 'df_filtered'
     value_hash: str  # Hash of the value at this point
-    value: Any = None  # Normalized value for PRM training
+    value: Any | None = None  # Normalized value for PRM; None if >1MB
     description: str | None = None  # Optional semantic description
     depends_on: list[str] = Field(
         default_factory=list

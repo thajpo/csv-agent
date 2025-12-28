@@ -95,6 +95,11 @@ Result of executing one code cell.
 
 Intermediate checkpoint for PRM/RL training.
 
+**Value storage policy:**
+- Scalars (int, float, str, bool, None): Always stored in `value`
+- Complex objects (DataFrame, dict, list): Stored if < 1MB, else `null`
+- When `value` is `null`, use `value_hash` for verification only
+
 ```json
 {
     "variable_name": "df_filtered",

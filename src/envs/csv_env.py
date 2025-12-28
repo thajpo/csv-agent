@@ -42,7 +42,7 @@ def json_default(obj):
 # Storage for hooks captured during execution
 _captured_hooks = []
 
-MAX_HOOK_VALUE_CHARS = 2000  # Truncate large values in hooks
+MAX_VALUE_SIZE_BYTES = 1_000_000  # 1MB limit for non-scalar hook values
 
 def hook(value, code_line, name=None, description=None, depends_on=None):
     """
@@ -58,6 +58,10 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
         description: Optional semantic description
         depends_on: List of hook names this depends on (for DAG ordering)
 
+    Value storage policy (for PRM training):
+        - Scalars (int, float, str, bool, None): Always stored in full
+        - Complex objects (DataFrame, dict, list): Stored if < 1MB, else hash-only
+
     Example:
         df_filtered = df[df['TR'] == 'control']
         hook(df_filtered, "df_filtered = df[df['TR'] == 'control']", name='df_filtered')
@@ -72,18 +76,22 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
     full_json = json.dumps(normalized, sort_keys=True, default=json_default)
     value_hash = hashlib.sha256(full_json.encode()).hexdigest()[:16]
 
-    # Truncate large values for output (hash is on full value)
-    if len(full_json) > MAX_HOOK_VALUE_CHARS:
-        truncated_value = full_json[:MAX_HOOK_VALUE_CHARS] + f"... [truncated {len(full_json) - MAX_HOOK_VALUE_CHARS} chars]"
-        display_value = truncated_value
+    # Determine whether to store full value or hash-only
+    # Scalars always stored; complex objects stored if < 1MB
+    is_scalar = isinstance(normalized, (int, float, str, bool, type(None)))
+    value_size = len(full_json.encode('utf-8'))
+
+    if is_scalar or value_size <= MAX_VALUE_SIZE_BYTES:
+        stored_value = normalized
     else:
-        display_value = normalized
+        # Too large - store None, rely on hash for verification
+        stored_value = None
 
     hook_data = {
         "__csv_agent_hook__": True,
         "variable_name": name,
         "value_hash": value_hash,
-        "value": display_value,
+        "value": stored_value,
         "description": description,
         "code_line": code_line,
         "depends_on": depends_on or [],
