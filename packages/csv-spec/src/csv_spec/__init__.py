@@ -1,23 +1,21 @@
 """
-Type definitions for CSV Agent.
+csv-spec: Type contracts for csv-agent.
 
-DEPRECATED: This module re-exports from csv_spec for backward compatibility.
-New code should import directly from csv_spec.
+This package defines the contract between environment and trainer:
+- Types: What actions/results look like
+- Normalization: How to canonicalize values for comparison
+- Parsing: How to extract actions from model output and results from execution
 
-Example:
-    # Old (still works):
-    from src.core.types import EpisodeJSONL
-
-    # New (preferred):
-    from csv_spec import EpisodeJSONL
+If you change anything here, you MUST update both:
+1. Environment (csv_env.py) - how it parses/validates
+2. Trainer (rl_env.py, prompts) - how it formats/consumes
 """
 
-# Re-export everything from csv_spec for backward compatibility
-from csv_spec import (
+from csv_spec.types import (
     # Core types
     Question,
     Hook,
-    # TypedDicts
+    # TypedDicts for serialization
     QADict,
     HookDict,
     ExecutionResultDict,
@@ -27,20 +25,26 @@ from csv_spec import (
     CodeDiffDict,
     TriangulationMetadataDict,
     TimingMetadataDict,
-    # Episode
+    # Episode schema
     EpisodeJSONL,
-    # Exploration
+    # Exploration types
     ExplorationTurn,
     ExplorationTrace,
-    # Results
+    # Result types
     TriangulationResult,
     BatchTriangulationResult,
-    # Contract types (NEW)
+    # Action/Step contract (NEW)
     CodeAction,
     SubmitAction,
     ActionSpec,
     StepResult,
 )
+
+from csv_spec.normalization import normalize_value
+from csv_spec.hashing import hash_artifact
+from csv_spec.parsing import parse_action, parse_step_result
+
+__version__ = "0.1.0"
 
 __all__ = [
     # Core types
@@ -69,4 +73,9 @@ __all__ = [
     "SubmitAction",
     "ActionSpec",
     "StepResult",
+    # Functions
+    "normalize_value",
+    "hash_artifact",
+    "parse_action",
+    "parse_step_result",
 ]

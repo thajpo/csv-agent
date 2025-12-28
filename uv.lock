@@ -373,6 +373,7 @@ name = "csv-agent-qa"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "csv-spec" },
     { name = "datasets" },
     { name = "datetime" },
     { name = "docker" },
@@ -406,6 +407,7 @@ kaggle = [
 
 [package.metadata]
 requires-dist = [
+    { name = "csv-spec", editable = "packages/csv-spec" },
     { name = "datasets", specifier = ">=3.0.0" },
     { name = "datetime", specifier = ">=6.0" },
     { name = "dearpygui", marker = "extra == 'gui'", specifier = ">=2.0" },
@@ -431,6 +433,23 @@ requires-dist = [
     { name = "verifiers", specifier = ">=0.1.8.post1" },
 ]
 provides-extras = ["kaggle", "gui"]
+
+[[package]]
+name = "csv-spec"
+version = "0.1.0"
+source = { editable = "packages/csv-spec" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "pandas", specifier = ">=2.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+]
 
 [[package]]
 name = "datasets"

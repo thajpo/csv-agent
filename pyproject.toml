@@ -6,6 +6,7 @@ readme = "README.md"
 tags = ["placeholder-tag", "train", "eval"]
 requires-python = ">=3.13"
 dependencies = [
+    "csv-spec",
     "datetime>=6.0",
     "docker>=7.1.0",
     "httpx>=0.28.1",
@@ -27,6 +28,9 @@ dependencies = [
     "huggingface-hub>=0.27.0",
     "questionary>=2.0.0",
 ]
+
+[tool.uv.sources]
+csv-spec = { path = "packages/csv-spec", editable = true }
 
 [project.scripts]
 csvagent = "src.cli:main"
