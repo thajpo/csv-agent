@@ -348,6 +348,7 @@ async def main(
     n_workers: int = 4,
     gui_progress: str | None = None,
     skip_existing: set | None = None,
+    difficulties: list[str] | None = None,
 ):
     ui = EpisodeGenUI()
 
@@ -439,6 +440,11 @@ async def main(
                 ui.base.console.print(
                     f"  [dim]{dataset_name}: skipping {skipped} already processed[/dim]"
                 )
+
+        # Filter by difficulty if specified
+        if difficulties:
+            allowed = {d.upper() for d in difficulties}
+            questions = [q for q in questions if q.get("difficulty", "").upper() in allowed]
 
         if max_questions and len(questions) > max_questions:
             questions = questions[:max_questions]
@@ -602,6 +608,13 @@ if __name__ == "__main__":
         default=None,
         help="Path to write progress JSON for GUI polling",
     )
+    parser.add_argument(
+        "--difficulties",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Filter to specific difficulties (e.g., HARD VERY_HARD)",
+    )
     args = parser.parse_args()
 
     try:
@@ -614,6 +627,7 @@ if __name__ == "__main__":
                     parallel=args.parallel,
                     n_workers=args.n_workers,
                     gui_progress=args.gui_progress,
+                    difficulties=args.difficulties,
                 )
             )
         )
