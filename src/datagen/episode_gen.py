@@ -317,6 +317,8 @@ async def process_csv_task(
                 hint=question_obj.hint,
                 difficulty=question_obj.difficulty,
                 n_steps=question_obj.n_steps,
+                category=getattr(question_obj, "category", None),
+                tags=getattr(question_obj, "tags", None),
                 template_name=question_obj.template_name,
                 template_params=question_obj.template_params,
                 output_type=question_obj.output_type,

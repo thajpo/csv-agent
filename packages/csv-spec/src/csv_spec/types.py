@@ -16,6 +16,7 @@ If you modify any type, you MUST update:
 3. Test fixtures
 """
 
+from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Any, Literal, NamedTuple, TypedDict, Union
 from datetime import datetime
@@ -33,6 +34,8 @@ class QADict(TypedDict, total=False):
     difficulty: str | None
     n_steps: int | None
     created_at: str | None
+    category: str | None
+    tags: list[str] | None
     template_name: str | None
     template_params: dict[str, Any] | None
     output_type: str | None
@@ -140,6 +143,61 @@ class TimingMetadataDict(TypedDict):
     avg_elapsed: float
 
 
+# ============= Diagnostic Types =============
+
+
+class FailureCategory(str, Enum):
+    """Classification of triangulation outcomes.
+
+    Used to distinguish WHY a question failed:
+    - GOOD: Verified successfully (gold matches majority)
+    - AMBIGUOUS: Multiple distinct answer clusters (question has multiple interpretations)
+    - TOO_HARD: Single wrong cluster (model consistently gets wrong answer)
+    - HINT_NECESSARY: Gold only succeeds with hint
+    - EXECUTION_FAILURE: Most traces failed to execute
+    """
+
+    GOOD = "good"
+    AMBIGUOUS = "ambiguous"
+    TOO_HARD = "too_hard"
+    HINT_NECESSARY = "hint_necessary"
+    EXECUTION_FAILURE = "execution_failure"
+
+
+class AnswerClusterDict(TypedDict):
+    """A cluster of equivalent answers from consistency traces."""
+
+    answer_hash: str
+    member_count: int
+    representative_answer: Any
+    member_indices: list[int]  # Which consistency trace indices
+
+
+class AnswerDistributionDict(TypedDict):
+    """Statistical summary of consistency trace answers."""
+
+    total_traces: int
+    successful_traces: int
+    execution_failures: int
+    cluster_count: int
+    entropy: float  # Shannon entropy - high = ambiguous
+    majority_confidence: float  # majority_count / successful_traces
+    clusters: list[AnswerClusterDict]
+
+
+class DiagnosticMetadataDict(TypedDict, total=False):
+    """Rich diagnostic information for failure analysis."""
+
+    failure_category: str  # FailureCategory value
+    answer_distribution: AnswerDistributionDict
+    gold_answer_hash: str | None
+    gold_execution_success: bool
+    gold_matches_majority: bool
+    gold_cluster_index: int | None  # Which cluster gold belongs to (-1 if none)
+    classification_confidence: float
+    classification_reasoning: str
+
+
 # ============= Result Types (NamedTuples) =============
 
 
@@ -154,6 +212,7 @@ class TriangulationResult(NamedTuple):
     timing_metadata: dict
     majority_answer_hash: str | None
     majority_count: int
+    diagnostics: "DiagnosticMetadataDict | None" = None  # Optional failure analysis
 
 
 class BatchTriangulationResult(NamedTuple):
@@ -168,6 +227,7 @@ class BatchTriangulationResult(NamedTuple):
     timing_metadata: dict
     majority_answer_hash: str | None
     majority_count: int
+    diagnostics: "DiagnosticMetadataDict | None" = None  # Optional failure analysis
 
 
 # ============= Core Pydantic Models =============
@@ -180,6 +240,8 @@ class Question(BaseModel):
     hint: str | None = None
     difficulty: str | None = None  # EASY, MEDIUM, HARD, VERY_HARD
     n_steps: int | None = None  # Expected step count
+    category: str | None = None
+    tags: list[str] | None = None
     template_name: str | None = None
     template_params: dict[str, Any] | None = None
     output_type: str | None = None

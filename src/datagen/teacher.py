@@ -322,7 +322,7 @@ def _compare_dataframes(df1: pd.DataFrame, df2: pd.DataFrame, tol: float) -> boo
 def _compare_statistical_dict(
     v1: dict, v2: dict, float_tol: float, p_value_tol: float
 ) -> bool:
-    """Compare dicts with 'answer' and/or 'p_value' keys."""
+    """Compare dicts with 'answer' and/or significance keys."""
     if set(v1.keys()) != set(v2.keys()):
         return False
 
@@ -331,19 +331,20 @@ def _compare_statistical_dict(
         if str(v1["answer"]).lower().strip() != str(v2["answer"]).lower().strip():
             return False
 
-    # Compare "p_value" field (stricter float tolerance)
-    if "p_value" in v1:
+    # Compare significance field (stricter float tolerance)
+    if "p_value" in v1 or "significance_score" in v1:
+        key = "p_value" if "p_value" in v1 else "significance_score"
         try:
-            if not _floats_match(v1["p_value"], v2["p_value"], p_value_tol):
+            if not _floats_match(v1[key], v2[key], p_value_tol):
                 return False
         except (ValueError, TypeError):
             # Fall back to string comparison if not numeric
-            if str(v1["p_value"]) != str(v2["p_value"]):
+            if str(v1[key]) != str(v2[key]):
                 return False
 
     # Compare remaining keys recursively
     for k in v1.keys():
-        if k in ("answer", "p_value"):
+        if k in ("answer", "p_value", "significance_score"):
             continue
         if not _values_match_recursive(v1[k], v2[k], float_tol, p_value_tol):
             return False
@@ -450,15 +451,20 @@ def _values_match_recursive(
 
     # Both floats/ints
     if isinstance(v1, (int, float)) and isinstance(v2, (int, float)):
-        # For correlation, compare absolute values (sign may differ)
-        if _key and 'correlation' in _key.lower():
+        # For association metrics, compare absolute values (sign may differ)
+        if _key and any(tag in _key.lower() for tag in ("correlation", "association")):
             return _floats_match(abs(v1), abs(v2), float_tol)
         return _floats_match(v1, v2, float_tol)
 
     # Both strings - apply context-aware normalization
     if isinstance(v1, str) and isinstance(v2, str):
-        # Normalize test names (mann_whitney_u ≈ Mann-Whitney U test)
-        if _key and _key.lower() in ('test_used', 'effect_size_type'):
+        # Normalize test names and method labels.
+        if _key and _key.lower() in (
+            "test_used",
+            "effect_size_type",
+            "method_choice",
+            "effect_size_kind",
+        ):
             return _normalize_test_name(v1) == _normalize_test_name(v2)
         return _normalize_string(v1) == _normalize_string(v2)
 
@@ -471,7 +477,7 @@ def _values_match_recursive(
 
     # Both dicts
     if isinstance(v1, dict) and isinstance(v2, dict):
-        special_keys = {"answer", "p_value"}
+        special_keys = {"answer", "p_value", "significance_score"}
         if special_keys.intersection(v1.keys()) or special_keys.intersection(v2.keys()):
             return _compare_statistical_dict(v1, v2, float_tol, p_value_tol)
 
@@ -755,6 +761,7 @@ async def triangulate_teacher(
     ui: Any,
     float_tol: float = 0.1,
     llm=None,
+    include_diagnostics: bool = False,
 ) -> TriangulationResult:
     """
     Run teacher triangulation: gold trace + consistency traces.
@@ -875,6 +882,13 @@ async def triangulate_teacher(
     ]
 
     if not submitted_answers:
+        # Compute diagnostics even for no-answer case
+        diagnostics = None
+        if include_diagnostics:
+            from src.datagen.diagnostics import analyze_failure
+            consistency_traces_only = [trace for trace, _ in consistency_results]
+            diagnostics = analyze_failure(gold_trace, consistency_traces_only, float_tol)
+
         return TriangulationResult(
             gold_trace=gold_trace,
             gold_conversation=gold_conversation,
@@ -884,6 +898,7 @@ async def triangulate_teacher(
             timing_metadata=timing_metadata,
             majority_answer_hash=None,
             majority_count=0,
+            diagnostics=diagnostics,
         )
 
     # Find majority answer by clustering (handles float tolerance and formatting differences)
@@ -907,6 +922,12 @@ async def triangulate_teacher(
         float_tol=float_tol,
     )
 
+    # Compute diagnostics if requested
+    diagnostics = None
+    if include_diagnostics:
+        from src.datagen.diagnostics import analyze_failure
+        diagnostics = analyze_failure(gold_trace, consistency_traces, float_tol)
+
     return TriangulationResult(
         gold_trace=gold_trace,
         gold_conversation=gold_conversation,
@@ -916,6 +937,7 @@ async def triangulate_teacher(
         timing_metadata=timing_metadata,
         majority_answer_hash=majority_answer_hash,
         majority_count=majority_count,
+        diagnostics=diagnostics,
     )
 
 
@@ -936,6 +958,7 @@ async def batch_triangulate(
     external_container: Any = None,  # Pre-created container from ContainerPool
     ui: Any,  # UI instance for Rich output (required)
     float_tol: float = 0.1,
+    include_diagnostics: bool = False,  # Compute failure diagnostics
 ) -> list[BatchTriangulationResult]:
     """
     Run triangulation on a batch of questions.
@@ -1070,6 +1093,7 @@ async def batch_triangulate(
                 container_pool=container_pool,
                 ui=ui,
                 float_tol=float_tol,
+                include_diagnostics=include_diagnostics,
             )
 
             if result.verified:

@@ -34,7 +34,7 @@ VERBALIZATION_PROMPT = '''You are writing questions for a data science training 
 {banned_words}
 
 ## YOUR TASK:
-Write a SHORT question (1-2 sentences) that expresses genuine curiosity and would lead someone to perform this analysis.
+Write a SHORT question (1-3 sentences) that expresses genuine curiosity and would lead someone to perform this analysis.
 
 The agent should DISCOVER which method to use - don't give it away! Rephrase method-specific concepts:
 - Instead of "bootstrap confidence interval" → "how certain can we be about this estimate?"
@@ -43,7 +43,7 @@ The agent should DISCOVER which method to use - don't give it away! Rephrase met
 - Instead of "Pearson correlation" → "how strongly related are these measurements?"
 
 GOOD QUESTIONS (short, curious, don't describe the method):
-- "Which numeric feature best predicts the target variable?"
+- "Which numeric feature best predicts the target variable? Return as JSON, e.g.: {{"predictor": "<col>", "fit_score": 0.0}}"
 - "I wonder if the most variable measurement can be explained by other features."
 - "Are there any strong correlations between the clinical measurements?"
 - "Does cholesterol differ significantly between outcome groups?"
@@ -53,16 +53,19 @@ BAD QUESTIONS (long, mechanical, describe the algorithm):
 - "Compute the Pearson correlation between all numeric columns and return the pair with the highest absolute value..." ← DESCRIBES HOW TO DO IT
 
 RULES:
-1. Question must be 1-2 sentences MAX
+1. Question must be 1-3 sentences MAX
 2. Express curiosity, not instructions
 3. Don't describe the method or steps - the agent must discover these
 4. Don't mention specific column names
 5. The hint can mention the approach
-6. Append output format BRIEFLY at the end: "Return as JSON with keys: x, y, z."
+6. ALWAYS append output format with a placeholder example at the end. Use JSON for ALL outputs:
+   - For dict outputs: "Return as JSON, e.g.: {{"column": "<name>", "mean": 0.0}}"
+   - For scalar outputs: "Return as JSON, e.g.: {{"answer": 0.0}}"
+   Use the REQUIRED OUTPUT KEYS below to construct the example.
 
 OUTPUT (respond with ONLY this JSON):
 {{
-    "question": "Short curious question here. Return as JSON with keys: ...",
+    "question": "Short curious question here. Return as JSON, e.g.: {{\"key\": \"<placeholder>\"}}",
     "hint": "Brief guidance on approach"
 }}
 
@@ -91,7 +94,7 @@ class QuestionVerbalizer:
         data_overview: str = "",
         dataset_description: str = "",
         banned_words: list[str] | None = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
         """
         Convert code into a natural language question.
 
@@ -105,7 +108,7 @@ class QuestionVerbalizer:
             banned_words: List of method terms to avoid in the question
 
         Returns:
-            Tuple of (question_text, hint)
+            Tuple of (question_text, hint, raw_response)
         """
         # Format ground truth for display
         if isinstance(ground_truth, dict):
@@ -132,7 +135,7 @@ class QuestionVerbalizer:
         # Parse response
         question, hint = self._parse_response(response)
 
-        return question, hint
+        return question, hint, response
 
     def _parse_response(self, response: str) -> tuple[str, str]:
         """Parse LLM response to extract question and hint."""
