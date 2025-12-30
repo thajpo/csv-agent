@@ -25,6 +25,7 @@ import pandas as pd
 
 from src.core.config import config
 from src.core.prompts import generate_data_overview
+from src.datagen.teacher import answers_match, execute_teacher_trace
 from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.synthetic.templates import (
     CompositionTemplate,
@@ -104,8 +105,11 @@ def _question_is_viable(question: str, profile: dict) -> tuple[bool, str]:
         return False, "empty question"
 
     # Heuristic sentence count to keep prompts concise and non-procedural.
-    sentence_count = len(re.findall(r"[.!?]", question))
-    if sentence_count > 2:
+    # Exclude the ICL example part (after "Return as JSON" or "e.g.:") from sentence counting
+    # since JSON examples contain periods in decimals that inflate the count.
+    question_for_counting = re.split(r"Return as JSON|e\.g\.:", question, maxsplit=1)[0]
+    sentence_count = len(re.findall(r"[.!?]", question_for_counting))
+    if sentence_count > 3:
         return False, "too many sentences"
 
     lowered = question.lower()
@@ -121,6 +125,32 @@ def _question_is_viable(question: str, profile: dict) -> tuple[bool, str]:
             return False, "mentions column names"
 
     return True, "ok"
+
+
+class _SilentTraceUI:
+    """No-op UI for silent student validation traces."""
+
+    def print_trace_start(self, mode: str) -> None:
+        return None
+
+    def print_turn(
+        self,
+        turn_num: int,
+        max_turns: int,
+        response: str,
+        code_cells: list[str],
+        execution_results: list[dict],
+    ) -> None:
+        return None
+
+    def print_trace_complete(
+        self,
+        success: bool,
+        final_answer: Any,
+        turns: int,
+        elapsed_seconds: float | None = None,
+    ) -> None:
+        return None
 
 
 class CompositionalQuestionGenerator:
@@ -154,6 +184,11 @@ class CompositionalQuestionGenerator:
         if not self.csv_path.exists():
             raise FileNotFoundError(f"CSV not found: {csv_path}")
 
+        self.dataset_name = (
+            self.csv_path.parent.name
+            if self.csv_path.name == "data.csv"
+            else self.csv_path.stem
+        )
         self.model = model or config.question_gen_model
         self.sampling_args = sampling_args or config.sampling_args.model_dump()
         self.dataset_description = dataset_description
@@ -182,6 +217,76 @@ class CompositionalQuestionGenerator:
             await self.env.destroy_sandbox(self.state["sandbox_id"])
         if self.verbalizer:
             await self.verbalizer.aclose()
+
+    async def _validate_question(
+        self,
+        question_text: str,
+        expected_values: list[Any],
+        expected_hashes: list[str],
+        n_steps: int | None,
+        difficulty: str | None,
+    ) -> tuple[bool, dict]:
+        """Run a student validation trace and compare against expected answers."""
+        validation_model = (
+            config.synthetic_question_validation_model or config.teacher_model
+        )
+        max_turns = (
+            config.synthetic_question_validation_max_turns or config.max_turns
+        )
+        ui = _SilentTraceUI()
+
+        try:
+            trace, _conversation, _system, elapsed = await execute_teacher_trace(
+                csv_path=str(self.csv_path),
+                question=question_text,
+                model=validation_model,
+                hint=None,
+                n_steps=n_steps,
+                difficulty=difficulty,
+                mode="student",
+                dataset_description=self.dataset_description,
+                data_overview=self.data_overview,
+                max_turns=max_turns,
+                sampling_args={
+                    "temperature": config.sampling_args.temperature,
+                    "max_tokens": config.sampling_args.max_tokens,
+                    "top_p": config.sampling_args.top_p,
+                },
+                ui=ui,
+                trace_mode="validation",
+            )
+        except Exception as exc:
+            return False, {
+                "model": validation_model,
+                "success": False,
+                "matched": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+        success = trace.get("success", False)
+        final_answer = trace.get("final_answer")
+        final_hash = trace.get("final_answer_hash")
+        matched = False
+        if success:
+            for expected_value, expected_hash in zip(expected_values, expected_hashes):
+                if answers_match(
+                    final_hash,
+                    expected_hash,
+                    final_answer,
+                    expected_value,
+                    float_tol=config.float_tolerance,
+                ):
+                    matched = True
+                    break
+
+        return matched, {
+            "model": validation_model,
+            "success": success,
+            "matched": matched,
+            "turns": len(trace.get("turns", [])),
+            "elapsed": round(float(elapsed), 3),
+            "final_answer_hash": final_hash,
+        }
 
     async def generate(
         self,
@@ -236,7 +341,8 @@ class CompositionalQuestionGenerator:
                     # Skip questions where template returns an error
                     # (e.g., "No suitable categorical column found")
                     if isinstance(ground_truth, dict) and "error" in ground_truth:
-                        print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) - skipped (template error)")
+                        error_msg = ground_truth.get("error", "unknown error")
+                        print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) - skipped: {error_msg}")
                         continue
 
                     # Collect all valid answers (primary + alternatives)
@@ -279,10 +385,12 @@ class CompositionalQuestionGenerator:
         # 4. Verbalize all concurrently (parallel LLM calls)
         print(f"\nVerbalizing {len(execution_results)} templates...")
 
-        async def verbalize_one(item: dict) -> dict | None:
-            """Generate a single question for one template execution."""
-            try:
-                question_text, hint = await self.verbalizer.verbalize(
+        n_candidates = max(1, config.synthetic_verbalization_candidates)
+
+        async def verbalize_candidates(item: dict) -> dict:
+            """Generate multiple candidates for one template execution."""
+            tasks = [
+                self.verbalizer.verbalize(
                     code=item["code"],
                     profile=profile,
                     ground_truth=item["ground_truth"],
@@ -291,19 +399,110 @@ class CompositionalQuestionGenerator:
                     dataset_description=self.dataset_description,
                     banned_words=FORBIDDEN_METHOD_TERMS,
                 )
+                for _ in range(n_candidates)
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            candidates = []
+            for idx, result in enumerate(results, start=1):
+                if isinstance(result, Exception):
+                    question_text = "[VERBALIZATION FAILED]"
+                    hint = ""
+                    raw_response = f"[VERBALIZATION ERROR: {type(result).__name__}: {result}]"
+                else:
+                    question_text, hint, raw_response = result
+                candidates.append(
+                    {
+                        "candidate_index": idx,
+                        "question": question_text,
+                        "hint": hint,
+                        "raw_response": raw_response,
+                    }
+                )
+            return {"item": item, "candidates": candidates}
 
-                if not question_text or question_text.startswith("[VERBALIZATION FAILED"):
-                    return None
+        verbalized = await asyncio.gather(
+            *[verbalize_candidates(item) for item in execution_results]
+        )
 
-                return {
+        questions: list[dict] = []
+        rejected: dict[str, int] = {}
+        rejection_log: list[dict] = []
+
+        def record_rejection(
+            item: dict,
+            candidate: dict,
+            reason: str,
+            validation: dict | None = None,
+        ) -> None:
+            rejected[reason] = rejected.get(reason, 0) + 1
+            rejection_log.append(
+                {
+                    "dataset": self.dataset_name,
+                    "template_name": item["template"].name,
+                    "template_params": item["params"] or None,
+                    "category": item["template"].category,
+                    "tags": item["template"].tags,
+                    "candidate_index": candidate.get("candidate_index"),
+                    "question": candidate.get("question"),
+                    "hint": candidate.get("hint"),
+                    "reason": reason,
+                    "validation": validation,
+                    "raw_response": candidate.get("raw_response"),
+                }
+            )
+
+        for bundle in verbalized:
+            item = bundle["item"]
+            candidates = bundle["candidates"]
+            accepted = None
+            attempts = 0
+            for candidate in candidates:
+                attempts += 1
+                question_text = candidate.get("question") or ""
+                if not question_text.strip():
+                    record_rejection(item, candidate, "empty_question")
+                    continue
+                if question_text.startswith("[VERBALIZATION FAILED"):
+                    record_rejection(item, candidate, "verbalization_failed")
+                    continue
+
+                is_ok, reason = _question_is_viable(question_text, profile)
+                if not is_ok:
+                    record_rejection(item, candidate, reason)
+                    continue
+
+                validation_info = None
+                if config.synthetic_question_validation_enabled:
+                    matched, validation_info = await self._validate_question(
+                        question_text=question_text,
+                        expected_values=item["ground_truths"],
+                        expected_hashes=item["answer_hashes"],
+                        n_steps=item["template"].n_steps,
+                        difficulty=item["template"].difficulty,
+                    )
+                    if not matched:
+                        record_rejection(
+                            item,
+                            candidate,
+                            "student_validation_failed",
+                            validation=validation_info,
+                        )
+                        continue
+
+                accepted = {
                     "question": question_text,
-                    "hint": hint,
+                    "hint": candidate.get("hint"),
                     "n_steps": item["template"].n_steps,
                     "difficulty": item["template"].difficulty,
+                    "category": item["template"].category,
+                    "tags": item["template"].tags,
                     "template_name": item["template"].name,
                     "template_params": item["params"] or None,
                     "output_type": item["template"].output_type,
                     "output_schema": item["template"].output_schema,
+                    "verbalization_attempts": attempts,
+                    "candidate_index": candidate.get("candidate_index"),
+                    "validation": validation_info,
                     # Primary answer (for backward compatibility)
                     "ground_truth_hash": item["answer_hash"],
                     "_ground_truth": item["ground_truth"],
@@ -312,29 +511,16 @@ class CompositionalQuestionGenerator:
                     "_ground_truths": item["ground_truths"],
                     "_template": item["template"].name,
                 }
-            except Exception as e:
-                print(f"  Verbalization error: {e}")
-                return None
+                break
 
-        verbalized = await asyncio.gather(*[verbalize_one(item) for item in execution_results])
-        questions = [q for q in verbalized if q is not None]
-
-        # Filter questions that violate the "curious, non-procedural" contract.
-        filtered = []
-        rejected = {}
-        for question in questions:
-            is_ok, reason = _question_is_viable(question.get("question", ""), profile)
-            if is_ok:
-                filtered.append(question)
-            else:
-                rejected[reason] = rejected.get(reason, 0) + 1
+            if accepted:
+                questions.append(accepted)
 
         if rejected:
             print("  Question filter rejections:")
             for reason, count in sorted(rejected.items(), key=lambda x: (-x[1], x[0])):
                 print(f"    - {reason}: {count}")
 
-        questions = filtered
         print(f"  Generated {len(questions)} questions from {len(execution_results)} templates")
 
         # 5. Format output
@@ -342,6 +528,7 @@ class CompositionalQuestionGenerator:
         output = {
             "dataset_columns": df.columns.tolist(),
             "questions": questions,
+            "rejections": rejection_log,
         }
 
         print(f"\nGenerated {len(questions)} questions")
@@ -484,6 +671,14 @@ async def generate_questions(
                 "questions": clean_questions,
             }
             json.dump(output, f, indent=2)
+
+        rejections = result.get("rejections", [])
+        if rejections:
+            rejection_file = output_path / "questions_rejected.jsonl"
+            with open(rejection_file, "w") as f:
+                for entry in rejections:
+                    f.write(json.dumps(entry) + "\n")
+            print(f"Saved rejected questions to: {rejection_file}")
 
         print(f"\nSaved to: {questions_file}")
         return result

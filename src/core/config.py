@@ -105,6 +105,10 @@ class Config(BaseModel):
     question_difficulty_distribution: Dict[str, float] = Field(
         default={"EASY": 0.30, "MEDIUM": 0.30, "HARD": 0.20, "VERY_HARD": 0.20}
     )
+    synthetic_verbalization_candidates: int = 5
+    synthetic_question_validation_enabled: bool = True
+    synthetic_question_validation_model: str | None = None
+    synthetic_question_validation_max_turns: int | None = None
 
     # pipelines: episode generation / triangulation
     n_consistency: int = 7  # Optimal for 8-worker containers (profiled)
