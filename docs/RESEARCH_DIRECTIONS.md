@@ -1,6 +1,6 @@
 # Research Directions: Process Reward Models for CSV Agents
 
-*Last updated: December 2024*
+*Last updated: January 2026*
 *Status: Exploration phase - pre-SFT/GRPO training*
 
 This document captures research ideas, failure modes, and future directions discussed during the design of a PRM-based training pipeline for CSV analysis agents.
@@ -41,8 +41,8 @@ This document captures research ideas, failure modes, and future directions disc
 
 ### Key Insight
 
-We have ~70% of the infrastructure for PRM-style training. The hooks are step boundaries. The triangulation gives us multiple traces per question. The missing pieces:
-1. Store raw hook values (not just hashes) for tolerance-based comparison
+We have ~80% of the infrastructure for PRM-style training. The hooks are step boundaries. The triangulation gives us multiple traces per question. The missing pieces:
+1. ~~Store raw hook values (not just hashes) for tolerance-based comparison~~ ✅ DONE
 2. Compute step-level consensus across traces
 3. Build or use a learned verifier
 
@@ -106,12 +106,17 @@ DeepSeek works in a domain where verification is hard (natural language proofs).
 
 ### Immediate Code Change Needed
 
-**TODO**: Add `value` field to hooks in:
-- `src/envs/csv_env.py` - `hook()` function in `_SETUP_SUBMIT`
-- `src/core/types.py` - `Hook` model and `HookDict`
-- `src/datagen/teacher.py` - hook extraction
+**DONE** (Jan 2026): The `value` field has been added to hooks:
+- ✅ `src/envs/csv_env.py` - `hook()` function stores `value` with size-bounded summaries
+- ✅ `csv_spec/types.py` - `Hook` model and `HookDict` include `value: Any`
+- ✅ Value storage policy implemented:
+  - Scalars: stored in full
+  - DataFrame/Series: bounded summary (shape, dtypes, head, numeric stats)
+  - Complex types: stored if < 100KB, else type+size metadata
 
 This enables tolerance-based step comparison using existing `answers_match()` function.
+
+**Remaining for PRM**: Step-level consensus computation (`step_confidence`, `is_consensus_correct`).
 
 ---
 
@@ -469,7 +474,7 @@ Maybe no: the model memorizes "when you see 'highest variance', do `df.var().idx
 6. **How do we handle tolerance in step comparison?**
    - Hash matching misses equivalent answers with float differences
    - `answers_match()` exists for final answers, need to apply to hooks
-   - Need raw values stored (not just hashes)
+   - ~~Need raw values stored (not just hashes)~~ ✅ DONE
 
 ---
 
@@ -477,9 +482,9 @@ Maybe no: the model memorizes "when you see 'highest variance', do `df.var().idx
 
 ### Before Training
 
-1. **Add raw values to hooks** (code change)
-   - Store actual normalized value alongside hash
-   - Enable tolerance-based step comparison
+1. ~~**Add raw values to hooks** (code change)~~ ✅ DONE (Jan 2026)
+   - Values stored with bounded summaries for DataFrames
+   - Enables tolerance-based step comparison via `answers_match()`
 
 2. **Compute step consensus** (analysis)
    - For existing episodes, compare hooks across traces
