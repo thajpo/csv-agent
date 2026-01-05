@@ -46,18 +46,29 @@ from csv_spec import (
     TimingMetadataDict,
 )
 from src.core.config import config
-from src.utils.docker import cleanup_csv_sandbox_containers, cleanup_session, generate_session_id
+from src.utils.docker import (
+    cleanup_csv_sandbox_containers,
+    cleanup_session,
+    generate_session_id,
+)
 from csv_spec import hash_artifact
 from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
+from src.datagen.manifest import (
+    DatagenManifest,
+    compute_dataset_hash,
+    compute_synthetic_fingerprint_from_question,
+)
 
 
 def make_signal_handler(session_id: str):
     """Create a signal handler that cleans up only this session's containers."""
+
     def handler(signum, frame):
         print(f"\n\n🛑 Interrupted! Cleaning up session {session_id} containers...")
         cleanup_session(session_id)
         print("✓ Cleanup complete")
         sys.exit(0)
+
     return handler
 
 
@@ -149,7 +160,9 @@ async def validate_single_question(
             )
 
         # Compare answer hash to ground truth (supports multiple valid answers)
-        expected_hashes = question_dict.get("ground_truth_hashes") or [question_dict.get("ground_truth_hash")]
+        expected_hashes = question_dict.get("ground_truth_hashes") or [
+            question_dict.get("ground_truth_hash")
+        ]
         expected_hashes = [h for h in expected_hashes if h is not None]
         if not expected_hashes:
             return False, trace, elapsed, "No ground_truth_hash in question"
@@ -162,7 +175,9 @@ async def validate_single_question(
             return True, trace, elapsed, None
 
         # Tolerant comparison: check against all valid answers
-        expected_answers = question_dict.get("_ground_truths") or [question_dict.get("_ground_truth")]
+        expected_answers = question_dict.get("_ground_truths") or [
+            question_dict.get("_ground_truth")
+        ]
         expected_answers = [a for a in expected_answers if a is not None]
 
         if actual_answer is not None:
@@ -183,9 +198,7 @@ async def validate_single_question(
             else "None"
         )
         act_str = (
-            json.dumps(actual_answer, default=str)[:200]
-            if actual_answer
-            else "None"
+            json.dumps(actual_answer, default=str)[:200] if actual_answer else "None"
         )
         return (
             False,
@@ -207,6 +220,8 @@ async def process_dataset(
     sampling_args: dict,
     ui: EpisodeGenUI,
     session_id: str | None = None,
+    manifest: DatagenManifest | None = None,
+    dataset_hash: str | None = None,
 ) -> tuple[list[EpisodeJSONL], list[dict]]:
     """
     Process all questions for a single dataset.
@@ -216,6 +231,9 @@ async def process_dataset(
     """
     dataset_description = load_dataset_description(csv_path)
     data_overview = generate_data_overview(str(csv_path))
+    dataset_name = (
+        csv_path.stem if csv_path.name != "data.csv" else csv_path.parent.name
+    )
 
     episodes = []
     failures = []
@@ -236,11 +254,19 @@ async def process_dataset(
             session_id=session_id,
         )
 
+        # Compute fingerprint for manifest recording
+        fingerprint = None
+        if manifest is not None and dataset_hash is not None:
+            fingerprint = compute_synthetic_fingerprint_from_question(
+                q_dict, dataset_hash
+            )
+
         if success and trace:
             question_obj = Question.from_dict(q_dict)
+            episode_id = str(uuid.uuid4())
 
             episode = EpisodeJSONL(
-                episode_id=str(uuid.uuid4()),
+                episode_id=episode_id,
                 timestamp=datetime.now(),
                 csv_source=str(csv_path),
                 question=QADict(
@@ -254,6 +280,7 @@ async def process_dataset(
                     output_type=question_obj.output_type,
                     output_schema=question_obj.output_schema,
                     ground_truth_hash=question_obj.ground_truth_hash,
+                    ground_truth_hashes=question_obj.ground_truth_hashes,
                     ground_truth=question_obj.ground_truth,
                 ),
                 gold_trace=trace,
@@ -276,6 +303,19 @@ async def process_dataset(
             )
             episodes.append(episode)
             ui.base.print_success(f"    ✓ Validated ({elapsed:.1f}s)")
+
+            # Record success to manifest
+            if manifest is not None and fingerprint is not None:
+                manifest.record_synthetic(
+                    fingerprint=fingerprint,
+                    status="success",
+                    dataset=dataset_name,
+                    template_name=q_dict.get("template_name", "unknown"),
+                    template_params=q_dict.get("template_params"),
+                    episode_id=episode_id,
+                    model=teacher_model,
+                    elapsed_seconds=elapsed,
+                )
         else:
             failure_record = {
                 "question": q_dict.get("question", "")[:100],
@@ -291,6 +331,18 @@ async def process_dataset(
             failures.append(failure_record)
             ui.base.print_warning(f"    ✗ Failed: {error}")
 
+            # Record failure to manifest
+            if manifest is not None and fingerprint is not None:
+                manifest.record_synthetic(
+                    fingerprint=fingerprint,
+                    status="failure",
+                    dataset=dataset_name,
+                    template_name=q_dict.get("template_name", "unknown"),
+                    template_params=q_dict.get("template_params"),
+                    model=teacher_model,
+                    elapsed_seconds=elapsed,
+                )
+
     return episodes, failures
 
 
@@ -304,6 +356,8 @@ async def process_dataset_task(
     ui: EpisodeGenUI,
     semaphore: asyncio.Semaphore | None = None,
     session_id: str | None = None,
+    manifest: DatagenManifest | None = None,
+    dataset_hash: str | None = None,
 ) -> tuple[str, list[EpisodeJSONL], list[dict]]:
     """
     Wrapper for process_dataset that respects semaphore for parallel execution.
@@ -324,6 +378,8 @@ async def process_dataset_task(
                 sampling_args=sampling_args,
                 ui=ui,
                 session_id=session_id,
+                manifest=manifest,
+                dataset_hash=dataset_hash,
             )
             return dataset_name, episodes, failures
     else:
@@ -336,6 +392,8 @@ async def process_dataset_task(
             sampling_args=sampling_args,
             ui=ui,
             session_id=session_id,
+            manifest=manifest,
+            dataset_hash=dataset_hash,
         )
         return dataset_name, episodes, failures
 
@@ -349,6 +407,8 @@ async def main(
     gui_progress: str | None = None,
     skip_existing: set | None = None,
     difficulties: list[str] | None = None,
+    no_cache: bool = False,
+    retry_failed: bool = False,
 ):
     ui = EpisodeGenUI()
 
@@ -415,6 +475,21 @@ async def main(
     if not append_mode and output_jsonl.exists():
         output_jsonl.unlink()
 
+    # Load manifest for caching (unless --no-cache)
+    manifest = None
+    if not no_cache:
+        manifest = DatagenManifest()
+        manifest.load()
+        stats = manifest.stats()
+        if stats["synthetic_total"] > 0:
+            ui.base.print_status(
+                f"Manifest loaded: {stats['synthetic_success']} success, "
+                f"{stats['synthetic_failure']} failures"
+            )
+
+    # Cache dataset hashes to avoid recomputing
+    dataset_hashes: dict[str, str] = {}
+
     # Prepare tasks
     tasks_to_run = []
     for qf in question_files:
@@ -427,8 +502,38 @@ async def main(
 
         questions, _ = load_questions(str(qf))
 
-        # Filter out already-processed questions
-        if skip_existing:
+        # Filter out already-processed questions using manifest
+        if manifest is not None:
+            # Compute dataset hash (cached per dataset)
+            if csv_path not in dataset_hashes:
+                dataset_hashes[csv_path] = compute_dataset_hash(csv_path)
+            dataset_hash = dataset_hashes[csv_path]
+
+            original_count = len(questions)
+            filtered_questions = []
+            for q in questions:
+                fingerprint = compute_synthetic_fingerprint_from_question(
+                    q, dataset_hash
+                )
+                if fingerprint is None:
+                    # Can't compute fingerprint (no template_name), include it
+                    filtered_questions.append(q)
+                    continue
+                # Check manifest - include_failures=True means skip failures too (unless retry_failed)
+                if manifest.has_synthetic(
+                    fingerprint, include_failures=not retry_failed
+                ):
+                    continue  # Skip - already processed
+                filtered_questions.append(q)
+            questions = filtered_questions
+            skipped = original_count - len(questions)
+            if skipped > 0:
+                ui.base.console.print(
+                    f"  [dim]{dataset_name}: skipping {skipped} cached[/dim]"
+                )
+
+        # Legacy skip_existing support (for backward compatibility)
+        elif skip_existing:
             original_count = len(questions)
             questions = [
                 q
@@ -444,7 +549,9 @@ async def main(
         # Filter by difficulty if specified
         if difficulties:
             allowed = {d.upper() for d in difficulties}
-            questions = [q for q in questions if q.get("difficulty", "").upper() in allowed]
+            questions = [
+                q for q in questions if q.get("difficulty", "").upper() in allowed
+            ]
 
         if max_questions and len(questions) > max_questions:
             questions = questions[:max_questions]
@@ -452,10 +559,12 @@ async def main(
         if not questions:
             continue  # Skip dataset if all questions already processed
 
-        tasks_to_run.append((dataset_name, csv_path, questions))
+        # Get dataset hash for this task (for manifest recording)
+        task_dataset_hash = dataset_hashes.get(csv_path) if manifest else None
+        tasks_to_run.append((dataset_name, csv_path, questions, task_dataset_hash))
 
     # Initialize progress tracking for GUI
-    for name, _, questions in tasks_to_run:
+    for name, _, questions, _ in tasks_to_run:
         progress.set_dataset(name, len(questions))
 
     all_episodes = []
@@ -476,8 +585,10 @@ async def main(
                 ui=ui,
                 semaphore=semaphore,
                 session_id=session_id,
+                manifest=manifest,
+                dataset_hash=task_hash,
             )
-            for name, csv_path, questions in tasks_to_run
+            for name, csv_path, questions, task_hash in tasks_to_run
         ]
         results = await asyncio.gather(*coros, return_exceptions=True)
 
@@ -503,7 +614,7 @@ async def main(
             )
     else:
         # Sequential execution
-        for name, csv_path, questions in tasks_to_run:
+        for name, csv_path, questions, task_hash in tasks_to_run:
             progress.set_current(name)
             _, episodes, failures = await process_dataset_task(
                 dataset_name=name,
@@ -514,6 +625,8 @@ async def main(
                 sampling_args=sampling_args,
                 ui=ui,
                 session_id=session_id,
+                manifest=manifest,
+                dataset_hash=task_hash,
             )
             all_episodes.extend(episodes)
             all_failures.extend(failures)
@@ -615,6 +728,16 @@ if __name__ == "__main__":
         default=None,
         help="Filter to specific difficulties (e.g., HARD VERY_HARD)",
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Ignore manifest cache (no read, no write)",
+    )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="Retry questions that previously failed validation",
+    )
     args = parser.parse_args()
 
     try:
@@ -628,6 +751,8 @@ if __name__ == "__main__":
                     n_workers=args.n_workers,
                     gui_progress=args.gui_progress,
                     difficulties=args.difficulties,
+                    no_cache=args.no_cache,
+                    retry_failed=args.retry_failed,
                 )
             )
         )

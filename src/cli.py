@@ -625,6 +625,144 @@ def cmd_stats(questions: bool, episodes: bool, gaps: bool):
     return 0
 
 
+# ============= Manifest Command =============
+
+
+def cmd_manifest_summary():
+    """Show manifest summary - cached questions and template changes."""
+    from src.datagen.manifest import DatagenManifest, compute_dataset_hash
+    from src.core.config import config
+
+    manifest = DatagenManifest()
+    manifest.load()
+
+    if not manifest.path.exists():
+        console.print(
+            "[dim]No manifest found. Run data generation to create one.[/dim]"
+        )
+        return 0
+
+    stats = manifest.stats()
+    total = stats["synthetic_total"] + stats["llm_total"]
+
+    console.print()
+    console.print(Panel.fit("[bold]Manifest Summary[/bold]", style="cyan"))
+    console.print(f"[dim]Location: {manifest.path}[/dim]")
+    console.print(f"[dim]Total entries: {total}[/dim]")
+    console.print()
+
+    # Overall stats
+    table = Table(title="Overall Statistics", show_header=True, box=None)
+    table.add_column("Type", style="cyan")
+    table.add_column("Success", style="green", justify="right")
+    table.add_column("Failure", style="red", justify="right")
+    table.add_column("Total", justify="right")
+
+    table.add_row(
+        "Synthetic",
+        str(stats["synthetic_success"]),
+        str(stats["synthetic_failure"]),
+        str(stats["synthetic_total"]),
+    )
+    table.add_row(
+        "LLM",
+        str(stats["llm_success"]),
+        str(stats["llm_failure"]),
+        str(stats["llm_total"]),
+    )
+    console.print(table)
+    console.print()
+
+    # Dataset summary
+    ds_summary = manifest.dataset_summary()
+    if ds_summary:
+        ds_table = Table(title="By Dataset", show_header=True, box=None)
+        ds_table.add_column("Dataset", style="cyan")
+        ds_table.add_column("Synth OK", style="green", justify="right")
+        ds_table.add_column("Synth Fail", style="red", justify="right")
+        ds_table.add_column("LLM OK", style="green", justify="right")
+        ds_table.add_column("LLM Fail", style="red", justify="right")
+        ds_table.add_column("Models", style="dim")
+
+        for ds, data in sorted(ds_summary.items()):
+            models = ", ".join(data["models"][:2])  # Show first 2 models
+            if len(data["models"]) > 2:
+                models += f" +{len(data['models']) - 2}"
+            ds_table.add_row(
+                ds[:30],  # Truncate long names
+                str(data["synthetic_success"]),
+                str(data["synthetic_failure"]),
+                str(data["llm_success"]),
+                str(data["llm_failure"]),
+                models or "-",
+            )
+
+        console.print(ds_table)
+        console.print()
+
+    # Template summary
+    tmpl_summary = manifest.template_summary()
+    if tmpl_summary:
+        tmpl_table = Table(title="By Template (Synthetic)", show_header=True, box=None)
+        tmpl_table.add_column("Template", style="cyan")
+        tmpl_table.add_column("Success", style="green", justify="right")
+        tmpl_table.add_column("Failure", style="red", justify="right")
+
+        for tmpl, data in sorted(tmpl_summary.items(), key=lambda x: -x[1]["success"]):
+            tmpl_table.add_row(
+                tmpl[:40],
+                str(data["success"]),
+                str(data["failure"]),
+            )
+
+        console.print(tmpl_table)
+        console.print()
+
+    # Model summary
+    model_summary = manifest.model_summary()
+    if model_summary and any(m != "unknown" for m in model_summary.keys()):
+        model_table = Table(title="By Model", show_header=True, box=None)
+        model_table.add_column("Model", style="cyan")
+        model_table.add_column("Synthetic", justify="right")
+        model_table.add_column("LLM", justify="right")
+        model_table.add_column("Total", justify="right")
+
+        for model, data in sorted(model_summary.items(), key=lambda x: -x[1]["total"]):
+            if model == "unknown":
+                continue
+            model_table.add_row(
+                model,
+                str(data["synthetic"]),
+                str(data["llm"]),
+                str(data["total"]),
+            )
+
+        console.print(model_table)
+        console.print()
+
+    # Template change detection (if we have CSV sources)
+    csv_sources = config.csv_sources
+    if isinstance(csv_sources, str):
+        csv_sources = [csv_sources]
+
+    if csv_sources and stats["synthetic_total"] > 0:
+        try:
+            # Use first dataset for change detection
+            first_csv = csv_sources[0]
+            dataset_hash = compute_dataset_hash(first_csv)
+            changes = manifest.detect_template_changes(dataset_hash)
+
+            if changes:
+                console.print("[yellow]Template Changes Detected:[/yellow]")
+                for tmpl, reason in sorted(changes.items()):
+                    console.print(f"  [yellow]•[/yellow] {tmpl}: {reason}")
+                console.print()
+        except Exception:
+            pass  # Silently skip if we can't compute hash
+
+    return 0
+
+
 # ============= Profiler Command =============
 
 
@@ -973,6 +1111,9 @@ Examples:
         "--max-k", type=int, default=None, help="Max k for triangulation profiling"
     )
 
+    # manifest
+    subparsers.add_parser("manifest", help="Show manifest summary and template changes")
+
     return parser
 
 
@@ -1064,6 +1205,9 @@ def main():
             episodes_dir=args.episodes_dir,
             max_k=args.max_k,
         )
+
+    elif args.command == "manifest":
+        return cmd_manifest_summary()
 
     return 0
 

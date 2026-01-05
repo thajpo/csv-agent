@@ -172,6 +172,104 @@ For batch processing, containers are created once and reused (`batch_triangulate
 - Comments describing future code instead of current line
 - Defensive checks for variables that should always exist (check control flow exhaustiveness instead)
 
+## Project Philosophy
+
+**Design Principles**
+- **Simplicity over complexity** - Avoid over-engineering. If a simple solution works, use it.
+- **Fail fast** - Strict validation, no defensive fallbacks. Errors should surface immediately.
+- **No backward compatibility** - If a format/schema changes, users regenerate data. Clean breaks over migration code.
+- **Correctness over convenience** - Hash full file contents, not mtimes. Verify answers strictly.
+
+**Data Generation Goals**
+- Build a high-quality training dataset for CSV analysis agents
+- Questions should require multi-step reasoning and data exploration
+- Two question sources: deterministic templates (synthetic) and LLM exploration (llm)
+- Teacher triangulation ensures answer correctness before inclusion in training data
+
+**What Makes Good Training Data**
+- Verified episodes where gold trace matches majority of consistency traces
+- Questions that require discovery (find the column with highest X) not just computation
+- Diverse difficulty levels and statistical techniques
+- Failed traces within successful triangulations are useful as DPO negative examples
+
+## Data Generation Caching (Manifest)
+
+The datagen pipeline uses a manifest to track processed questions and avoid redundant work.
+The manifest is for datagen only; episodes are for training. These are separate concerns.
+
+### Manifest Location
+
+`data/datagen_manifest.jsonl` (JSONL format for append-safety)
+
+### Fingerprinting Strategy
+
+**Synthetic questions** (deterministic - fingerprint the input):
+```python
+fingerprint = hash_artifact({
+    "template_code": template.code_template,
+    "alternative_codes": template.alternative_code_templates or [],
+    "params": params,
+    "dataset_hash": content_hash(csv_path),  # Full file content
+})
+```
+
+**LLM questions** (non-deterministic - fingerprint the output):
+```python
+fingerprint = hash_artifact({
+    "question_text": normalize(question_text),  # Lowercase, strip punctuation
+    "dataset_hash": content_hash(csv_path),
+})
+```
+
+### What Gets Tracked
+
+| Source | Outcome | Save Episode? | Save to Manifest? |
+|--------|---------|---------------|-------------------|
+| Synthetic | Answer matches ground truth | Yes | Yes (success) |
+| Synthetic | Answer mismatch | No | Yes (failure) |
+| LLM | Gold matches majority | Yes (verified=True) | Yes (success) |
+| LLM | Gold doesn't match majority | No | Yes (failure) |
+
+### Manifest Entry Schema
+
+Each entry tracks:
+- `fingerprint` - Unique hash for the question
+- `status` - "success" or "failure"
+- `dataset` - Dataset name
+- `timestamp` - When processed
+- `episode_id` - Episode ID (if successful)
+- `model` - Model used for triangulation/validation
+- `elapsed_seconds` - Processing time (avg across traces for LLM)
+- `template_name` / `template_params` - For synthetic questions
+- `question_text` / `n_consistency` - For LLM questions
+
+### CLI Commands
+
+**View manifest summary:**
+```bash
+csvagent manifest
+```
+
+Shows:
+- Overall statistics (success/failure counts)
+- Stats by dataset
+- Stats by template (synthetic)
+- Stats by model
+- Template changes detected (new or modified templates)
+
+**Generation flags:**
+- `(default)` - Check manifest, skip already-processed questions
+- `--retry-failed` - Re-run entries where status=failure
+- `--no-cache` - Ignore manifest entirely (no read, no write)
+
+To fully reset: delete `data/datagen_manifest.jsonl`
+
+### Concurrent Safety
+
+The manifest uses JSONL append format. Multiple concurrent jobs can safely append.
+On load, later entries override earlier ones (last-write-wins for duplicates).
+This means concurrent runs may duplicate some work, but won't corrupt data.
+
 ## Directory Structure
 
 ```
