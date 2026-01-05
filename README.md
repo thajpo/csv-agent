@@ -161,6 +161,33 @@ Settings are in `src/core/config.py` (Pydantic models). Key fields:
 
 ---
 
+## Caching & Incremental Generation
+
+The pipeline uses a manifest (`data/datagen_manifest.jsonl`) to track processed questions. This enables:
+
+- **Skip redundant work** - Already-processed questions are skipped automatically
+- **Resume interrupted runs** - Just re-run the command, it picks up where it left off
+- **Template change detection** - When template code changes, only affected questions re-run
+
+```bash
+# View manifest summary
+csvagent manifest
+
+# Force re-run of failed questions
+csvagent generate episodes --synth --retry-failed
+
+# Bypass cache entirely
+csvagent generate episodes --synth --no-cache
+```
+
+The manifest tracks fingerprints based on:
+- **Synthetic**: template code + params + dataset content hash
+- **LLM**: normalized question text + dataset content hash
+
+Changing template code automatically invalidates cached results for that template.
+
+---
+
 ## Adding Datasets from Kaggle
 
 ```bash

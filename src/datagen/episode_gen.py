@@ -40,6 +40,11 @@ from src.utils.docker import (
     check_resource_availability,
 )
 from src.envs.container_pool import ContainerPool
+from src.datagen.manifest import (
+    DatagenManifest,
+    compute_dataset_hash,
+    compute_llm_fingerprint,
+)
 
 
 @dataclass
@@ -55,11 +60,13 @@ class CSVTask:
 
 def make_signal_handler(session_id: str):
     """Create a signal handler that cleans up only this session's containers."""
+
     def handler(signum, frame):
         print(f"\n\n🛑 Interrupted! Cleaning up session {session_id} containers...")
         cleanup_session(session_id)
         print("✓ Cleanup complete")
         sys.exit(0)
+
     return handler
 
 
@@ -256,6 +263,8 @@ async def process_csv_task(
     verified_only: bool,
     ui: EpisodeGenUI,
     external_container: Any = None,
+    manifest: DatagenManifest | None = None,
+    dataset_hash: str | None = None,
 ) -> list[EpisodeJSONL]:
     """
     Process a single CSV task and return generated episodes.
@@ -265,6 +274,8 @@ async def process_csv_task(
     Args:
         external_container: Optional pre-created container from ContainerPool.
                            If provided, the container is reused instead of created.
+        manifest: Optional manifest for recording results
+        dataset_hash: Optional dataset hash for fingerprinting
     """
     # Generate data overview
     data_overview = generate_data_overview(task.csv_path)
@@ -290,25 +301,52 @@ async def process_csv_task(
     episodes = []
     failures = []
     for r in results:
+        question_text = r.question.get("question_text", r.question.get("question", ""))
+
+        # Compute fingerprint for manifest recording
+        fingerprint = None
+        if manifest is not None and dataset_hash is not None:
+            fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
+
         if not r.verified:
             # Log unverified for later analysis
-            failures.append({
-                "question": r.question.get("question_text", r.question.get("question", ""))[:100],
-                "gold_answer": r.gold_trace.get("final_answer") if r.gold_trace else None,
-                "gold_success": r.gold_trace.get("success") if r.gold_trace else False,
-                "majority_answer": r.majority_answer_hash,
-                "majority_count": r.majority_count,
-                "n_consistency": len(r.consistency_results),
-            })
+            failures.append(
+                {
+                    "question": question_text[:100],
+                    "gold_answer": r.gold_trace.get("final_answer")
+                    if r.gold_trace
+                    else None,
+                    "gold_success": r.gold_trace.get("success")
+                    if r.gold_trace
+                    else False,
+                    "majority_answer": r.majority_answer_hash,
+                    "majority_count": r.majority_count,
+                    "n_consistency": len(r.consistency_results),
+                }
+            )
+
+            # Record failure to manifest
+            if manifest is not None and fingerprint is not None:
+                manifest.record_llm(
+                    fingerprint=fingerprint,
+                    status="failure",
+                    dataset=task.dataset_name,
+                    question_text=question_text,
+                    model=teacher_model,
+                    n_consistency=len(r.consistency_results),
+                    elapsed_seconds=r.timing_metadata.get("avg_elapsed"),
+                )
+
             if verified_only:
                 continue
 
         question_obj = Question.from_dict(r.question)
         consistency_traces = [trace for trace, _ in r.consistency_results]
         n_succeeded = sum(1 for t in consistency_traces if t["success"])
+        episode_id = str(uuid.uuid4())
 
         episode_jsonl = EpisodeJSONL(
-            episode_id=str(uuid.uuid4()),
+            episode_id=episode_id,
             timestamp=datetime.now(),
             csv_source=task.csv_path,
             question=QADict(
@@ -324,6 +362,7 @@ async def process_csv_task(
                 output_type=question_obj.output_type,
                 output_schema=question_obj.output_schema,
                 ground_truth_hash=question_obj.ground_truth_hash,
+                ground_truth_hashes=question_obj.ground_truth_hashes,
                 ground_truth=question_obj.ground_truth,
             ),
             gold_trace=r.gold_trace,
@@ -346,6 +385,19 @@ async def process_csv_task(
 
         episodes.append(episode_jsonl)
 
+        # Record success to manifest (only for verified episodes)
+        if r.verified and manifest is not None and fingerprint is not None:
+            manifest.record_llm(
+                fingerprint=fingerprint,
+                status="success",
+                dataset=task.dataset_name,
+                question_text=question_text,
+                episode_id=episode_id,
+                model=teacher_model,
+                n_consistency=len(r.consistency_results),
+                elapsed_seconds=r.timing_metadata.get("avg_elapsed"),
+            )
+
     return episodes, failures
 
 
@@ -357,6 +409,8 @@ async def main(
     skip_difficulty_filter: bool = False,
     difficulties: list[str] | None = None,
     skip_existing: set | None = None,
+    no_cache: bool = False,
+    retry_failed: bool = False,
 ):
     # Create global UI instance
     ui = EpisodeGenUI()
@@ -431,8 +485,47 @@ async def main(
         # Remove tasks with no questions after filtering
         tasks = [t for t in tasks if t.questions]
 
-    # Skip questions that already have episodes (append mode)
-    if skip_existing:
+    # Load manifest for caching (unless --no-cache)
+    manifest = None
+    dataset_hashes: dict[str, str] = {}
+    if not no_cache:
+        manifest = DatagenManifest()
+        manifest.load()
+        stats = manifest.stats()
+        if stats["llm_total"] > 0:
+            ui.base.print_status(
+                f"Manifest loaded: {stats['llm_success']} success, "
+                f"{stats['llm_failure']} failures"
+            )
+
+        # Filter questions using manifest
+        original_total = sum(len(t.questions) for t in tasks)
+        for task in tasks:
+            # Compute dataset hash (cached)
+            if task.csv_path not in dataset_hashes:
+                dataset_hashes[task.csv_path] = compute_dataset_hash(task.csv_path)
+            dataset_hash = dataset_hashes[task.csv_path]
+
+            filtered_questions = []
+            for q in task.questions:
+                question_text = q.get("question_text", q.get("question", ""))
+                fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
+                # include_failures=True means skip failures too (unless retry_failed)
+                if manifest.has_llm(fingerprint, include_failures=not retry_failed):
+                    continue  # Skip - already processed
+                filtered_questions.append(q)
+            task.questions = filtered_questions
+
+        # Remove tasks with no questions after filtering
+        tasks = [t for t in tasks if t.questions]
+        new_total = sum(len(t.questions) for t in tasks)
+        if original_total > new_total:
+            ui.base.print_status(
+                f"Skipping {original_total - new_total} cached questions"
+            )
+
+    # Legacy skip_existing support (for backward compatibility)
+    elif skip_existing:
         original_total = sum(len(t.questions) for t in tasks)
         for task in tasks:
             task.questions = [
@@ -499,7 +592,7 @@ async def main(
         )
         ui.base.print_error(
             "   Wait for other scripts to finish, or run: "
-            "uv run python -c \"from src.utils.docker import cleanup_csv_sandbox_containers; cleanup_csv_sandbox_containers()\""
+            'uv run python -c "from src.utils.docker import cleanup_csv_sandbox_containers; cleanup_csv_sandbox_containers()"'
         )
         return 1
     elif resource_status.recommended_max_containers < max_concurrent:
@@ -535,6 +628,8 @@ async def main(
     ) -> tuple[CSVTask, list[EpisodeJSONL], list[dict]]:
         # Acquire container from pool (blocks until one is available)
         container = await pool.acquire(task.csv_path)
+        # Get dataset hash if manifest is active
+        task_dataset_hash = dataset_hashes.get(task.csv_path) if manifest else None
         try:
             episodes, failures = await process_csv_task(
                 task=task,
@@ -546,6 +641,8 @@ async def main(
                 verified_only=verified_only,
                 ui=ui,
                 external_container=container,
+                manifest=manifest,
+                dataset_hash=task_dataset_hash,
             )
             return (task, episodes, failures)
         finally:
