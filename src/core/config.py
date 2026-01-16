@@ -106,6 +106,7 @@ class Config(BaseModel):
         default={"EASY": 0.30, "MEDIUM": 0.30, "HARD": 0.20, "VERY_HARD": 0.20}
     )
     synthetic_verbalization_candidates: int = 5
+    synthetic_skip_verbalization: bool = True  # Use mechanical questions (template.description)
     synthetic_question_validation_enabled: bool = True
     synthetic_question_validation_model: str | None = None
     synthetic_question_validation_max_turns: int | None = None
