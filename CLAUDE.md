@@ -260,7 +260,6 @@ Shows:
 **Generation flags:**
 - `(default)` - Check manifest, skip already-processed questions
 - `--retry-failed` - Re-run entries where status=failure
-- `--no-cache` - Ignore manifest entirely (no read, no write)
 
 To fully reset: delete `data/datagen_manifest.jsonl`
 

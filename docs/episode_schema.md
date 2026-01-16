@@ -36,18 +36,21 @@ Contains the question and ground truth for evaluation.
     "hint": "Filter by target==1, then compute mean of age column",
     "difficulty": "EASY | MEDIUM | HARD | VERY_HARD",
     "n_steps": 3,
-    
+
     "template_name": "filter_aggregate",
     "template_params": {"column": "age", "filter_col": "target"},
     "output_type": "float",
     "output_schema": null,
-    
+
     "ground_truth": 54.3,
-    "ground_truth_hash": "a1b2c3d4e5f67890"
+    "ground_truth_hash": "a1b2c3d4e5f67890",
+    "ground_truth_hashes": ["a1b2c3d4e5f67890", "b2c3d4e5f6789012"]
 }
 ```
 
-**Note**: `ground_truth` is included for synthetic (template-based) questions. For LLM-generated questions, this may be null and correctness is determined by triangulation.
+**Notes**:
+- `ground_truth` is included for synthetic (template-based) questions. For LLM-generated questions, this may be null and correctness is determined by triangulation.
+- `ground_truth_hashes` contains ALL valid answer hashes when a question has multiple valid interpretations (e.g., "most variable" could mean highest variance, coefficient of variation, or standard deviation). Use this for multi-outcome validation: an answer is correct if it matches ANY hash in this list.
 
 ---
 
