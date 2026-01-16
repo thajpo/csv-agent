@@ -409,7 +409,6 @@ async def main(
     skip_difficulty_filter: bool = False,
     difficulties: list[str] | None = None,
     skip_existing: set | None = None,
-    no_cache: bool = False,
     retry_failed: bool = False,
 ):
     # Create global UI instance
@@ -485,47 +484,43 @@ async def main(
         # Remove tasks with no questions after filtering
         tasks = [t for t in tasks if t.questions]
 
-    # Load manifest for caching (unless --no-cache)
-    manifest = None
+    # Load manifest for caching
     dataset_hashes: dict[str, str] = {}
-    if not no_cache:
-        manifest = DatagenManifest()
-        manifest.load()
-        stats = manifest.stats()
-        if stats["llm_total"] > 0:
-            ui.base.print_status(
-                f"Manifest loaded: {stats['llm_success']} success, "
-                f"{stats['llm_failure']} failures"
-            )
+    manifest = DatagenManifest()
+    manifest.load()
+    stats = manifest.stats()
+    if stats["llm_total"] > 0:
+        ui.base.print_status(
+            f"Manifest loaded: {stats['llm_success']} success, "
+            f"{stats['llm_failure']} failures"
+        )
 
-        # Filter questions using manifest
-        original_total = sum(len(t.questions) for t in tasks)
-        for task in tasks:
-            # Compute dataset hash (cached)
-            if task.csv_path not in dataset_hashes:
-                dataset_hashes[task.csv_path] = compute_dataset_hash(task.csv_path)
-            dataset_hash = dataset_hashes[task.csv_path]
+    # Filter questions using manifest
+    original_total = sum(len(t.questions) for t in tasks)
+    for task in tasks:
+        # Compute dataset hash (cached)
+        if task.csv_path not in dataset_hashes:
+            dataset_hashes[task.csv_path] = compute_dataset_hash(task.csv_path)
+        dataset_hash = dataset_hashes[task.csv_path]
 
-            filtered_questions = []
-            for q in task.questions:
-                question_text = q.get("question_text", q.get("question", ""))
-                fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
-                # include_failures=True means skip failures too (unless retry_failed)
-                if manifest.has_llm(fingerprint, include_failures=not retry_failed):
-                    continue  # Skip - already processed
-                filtered_questions.append(q)
-            task.questions = filtered_questions
+        filtered_questions = []
+        for q in task.questions:
+            question_text = q.get("question_text", q.get("question", ""))
+            fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
+            # include_failures=True means skip failures too (unless retry_failed)
+            if manifest.has_llm(fingerprint, include_failures=not retry_failed):
+                continue  # Skip - already processed
+            filtered_questions.append(q)
+        task.questions = filtered_questions
 
-        # Remove tasks with no questions after filtering
-        tasks = [t for t in tasks if t.questions]
-        new_total = sum(len(t.questions) for t in tasks)
-        if original_total > new_total:
-            ui.base.print_status(
-                f"Skipping {original_total - new_total} cached questions"
-            )
+    # Remove tasks with no questions after filtering
+    tasks = [t for t in tasks if t.questions]
+    new_total = sum(len(t.questions) for t in tasks)
+    if original_total > new_total:
+        ui.base.print_status(f"Skipping {original_total - new_total} cached questions")
 
     # Legacy skip_existing support (for backward compatibility)
-    elif skip_existing:
+    if skip_existing:
         original_total = sum(len(t.questions) for t in tasks)
         for task in tasks:
             task.questions = [
