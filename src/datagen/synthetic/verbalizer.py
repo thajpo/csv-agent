@@ -16,6 +16,12 @@ from src.core.model import APILLM
 
 VERBALIZATION_PROMPT = '''You are writing questions for a data science training dataset.
 
+## MANDATORY CONSTRAINT (VIOLATIONS CORRUPT TRAINING DATA):
+The hint MUST match EXACTLY what the code does. DO NOT add exclusions or constraints not in the code.
+- If code uses `df.select_dtypes('number')` → hint says "all numeric columns"
+- NEVER say "excluding the target", "except the charge column", "without X" unless the code EXPLICITLY does this
+- Look at the code: does it have `.drop()`, filtering, or exclusion logic? If NO, the hint cannot exclude anything.
+
 ## DATASET:
 {dataset_description}
 
@@ -48,9 +54,18 @@ GOOD QUESTIONS (short, curious, don't describe the method):
 - "Are there any strong correlations between the clinical measurements?"
 - "Does cholesterol differ significantly between outcome groups?"
 
-BAD QUESTIONS (long, mechanical, describe the algorithm):
-- "Identify the column with highest variance, then find the three most correlated columns, fit a regression, and report the R-squared..." ← TOO LONG, DESCRIBES STEPS
-- "Compute the Pearson correlation between all numeric columns and return the pair with the highest absolute value..." ← DESCRIBES HOW TO DO IT
+BAD QUESTIONS:
+- "Identify the column with highest variance, then find the three most correlated columns..." ← TOO LONG, DESCRIBES STEPS
+- "Compute the Pearson correlation between all numeric columns and return..." ← DESCRIBES HOW TO DO IT
+
+BAD HINTS (adding constraints not in code - THIS CORRUPTS TRAINING DATA):
+- "Find the column with highest variance (excluding the target)..." ← WRONG if code doesn't exclude
+- "Examine all numeric columns except the charge column..." ← WRONG if code uses all columns
+- "Among the feature columns (not including the target)..." ← WRONG if code includes all
+
+GOOD HINTS (matching what the code actually does):
+- "Examine all numeric columns, find the one with highest variance..." ← CORRECT if code uses df.select_dtypes('number')
+- "Compute variance for each numeric column and select the maximum..." ← CORRECT, no false exclusions
 
 RULES:
 1. Question must be 1-3 sentences MAX
@@ -66,7 +81,7 @@ RULES:
 OUTPUT (respond with ONLY this JSON):
 {{
     "question": "Short curious question here. Return as JSON, e.g.: {{\"key\": \"<placeholder>\"}}",
-    "hint": "Brief guidance on approach"
+    "hint": "Brief guidance on approach (NO exclusions unless code excludes)"
 }}
 
 REQUIRED OUTPUT KEYS: {output_schema}'''
@@ -74,6 +89,27 @@ REQUIRED OUTPUT KEYS: {output_schema}'''
 
 class QuestionVerbalizer:
     """Convert code compositions into natural language questions using an LLM."""
+
+    # Phrases that indicate exclusion in hints
+    EXCLUSION_PHRASES = [
+        "excluding",
+        "except the",
+        "except for",
+        "without the",
+        "other than",
+        "not including",
+        "ignoring the",
+    ]
+
+    # Patterns in code that indicate intentional exclusion
+    CODE_EXCLUSION_PATTERNS = [
+        ".drop(",
+        ".drop(columns",
+        "!= ",
+        "exclude",
+        "remaining_cols",
+        "feature_cols",  # Often used after excluding target
+    ]
 
     def __init__(self, model: str, sampling_args: dict):
         """
@@ -85,6 +121,31 @@ class QuestionVerbalizer:
         """
         self.llm = APILLM(model=model, sampling_args=sampling_args)
 
+    def _hint_has_spurious_exclusion(self, hint: str, code: str) -> bool:
+        """
+        Check if hint adds exclusion constraints not present in the code.
+
+        Returns True if the hint is invalid (has exclusion but code doesn't).
+        """
+        hint_lower = hint.lower()
+        code_lower = code.lower()
+
+        # Check if hint contains exclusion language
+        hint_has_exclusion = any(
+            phrase in hint_lower for phrase in self.EXCLUSION_PHRASES
+        )
+
+        if not hint_has_exclusion:
+            return False  # No exclusion in hint, it's fine
+
+        # Hint has exclusion - check if code justifies it
+        code_has_exclusion = any(
+            pattern in code_lower for pattern in self.CODE_EXCLUSION_PATTERNS
+        )
+
+        # If hint has exclusion but code doesn't, it's spurious
+        return not code_has_exclusion
+
     async def verbalize(
         self,
         code: str,
@@ -94,6 +155,7 @@ class QuestionVerbalizer:
         data_overview: str = "",
         dataset_description: str = "",
         banned_words: list[str] | None = None,
+        max_attempts: int = 3,
     ) -> tuple[str, str, str]:
         """
         Convert code into a natural language question.
@@ -106,9 +168,13 @@ class QuestionVerbalizer:
             data_overview: Text summary of the dataset (from generate_data_overview)
             dataset_description: Human description of what the dataset contains
             banned_words: List of method terms to avoid in the question
+            max_attempts: Maximum attempts to generate a valid hint (default: 3)
 
         Returns:
             Tuple of (question_text, hint, raw_response)
+
+        Raises:
+            ValueError: If unable to generate a valid hint after max_attempts
         """
         # Format ground truth for display
         if isinstance(ground_truth, dict):
@@ -129,13 +195,28 @@ class QuestionVerbalizer:
             banned_words=banned_str,
         )
 
-        # Call LLM
-        response = await self.llm(prompt)
+        # Try multiple times to get a valid hint
+        for attempt in range(max_attempts):
+            response = await self.llm(prompt)
+            question, hint = self._parse_response(response)
 
-        # Parse response
-        question, hint = self._parse_response(response)
+            # Validate hint doesn't add spurious exclusions
+            is_spurious = self._hint_has_spurious_exclusion(hint, code)
 
-        return question, hint, response
+            if not is_spurious:
+                return question, hint, response
+
+            # Log warning on retry
+            print(
+                f"[verbalizer] SPURIOUS EXCLUSION DETECTED (attempt {attempt + 1}/{max_attempts}): "
+                f"{hint[:80]}..."
+            )
+
+        # All attempts failed - raise error
+        raise ValueError(
+            f"Could not generate valid hint after {max_attempts} attempts. "
+            f"Last hint added exclusion not in code: {hint[:100]}"
+        )
 
     def _parse_response(self, response: str) -> tuple[str, str]:
         """Parse LLM response to extract question and hint."""
