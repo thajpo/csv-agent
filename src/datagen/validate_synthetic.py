@@ -407,7 +407,6 @@ async def main(
     gui_progress: str | None = None,
     skip_existing: set | None = None,
     difficulties: list[str] | None = None,
-    no_cache: bool = False,
     retry_failed: bool = False,
 ):
     ui = EpisodeGenUI()
@@ -475,17 +474,15 @@ async def main(
     if not append_mode and output_jsonl.exists():
         output_jsonl.unlink()
 
-    # Load manifest for caching (unless --no-cache)
-    manifest = None
-    if not no_cache:
-        manifest = DatagenManifest()
-        manifest.load()
-        stats = manifest.stats()
-        if stats["synthetic_total"] > 0:
-            ui.base.print_status(
-                f"Manifest loaded: {stats['synthetic_success']} success, "
-                f"{stats['synthetic_failure']} failures"
-            )
+    # Load manifest for caching
+    manifest = DatagenManifest()
+    manifest.load()
+    stats = manifest.stats()
+    if stats["synthetic_total"] > 0:
+        ui.base.print_status(
+            f"Manifest loaded: {stats['synthetic_success']} success, "
+            f"{stats['synthetic_failure']} failures"
+        )
 
     # Cache dataset hashes to avoid recomputing
     dataset_hashes: dict[str, str] = {}
@@ -503,48 +500,29 @@ async def main(
         questions, _ = load_questions(str(qf))
 
         # Filter out already-processed questions using manifest
-        if manifest is not None:
-            # Compute dataset hash (cached per dataset)
-            if csv_path not in dataset_hashes:
-                dataset_hashes[csv_path] = compute_dataset_hash(csv_path)
-            dataset_hash = dataset_hashes[csv_path]
+        # Compute dataset hash (cached per dataset)
+        if csv_path not in dataset_hashes:
+            dataset_hashes[csv_path] = compute_dataset_hash(csv_path)
+        dataset_hash = dataset_hashes[csv_path]
 
-            original_count = len(questions)
-            filtered_questions = []
-            for q in questions:
-                fingerprint = compute_synthetic_fingerprint_from_question(
-                    q, dataset_hash
-                )
-                if fingerprint is None:
-                    # Can't compute fingerprint (no template_name), include it
-                    filtered_questions.append(q)
-                    continue
-                # Check manifest - include_failures=True means skip failures too (unless retry_failed)
-                if manifest.has_synthetic(
-                    fingerprint, include_failures=not retry_failed
-                ):
-                    continue  # Skip - already processed
+        original_count = len(questions)
+        filtered_questions = []
+        for q in questions:
+            fingerprint = compute_synthetic_fingerprint_from_question(q, dataset_hash)
+            if fingerprint is None:
+                # Can't compute fingerprint (no template_name), include it
                 filtered_questions.append(q)
-            questions = filtered_questions
-            skipped = original_count - len(questions)
-            if skipped > 0:
-                ui.base.console.print(
-                    f"  [dim]{dataset_name}: skipping {skipped} cached[/dim]"
-                )
-
-        # Legacy skip_existing support (for backward compatibility)
-        elif skip_existing:
-            original_count = len(questions)
-            questions = [
-                q
-                for q in questions
-                if q.get("id", q.get("ground_truth_hash", "")) not in skip_existing
-            ]
-            skipped = original_count - len(questions)
-            if skipped > 0:
-                ui.base.console.print(
-                    f"  [dim]{dataset_name}: skipping {skipped} already processed[/dim]"
-                )
+                continue
+            # Check manifest - include_failures=True means skip failures too (unless retry_failed)
+            if manifest.has_synthetic(fingerprint, include_failures=not retry_failed):
+                continue  # Skip - already processed
+            filtered_questions.append(q)
+        questions = filtered_questions
+        skipped = original_count - len(questions)
+        if skipped > 0:
+            ui.base.console.print(
+                f"  [dim]{dataset_name}: skipping {skipped} cached[/dim]"
+            )
 
         # Filter by difficulty if specified
         if difficulties:
@@ -560,7 +538,7 @@ async def main(
             continue  # Skip dataset if all questions already processed
 
         # Get dataset hash for this task (for manifest recording)
-        task_dataset_hash = dataset_hashes.get(csv_path) if manifest else None
+        task_dataset_hash = dataset_hashes.get(csv_path)
         tasks_to_run.append((dataset_name, csv_path, questions, task_dataset_hash))
 
     # Initialize progress tracking for GUI
@@ -729,11 +707,6 @@ if __name__ == "__main__":
         help="Filter to specific difficulties (e.g., HARD VERY_HARD)",
     )
     parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        help="Ignore manifest cache (no read, no write)",
-    )
-    parser.add_argument(
         "--retry-failed",
         action="store_true",
         help="Retry questions that previously failed validation",
@@ -751,7 +724,6 @@ if __name__ == "__main__":
                     n_workers=args.n_workers,
                     gui_progress=args.gui_progress,
                     difficulties=args.difficulties,
-                    no_cache=args.no_cache,
                     retry_failed=args.retry_failed,
                 )
             )
