@@ -340,7 +340,7 @@ def _has_moderate_cardinality_categorical(profile: dict, min_groups: int = 3, ma
 
 MAX_VARIANCE_MEAN = CompositionTemplate(
     name="max_variance_mean",
-    description="Find the numeric column with highest variance, then compute its mean",
+    description="Find the numeric column with highest variance (excluding identifier-like columns), then compute its mean",
     output_schema="A single number (the mean), rounded to 3 decimal places",
     code_template="""
 # Step 1: Find the column with maximum variance
@@ -398,12 +398,34 @@ print(f"Mean of {max_std_col}: {result:.4f}")
 
 submit(round(result, 3))
 """.strip(),
+        # Exclude-target alternative: exclude the highest-variance column (likely target) first
+        """
+# Step 1: Find and exclude the likely target column (highest variance)
+numeric_cols = df.select_dtypes('number')
+variances = numeric_cols.var()
+target_col = variances.idxmax()
+print(f"Excluding likely target column: {target_col} (variance: {variances[target_col]:.4f})")
+
+# Step 2: Find highest variance among remaining columns
+remaining_cols = numeric_cols.drop(columns=[target_col])
+remaining_variances = remaining_cols.var()
+max_var_col = remaining_variances.idxmax()
+hook(max_var_col, "max_var_col among non-target columns", name='max_var_col')
+print(f"Column with highest variance (excluding target): {max_var_col} (variance: {remaining_variances[max_var_col]:.4f})")
+
+# Step 3: Compute the mean of that column
+result = df[max_var_col].mean()
+hook(result, "result = df[max_var_col].mean()", name='result', depends_on=['max_var_col'])
+print(f"Mean of {max_var_col}: {result:.4f}")
+
+submit(round(result, 3))
+""".strip(),
     ],
 )
 
 MIN_MEAN_COLUMN_STD = CompositionTemplate(
     name="min_mean_column_std",
-    description="Find the numeric column with lowest mean, then compute its standard deviation",
+    description="Find the numeric column with lowest mean (excluding identifier-like columns), then compute its standard deviation",
     output_schema="A single number (the standard deviation), rounded to 3 decimal places",
     code_template="""
 # Step 1: Find the column with minimum mean
@@ -424,6 +446,51 @@ submit(round(result, 3))
     applicable_when=lambda p: _count_numeric_cols(p) >= 2,
     n_steps=3,
     difficulty="MEDIUM",
+    alternative_code_templates=[
+        # Exclude-target alternative: exclude the highest-variance column (likely target) first
+        """
+# Step 1: Find and exclude the likely target column (highest variance)
+numeric_cols = df.select_dtypes('number')
+variances = numeric_cols.var()
+target_col = variances.idxmax()
+print(f"Excluding likely target column: {target_col}")
+
+# Step 2: Find column with minimum mean among remaining columns
+remaining_cols = numeric_cols.drop(columns=[target_col])
+means = remaining_cols.mean()
+min_mean_col = means.idxmin()
+hook(min_mean_col, "min_mean_col among non-target columns", name='min_mean_col')
+print(f"Column with lowest mean (excluding target): {min_mean_col} (mean: {means[min_mean_col]:.4f})")
+
+# Step 3: Compute the standard deviation of that column
+result = df[min_mean_col].std()
+hook(result, "result = df[min_mean_col].std()", name='result', depends_on=['min_mean_col'])
+print(f"Std of {min_mean_col}: {result:.4f}")
+
+submit(round(result, 3))
+""".strip(),
+        # Exclude first numeric column alternative (sometimes used as index)
+        """
+# Step 1: Exclude the first numeric column (may be index-like)
+numeric_cols = df.select_dtypes('number')
+first_col = numeric_cols.columns[0]
+print(f"Excluding first numeric column: {first_col}")
+remaining_cols = numeric_cols.drop(columns=[first_col])
+
+# Step 2: Find column with minimum mean among remaining columns
+means = remaining_cols.mean()
+min_mean_col = means.idxmin()
+hook(min_mean_col, "min_mean_col excluding first column", name='min_mean_col')
+print(f"Column with lowest mean (excluding first): {min_mean_col} (mean: {means[min_mean_col]:.4f})")
+
+# Step 3: Compute the standard deviation of that column
+result = df[min_mean_col].std()
+hook(result, "result = df[min_mean_col].std()", name='result', depends_on=['min_mean_col'])
+print(f"Std of {min_mean_col}: {result:.4f}")
+
+submit(round(result, 3))
+""".strip(),
+    ],
 )
 
 
@@ -433,8 +500,8 @@ submit(round(result, 3))
 
 STRONGEST_CORRELATION = CompositionTemplate(
     name="strongest_correlation",
-    description="Find the pair of numeric columns with the strongest correlation",
-    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "association_score" (the association strength rounded to 4 decimal places). Example: {"columns": ["col_a", "col_b"], "association_score": 0.8470}',
+    description="Find the pair of numeric columns with the strongest absolute correlation (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "association_score" (the association strength rounded to 2 decimals places). Example: {"columns": ["col_a", "col_b"], "association_score": 0.84}',
     code_template="""
 # Step 1: Compute correlation matrix
 numeric_cols = df.select_dtypes('number')
@@ -453,18 +520,69 @@ correlation_value = corr_matrix.loc[max_corr_idx[0], max_corr_idx[1]]
 hook(correlation_value, "correlation_value extracted", name='correlation_value', depends_on=['max_corr_idx'])
 print(f"Correlation: {correlation_value:.4f}")
 
-submit({"columns": sorted(list(max_corr_idx)), "association_score": round(float(correlation_value), 4)})
+submit({"columns": sorted(list(max_corr_idx)), "association_score": round(float(correlation_value), 2)})
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 3,
     n_steps=4,
     difficulty="MEDIUM",
+    alternative_code_templates=[
+        # Exclude-target alternative: exclude the highest-variance column (likely target) from correlation
+        """
+# Step 1: Identify and exclude likely target column (highest variance)
+numeric_cols = df.select_dtypes('number')
+variances = numeric_cols.var()
+target_col = variances.idxmax()
+print(f"Excluding likely target column: {target_col}")
+feature_cols = numeric_cols.drop(columns=[target_col])
+
+# Step 2: Compute correlation matrix on remaining columns
+corr_matrix = feature_cols.corr().abs()
+hook(corr_matrix.shape, "correlation matrix computed (excluding target)", name='corr_shape')
+print(f"Correlation matrix: {corr_matrix.shape[0]} x {corr_matrix.shape[1]}")
+
+# Step 3: Find the maximum off-diagonal correlation
+np.fill_diagonal(corr_matrix.values, 0)
+max_corr_idx = corr_matrix.stack().idxmax()
+hook(max_corr_idx, "max_corr_idx among features", name='max_corr_idx')
+print(f"Strongest correlation pair (features only): {max_corr_idx}")
+
+# Step 4: Get the correlation value
+correlation_value = corr_matrix.loc[max_corr_idx[0], max_corr_idx[1]]
+hook(correlation_value, "correlation_value extracted", name='correlation_value', depends_on=['max_corr_idx'])
+print(f"Correlation: {correlation_value:.4f}")
+
+submit({"columns": sorted(list(max_corr_idx)), "association_score": round(float(correlation_value), 2)})
+""".strip(),
+        # Use signed correlation (not absolute) - strongest could be most negative
+        """
+# Step 1: Compute correlation matrix (signed, not absolute)
+numeric_cols = df.select_dtypes('number')
+corr_matrix = numeric_cols.corr()
+hook(corr_matrix.shape, "correlation matrix computed (signed)", name='corr_shape')
+print(f"Correlation matrix: {corr_matrix.shape[0]} x {corr_matrix.shape[1]}")
+
+# Step 2: Find the maximum off-diagonal correlation by absolute value
+np.fill_diagonal(corr_matrix.values, 0)
+abs_corr = corr_matrix.abs()
+max_corr_idx = abs_corr.stack().idxmax()
+hook(max_corr_idx, "max_corr_idx by absolute value", name='max_corr_idx')
+print(f"Strongest correlation pair: {max_corr_idx}")
+
+# Step 3: Get the actual (signed) correlation value, report absolute
+correlation_value = abs(corr_matrix.loc[max_corr_idx[0], max_corr_idx[1]])
+hook(correlation_value, "correlation_value (absolute)", name='correlation_value', depends_on=['max_corr_idx'])
+print(f"Correlation (absolute): {correlation_value:.4f}")
+
+submit({"columns": sorted(list(max_corr_idx)), "association_score": round(float(correlation_value), 2)})
+""".strip(),
+    ],
 )
 
 WEAKEST_CORRELATION = CompositionTemplate(
     name="weakest_correlation",
-    description="Find the pair of numeric columns with the weakest (closest to zero) correlation",
-    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "association_score" (the absolute association strength rounded to 4 decimal places). Example: {"columns": ["col_a", "col_b"], "association_score": 0.0120}',
+    description="Find the pair of numeric columns with the weakest absolute correlation (closest to zero) (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly two keys: "columns" (a list of the two column names, alphabetically sorted) and "association_score" (the absolute association strength rounded to 2 decimals places). Example: {"columns": ["col_a", "col_b"], "association_score": 0.01}',
     code_template="""
 # Step 1: Compute correlation matrix
 numeric_cols = df.select_dtypes('number')
@@ -482,12 +600,61 @@ correlation_value = corr_matrix.loc[min_corr_idx[0], min_corr_idx[1]]
 hook(correlation_value, "correlation_value extracted", name='correlation_value', depends_on=['min_corr_idx'])
 print(f"Correlation: {correlation_value:.4f}")
 
-submit({"columns": sorted(list(min_corr_idx)), "association_score": round(float(correlation_value), 4)})
+submit({"columns": sorted(list(min_corr_idx)), "association_score": round(float(correlation_value), 2)})
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 3,
     n_steps=4,
     difficulty="MEDIUM",
+    alternative_code_templates=[
+        # Exclude-target alternative: exclude the highest-variance column (likely target) from correlation
+        """
+# Step 1: Identify and exclude likely target column (highest variance)
+numeric_cols = df.select_dtypes('number')
+variances = numeric_cols.var()
+target_col = variances.idxmax()
+print(f"Excluding likely target column: {target_col}")
+feature_cols = numeric_cols.drop(columns=[target_col])
+
+# Step 2: Compute correlation matrix on remaining columns
+corr_matrix = feature_cols.corr().abs()
+hook(corr_matrix.shape, "correlation matrix computed (excluding target)", name='corr_shape')
+
+# Step 3: Find minimum correlation (mask diagonal)
+np.fill_diagonal(corr_matrix.values, np.nan)
+min_corr_idx = corr_matrix.stack().idxmin()
+hook(min_corr_idx, "min_corr_idx among features", name='min_corr_idx')
+print(f"Weakest correlation pair (features only): {min_corr_idx}")
+
+# Step 4: Get the correlation value
+correlation_value = corr_matrix.loc[min_corr_idx[0], min_corr_idx[1]]
+hook(correlation_value, "correlation_value extracted", name='correlation_value', depends_on=['min_corr_idx'])
+print(f"Correlation: {correlation_value:.4f}")
+
+submit({"columns": sorted(list(min_corr_idx)), "association_score": round(float(correlation_value), 2)})
+""".strip(),
+        # Use signed correlation (not absolute)
+        """
+# Step 1: Compute correlation matrix (signed, not absolute)
+numeric_cols = df.select_dtypes('number')
+corr_matrix = numeric_cols.corr()
+hook(corr_matrix.shape, "correlation matrix computed (signed)", name='corr_shape')
+
+# Step 2: Find minimum absolute correlation (mask diagonal)
+np.fill_diagonal(corr_matrix.values, np.nan)
+abs_corr = corr_matrix.abs()
+min_corr_idx = abs_corr.stack().idxmin()
+hook(min_corr_idx, "min_corr_idx by absolute value", name='min_corr_idx')
+print(f"Weakest correlation pair: {min_corr_idx}")
+
+# Step 3: Get the absolute correlation value
+correlation_value = abs(corr_matrix.loc[min_corr_idx[0], min_corr_idx[1]])
+hook(correlation_value, "correlation_value (absolute)", name='correlation_value', depends_on=['min_corr_idx'])
+print(f"Correlation (absolute): {correlation_value:.4f}")
+
+submit({"columns": sorted(list(min_corr_idx)), "association_score": round(float(correlation_value), 2)})
+""".strip(),
+    ],
 )
 
 
@@ -497,7 +664,7 @@ submit({"columns": sorted(list(min_corr_idx)), "association_score": round(float(
 
 CONDITIONAL_NORMALITY = CompositionTemplate(
     name="conditional_normality",
-    description="Test if column is normally distributed; report mean±std if yes, median+IQR if no",
+    description="Test if highest-variance column (excluding identifier-like columns) is normally distributed using Shapiro-Wilk at alpha=0.05 (sampled to 5000 rows if larger); report mean±std if normal, median+IQR if not",
     output_schema='A JSON object with exactly 3 keys. If normal: {"distribution": "normal", "mean": <number>, "std": <number>}. If non-normal: {"distribution": "non-normal", "median": <number>, "iqr": <number>}. The "iqr" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.',
     code_template="""
 # Step 1: Get the target column (highest variance numeric column)
@@ -631,11 +798,12 @@ submit({"count": len(id_like_cols), "columns": sorted(id_like_cols)})
 
 COUNT_OUTLIER_COLUMNS = CompositionTemplate(
     name="count_outlier_columns",
-    description="Count how many numeric columns contain outliers (beyond 3 std from mean)",
+    description="Count how many numeric columns (excluding identifier-like columns) contain outliers (beyond 3 std from mean)",
     output_schema='A JSON object with exactly 2 keys: "columns_with_outliers" (integer count of columns containing at least one outlier) and "total_outliers" (integer total count of outlier values across all columns). Example: {"columns_with_outliers": 3, "total_outliers": 47}',
     code_template="""
 # Step 1: For each numeric column, check for outliers
-numeric_cols = df.select_dtypes('number').columns
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not _is_index_column(c)]
 outlier_counts = {}
 
 for col in numeric_cols:
@@ -669,6 +837,101 @@ submit({"columns_with_outliers": cols_with_outliers, "total_outliers": total_out
         {"z_threshold": 3.0},
         {"z_threshold": 2.5},
     ],
+    alternative_code_templates=[
+        # IQR-based outliers (1.5 * IQR beyond Q1/Q3) - common alternative definition
+        """
+# Step 1: For each numeric column, check for outliers using IQR method
+numeric_cols = df.select_dtypes('number').columns
+outlier_counts = {}
+
+for col in numeric_cols:
+    Q1 = df[col].quantile(0.25)
+    Q3 = df[col].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    outliers = ((df[col] < lower_bound) | (df[col] > upper_bound)).sum()
+    outlier_counts[col] = int(outliers)
+
+hook(outlier_counts, "outlier counts per column (IQR method)", name='outlier_counts')
+print("Outlier counts per column (IQR method):")
+for col, count in sorted(outlier_counts.items(), key=lambda x: -x[1])[:5]:
+    print(f"  {col}: {count}")
+
+# Step 2: Count columns with any outliers
+cols_with_outliers = sum(1 for v in outlier_counts.values() if v > 0)
+hook(cols_with_outliers, "count of columns with outliers", name='cols_with_outliers', depends_on=['outlier_counts'])
+print(f"Columns with outliers: {cols_with_outliers}/{len(numeric_cols)}")
+
+# Step 3: Total outlier count
+total_outliers = sum(outlier_counts.values())
+hook(total_outliers, "total outliers across all columns", name='total_outliers', depends_on=['outlier_counts'])
+
+submit({"columns_with_outliers": cols_with_outliers, "total_outliers": total_outliers})
+""".strip(),
+        # Inclusive threshold (>= instead of >) for z-score method
+        """
+# Step 1: For each numeric column, check for outliers (inclusive threshold)
+numeric_cols = df.select_dtypes('number').columns
+outlier_counts = {}
+z_threshold = 3.0
+
+for col in numeric_cols:
+    mean = df[col].mean()
+    std = df[col].std()
+    if std > 0:
+        # Using >= for inclusive threshold interpretation
+        outliers = ((df[col] - mean).abs() >= z_threshold * std).sum()
+        outlier_counts[col] = int(outliers)
+
+hook(outlier_counts, "outlier counts per column (inclusive)", name='outlier_counts')
+print("Outlier counts per column (>= threshold):")
+for col, count in sorted(outlier_counts.items(), key=lambda x: -x[1])[:5]:
+    print(f"  {col}: {count}")
+
+# Step 2: Count columns with any outliers
+cols_with_outliers = sum(1 for v in outlier_counts.values() if v > 0)
+hook(cols_with_outliers, "count of columns with outliers", name='cols_with_outliers', depends_on=['outlier_counts'])
+print(f"Columns with outliers: {cols_with_outliers}/{len(numeric_cols)}")
+
+# Step 3: Total outlier count
+total_outliers = sum(outlier_counts.values())
+hook(total_outliers, "total outliers across all columns", name='total_outliers', depends_on=['outlier_counts'])
+
+submit({"columns_with_outliers": cols_with_outliers, "total_outliers": total_outliers})
+""".strip(),
+        # Using ddof=0 (population std) instead of ddof=1 (sample std)
+        """
+# Step 1: For each numeric column, check for outliers using population std
+numeric_cols = df.select_dtypes('number').columns
+outlier_counts = {}
+z_threshold = 3.0
+
+for col in numeric_cols:
+    mean = df[col].mean()
+    # Use population std (ddof=0) instead of sample std (ddof=1)
+    std = df[col].std(ddof=0)
+    if std > 0:
+        outliers = ((df[col] - mean).abs() > z_threshold * std).sum()
+        outlier_counts[col] = int(outliers)
+
+hook(outlier_counts, "outlier counts per column (population std)", name='outlier_counts')
+print("Outlier counts per column (population std):")
+for col, count in sorted(outlier_counts.items(), key=lambda x: -x[1])[:5]:
+    print(f"  {col}: {count}")
+
+# Step 2: Count columns with any outliers
+cols_with_outliers = sum(1 for v in outlier_counts.values() if v > 0)
+hook(cols_with_outliers, "count of columns with outliers", name='cols_with_outliers', depends_on=['outlier_counts'])
+print(f"Columns with outliers: {cols_with_outliers}/{len(numeric_cols)}")
+
+# Step 3: Total outlier count
+total_outliers = sum(outlier_counts.values())
+hook(total_outliers, "total outliers across all columns", name='total_outliers', depends_on=['outlier_counts'])
+
+submit({"columns_with_outliers": cols_with_outliers, "total_outliers": total_outliers})
+""".strip(),
+    ],
 )
 
 
@@ -678,7 +941,7 @@ submit({"columns_with_outliers": cols_with_outliers, "total_outliers": total_out
 
 CATEGORY_WITH_HIGHEST_TARGET_MEAN = CompositionTemplate(
     name="category_highest_target_mean",
-    description="Find which category has the highest mean for the most variable numeric column",
+    description="Find which category (from first categorical column with 2-20 unique values) has the highest mean for the highest-variance numeric column (excluding identifier-like columns)",
     output_schema='A JSON object with exactly 4 keys: "category_column" (the grouping column name), "best_category" (the category value with highest mean), "target_column" (the numeric column analyzed), and "mean_value" (rounded to 3 decimal places). Example: {"category_column": "region", "best_category": "West", "target_column": "sales", "mean_value": 1234.567}',
     code_template="""
 # Step 1: Identify the target (most variable numeric column)
@@ -732,8 +995,8 @@ else:
 
 CORRELATION_AFTER_OUTLIER_REMOVAL = CompositionTemplate(
     name="correlation_after_outlier_removal",
-    description="Find strongest correlation, remove outliers from those columns, recompute correlation",
-    output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "original_association" (rounded to 4 decimals), "outliers_removed" (integer count), and "clean_association" (rounded to 4 decimals). Example: {"columns": ["col_a", "col_b"], "original_association": 0.8470, "outliers_removed": 12, "clean_association": 0.8910}',
+    description="Find strongest absolute correlation pair (excluding identifier-like columns), remove outliers beyond 3 standard deviations from both columns, recompute correlation",
+    output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "original_association" (rounded to 2 decimals), "outliers_removed" (integer count), and "clean_association" (rounded to 2 decimals). Example: {"columns": ["col_a", "col_b"], "original_association": 0.8470, "outliers_removed": 12, "clean_association": 0.8910}',
     code_template="""
 # Step 1: Find the strongest correlation pair
 numeric_cols = df.select_dtypes('number')
@@ -760,9 +1023,9 @@ print(f"Correlation after cleaning: {clean_corr:.4f}")
 
 submit({
     "columns": sorted([col1, col2]),
-    "original_association": round(float(original_corr), 4),
+    "original_association": round(float(original_corr), 2),
     "outliers_removed": int(rows_removed),
-    "clean_association": round(float(clean_corr), 4)
+    "clean_association": round(float(clean_corr), 2)
 })
 """.strip(),
     output_type="dict",
@@ -778,8 +1041,8 @@ submit({
 
 REGRESSION_MOST_PREDICTIVE = CompositionTemplate(
     name="regression_most_predictive",
-    description="Find the most predictive feature via correlation, build regression, report R-squared",
-    output_schema='A JSON object with exactly 6 keys: "target" (column name), "best_predictor" (column name), "association_score" (rounded to 4 decimals), "fit_score" (rounded to 4 decimals), "coefficient" (rounded to 4 decimals), and "significance_score" (rounded to 6 decimals). Example: {"target": "price", "best_predictor": "sqft", "association_score": 0.8340, "fit_score": 0.6956, "coefficient": 135.2847, "significance_score": 0.000001}',
+    description="Use highest-variance numeric column as target (excluding identifier-like columns), find best predictor via absolute correlation, build OLS regression, report R-squared",
+    output_schema='A JSON object with exactly 6 keys: "target" (column name), "best_predictor" (column name), "association_score" (rounded to 2 decimals), "fit_score" (rounded to 2 decimals), "coefficient" (rounded to 2 decimals), and "significance_score" (rounded to 4 decimals). Example: {"target": "price", "best_predictor": "sqft", "association_score": 0.83, "fit_score": 0.6956, "coefficient": 135.2847, "significance_score": 0.0000}',
     code_template="""
 # Step 1: Identify numeric columns (exclude index-like columns)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -826,10 +1089,10 @@ hook({"coef": float(coef), "p_value": float(p_value)}, "regression stats", name=
 submit({
     "target": target_col,
     "best_predictor": best_predictor,
-    "association_score": round(float(best_corr), 4),
-    "fit_score": round(float(r_squared), 4),
-    "coefficient": round(float(coef), 4),
-    "significance_score": round(float(p_value), 6)
+    "association_score": round(float(best_corr), 2),
+    "fit_score": round(float(r_squared), 2),
+    "coefficient": round(float(coef), 2),
+    "significance_score": round(float(p_value), 4)
 })
 """.strip(),
     output_type="dict",
@@ -887,10 +1150,10 @@ hook({"coef": float(coef), "p_value": float(p_value)}, "regression stats", name=
 submit({
     "target": target_col,
     "best_predictor": best_predictor,
-    "association_score": round(float(best_corr), 4),
-    "fit_score": round(float(r_squared), 4),
-    "coefficient": round(float(coef), 4),
-    "significance_score": round(float(p_value), 6)
+    "association_score": round(float(best_corr), 2),
+    "fit_score": round(float(r_squared), 2),
+    "coefficient": round(float(coef), 2),
+    "significance_score": round(float(p_value), 4)
 })
 """.strip(),
     ],
@@ -898,8 +1161,8 @@ submit({
 
 TTEST_DISCOVERED_GROUPS = CompositionTemplate(
     name="ttest_discovered_groups",
-    description="Find binary categorical column, perform t-test on highest-variance numeric column",
-    output_schema='A JSON object with exactly 9 keys: "target_column", "grouping_column", "group1", "group2", "mean1" (rounded to 4 decimals), "mean2" (rounded to 4 decimals), "test_statistic" (rounded to 4 decimals), "significance_score" (rounded to 6 decimals), and "significant" (boolean, true if significance_score < 0.05). Example: {"target_column": "score", "grouping_column": "gender", "group1": "M", "group2": "F", "mean1": 75.4321, "mean2": 78.1234, "test_statistic": -2.3456, "significance_score": 0.019234, "significant": true}',
+    description="Find binary categorical column (if none exists, create binary split from first non-target numeric column's median), perform t-test on highest-variance numeric column (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly 9 keys: "target_column", "grouping_column", "group1", "group2", "mean1" (rounded to 2 decimals), "mean2" (rounded to 2 decimals), "test_statistic" (rounded to 2 decimals), "significance_score" (rounded to 4 decimals), and "significant" (boolean, true if significance_score < 0.05). Example: {"target_column": "score", "grouping_column": "gender", "group1": "M", "group2": "F", "mean1": 75.4321, "mean2": 78.1234, "test_statistic": -2.3456, "significance_score": 0.0192, "significant": true}',
     code_template="""
 # Step 1: Find numeric column with highest variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -962,10 +1225,10 @@ else:
         "grouping_column": binary_col,
         "group1": str(group1_name),
         "group2": str(group2_name),
-        "mean1": round(float(mean1), 4),
-        "mean2": round(float(mean2), 4),
-        "test_statistic": round(float(t_stat), 4),
-        "significance_score": round(float(p_value), 6),
+        "mean1": round(float(mean1), 2),
+        "mean2": round(float(mean2), 2),
+        "test_statistic": round(float(t_stat), 2),
+        "significance_score": round(float(p_value), 4),
         "significant": is_significant
     })
 """.strip(),
@@ -1040,10 +1303,10 @@ else:
         "grouping_column": binary_col,
         "group1": str(group1_name),
         "group2": str(group2_name),
-        "mean1": round(float(mean1), 4),
-        "mean2": round(float(mean2), 4),
-        "test_statistic": round(float(t_stat), 4),
-        "significance_score": round(float(p_value), 6),
+        "mean1": round(float(mean1), 2),
+        "mean2": round(float(mean2), 2),
+        "test_statistic": round(float(t_stat), 2),
+        "significance_score": round(float(p_value), 4),
         "significant": is_significant
     })
 """.strip(),
@@ -1052,8 +1315,8 @@ else:
 
 BOOTSTRAP_CI_DISCOVERED = CompositionTemplate(
     name="bootstrap_ci_discovered",
-    description="Bootstrap 95% CI for the mean of the column with highest skewness",
-    output_schema='A JSON object with exactly 7 keys: "column" (name of most skewed column), "skewness" (rounded to 4 decimals), "mean" (rounded to 4 decimals), "ci_lower" (lower bound of 95% CI, rounded to 4 decimals), "ci_upper" (upper bound, rounded to 4 decimals), "std_error" (bootstrap standard error, rounded to 4 decimals), and "n_iterations" (integer, the number of resamples). Example: {"column": "income", "skewness": 2.3456, "mean": 50000.1234, "ci_lower": 48500.5678, "ci_upper": 51500.9012, "std_error": 750.3456, "n_iterations": 1000}',
+    description="Bootstrap 95% CI (1000 iterations, seed=42) for the mean of the column with highest absolute skewness (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly 7 keys: "column" (name of most skewed column), "skewness" (rounded to 2 decimals), "mean" (rounded to 2 decimals), "ci_lower" (lower bound of 95% CI, rounded to 2 decimals), "ci_upper" (upper bound, rounded to 2 decimals), "std_error" (bootstrap standard error, rounded to 2 decimals), and "n_iterations" (integer, the number of resamples). Example: {"column": "income", "skewness": 2.3456, "mean": 50000.1234, "ci_lower": 48500.5678, "ci_upper": 51500.9012, "std_error": 750.3456, "n_iterations": 1000}',
     code_template="""
 # Step 1: Identify numeric columns
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1070,8 +1333,8 @@ for col in numeric_cols:
 hook(skewness, "absolute skewness per column", name='skewness')
 print(f"Skewness values:\\n{sorted(skewness.items(), key=lambda x: -x[1])[:5]}")
 
-# Step 3: Find column with highest absolute skewness
-target_col = max(skewness, key=skewness.get)
+# Step 3: Find column with highest absolute skewness (alphabetical tiebreaker)
+target_col = sorted(skewness.items(), key=lambda x: (-x[1], x[0]))[0][0]
 hook(target_col, "most skewed column", name='target_col', depends_on=['skewness'])
 print(f"Most skewed: {target_col} (skewness={skewness[target_col]:.4f})")
 
@@ -1109,11 +1372,11 @@ hook(se, "bootstrap standard error", name='std_error', depends_on=['confidence_i
 
     submit({
         "column": target_col,
-        "skewness": round(float(skewness[target_col]), 4),
-        "mean": round(float(original_mean), 4),
-        "ci_lower": round(float(ci_lower), 4),
-        "ci_upper": round(float(ci_upper), 4),
-        "std_error": round(float(se), 4),
+        "skewness": round(float(skewness[target_col]), 2),
+        "mean": round(float(original_mean), 2),
+        "ci_lower": round(float(ci_lower), 2),
+        "ci_upper": round(float(ci_upper), 2),
+        "std_error": round(float(se), 2),
         "n_iterations": n_bootstrap
     })
 """.strip(),
@@ -1125,8 +1388,8 @@ hook(se, "bootstrap standard error", name='std_error', depends_on=['confidence_i
 
 ANOVA_DISCOVERED_GROUPS = CompositionTemplate(
     name="anova_discovered_groups",
-    description="Find categorical column with 3+ groups, perform ANOVA on highest-variance numeric",
-    output_schema='A JSON object with exactly 11 keys: "target_column", "grouping_column", "n_groups" (integer), "test_statistic" (rounded to 4 decimals), "significance_score" (rounded to 6 decimals), "significant" (boolean), "best_group" (category with highest mean), "best_mean" (rounded to 4 decimals), "worst_group" (category with lowest mean), "worst_mean" (rounded to 4 decimals), and "effect_size" (rounded to 4 decimals). Example: {"target_column": "sales", "grouping_column": "region", "n_groups": 4, "test_statistic": 15.2345, "significance_score": 0.000012, "significant": true, "best_group": "West", "best_mean": 1234.5678, "worst_group": "East", "worst_mean": 890.1234, "effect_size": 0.1523}',
+    description="Find first categorical column with 3-10 groups (each with n >= 10 samples), perform one-way ANOVA on highest-variance numeric column (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly 11 keys: "target_column", "grouping_column", "n_groups" (integer), "test_statistic" (rounded to 2 decimals), "significance_score" (rounded to 4 decimals), "significant" (boolean), "best_group" (category with highest mean), "best_mean" (rounded to 2 decimals), "worst_group" (category with lowest mean), "worst_mean" (rounded to 2 decimals), and "effect_size" (rounded to 2 decimals). Example: {"target_column": "sales", "grouping_column": "region", "n_groups": 4, "test_statistic": 15.23, "significance_score": 0.0000, "significant": true, "best_group": "West", "best_mean": 1234.5678, "worst_group": "East", "worst_mean": 890.1234, "effect_size": 0.1523}',
     code_template="""
 # Step 1: Find numeric column with highest variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1194,14 +1457,14 @@ else:
         "target_column": target_col,
         "grouping_column": group_col,
         "n_groups": n_groups,
-        "test_statistic": round(float(f_stat), 4),
-        "significance_score": round(float(p_value), 6),
+        "test_statistic": round(float(f_stat), 2),
+        "significance_score": round(float(p_value), 4),
         "significant": p_value < 0.05,
         "best_group": str(best_group),
-        "best_mean": round(float(group_means[best_group]), 4),
+        "best_mean": round(float(group_means[best_group]), 2),
         "worst_group": str(worst_group),
-        "worst_mean": round(float(group_means[worst_group]), 4),
-        "effect_size": round(float(eta_squared), 4)
+        "worst_mean": round(float(group_means[worst_group]), 2),
+        "effect_size": round(float(eta_squared), 2)
     })
 """.strip(),
     output_type="dict",
@@ -1211,12 +1474,93 @@ else:
     ),
     n_steps=9,
     difficulty="VERY_HARD",
+    alternative_code_templates=[
+        # Alternative: Exclude the highest-variance column (likely target) and use second-highest
+        """
+# Step 1: Find numeric column with second-highest variance (excluding likely target)
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not _is_index_column(c)]
+variances = df[numeric_cols].var()
+# Exclude highest variance (likely the target variable)
+target_candidate = variances.idxmax()
+remaining_vars = variances.drop(target_candidate)
+target_col = remaining_vars.idxmax()
+hook(target_col, "target column (second-highest variance, excluding likely target)", name='target_col')
+print(f"Target: {target_col} (excluded {target_candidate} as likely target)")
+
+# Step 2: Find categorical column with 3-10 unique values
+cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+group_col = None
+for col in cat_cols:
+    n_unique = df[col].nunique()
+    if 3 <= n_unique <= 10:
+        group_col = col
+        break
+
+if group_col is None:
+    cat_cardinalities = {col: df[col].nunique() for col in cat_cols[:5]}
+    submit({"error": f"No categorical column with 3-10 groups. Found cardinalities: {cat_cardinalities}"})
+else:
+    hook(group_col, "grouping column", name='group_col')
+    print(f"Grouping by: {group_col}")
+
+    # Step 3: Get group names and sizes - require minimum 10 samples per group
+    group_counts = df[group_col].value_counts()
+    valid_groups = group_counts[group_counts >= 10]
+    n_groups = len(valid_groups)
+
+    if n_groups < 3:
+        submit({"error": f"Need 3+ groups with ≥10 samples. Found {n_groups} valid groups"})
+    else:
+        hook({"n_groups": n_groups, "counts": valid_groups.to_dict()}, "group info", name='group_info', depends_on=['group_col'])
+        print(f"Valid groups with ≥10 samples: {n_groups}")
+
+        # Step 4: Compute group means (only for valid groups)
+        df_valid = df[df[group_col].isin(valid_groups.index)]
+        group_means = df_valid.groupby(group_col)[target_col].mean()
+        hook(group_means.to_dict(), "group means", name='group_means', depends_on=['group_info'])
+
+        # Step 5: Prepare data for ANOVA
+        groups_data = [df_valid[df_valid[group_col] == g][target_col].dropna().values for g in valid_groups.index]
+        min_group_size = min(len(g) for g in groups_data)
+        hook(min_group_size, "minimum group size", name='min_size', depends_on=['group_means'])
+
+        # Step 6: Perform one-way ANOVA
+        f_stat, p_value = scipy.stats.f_oneway(*groups_data)
+        hook({"f_stat": float(f_stat), "p_value": float(p_value)}, "ANOVA results", name='anova', depends_on=['min_size'])
+
+        # Step 7: Identify best and worst groups
+        best_group = group_means.idxmax()
+        worst_group = group_means.idxmin()
+        hook({"best": str(best_group), "worst": str(worst_group)}, "extreme groups", name='extremes', depends_on=['anova'])
+
+        # Step 8: Effect size (eta-squared)
+        ss_between = sum(len(g) * (g.mean() - df_valid[target_col].mean())**2 for g in groups_data)
+        ss_total = ((df_valid[target_col] - df_valid[target_col].mean())**2).sum()
+        eta_squared = ss_between / ss_total if ss_total > 0 else 0
+        hook(eta_squared, "eta-squared effect size", name='effect_size', depends_on=['extremes'])
+
+    submit({
+        "target_column": target_col,
+        "grouping_column": group_col,
+        "n_groups": n_groups,
+        "test_statistic": round(float(f_stat), 2),
+        "significance_score": round(float(p_value), 4),
+        "significant": p_value < 0.05,
+        "best_group": str(best_group),
+        "best_mean": round(float(group_means[best_group]), 2),
+        "worst_group": str(worst_group),
+        "worst_mean": round(float(group_means[worst_group]), 2),
+        "effect_size": round(float(eta_squared), 2)
+    })
+""".strip(),
+    ],
 )
 
 MULTIPLE_REGRESSION_TOP_PREDICTORS = CompositionTemplate(
     name="multiple_regression_top_predictors",
-    description="Find top 3 predictors via correlation, build multiple regression, report adjusted R-squared",
-    output_schema='A JSON object with exactly 5 keys: "target" (column name), "predictors" (list of 3 column names, alphabetically sorted), "fit_score" (rounded to 4 decimals), "fit_score_adj" (rounded to 4 decimals), and "n_influential" (integer count of predictors with significance_score < 0.05). Example: {"target": "price", "predictors": ["age", "bedrooms", "sqft"], "fit_score": 0.7234, "fit_score_adj": 0.7156, "n_influential": 2}',
+    description="Use highest-variance numeric column as target (excluding identifier-like columns), find top 3 predictors via absolute correlation, build OLS multiple regression, report adjusted R-squared",
+    output_schema='A JSON object with exactly 5 keys: "target" (column name), "predictors" (list of 3 column names, alphabetically sorted), "fit_score" (rounded to 2 decimals), "fit_score_adj" (rounded to 2 decimals), and "n_influential" (integer count of predictors with significance_score < 0.05). Example: {"target": "price", "predictors": ["age", "bedrooms", "sqft"], "fit_score": 0.7234, "fit_score_adj": 0.7156, "n_influential": 2}',
     code_template="""
 # Step 1: Identify numeric columns
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1269,8 +1613,8 @@ else:
     submit({
         "target": target_col,
         "predictors": sorted(top_3),
-        "fit_score": round(float(model.rsquared), 4),
-        "fit_score_adj": round(float(model.rsquared_adj), 4),
+        "fit_score": round(float(model.rsquared), 2),
+        "fit_score_adj": round(float(model.rsquared_adj), 2),
         "n_influential": n_significant
     })
 """.strip(),
@@ -1287,8 +1631,8 @@ else:
 
 CHI_SQUARED_INDEPENDENCE = CompositionTemplate(
     name="chi_squared_independence",
-    description="Test independence between two categorical variables using chi-squared test",
-    output_schema='A JSON object with exactly 7 keys: "column1" (first categorical column), "column2" (second categorical column), "test_statistic" (rounded to 4 decimals), "significance_score" (rounded to 6 decimals), "df" (integer), "expected_min" (minimum expected frequency rounded to 2 decimals), and "independent" (boolean, true if significance_score >= 0.05). Example: {"column1": "gender", "column2": "product", "test_statistic": 15.2345, "significance_score": 0.004321, "df": 4, "expected_min": 5.23, "independent": false}',
+    description="Test independence between first two categorical columns (each with 2-10 unique values) using chi-squared test at alpha=0.05",
+    output_schema='A JSON object with exactly 7 keys: "column1" (first categorical column), "column2" (second categorical column), "test_statistic" (rounded to 2 decimals), "significance_score" (rounded to 4 decimals), "df" (integer), "expected_min" (minimum expected frequency rounded to 2 decimals), and "independent" (boolean, true if significance_score >= 0.05). Example: {"column1": "gender", "column2": "product", "test_statistic": 15.23, "significance_score": 0.0043, "df": 4, "expected_min": 5.23, "independent": false}',
     code_template="""
 # Step 1: Identify categorical columns with reasonable cardinality
 cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
@@ -1324,8 +1668,8 @@ else:
     submit({
         "column1": col1,
         "column2": col2,
-        "test_statistic": round(float(chi2), 4),
-        "significance_score": round(float(p_value), 6),
+        "test_statistic": round(float(chi2), 2),
+        "significance_score": round(float(p_value), 4),
         "df": int(dof),
         "expected_min": round(float(min_expected), 2),
         "independent": is_independent
@@ -1342,14 +1686,15 @@ else:
 
 MANN_WHITNEY_U_TEST = CompositionTemplate(
     name="mann_whitney_u_test",
-    description="Non-parametric comparison of two groups using Mann-Whitney U test",
-    output_schema='A JSON object with exactly 8 keys: "target_column", "grouping_column", "group1", "group2", "median1" (rounded to 4 decimals), "median2" (rounded to 4 decimals), "test_statistic" (rounded to 2 decimals), and "significance_score" (rounded to 6 decimals). Example: {"target_column": "score", "grouping_column": "treatment", "group1": "control", "group2": "experimental", "median1": 72.5000, "median2": 78.0000, "test_statistic": 1234.50, "significance_score": 0.034567}',
+    description="Find binary categorical column (if none, create median split from first non-target numeric), perform Mann-Whitney U test on most-skewed numeric column (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly 8 keys: "target_column", "grouping_column", "group1", "group2", "median1" (rounded to 2 decimals), "median2" (rounded to 2 decimals), "test_statistic" (rounded to 2 decimals), and "significance_score" (rounded to 4 decimals). Example: {"target_column": "score", "grouping_column": "treatment", "group1": "control", "group2": "experimental", "median1": 72.5000, "median2": 78.0000, "test_statistic": 1234.50, "significance_score": 0.0345}',
     code_template="""
 # Step 1: Find most skewed numeric column (non-parametric tests suit skewed data)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
                 if not _is_index_column(c)]
 skewness = {col: abs(df[col].skew()) for col in numeric_cols if not df[col].isna().all()}
-target_col = max(skewness, key=skewness.get)
+# Alphabetical tiebreaker for determinism
+target_col = sorted(skewness.items(), key=lambda x: (-x[1], x[0]))[0][0]
 hook({"target": target_col, "skewness": skewness[target_col]}, "target column (most skewed)", name='target_col')
 print(f"Target: {target_col} (skewness: {skewness[target_col]:.4f})")
 
@@ -1394,10 +1739,10 @@ submit({
     "grouping_column": binary_col,
     "group1": g1_name,
     "group2": g2_name,
-    "median1": round(float(med1), 4),
-    "median2": round(float(med2), 4),
+    "median1": round(float(med1), 2),
+    "median2": round(float(med2), 2),
     "test_statistic": round(float(u_stat), 2),
-    "significance_score": round(float(p_value), 6)
+    "significance_score": round(float(p_value), 4)
 })
 """.strip(),
     output_type="dict",
@@ -1408,8 +1753,8 @@ submit({
 
 SPEARMAN_RANK_CORRELATION = CompositionTemplate(
     name="spearman_rank_correlation",
-    description="Find strongest monotonic (rank-based) correlation between numeric columns",
-    output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "association_score" (rounded to 4 decimals), "significance_score" (rounded to 6 decimals), and "interpretation" (string: "strong", "moderate", "weak", or "negligible"). Example: {"columns": ["age", "income"], "association_score": 0.7234, "significance_score": 0.000001, "interpretation": "strong"}',
+    description="Find strongest absolute monotonic (Spearman rank) correlation between numeric columns (excluding identifier-like columns); interpretation thresholds: >=0.7 strong, >=0.4 moderate, >=0.2 weak, else negligible",
+    output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "association_score" (rounded to 2 decimals), "significance_score" (rounded to 4 decimals), and "interpretation" (string: "strong", "moderate", "weak", or "negligible"). Example: {"columns": ["age", "income"], "association_score": 0.72, "significance_score": 0.0000, "interpretation": "strong"}',
     code_template="""
 # Step 1: Get numeric columns
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1447,8 +1792,8 @@ hook(interpretation, "correlation interpretation", name='interpretation', depend
 
 submit({
     "columns": sorted([col1, col2]),
-    "association_score": round(float(rho), 4),
-    "significance_score": round(float(p_value), 6),
+    "association_score": round(float(rho), 2),
+    "significance_score": round(float(p_value), 4),
     "interpretation": interpretation
 })
 """.strip(),
@@ -1460,8 +1805,8 @@ submit({
 
 COEFFICIENT_OF_VARIATION = CompositionTemplate(
     name="coefficient_of_variation",
-    description="Find the column with highest relative variability (coefficient of variation)",
-    output_schema='A JSON object with exactly 4 keys: "column" (name of column with highest CV), "cv" (coefficient of variation as percentage rounded to 2 decimals), "mean" (rounded to 4 decimals), and "std" (rounded to 4 decimals). Example: {"column": "price", "cv": 45.23, "mean": 1234.5678, "std": 558.4567}',
+    description="Find the column with highest relative variability (coefficient of variation, excluding identifier-like columns)",
+    output_schema='A JSON object with exactly 4 keys: "column" (name of column with highest CV), "cv" (coefficient of variation as percentage rounded to 2 decimals), "mean" (rounded to 2 decimals), and "std" (rounded to 2 decimals). Example: {"column": "price", "cv": 45.23, "mean": 1234.5678, "std": 558.4567}',
     code_template="""
 # Step 1: Get numeric columns with non-zero means
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1482,8 +1827,8 @@ else:
     for col, cv in sorted(cv_values.items(), key=lambda x: -x[1])[:5]:
         print(f"  {col}: {cv:.2f}%")
 
-    # Step 2: Find column with highest CV
-    max_cv_col = max(cv_values, key=cv_values.get)
+    # Step 2: Find column with highest CV (alphabetical tiebreaker)
+    max_cv_col = sorted(cv_values.items(), key=lambda x: (-x[1], x[0]))[0][0]
     hook(max_cv_col, "column with highest CV", name='max_cv_col', depends_on=['cv_values'])
     print(f"Highest CV: {max_cv_col} ({cv_values[max_cv_col]:.2f}%)")
 
@@ -1495,8 +1840,8 @@ else:
     submit({
         "column": max_cv_col,
         "cv": round(cv_values[max_cv_col], 2),
-        "mean": round(float(col_mean), 4),
-        "std": round(float(col_std), 4)
+        "mean": round(float(col_mean), 2),
+        "std": round(float(col_std), 2)
     })
 """.strip(),
     output_type="dict",
@@ -1507,8 +1852,8 @@ else:
 
 IQR_OUTLIER_ANALYSIS = CompositionTemplate(
     name="iqr_outlier_analysis",
-    description="Detect outliers using IQR method (1.5*IQR beyond quartiles)",
-    output_schema='A JSON object with exactly 7 keys: "column" (analyzed column), "q1" (25th percentile rounded to 4 decimals), "q3" (75th percentile rounded to 4 decimals), "iqr" (rounded to 4 decimals), "lower_fence" (rounded to 4 decimals), "upper_fence" (rounded to 4 decimals), and "n_outliers" (integer count). Example: {"column": "salary", "q1": 45000.0000, "q3": 75000.0000, "iqr": 30000.0000, "lower_fence": 0.0000, "upper_fence": 120000.0000, "n_outliers": 23}',
+    description="Detect outliers using IQR method (1.5*IQR beyond quartiles) on highest-variance column (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly 7 keys: "column" (analyzed column), "q1" (25th percentile rounded to 2 decimals), "q3" (75th percentile rounded to 2 decimals), "iqr" (rounded to 2 decimals), "lower_fence" (rounded to 2 decimals), "upper_fence" (rounded to 2 decimals), and "n_outliers" (integer count). Example: {"column": "salary", "q1": 45000.0000, "q3": 75000.0000, "iqr": 30000.0000, "lower_fence": 0.0000, "upper_fence": 120000.0000, "n_outliers": 23}',
     code_template="""
 # Step 1: Find column with highest variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1539,11 +1884,11 @@ print(f"Outliers: {outliers} ({100*outliers/len(data):.2f}%)")
 
 submit({
     "column": target_col,
-    "q1": round(float(q1), 4),
-    "q3": round(float(q3), 4),
-    "iqr": round(float(iqr), 4),
-    "lower_fence": round(float(lower_fence), 4),
-    "upper_fence": round(float(upper_fence), 4),
+    "q1": round(float(q1), 2),
+    "q3": round(float(q3), 2),
+    "iqr": round(float(iqr), 2),
+    "lower_fence": round(float(lower_fence), 2),
+    "upper_fence": round(float(upper_fence), 2),
     "n_outliers": int(outliers)
 })
 """.strip(),
@@ -1586,11 +1931,11 @@ print(f"Outliers: {outliers} ({100*outliers/len(data):.2f}%)")
 
 submit({
     "column": target_col,
-    "q1": round(float(q1), 4),
-    "q3": round(float(q3), 4),
-    "iqr": round(float(iqr), 4),
-    "lower_fence": round(float(lower_fence), 4),
-    "upper_fence": round(float(upper_fence), 4),
+    "q1": round(float(q1), 2),
+    "q3": round(float(q3), 2),
+    "iqr": round(float(iqr), 2),
+    "lower_fence": round(float(lower_fence), 2),
+    "upper_fence": round(float(upper_fence), 2),
     "n_outliers": int(outliers)
 })
 """.strip(),
@@ -1599,14 +1944,15 @@ submit({
 
 PERCENTILE_RANKING = CompositionTemplate(
     name="percentile_ranking",
-    description="Find the value at specific percentiles for the column with highest range",
-    output_schema='A JSON object with exactly 6 keys: "column" (analyzed column), "p10" (10th percentile rounded to 4 decimals), "p25" (25th percentile), "p50" (median), "p75" (75th percentile), and "p90" (90th percentile). Example: {"column": "income", "p10": 25000.0000, "p25": 40000.0000, "p50": 55000.0000, "p75": 75000.0000, "p90": 100000.0000}',
+    description="Find the value at specific percentiles for the column with highest range (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly 6 keys: "column" (analyzed column), "p10" (10th percentile rounded to 2 decimals), "p25" (25th percentile), "p50" (median), "p75" (75th percentile), and "p90" (90th percentile). Example: {"column": "income", "p10": 25000.0000, "p25": 40000.0000, "p50": 55000.0000, "p75": 75000.0000, "p90": 100000.0000}',
     code_template="""
 # Step 1: Find column with largest range
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
                 if not _is_index_column(c)]
 ranges = {col: df[col].max() - df[col].min() for col in numeric_cols}
-target_col = max(ranges, key=ranges.get)
+# Alphabetical tiebreaker for determinism
+target_col = sorted(ranges.items(), key=lambda x: (-x[1], x[0]))[0][0]
 hook({"column": target_col, "range": ranges[target_col]}, "column with largest range", name='target_col')
 print(f"Analyzing: {target_col} (range: {ranges[target_col]:.4f})")
 
@@ -1620,11 +1966,11 @@ for k, v in values.items():
 
 submit({
     "column": target_col,
-    "p10": round(float(values["p10"]), 4),
-    "p25": round(float(values["p25"]), 4),
-    "p50": round(float(values["p50"]), 4),
-    "p75": round(float(values["p75"]), 4),
-    "p90": round(float(values["p90"]), 4)
+    "p10": round(float(values["p10"]), 2),
+    "p25": round(float(values["p25"]), 2),
+    "p50": round(float(values["p50"]), 2),
+    "p75": round(float(values["p75"]), 2),
+    "p90": round(float(values["p90"]), 2)
 })
 """.strip(),
     output_type="dict",
@@ -1635,8 +1981,8 @@ submit({
 
 DESCRIPTIVE_SUMMARY = CompositionTemplate(
     name="descriptive_summary",
-    description="Compute comprehensive descriptive statistics for the most variable column",
-    output_schema='A JSON object with exactly 9 keys: "column", "count" (integer), "mean" (rounded to 4 decimals), "std", "min", "max", "median", "skewness", and "kurtosis" (all rounded to 4 decimals). Example: {"column": "age", "count": 1000, "mean": 35.4567, "std": 12.3456, "min": 18.0000, "max": 85.0000, "median": 34.0000, "skewness": 0.5678, "kurtosis": -0.2345}',
+    description="Compute comprehensive descriptive statistics for the most variable column (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly 9 keys: "column", "count" (integer), "mean" (rounded to 2 decimals), "std", "min", "max", "median", "skewness", and "kurtosis" (all rounded to 2 decimals). Example: {"column": "age", "count": 1000, "mean": 35.4567, "std": 12.3456, "min": 18.0000, "max": 85.0000, "median": 34.0000, "skewness": 0.5678, "kurtosis": -0.2345}',
     code_template="""
 # Step 1: Find column with highest variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1665,13 +2011,13 @@ for k, v in stats_dict.items():
 submit({
     "column": target_col,
     "count": int(stats_dict["count"]),
-    "mean": round(float(stats_dict["mean"]), 4),
-    "std": round(float(stats_dict["std"]), 4),
-    "min": round(float(stats_dict["min"]), 4),
-    "max": round(float(stats_dict["max"]), 4),
-    "median": round(float(stats_dict["median"]), 4),
-    "skewness": round(float(stats_dict["skewness"]), 4),
-    "kurtosis": round(float(stats_dict["kurtosis"]), 4)
+    "mean": round(float(stats_dict["mean"]), 2),
+    "std": round(float(stats_dict["std"]), 2),
+    "min": round(float(stats_dict["min"]), 2),
+    "max": round(float(stats_dict["max"]), 2),
+    "median": round(float(stats_dict["median"]), 2),
+    "skewness": round(float(stats_dict["skewness"]), 2),
+    "kurtosis": round(float(stats_dict["kurtosis"]), 2)
 })
 """.strip(),
     output_type="dict",
@@ -1711,13 +2057,13 @@ for k, v in stats_dict.items():
 submit({
     "column": target_col,
     "count": int(stats_dict["count"]),
-    "mean": round(float(stats_dict["mean"]), 4),
-    "std": round(float(stats_dict["std"]), 4),
-    "min": round(float(stats_dict["min"]), 4),
-    "max": round(float(stats_dict["max"]), 4),
-    "median": round(float(stats_dict["median"]), 4),
-    "skewness": round(float(stats_dict["skewness"]), 4),
-    "kurtosis": round(float(stats_dict["kurtosis"]), 4)
+    "mean": round(float(stats_dict["mean"]), 2),
+    "std": round(float(stats_dict["std"]), 2),
+    "min": round(float(stats_dict["min"]), 2),
+    "max": round(float(stats_dict["max"]), 2),
+    "median": round(float(stats_dict["median"]), 2),
+    "skewness": round(float(stats_dict["skewness"]), 2),
+    "kurtosis": round(float(stats_dict["kurtosis"]), 2)
 })
 """.strip(),
     ],
@@ -1725,8 +2071,8 @@ submit({
 
 LEVENE_VARIANCE_TEST = CompositionTemplate(
     name="levene_variance_test",
-    description="Test equality of variances between groups using Levene's test",
-    output_schema='A JSON object with exactly 7 keys: "target_column", "grouping_column", "n_groups" (integer), "test_statistic" (rounded to 4 decimals), "significance_score" (rounded to 6 decimals), "variances_equal" (boolean, true if significance_score >= 0.05), and "group_variances" (dict mapping group names to variance rounded to 4 decimals). Example: {"target_column": "score", "grouping_column": "class", "n_groups": 3, "test_statistic": 2.3456, "significance_score": 0.098765, "variances_equal": true, "group_variances": {"A": 123.4567, "B": 145.6789, "C": 112.3456}}',
+    description="Test equality of variances using Levene's test (first categorical column with 2-6 groups) on highest-variance numeric column (excluding identifier-like columns)",
+    output_schema='A JSON object with exactly 7 keys: "target_column", "grouping_column", "n_groups" (integer), "test_statistic" (rounded to 2 decimals), "significance_score" (rounded to 4 decimals), "variances_equal" (boolean, true if significance_score >= 0.05), and "group_variances" (dict mapping group names to variance rounded to 2 decimals). Example: {"target_column": "score", "grouping_column": "class", "n_groups": 3, "test_statistic": 2.34, "significance_score": 0.0987, "variances_equal": true, "group_variances": {"A": 123.4567, "B": 145.6789, "C": 112.3456}}',
     code_template="""
 # Step 1: Find numeric column with high variance
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1776,10 +2122,10 @@ else:
         "target_column": target_col,
         "grouping_column": group_col,
         "n_groups": n_groups,
-        "test_statistic": round(float(stat), 4),
-        "significance_score": round(float(p_value), 6),
+        "test_statistic": round(float(stat), 2),
+        "significance_score": round(float(p_value), 4),
         "variances_equal": variances_equal,
-        "group_variances": {k: round(v, 4) for k, v in group_vars.items()}
+        "group_variances": {k: round(v, 2) for k, v in group_vars.items()}
     })
 """.strip(),
     output_type="dict",
@@ -1790,8 +2136,8 @@ else:
 
 KOLMOGOROV_SMIRNOV_NORMALITY = CompositionTemplate(
     name="ks_normality_test",
-    description="Test for normality using Kolmogorov-Smirnov test against theoretical normal",
-    output_schema='A JSON object with exactly 6 keys: "column" (tested column), "test_statistic" (rounded to 4 decimals), "significance_score" (rounded to 6 decimals), "is_normal" (boolean, true if significance_score >= 0.05), "sample_mean" (rounded to 4 decimals), and "sample_std" (rounded to 4 decimals). Example: {"column": "height", "test_statistic": 0.0456, "significance_score": 0.234567, "is_normal": true, "sample_mean": 170.1234, "sample_std": 10.5678}',
+    description="Test for normality using Kolmogorov-Smirnov test against theoretical normal on column with lowest absolute skewness (closest to zero) (excluding identifier-like columns), alpha=0.05",
+    output_schema='A JSON object with exactly 6 keys: "column" (tested column), "test_statistic" (rounded to 2 decimals), "significance_score" (rounded to 4 decimals), "is_normal" (boolean, true if significance_score >= 0.05), "sample_mean" (rounded to 2 decimals), and "sample_std" (rounded to 2 decimals). Example: {"column": "height", "test_statistic": 0.04, "significance_score": 0.2345, "is_normal": true, "sample_mean": 170.1234, "sample_std": 10.5678}',
     code_template="""
 # Step 1: Find column closest to normal (lowest skewness)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1829,11 +2175,11 @@ else:
 
     submit({
         "column": target_col,
-        "test_statistic": round(float(ks_stat), 4),
-        "significance_score": round(float(p_value), 6),
+        "test_statistic": round(float(ks_stat), 2),
+        "significance_score": round(float(p_value), 4),
         "is_normal": is_normal,
-        "sample_mean": round(float(sample_mean), 4),
-        "sample_std": round(float(sample_std), 4)
+        "sample_mean": round(float(sample_mean), 2),
+        "sample_std": round(float(sample_std), 2)
     })
 """.strip(),
     output_type="dict",
@@ -1844,8 +2190,8 @@ else:
 
 PAIRED_COLUMNS_CORRELATION_CHANGE = CompositionTemplate(
     name="correlation_change_analysis",
-    description="Compare correlation before and after log-transforming skewed columns",
-    output_schema='A JSON object with exactly 5 keys: "columns" (list of 2 column names, alphabetically sorted), "original_association" (rounded to 4 decimals), "log_association" (rounded to 4 decimals), "improvement" (absolute difference, rounded to 4 decimals), and "transformation_helpful" (boolean, true if |log_association| > |original_association|). Example: {"columns": ["income", "spending"], "original_association": 0.4567, "log_association": 0.7234, "improvement": 0.2667, "transformation_helpful": true}',
+    description="Select two most skewed positive numeric columns (excluding identifier-like columns), compare Pearson correlation before and after log1p transformation",
+    output_schema='A JSON object with exactly 5 keys: "columns" (list of 2 column names, alphabetically sorted), "original_association" (rounded to 2 decimals), "log_association" (rounded to 2 decimals), "improvement" (absolute difference, rounded to 2 decimals), and "transformation_helpful" (boolean, true if |log_association| > |original_association|). Example: {"columns": ["income", "spending"], "original_association": 0.4567, "log_association": 0.7234, "improvement": 0.2667, "transformation_helpful": true}',
     code_template="""
 # Step 1: Find two most skewed positive columns
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -1853,11 +2199,13 @@ numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
 # Filter to positive columns (can take log)
 positive_cols = [c for c in numeric_cols if (df[c] > 0).all()]
 if len(positive_cols) < 2:
-    # Shift to make positive
+    # Use first two numeric cols - log1p with min-shift handles non-positive values
     positive_cols = numeric_cols[:2]
 
 skewness = {col: abs(df[col].skew()) for col in positive_cols}
-sorted_cols = sorted(skewness, key=skewness.get, reverse=True)[:2]
+# Sort by skewness desc, then alphabetically for deterministic tie-breaking
+sorted_cols = sorted(skewness.items(), key=lambda x: (-x[1], x[0]))[:2]
+sorted_cols = [col for col, _ in sorted_cols]
 col1, col2 = sorted_cols[0], sorted_cols[1]
 hook([col1, col2], "selected columns (most skewed)", name='selected_cols')
 print(f"Analyzing: {col1} vs {col2}")
@@ -1885,9 +2233,9 @@ hook({"improvement": float(improvement), "helpful": transformation_helpful}, "co
 
 submit({
     "columns": sorted([col1, col2]),
-    "original_association": round(float(orig_corr), 4),
-    "log_association": round(float(log_corr), 4),
-    "improvement": round(abs(float(improvement)), 4),
+    "original_association": round(float(orig_corr), 2),
+    "log_association": round(float(log_corr), 2),
+    "improvement": round(abs(float(improvement)), 2),
     "transformation_helpful": transformation_helpful
 })
 """.strip(),
@@ -1904,14 +2252,15 @@ submit({
 
 AUDIT_MISSING_IMPUTATION_EFFECT = CompositionTemplate(
     name="audit_missing_imputation_effect",
-    description="Find column with most missing values, impute with median, measure mean shift",
-    output_schema='A JSON object with exactly 6 keys: "column" (name of numeric column with highest missing_pct), "missing_pct" (rounded to 2 decimals), "imputed_count" (integer), "original_mean" (rounded to 4 decimals, computed on non-missing), "imputed_mean" (rounded to 4 decimals, mean after median imputation), and "mean_shift" (imputed_mean - original_mean, rounded to 4 decimals). Example: {"column": "age", "missing_pct": 12.50, "imputed_count": 125, "original_mean": 35.4567, "imputed_mean": 35.1023, "mean_shift": -0.3544}',
+    description="Find column with most missing values (excluding identifier-like columns), impute with median, measure mean shift",
+    output_schema='A JSON object with exactly 6 keys: "column" (name of numeric column with highest missing_pct), "missing_pct" (rounded to 2 decimals), "imputed_count" (integer), "original_mean" (rounded to 2 decimals, computed on non-missing), "imputed_mean" (rounded to 2 decimals, mean after median imputation), and "mean_shift" (imputed_mean - original_mean, rounded to 2 decimals). Example: {"column": "age", "missing_pct": 12.50, "imputed_count": 125, "original_mean": 35.4567, "imputed_mean": 35.1023, "mean_shift": -0.3544}',
     code_template="""
 # Step 1: Find numeric column with highest missing percentage
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
                 if not _is_index_column(c)]
 missing_pcts = {col: df[col].isna().mean() * 100 for col in numeric_cols}
-target_col = max(missing_pcts, key=missing_pcts.get)
+# Alphabetical tiebreaker for determinism
+target_col = sorted(missing_pcts.items(), key=lambda x: (-x[1], x[0]))[0][0]
 missing_pct = missing_pcts[target_col]
 hook(target_col, "column with most missing", name='target_col')
 print(f"Target column: {target_col} ({missing_pct:.2f}% missing)")
@@ -1945,9 +2294,9 @@ else:
         "column": target_col,
         "missing_pct": round(missing_pct, 2),
         "imputed_count": int(imputed_count),
-        "original_mean": round(float(original_mean), 4),
-        "imputed_mean": round(float(imputed_mean), 4),
-        "mean_shift": round(float(mean_shift), 4)
+        "original_mean": round(float(original_mean), 2),
+        "imputed_mean": round(float(imputed_mean), 2),
+        "mean_shift": round(float(mean_shift), 2)
     })
 """.strip(),
     output_type="dict",
@@ -1958,8 +2307,8 @@ else:
 
 RANK_CATEGORIES_BY_TARGET_MEAN = CompositionTemplate(
     name="rank_categories_by_target_mean",
-    description="Rank categories by mean of target variable, filtering by minimum sample size",
-    output_schema='A JSON object with exactly 3 keys: "category_column" (string), "target_column" (string), and "ranking" (list of top category objects, each with "category", "mean" rounded to 4 decimals, and "n", sorted by mean descending). Example: {"category_column": "region", "target_column": "sales", "ranking": [{"category": "West", "mean": 1234.5678, "n": 42}, {"category": "North", "mean": 1150.0000, "n": 31}]}',
+    description="Use first categorical column with 3-20 unique values as grouping, highest-variance numeric column as target (excluding identifier-like columns), rank top 3 categories by mean (only categories with n >= 10 samples)",
+    output_schema='A JSON object with exactly 3 keys: "category_column" (string), "target_column" (string), and "ranking" (list of top category objects, each with "category", "mean" rounded to 2 decimals, and "n", sorted by mean descending). Example: {"category_column": "region", "target_column": "sales", "ranking": [{"category": "West", "mean": 1234.5678, "n": 42}, {"category": "North", "mean": 1150.0000, "n": 31}]}',
     code_template="""
 # Step 1: Find suitable categorical column (moderate cardinality)
 cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
@@ -1998,7 +2347,7 @@ else:
     # Step 5: Rank and take top_k
     ranked = filtered.sort_values('mean', ascending=False).head(top_k)
     ranking = [
-        {"category": str(idx), "mean": round(row['mean'], 4), "n": int(row['count'])}
+        {"category": str(idx), "mean": round(row['mean'], 2), "n": int(row['count'])}
         for idx, row in ranked.iterrows()
     ]
     hook(ranking, "final ranking", name='ranking', depends_on=['n_filtered'])
@@ -2021,8 +2370,8 @@ else:
 
 ADAPTIVE_TWO_SAMPLE_TEST = CompositionTemplate(
     name="adaptive_two_sample_test",
-    description="Choose t-test or Mann-Whitney based on normality/variance assumptions",
-    output_schema='A JSON object with exactly 10 keys: "target_column", "grouping_column", "group1", "group2", "method_choice" ("parametric" or "rank_based"), "significance_score" (rounded to 6 decimals), "effect_size_kind" ("standardized_diff" or "rank_based"), "effect_size" (rounded to 4 decimals), "significant" (boolean), and "assumptions_passed" (boolean). Example: {"target_column": "score", "grouping_column": "treatment", "group1": "control", "group2": "drug", "method_choice": "rank_based", "significance_score": 0.034567, "effect_size_kind": "rank_based", "effect_size": 0.2451, "significant": true, "assumptions_passed": false}',
+    description="Select least-skewed numeric column as target and first binary categorical as grouping, choose t-test or Mann-Whitney based on normality (Shapiro-Wilk) and variance (Levene) assumptions",
+    output_schema='A JSON object with exactly 10 keys: "target_column", "grouping_column", "group1", "group2", "method_choice" ("parametric" or "rank_based"), "significance_score" (rounded to 4 decimals), "effect_size_kind" ("standardized_diff" or "rank_based"), "effect_size" (rounded to 2 decimals), "significant" (boolean), and "assumptions_passed" (boolean). Example: {"target_column": "score", "grouping_column": "treatment", "group1": "control", "group2": "drug", "method_choice": "rank_based", "significance_score": 0.0345, "effect_size_kind": "rank_based", "effect_size": 0.2451, "significant": true, "assumptions_passed": false}',
     code_template="""
 # Step 1: Find target column (prefer less skewed for interesting test choice)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -2093,9 +2442,9 @@ else:
         "group1": g1_name,
         "group2": g2_name,
         "method_choice": test_used,
-        "significance_score": round(float(p_value), 6),
+        "significance_score": round(float(p_value), 4),
         "effect_size_kind": effect_size_type,
-        "effect_size": round(float(effect_size), 4),
+        "effect_size": round(float(effect_size), 2),
         "significant": p_value < 0.05,
         "assumptions_passed": assumptions_passed
     })
@@ -2108,8 +2457,8 @@ else:
 
 QUANTILE_BIN_BEST_MEAN = CompositionTemplate(
     name="quantile_bin_best_mean",
-    description="Bin a numeric column into quantiles, find which bin has highest mean of target",
-    output_schema='A JSON object with exactly 5 keys: "binning_column" (string), "target_column" (string), "best_bin" (string label), "best_bin_mean" (rounded to 4 decimals), and "bin_means" (dict mapping bin labels to means rounded to 4 decimals). Example: {"binning_column": "age", "target_column": "income", "best_bin": "(45.0, 60.0]", "best_bin_mean": 75000.1234, "bin_means": {"(18.0, 30.0]": 45000.0, "(30.0, 45.0]": 52000.0}}',
+    description="Select most-skewed numeric column as binning column, highest-variance other column as target (excluding identifier-like columns), bin into quantiles, find which bin has highest mean of target",
+    output_schema='A JSON object with exactly 5 keys: "binning_column" (string), "target_column" (string), "best_bin" (string label), "best_bin_mean" (rounded to 2 decimals), and "bin_means" (dict mapping bin labels to means rounded to 2 decimals). Example: {"binning_column": "age", "target_column": "income", "best_bin": "(45.0, 60.0]", "best_bin_mean": 75000.1234, "bin_means": {"(18.0, 30.0]": 45000.0, "(30.0, 45.0]": 52000.0}}',
     code_template="""
 # Step 1: Choose binning column (most skewed - more interesting bins)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -2118,7 +2467,8 @@ if len(numeric_cols) < 2:
     submit({"error": "Need at least 2 numeric columns"})
 else:
     skewness = {col: abs(df[col].skew()) for col in numeric_cols}
-    bin_col = max(skewness, key=skewness.get)
+    # Alphabetical tiebreaker for determinism
+    bin_col = sorted(skewness.items(), key=lambda x: (-x[1], x[0]))[0][0]
     hook(bin_col, "binning column (most skewed)", name='bin_col')
     print(f"Binning column: {bin_col} (skewness: {skewness[bin_col]:.4f})")
 
@@ -2139,7 +2489,7 @@ else:
     else:
         # Step 4: Compute mean per bin
         bin_means = df.groupby(bins)[target_col].mean()
-        bin_means_dict = {str(k): round(v, 4) for k, v in bin_means.items()}
+        bin_means_dict = {str(k): round(v, 2) for k, v in bin_means.items()}
         hook(bin_means_dict, "means per bin", name='bin_means', depends_on=['bin_count'])
         print("Bin means:")
         for b, m in sorted(bin_means.items(), key=lambda x: x[1], reverse=True):
@@ -2154,7 +2504,7 @@ else:
             "binning_column": bin_col,
             "target_column": target_col,
             "best_bin": str(best_bin),
-            "best_bin_mean": round(float(best_mean), 4),
+            "best_bin_mean": round(float(best_mean), 2),
             "bin_means": bin_means_dict
         })
 """.strip(),
@@ -2170,8 +2520,8 @@ else:
 
 ITERATIVE_OUTLIER_REMOVAL = CompositionTemplate(
     name="iterative_outlier_removal",
-    description="Iteratively remove outliers until mean stabilizes, report convergence",
-    output_schema='A JSON object with exactly 5 keys: "column" (string), "iterations_used" (integer), "total_removed" (integer), "initial_mean" (rounded to 4 decimals), and "final_mean" (rounded to 4 decimals). Example: {"column": "price", "iterations_used": 3, "total_removed": 18, "initial_mean": 123.4567, "final_mean": 118.9012}',
+    description="Iteratively remove z-score outliers (|z|>3) from highest-CV column (excluding identifier-like columns) until no outliers remain OR mean change < 0.001, report convergence",
+    output_schema='A JSON object with exactly 5 keys: "column" (string), "iterations_used" (integer), "total_removed" (integer), "initial_mean" (rounded to 2 decimals), and "final_mean" (rounded to 2 decimals). Example: {"column": "price", "iterations_used": 3, "total_removed": 18, "initial_mean": 123.4567, "final_mean": 118.9012}',
     code_template="""
 # Step 1: Pick column with highest CV (most likely to have meaningful outliers)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
@@ -2186,7 +2536,8 @@ for col in numeric_cols:
 if not cv_values:
     submit({"error": "No suitable numeric columns found"})
 else:
-    target_col = max(cv_values, key=cv_values.get)
+    # Alphabetical tiebreaker for determinism
+    target_col = sorted(cv_values.items(), key=lambda x: (-x[1], x[0]))[0][0]
     hook(target_col, "target column (highest CV)", name='target_col')
     print(f"Target: {target_col} (CV: {cv_values[target_col]:.4f})")
 
@@ -2239,8 +2590,8 @@ else:
         "column": target_col,
         "iterations_used": iterations_used,
         "total_removed": int(total_removed),
-        "initial_mean": round(float(initial_mean), 4),
-        "final_mean": round(float(final_mean), 4)
+        "initial_mean": round(float(initial_mean), 2),
+        "final_mean": round(float(final_mean), 2)
     })
 """.strip(),
     output_type="dict",
@@ -2256,8 +2607,8 @@ else:
 
 SEGMENT_THEN_ANALYZE_OUTLIERS = CompositionTemplate(
     name="segment_then_analyze_outliers",
-    description="Find best category segment, then analyze outlier rate within that segment",
-    output_schema='A JSON object with exactly 7 keys: "category_column" (string), "target_column" (string), "best_category" (string with highest mean), "segment_size" (integer), "segment_mean" (rounded to 4 decimals), "segment_outliers" (integer, IQR method), and "outlier_rate" (rounded to 4 decimals). Example: {"category_column": "region", "target_column": "sales", "best_category": "West", "segment_size": 120, "segment_mean": 1234.5678, "segment_outliers": 9, "outlier_rate": 0.0750}',
+    description="Use first categorical column with 3-15 unique values as grouping, highest-variance numeric column as target (excluding identifier-like columns), find category with highest mean, analyze IQR-based outlier rate within that segment",
+    output_schema='A JSON object with exactly 7 keys: "category_column" (string), "target_column" (string), "best_category" (string with highest mean), "segment_size" (integer), "segment_mean" (rounded to 2 decimals), "segment_outliers" (integer, IQR method), and "outlier_rate" (rounded to 2 decimals). Example: {"category_column": "region", "target_column": "sales", "best_category": "West", "segment_size": 120, "segment_mean": 1234.5678, "segment_outliers": 9, "outlier_rate": 0.0750}',
     code_template="""
 # Step 1: Find suitable categorical column
 cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
@@ -2311,9 +2662,9 @@ else:
         "target_column": target_col,
         "best_category": str(best_cat),
         "segment_size": segment_size,
-        "segment_mean": round(float(segment_mean), 4),
+        "segment_mean": round(float(segment_mean), 2),
         "segment_outliers": int(outliers),
-        "outlier_rate": round(float(outlier_rate), 4)
+        "outlier_rate": round(float(outlier_rate), 2)
     })
 """.strip(),
     output_type="dict",
