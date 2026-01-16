@@ -173,10 +173,18 @@ QUESTION:
 
 The dataframe `df` is already loaded.
 
+=== IDENTIFIER-LIKE COLUMN RULES ===
+When a question mentions "excluding identifier-like columns", you MUST exclude:
+- Columns with >98% unique values (nearly unique = likely row identifiers)
+- Columns matching ID patterns: 'id', 'uuid', 'index', 'row_id', 'person_id', 'charges' (if 99%+ unique), etc.
+- Use: `df.select_dtypes('number').drop(columns=[id_cols], errors='ignore')`
+This is CRITICAL for questions about "highest variance", "strongest correlation", etc.
+
 === APPROACH ===
 1. Check available columns: `print(df.columns.tolist())`
-2. Explore relevant data before computing
-3. Submit your answer with `submit(result)`
+2. Identify and exclude id-like columns before analysis
+3. Explore relevant data before computing
+4. Submit your answer with `submit(result)`
 
 === EXAMPLE ===
 ```python

@@ -35,9 +35,26 @@ def json_default(obj):
         return int(obj)
     if isinstance(obj, (np.floating, float)):
         return float(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)  # Convert numpy bool to Python bool for proper JSON serialization
     if isinstance(obj, np.ndarray):
         return obj.tolist()
     return str(obj)
+
+# Default precision for float rounding before hashing.
+# Must match csv_spec.hashing.DEFAULT_HASH_PRECISION for consistent hashes.
+DEFAULT_HASH_PRECISION = 2
+
+def _round_floats(obj, precision):
+    """Recursively round all floats in a structure to consistent precision."""
+    if isinstance(obj, float):
+        return round(obj, precision)
+    if isinstance(obj, dict):
+        return {k: _round_floats(v, precision) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        rounded = [_round_floats(item, precision) for item in obj]
+        return tuple(rounded) if isinstance(obj, tuple) else rounded
+    return obj
 
 # Storage for hooks captured during execution
 _captured_hooks = []
@@ -125,7 +142,9 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
 
     # Get normalized value for hashing (always hash the full value)
     normalized = normalize_value(value)
-    full_json = json.dumps(normalized, sort_keys=True, default=json_default)
+    # Round floats before hashing to ensure consistent hashes despite FP precision
+    rounded = _round_floats(normalized, DEFAULT_HASH_PRECISION)
+    full_json = json.dumps(rounded, sort_keys=True, default=json_default)
     value_hash = hashlib.sha256(full_json.encode()).hexdigest()[:16]
 
     # Determine stored value based on type
