@@ -127,8 +127,18 @@ def _question_is_viable(question: str, profile: dict) -> tuple[bool, str]:
     return True, "ok"
 
 
+class _NullConsole:
+    """No-op console that silently ignores all print calls."""
+
+    def print(self, *args, **kwargs) -> None:
+        pass
+
+
 class _SilentTraceUI:
     """No-op UI for silent student validation traces."""
+
+    def __init__(self):
+        self.console = _NullConsole()
 
     def print_trace_start(self, mode: str) -> None:
         return None
@@ -200,11 +210,13 @@ class CompositionalQuestionGenerator:
         self.data_overview: str = ""
 
     async def setup(self) -> None:
-        """Initialize sandbox, verbalizer, and generate data overview."""
-        self.verbalizer = QuestionVerbalizer(
-            model=self.model,
-            sampling_args=self.sampling_args,
-        )
+        """Initialize sandbox, verbalizer (if needed), and generate data overview."""
+        # Only initialize verbalizer if we're using LLM verbalization
+        if not config.synthetic_skip_verbalization:
+            self.verbalizer = QuestionVerbalizer(
+                model=self.model,
+                sampling_args=self.sampling_args,
+            )
         self.env = LocalCSVAnalysisEnv(csv_path=str(self.csv_path))
         self.state = await self.env.setup_state({})
 
@@ -291,12 +303,16 @@ class CompositionalQuestionGenerator:
     async def generate(
         self,
         n_questions: int | None = None,
+        output_path: Path | None = None,
+        retry_failed: bool = False,
     ) -> dict:
         """
         Generate compositional questions for the dataset.
 
         Args:
             n_questions: Max questions to generate (None = all applicable templates)
+            output_path: Directory for incremental JSONL output (enables resume)
+            retry_failed: If True, re-process previously failed questions
 
         Returns:
             Dict with dataset_columns and questions list
@@ -351,7 +367,7 @@ class CompositionalQuestionGenerator:
 
                     # Execute alternative code templates if present
                     alt_codes = template.instantiate_alternatives(profile, params)
-                    for alt_code in alt_codes:
+                    for alt_idx, alt_code in enumerate(alt_codes):
                         try:
                             alt_result = await self._execute_code(alt_code)
                             if alt_result:
@@ -361,8 +377,12 @@ class CompositionalQuestionGenerator:
                                     if alt_hash not in answer_hashes:
                                         ground_truths.append(alt_gt)
                                         answer_hashes.append(alt_hash)
-                        except Exception:
-                            pass  # Silently skip failed alternatives
+                                else:
+                                    print(f"    [alt {alt_idx+1}] returned error: {alt_gt.get('error', 'unknown')[:50]}")
+                            else:
+                                print(f"    [alt {alt_idx+1}] no result returned")
+                        except Exception as alt_exc:
+                            print(f"    [alt {alt_idx+1}] FAILED: {alt_exc}")
 
                     n_alts = len(ground_truths) - 1
                     alt_suffix = f" (+{n_alts} alt)" if n_alts > 0 else ""
@@ -382,94 +402,162 @@ class CompositionalQuestionGenerator:
             except Exception as e:
                 print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) FAILED: {e}")
 
-        # 4. Verbalize all concurrently (parallel LLM calls)
-        print(f"\nVerbalizing {len(execution_results)} templates...")
-
-        n_candidates = max(1, config.synthetic_verbalization_candidates)
-
-        async def verbalize_candidates(item: dict) -> dict:
-            """Generate multiple candidates for one template execution."""
-            tasks = [
-                self.verbalizer.verbalize(
-                    code=item["code"],
-                    profile=profile,
-                    ground_truth=item["ground_truth"],
-                    output_schema=item["template"].output_schema,
-                    data_overview=self.data_overview,
-                    dataset_description=self.dataset_description,
-                    banned_words=FORBIDDEN_METHOD_TERMS,
-                )
-                for _ in range(n_candidates)
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            candidates = []
-            for idx, result in enumerate(results, start=1):
-                if isinstance(result, Exception):
-                    question_text = "[VERBALIZATION FAILED]"
-                    hint = ""
-                    raw_response = f"[VERBALIZATION ERROR: {type(result).__name__}: {result}]"
-                else:
-                    question_text, hint, raw_response = result
-                candidates.append(
-                    {
-                        "candidate_index": idx,
+        # 4. Verbalize (or use mechanical questions)
+        if config.synthetic_skip_verbalization:
+            # Mechanical questions: use template description directly
+            print(f"\nUsing mechanical questions for {len(execution_results)} templates...")
+            verbalized = []
+            for item in execution_results:
+                template = item["template"]
+                # Build question from template description + output schema
+                question_text = f"{template.description}. Return as JSON matching this schema: {template.output_schema}"
+                verbalized.append({
+                    "item": item,
+                    "candidates": [{
+                        "candidate_index": 1,
                         "question": question_text,
-                        "hint": hint,
-                        "raw_response": raw_response,
-                    }
-                )
-            return {"item": item, "candidates": candidates}
+                        "hint": "",  # No hint for mechanical questions
+                        "raw_response": "[MECHANICAL]",
+                    }]
+                })
+        else:
+            # LLM verbalization
+            print(f"\nVerbalizing {len(execution_results)} templates...")
 
-        verbalized = await asyncio.gather(
-            *[verbalize_candidates(item) for item in execution_results]
-        )
+            n_candidates = max(1, config.synthetic_verbalization_candidates)
+
+            async def verbalize_candidates(item: dict) -> dict:
+                """Generate multiple candidates for one template execution."""
+                tasks = [
+                    self.verbalizer.verbalize(
+                        code=item["code"],
+                        profile=profile,
+                        ground_truth=item["ground_truth"],
+                        output_schema=item["template"].output_schema,
+                        data_overview=self.data_overview,
+                        dataset_description=self.dataset_description,
+                        banned_words=FORBIDDEN_METHOD_TERMS,
+                    )
+                    for _ in range(n_candidates)
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                candidates = []
+                for idx, result in enumerate(results, start=1):
+                    if isinstance(result, Exception):
+                        question_text = "[VERBALIZATION FAILED]"
+                        hint = ""
+                        raw_response = f"[VERBALIZATION ERROR: {type(result).__name__}: {result}]"
+                    else:
+                        question_text, hint, raw_response = result
+                    candidates.append(
+                        {
+                            "candidate_index": idx,
+                            "question": question_text,
+                            "hint": hint,
+                            "raw_response": raw_response,
+                        }
+                    )
+                return {"item": item, "candidates": candidates}
+
+            verbalized = await asyncio.gather(
+                *[verbalize_candidates(item) for item in execution_results]
+            )
 
         questions: list[dict] = []
         rejected: dict[str, int] = {}
         rejection_log: list[dict] = []
+
+        # Incremental JSONL output files (for resume capability)
+        accepted_jsonl = output_path / "questions_accepted.jsonl" if output_path else None
+        rejected_jsonl = output_path / "questions_rejected.jsonl" if output_path else None
+
+        # Load already-processed fingerprints for resume
+        processed_fingerprints: set[str] = set()
+        if accepted_jsonl and accepted_jsonl.exists():
+            with open(accepted_jsonl) as f:
+                for line in f:
+                    entry = json.loads(line)
+                    fp = entry.get("_fingerprint")
+                    if fp:
+                        processed_fingerprints.add(fp)
+                    questions.append(entry)
+            print(f"  Resuming: loaded {len(questions)} already-processed questions")
+        if rejected_jsonl and rejected_jsonl.exists() and not retry_failed:
+            with open(rejected_jsonl) as f:
+                for line in f:
+                    entry = json.loads(line)
+                    fp = entry.get("_fingerprint")
+                    if fp:
+                        processed_fingerprints.add(fp)
+            print(f"  Resuming: skipping {len(processed_fingerprints) - len(questions)} rejected questions")
+        elif retry_failed and rejected_jsonl and rejected_jsonl.exists():
+            # Count how many will be retried
+            with open(rejected_jsonl) as f:
+                retry_count = sum(1 for _ in f)
+            print(f"  Retry mode: will re-process {retry_count} previously rejected questions")
 
         def record_rejection(
             item: dict,
             candidate: dict,
             reason: str,
             validation: dict | None = None,
+            fingerprint: str | None = None,
         ) -> None:
             rejected[reason] = rejected.get(reason, 0) + 1
-            rejection_log.append(
-                {
-                    "dataset": self.dataset_name,
-                    "template_name": item["template"].name,
-                    "template_params": item["params"] or None,
-                    "category": item["template"].category,
-                    "tags": item["template"].tags,
-                    "candidate_index": candidate.get("candidate_index"),
-                    "question": candidate.get("question"),
-                    "hint": candidate.get("hint"),
-                    "reason": reason,
-                    "validation": validation,
-                    "raw_response": candidate.get("raw_response"),
-                }
-            )
+            entry = {
+                "dataset": self.dataset_name,
+                "template_name": item["template"].name,
+                "template_params": item["params"] or None,
+                "category": item["template"].category,
+                "tags": item["template"].tags,
+                "candidate_index": candidate.get("candidate_index"),
+                "question": candidate.get("question"),
+                "hint": candidate.get("hint"),
+                "reason": reason,
+                "validation": validation,
+                "raw_response": candidate.get("raw_response"),
+                "_fingerprint": fingerprint,
+            }
+            rejection_log.append(entry)
+            # Incremental save
+            if rejected_jsonl:
+                with open(rejected_jsonl, "a") as f:
+                    f.write(json.dumps(entry) + "\n")
 
         for bundle in verbalized:
             item = bundle["item"]
             candidates = bundle["candidates"]
+
+            # Compute fingerprint for this template+params combination
+            fingerprint = hash_artifact({
+                "template": item["template"].name,
+                "params": item["params"],
+                "answer_hash": item["answer_hash"],
+            })
+
+            # Skip if already processed (resume capability)
+            if fingerprint in processed_fingerprints:
+                continue
+
             accepted = None
             attempts = 0
             for candidate in candidates:
                 attempts += 1
                 question_text = candidate.get("question") or ""
                 if not question_text.strip():
-                    record_rejection(item, candidate, "empty_question")
+                    record_rejection(item, candidate, "empty_question", fingerprint=fingerprint)
                     continue
                 if question_text.startswith("[VERBALIZATION FAILED"):
-                    record_rejection(item, candidate, "verbalization_failed")
+                    record_rejection(item, candidate, "verbalization_failed", fingerprint=fingerprint)
                     continue
 
-                is_ok, reason = _question_is_viable(question_text, profile)
-                if not is_ok:
-                    record_rejection(item, candidate, reason)
-                    continue
+                # Skip viability filter for mechanical questions (they intentionally contain method details)
+                is_mechanical = candidate.get("raw_response") == "[MECHANICAL]"
+                if not is_mechanical:
+                    is_ok, reason = _question_is_viable(question_text, profile)
+                    if not is_ok:
+                        record_rejection(item, candidate, reason, fingerprint=fingerprint)
+                        continue
 
                 validation_info = None
                 if config.synthetic_question_validation_enabled:
@@ -486,6 +574,7 @@ class CompositionalQuestionGenerator:
                             candidate,
                             "student_validation_failed",
                             validation=validation_info,
+                            fingerprint=fingerprint,
                         )
                         continue
 
@@ -510,11 +599,16 @@ class CompositionalQuestionGenerator:
                     "ground_truth_hashes": item["answer_hashes"],
                     "_ground_truths": item["ground_truths"],
                     "_template": item["template"].name,
+                    "_fingerprint": fingerprint,
                 }
                 break
 
             if accepted:
                 questions.append(accepted)
+                # Incremental save
+                if accepted_jsonl:
+                    with open(accepted_jsonl, "a") as f:
+                        f.write(json.dumps(accepted) + "\n")
 
         if rejected:
             print("  Question filter rejections:")
@@ -618,6 +712,7 @@ async def generate_questions(
     output_dir: str | None = None,
     n_questions: int | None = None,
     model: str | None = None,
+    retry_failed: bool = False,
 ) -> dict:
     """
     Main entry point for generating compositional questions.
@@ -627,6 +722,7 @@ async def generate_questions(
         output_dir: Directory to save questions.json (defaults to data/questions/{dataset_name}/)
         n_questions: Max questions to generate
         model: LLM model for verbalization
+        retry_failed: If True, re-process previously failed questions
 
     Returns:
         Generated questions dict
@@ -642,18 +738,18 @@ async def generate_questions(
         dataset_description=dataset_description,
     )
 
+    # Prepare output path early for incremental saving
+    if output_dir is None:
+        dataset_name = Path(csv_path).parent.name
+        output_dir = f"{config.questions_synthetic_dir}/{dataset_name}"
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
     try:
         await generator.setup()
-        result = await generator.generate(n_questions=n_questions)
+        result = await generator.generate(n_questions=n_questions, output_path=output_path, retry_failed=retry_failed)
 
-        # Save output
-        if output_dir is None:
-            # Use parent folder name (e.g., "mirichoi0218_insurance" from ".../mirichoi0218_insurance/data.csv")
-            dataset_name = Path(csv_path).parent.name
-            output_dir = f"{config.questions_synthetic_dir}/{dataset_name}"
-
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
+        # Save final output (combines any resumed data with new)
         questions_file = output_path / "questions.json"
 
         with open(questions_file, "w") as f:
@@ -730,6 +826,11 @@ def main() -> int:
         default=None,
         help="Limit number of datasets to process (for testing)",
     )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="Re-process previously failed questions (ignores rejected fingerprints)",
+    )
 
     args = parser.parse_args()
 
@@ -776,6 +877,7 @@ def main() -> int:
                     output_dir=args.output_dir,
                     n_questions=args.n_questions,
                     model=args.model,
+                    retry_failed=args.retry_failed,
                 )
             )
             total_questions += len(result["questions"])
