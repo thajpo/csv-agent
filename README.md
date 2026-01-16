@@ -176,8 +176,8 @@ csvagent manifest
 # Force re-run of failed questions
 csvagent generate episodes --synth --retry-failed
 
-# Bypass cache entirely
-csvagent generate episodes --synth --no-cache
+# To fully reset cache, delete the manifest file
+rm data/datagen_manifest.jsonl
 ```
 
 The manifest tracks fingerprints based on:
