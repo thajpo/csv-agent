@@ -18,6 +18,8 @@ import asyncio
 import json
 import re
 import sys
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +37,13 @@ from src.datagen.synthetic.templates import (
 )
 from src.datagen.synthetic.verbalizer import QuestionVerbalizer
 from src.envs.csv_env import LocalCSVAnalysisEnv
-from csv_spec import hash_artifact
+from csv_spec import (
+    hash_artifact,
+    EpisodeJSONL,
+    QADict,
+    TriangulationMetadataDict,
+    TimingMetadataDict,
+)
 from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
 
 # Dataset viability thresholds
@@ -237,8 +245,12 @@ class CompositionalQuestionGenerator:
         expected_hashes: list[str],
         n_steps: int | None,
         difficulty: str | None,
-    ) -> tuple[bool, dict]:
-        """Run a student validation trace and compare against expected answers."""
+    ) -> tuple[bool, dict, dict | None]:
+        """Run a student validation trace and compare against expected answers.
+
+        Returns:
+            (matched, validation_info, trace) - trace is full TraceDict if matched, else None
+        """
         validation_model = (
             config.synthetic_question_validation_model or config.teacher_model
         )
@@ -273,7 +285,7 @@ class CompositionalQuestionGenerator:
                 "success": False,
                 "matched": False,
                 "error": f"{type(exc).__name__}: {exc}",
-            }
+            }, None
 
         success = trace.get("success", False)
         final_answer = trace.get("final_answer")
@@ -291,7 +303,7 @@ class CompositionalQuestionGenerator:
                     matched = True
                     break
 
-        return matched, {
+        validation_info = {
             "model": validation_model,
             "success": success,
             "matched": matched,
@@ -299,6 +311,8 @@ class CompositionalQuestionGenerator:
             "elapsed": round(float(elapsed), 3),
             "final_answer_hash": final_hash,
         }
+        # Return full trace when matched (for episode generation)
+        return matched, validation_info, trace if matched else None
 
     async def generate(
         self,
@@ -470,6 +484,7 @@ class CompositionalQuestionGenerator:
         # Incremental JSONL output files (for resume capability)
         accepted_jsonl = output_path / "questions_accepted.jsonl" if output_path else None
         rejected_jsonl = output_path / "questions_rejected.jsonl" if output_path else None
+        episodes_jsonl = output_path / "episodes.jsonl" if output_path else None
 
         # Load already-processed fingerprints for resume
         processed_fingerprints: set[str] = set()
@@ -560,8 +575,9 @@ class CompositionalQuestionGenerator:
                         continue
 
                 validation_info = None
+                validation_trace = None
                 if config.synthetic_question_validation_enabled:
-                    matched, validation_info = await self._validate_question(
+                    matched, validation_info, validation_trace = await self._validate_question(
                         question_text=question_text,
                         expected_values=item["ground_truths"],
                         expected_hashes=item["answer_hashes"],
@@ -600,15 +616,67 @@ class CompositionalQuestionGenerator:
                     "_ground_truths": item["ground_truths"],
                     "_template": item["template"].name,
                     "_fingerprint": fingerprint,
+                    # Full trace for episode generation (validation IS the episode)
+                    "_trace": validation_trace,
                 }
                 break
 
             if accepted:
                 questions.append(accepted)
-                # Incremental save
+                # Incremental save question
                 if accepted_jsonl:
+                    # Save question without trace (trace goes to episodes)
+                    question_entry = {k: v for k, v in accepted.items() if k != "_trace"}
                     with open(accepted_jsonl, "a") as f:
-                        f.write(json.dumps(accepted) + "\n")
+                        f.write(json.dumps(question_entry) + "\n")
+
+                # Save episode with full trace (validation IS the episode)
+                if episodes_jsonl and accepted.get("_trace"):
+                    validation = accepted.get("validation", {})
+                    elapsed = validation.get("elapsed", 0.0)
+
+                    episode = EpisodeJSONL(
+                        episode_id=str(uuid.uuid4()),
+                        timestamp=datetime.now(),
+                        csv_source=str(self.csv_path),
+                        question=QADict(
+                            id=accepted.get("_fingerprint", ""),
+                            question_text=accepted["question"],
+                            hint=accepted.get("hint"),
+                            difficulty=accepted.get("difficulty"),
+                            n_steps=accepted.get("n_steps"),
+                            category=accepted.get("category"),
+                            tags=accepted.get("tags"),
+                            template_name=accepted.get("template_name"),
+                            template_params=accepted.get("template_params"),
+                            output_type=accepted.get("output_type"),
+                            output_schema=accepted.get("output_schema"),
+                            ground_truth=accepted.get("_ground_truth"),
+                            ground_truth_hash=accepted.get("ground_truth_hash"),
+                            ground_truth_hashes=accepted.get("ground_truth_hashes"),
+                        ),
+                        # For synthetic: validation trace IS the gold trace
+                        # (LLM solved without hint, matched ground truth)
+                        gold_trace=accepted["_trace"],
+                        consistency_traces=[],  # No triangulation needed - we have deterministic ground truth
+                        verified=True,  # Verified by ground truth match
+                        triangulation=TriangulationMetadataDict(
+                            n_consistency_runs=0,
+                            n_consistency_succeeded=0,
+                            majority_answer_hash=accepted.get("ground_truth_hash"),
+                            majority_count=1,
+                            gold_matches_majority=True,
+                        ),
+                        timing=TimingMetadataDict(
+                            gold_elapsed=elapsed,
+                            consistency_elapsed=[],
+                            total_elapsed=elapsed,
+                            avg_elapsed=elapsed,
+                        ),
+                        source="synthetic",
+                    )
+                    with open(episodes_jsonl, "a") as f:
+                        f.write(json.dumps(episode, default=str) + "\n")
 
         if rejected:
             print("  Question filter rejections:")
