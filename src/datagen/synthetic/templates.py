@@ -1172,17 +1172,24 @@ target_col = variances.idxmax()
 hook(target_col, "target column (highest variance)", name='target_col')
 print(f"Target: {target_col}")
 
-# Step 2: Find a binary categorical column
+# Step 2: Find a binary categorical column (including numeric columns with exactly 2 unique values)
 cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 binary_col = None
-for col in cat_cols:
+# First check object/category columns
+for col in sorted(cat_cols):  # Alphabetical for determinism
     if df[col].nunique() == 2:
         binary_col = col
         break
+# Then check numeric columns with exactly 2 unique values (e.g., 0/1 binary)
+if binary_col is None:
+    for col in sorted(numeric_cols):
+        if col != target_col and df[col].nunique() == 2:
+            binary_col = col
+            break
 
 if binary_col is None:
     # Create binary from numeric if no categorical
-    for col in numeric_cols:
+    for col in sorted(numeric_cols):  # Alphabetical for determinism
         if col != target_col:
             median_val = df[col].median()
             df['_binary_group'] = (df[col] > median_val).map({True: 'high', False: 'low'})
@@ -1195,14 +1202,16 @@ else:
     hook(binary_col, "binary grouping column", name='binary_col')
     print(f"Grouping by: {binary_col}")
 
-    # Step 3: Get the two groups
-    groups = df[binary_col].dropna().unique()
-    group1_name, group2_name = groups[0], groups[1]
-    hook([str(group1_name), str(group2_name)], "group names", name='group_names', depends_on=['binary_col'])
+    # Step 3: Get the two groups (sorted for determinism)
+    raw_groups = list(df[binary_col].dropna().unique())
+    sorted_groups = sorted(raw_groups, key=str)  # Sort by string repr, keep original values
+    group1_val, group2_val = sorted_groups[0], sorted_groups[1]
+    group1_name, group2_name = str(group1_val), str(group2_val)
+    hook([group1_name, group2_name], "group names", name='group_names', depends_on=['binary_col'])
 
     # Step 4: Extract data for each group
-    group1_data = df[df[binary_col] == group1_name][target_col].dropna()
-    group2_data = df[df[binary_col] == group2_name][target_col].dropna()
+    group1_data = df[df[binary_col] == group1_val][target_col].dropna()
+    group2_data = df[df[binary_col] == group2_val][target_col].dropna()
     hook({"group1_n": len(group1_data), "group2_n": len(group2_data)}, "group sizes", name='group_sizes', depends_on=['group_names'])
     print(f"Group sizes: {len(group1_data)} vs {len(group2_data)}")
 
@@ -1250,17 +1259,24 @@ target_col = cv.idxmax()
 hook(target_col, "target column (highest CV)", name='target_col')
 print(f"Target: {target_col}")
 
-# Step 2: Find a binary categorical column
+# Step 2: Find a binary categorical column (including numeric columns with exactly 2 unique values)
 cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 binary_col = None
-for col in cat_cols:
+# First check object/category columns
+for col in sorted(cat_cols):  # Alphabetical for determinism
     if df[col].nunique() == 2:
         binary_col = col
         break
+# Then check numeric columns with exactly 2 unique values (e.g., 0/1 binary)
+if binary_col is None:
+    for col in sorted(numeric_cols):
+        if col != target_col and df[col].nunique() == 2:
+            binary_col = col
+            break
 
 if binary_col is None:
     # Create binary from numeric if no categorical
-    for col in numeric_cols:
+    for col in sorted(numeric_cols):  # Alphabetical for determinism
         if col != target_col:
             median_val = df[col].median()
             df['_binary_group'] = (df[col] > median_val).map({True: 'high', False: 'low'})
@@ -1273,14 +1289,16 @@ else:
     hook(binary_col, "binary grouping column", name='binary_col')
     print(f"Grouping by: {binary_col}")
 
-    # Step 3: Get the two groups
-    groups = df[binary_col].dropna().unique()
-    group1_name, group2_name = groups[0], groups[1]
-    hook([str(group1_name), str(group2_name)], "group names", name='group_names', depends_on=['binary_col'])
+    # Step 3: Get the two groups (sorted for determinism)
+    raw_groups = list(df[binary_col].dropna().unique())
+    sorted_groups = sorted(raw_groups, key=str)  # Sort by string repr, keep original values
+    group1_val, group2_val = sorted_groups[0], sorted_groups[1]
+    group1_name, group2_name = str(group1_val), str(group2_val)
+    hook([group1_name, group2_name], "group names", name='group_names', depends_on=['binary_col'])
 
     # Step 4: Extract data for each group
-    group1_data = df[df[binary_col] == group1_name][target_col].dropna()
-    group2_data = df[df[binary_col] == group2_name][target_col].dropna()
+    group1_data = df[df[binary_col] == group1_val][target_col].dropna()
+    group2_data = df[df[binary_col] == group2_val][target_col].dropna()
     hook({"group1_n": len(group1_data), "group2_n": len(group2_data)}, "group sizes", name='group_sizes', depends_on=['group_names'])
     print(f"Group sizes: {len(group1_data)} vs {len(group2_data)}")
 
@@ -1698,30 +1716,41 @@ target_col = sorted(skewness.items(), key=lambda x: (-x[1], x[0]))[0][0]
 hook({"target": target_col, "skewness": skewness[target_col]}, "target column (most skewed)", name='target_col')
 print(f"Target: {target_col} (skewness: {skewness[target_col]:.4f})")
 
-# Step 2: Find binary grouping column
+# Step 2: Find binary grouping column (including numeric columns with exactly 2 unique values)
 cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
 binary_col = None
-for col in cat_cols:
+# First check object/category columns
+for col in sorted(cat_cols):  # Alphabetical for determinism
     if df[col].nunique() == 2:
         binary_col = col
         break
+# Then check numeric columns with exactly 2 unique values (e.g., 0/1 binary)
+if binary_col is None:
+    for col in sorted(numeric_cols):
+        if col != target_col and df[col].nunique() == 2:
+            binary_col = col
+            break
 
 if binary_col is None:
     # Create binary from median split
-    other_numeric = [c for c in numeric_cols if c != target_col][0] if len(numeric_cols) > 1 else target_col
+    other_cols = sorted([c for c in numeric_cols if c != target_col])  # Alphabetical for determinism
+    other_numeric = other_cols[0] if other_cols else target_col
     df['_binary_group'] = (df[other_numeric] > df[other_numeric].median()).map({True: 'high', False: 'low'})
     binary_col = '_binary_group'
 
 hook(binary_col, "grouping column", name='binary_col')
 print(f"Grouping by: {binary_col}")
 
-# Step 3: Extract groups
-groups = df[binary_col].dropna().unique()
-g1_name, g2_name = str(groups[0]), str(groups[1])
+# Step 3: Extract groups (sorted for determinism)
+raw_groups = list(df[binary_col].dropna().unique())
+# Sort by string representation for determinism, but keep original values for filtering
+sorted_groups = sorted(raw_groups, key=str)
+g1_val, g2_val = sorted_groups[0], sorted_groups[1]
+g1_name, g2_name = str(g1_val), str(g2_val)
 hook([g1_name, g2_name], "group names", name='groups', depends_on=['binary_col'])
 
-g1_data = df[df[binary_col] == groups[0]][target_col].dropna()
-g2_data = df[df[binary_col] == groups[1]][target_col].dropna()
+g1_data = df[df[binary_col] == g1_val][target_col].dropna()
+g2_data = df[df[binary_col] == g2_val][target_col].dropna()
 hook({"n1": len(g1_data), "n2": len(g2_data)}, "group sizes", name='sizes', depends_on=['groups'])
 
 # Step 4: Compute medians
