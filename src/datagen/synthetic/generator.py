@@ -635,7 +635,12 @@ class CompositionalQuestionGenerator:
                                 source="synthetic_failed",
                             )
                             with open(episodes_failed_jsonl, "a") as f:
-                                f.write(json.dumps(failed_episode, default=str) + "\n")
+                                f.write(
+                                    json.dumps(
+                                        failed_episode.model_dump(), default=str
+                                    )
+                                    + "\n"
+                                )
                         continue
 
                 accepted = {
@@ -720,7 +725,7 @@ class CompositionalQuestionGenerator:
                         source="synthetic",
                     )
                     with open(episodes_jsonl, "a") as f:
-                        f.write(json.dumps(episode, default=str) + "\n")
+                        f.write(json.dumps(episode.model_dump(), default=str) + "\n")
 
         if rejected:
             print("  Question filter rejections:")

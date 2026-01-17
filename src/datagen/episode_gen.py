@@ -265,7 +265,7 @@ async def process_csv_task(
     external_container: Any = None,
     manifest: DatagenManifest | None = None,
     dataset_hash: str | None = None,
-) -> list[EpisodeJSONL]:
+) -> tuple[list[EpisodeJSONL], list[dict], list[EpisodeJSONL]]:
     """
     Process a single CSV task and return generated episodes.
 
@@ -300,6 +300,7 @@ async def process_csv_task(
 
     episodes = []
     failures = []
+    failed_episodes = []  # Full episodes for DPO negative examples
     for r in results:
         question_text = r.question.get("question_text", r.question.get("question", ""))
 
@@ -309,7 +310,7 @@ async def process_csv_task(
             fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
 
         if not r.verified:
-            # Log unverified for later analysis
+            # Log unverified summary for quick analysis
             failures.append(
                 {
                     "question": question_text[:100],
@@ -324,6 +325,54 @@ async def process_csv_task(
                     "n_consistency": len(r.consistency_results),
                 }
             )
+
+            # Save FULL episode for DPO training (negative examples)
+            # Only save if we have a gold trace (otherwise nothing to learn from)
+            if r.gold_trace is not None:
+                question_obj = Question.from_dict(r.question)
+                consistency_traces = [trace for trace, _ in r.consistency_results]
+                n_succeeded = sum(1 for t in consistency_traces if t["success"])
+                failed_episode_id = str(uuid.uuid4())
+
+                failed_episode = EpisodeJSONL(
+                    episode_id=failed_episode_id,
+                    timestamp=datetime.now(),
+                    csv_source=task.csv_path,
+                    question=QADict(
+                        id=question_obj.id,
+                        question_text=question_obj.question_text,
+                        hint=question_obj.hint,
+                        difficulty=question_obj.difficulty,
+                        n_steps=question_obj.n_steps,
+                        category=getattr(question_obj, "category", None),
+                        tags=getattr(question_obj, "tags", None),
+                        template_name=question_obj.template_name,
+                        template_params=question_obj.template_params,
+                        output_type=question_obj.output_type,
+                        output_schema=question_obj.output_schema,
+                        ground_truth_hash=question_obj.ground_truth_hash,
+                        ground_truth_hashes=question_obj.ground_truth_hashes,
+                        ground_truth=question_obj.ground_truth,
+                    ),
+                    gold_trace=r.gold_trace,
+                    consistency_traces=consistency_traces,
+                    verified=False,  # Explicitly marked as failed
+                    source="llm_failed",  # Tag source for filtering
+                    triangulation=TriangulationMetadataDict(
+                        n_consistency_runs=len(consistency_traces),
+                        n_consistency_succeeded=n_succeeded,
+                        majority_answer_hash=r.majority_answer_hash,
+                        majority_count=r.majority_count,
+                        gold_matches_majority=False,
+                    ),
+                    timing=TimingMetadataDict(
+                        gold_elapsed=r.timing_metadata["gold_elapsed"],
+                        consistency_elapsed=r.timing_metadata["consistency_elapsed"],
+                        total_elapsed=r.timing_metadata["total_elapsed"],
+                        avg_elapsed=r.timing_metadata["avg_elapsed"],
+                    ),
+                )
+                failed_episodes.append(failed_episode)
 
             # Record failure to manifest
             if manifest is not None and fingerprint is not None:
@@ -368,6 +417,7 @@ async def process_csv_task(
             gold_trace=r.gold_trace,
             consistency_traces=consistency_traces,
             verified=r.verified,
+            source="llm",
             triangulation=TriangulationMetadataDict(
                 n_consistency_runs=len(consistency_traces),
                 n_consistency_succeeded=n_succeeded,
@@ -398,7 +448,7 @@ async def process_csv_task(
                 elapsed_seconds=r.timing_metadata.get("avg_elapsed"),
             )
 
-    return episodes, failures
+    return episodes, failures, failed_episodes
 
 
 async def main(
@@ -620,13 +670,13 @@ async def main(
 
     async def process_task_wrapper(
         task: CSVTask,
-    ) -> tuple[CSVTask, list[EpisodeJSONL], list[dict]]:
+    ) -> tuple[CSVTask, list[EpisodeJSONL], list[dict], list[EpisodeJSONL]]:
         # Acquire container from pool (blocks until one is available)
         container = await pool.acquire(task.csv_path)
         # Get dataset hash if manifest is active
         task_dataset_hash = dataset_hashes.get(task.csv_path) if manifest else None
         try:
-            episodes, failures = await process_csv_task(
+            episodes, failures, failed_episodes = await process_csv_task(
                 task=task,
                 teacher_model=teacher_model,
                 n_consistency=n_consistency,
@@ -639,7 +689,7 @@ async def main(
                 manifest=manifest,
                 dataset_hash=task_dataset_hash,
             )
-            return (task, episodes, failures)
+            return (task, episodes, failures, failed_episodes)
         finally:
             # Release container back to pool for reuse
             await pool.release(container)
@@ -650,18 +700,21 @@ async def main(
     # Process as each completes (provides real-time progress)
     completed_count = 0
     all_failures = []
+    all_failed_episodes = []  # Full episodes for DPO
     had_error = False
     try:
         for coro in asyncio.as_completed(pending_tasks):
-            task_result, episodes, failures = await coro
+            task_result, episodes, failures, failed_episodes = await coro
             completed_count += 1
 
             n_verified = sum(1 for ep in episodes if ep.verified)
             ui.base.print_success(
                 f"✓ [{completed_count}/{len(tasks)}] {task_result.dataset_name}: "
-                f"{len(episodes)} episodes ({n_verified} verified)"
+                f"{len(episodes)} episodes ({n_verified} verified), "
+                f"{len(failed_episodes)} failed (for DPO)"
             )
             all_episodes.extend(episodes)
+            all_failed_episodes.extend(failed_episodes)
             # Tag failures with dataset for analysis
             for f in failures:
                 f["dataset"] = task_result.dataset_name
@@ -690,21 +743,32 @@ async def main(
         for episode in all_episodes:
             f.write(json.dumps(episode.model_dump(), default=str) + "\n")
 
+    # Write failed episodes to separate file for DPO training
+    failed_episodes_jsonl = output_jsonl.parent / "episodes_failed.jsonl"
+    if all_failed_episodes:
+        with open(failed_episodes_jsonl, write_mode) as f:
+            for episode in all_failed_episodes:
+                f.write(json.dumps(episode.model_dump(), default=str) + "\n")
+
     # Display final summary
     ui.base.print_section("PIPELINE COMPLETE")
     ui.base.print_key_value("Output file", str(output_jsonl))
     ui.base.print_key_value("Total sources", len(tasks))
     ui.base.print_key_value("Total episodes saved", len(all_episodes))
     ui.base.print_key_value("Total verified", total_verified)
-    ui.base.print_key_value("Total unverified", len(all_failures))
+    ui.base.print_key_value("Total failed episodes (DPO)", len(all_failed_episodes))
+    ui.base.print_key_value("Total unverified (summary)", len(all_failures))
 
-    # Write failures to log file for later investigation
+    # Write failures summary to log file for later investigation
     if all_failures:
         failures_log = output_jsonl.parent / "failures_llm.jsonl"
         with open(failures_log, "w") as f:
             for failure in all_failures:
                 f.write(json.dumps(failure, default=str) + "\n")
-        ui.base.print_status(f"Failures logged to: {failures_log}")
+        ui.base.print_status(f"Failures summary logged to: {failures_log}")
+
+    if all_failed_episodes:
+        ui.base.print_status(f"Failed episodes (for DPO) saved to: {failed_episodes_jsonl}")
 
     ui.base.print_empty_line()
 

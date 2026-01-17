@@ -19,7 +19,9 @@
     
     "verified": true,
     "triangulation": { /* TriangulationMetadataDict */ },
-    "timing": { /* TimingMetadataDict */ }
+    "timing": { /* TimingMetadataDict */ },
+
+    "source": "synthetic | synthetic_failed | llm | llm_failed"
 }
 ```
 
