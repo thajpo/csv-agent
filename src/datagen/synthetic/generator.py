@@ -311,8 +311,8 @@ class CompositionalQuestionGenerator:
             "elapsed": round(float(elapsed), 3),
             "final_answer_hash": final_hash,
         }
-        # Return full trace when matched (for episode generation)
-        return matched, validation_info, trace if matched else None
+        # Always return full trace (matched=positive for SFT, unmatched=negative for DPO)
+        return matched, validation_info, trace
 
     async def generate(
         self,
@@ -485,6 +485,7 @@ class CompositionalQuestionGenerator:
         accepted_jsonl = output_path / "questions_accepted.jsonl" if output_path else None
         rejected_jsonl = output_path / "questions_rejected.jsonl" if output_path else None
         episodes_jsonl = output_path / "episodes.jsonl" if output_path else None
+        episodes_failed_jsonl = output_path / "episodes_failed.jsonl" if output_path else None
 
         # Load already-processed fingerprints for resume
         processed_fingerprints: set[str] = set()
@@ -592,6 +593,49 @@ class CompositionalQuestionGenerator:
                             validation=validation_info,
                             fingerprint=fingerprint,
                         )
+                        # Save failed trace for DPO (negative examples)
+                        if episodes_failed_jsonl and validation_trace:
+                            elapsed = validation_info.get("elapsed", 0.0)
+                            failed_episode = EpisodeJSONL(
+                                episode_id=str(uuid.uuid4()),
+                                timestamp=datetime.now(),
+                                csv_source=str(self.csv_path),
+                                question=QADict(
+                                    id=fingerprint or "",
+                                    question_text=question_text,
+                                    hint=candidate.get("hint"),
+                                    difficulty=item["template"].difficulty,
+                                    n_steps=item["template"].n_steps,
+                                    category=item["template"].category,
+                                    tags=item["template"].tags,
+                                    template_name=item["template"].name,
+                                    template_params=item["params"],
+                                    output_type=item["template"].output_type,
+                                    output_schema=item["template"].output_schema,
+                                    ground_truth=item["ground_truth"],
+                                    ground_truth_hash=item["answer_hash"],
+                                    ground_truth_hashes=item["answer_hashes"],
+                                ),
+                                gold_trace=validation_trace,  # Failed trace
+                                consistency_traces=[],
+                                verified=False,  # NOT verified - wrong answer
+                                triangulation=TriangulationMetadataDict(
+                                    n_consistency_runs=0,
+                                    n_consistency_succeeded=0,
+                                    majority_answer_hash=validation_info.get("final_answer_hash"),
+                                    majority_count=0,
+                                    gold_matches_majority=False,
+                                ),
+                                timing=TimingMetadataDict(
+                                    gold_elapsed=elapsed,
+                                    consistency_elapsed=[],
+                                    total_elapsed=elapsed,
+                                    avg_elapsed=elapsed,
+                                ),
+                                source="synthetic_failed",
+                            )
+                            with open(episodes_failed_jsonl, "a") as f:
+                                f.write(json.dumps(failed_episode, default=str) + "\n")
                         continue
 
                 accepted = {
