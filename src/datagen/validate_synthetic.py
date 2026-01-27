@@ -58,6 +58,10 @@ from src.datagen.manifest import (
     compute_dataset_hash,
     compute_synthetic_fingerprint_from_question,
 )
+from src.datagen.shared.dataset_meta import (
+    load_dataset_meta,
+    generate_description_from_overview,
+)
 
 
 def make_signal_handler(session_id: str):
@@ -89,24 +93,16 @@ def load_questions(questions_path: str) -> tuple[list[dict], list[str] | None]:
 
 
 def load_dataset_description(csv_path: Path) -> str:
-    """Load dataset description from meta.json."""
-    meta_path = csv_path.parent / "meta.json"
-    if not meta_path.exists():
-        meta_path = csv_path.with_suffix(".meta.json")
+    """Load dataset description using shared module (synthesize if missing)."""
+    dataset_name, dataset_description = load_dataset_meta(str(csv_path))
 
-    if meta_path.exists():
-        try:
-            with open(meta_path) as f:
-                meta = json.load(f)
-                return (
-                    meta.get("description")
-                    or meta.get("subtitle")
-                    or meta.get("title")
-                    or ""
-                )
-        except Exception:
-            pass
-    return ""
+    # Generate description from data_overview if missing
+    if not dataset_description or not dataset_description.strip():
+        data_overview = generate_data_overview(str(csv_path))
+        dataset_description = generate_description_from_overview(data_overview)
+        print(f"{dataset_name}: No description found, synthesized from data_overview")
+
+    return dataset_description
 
 
 async def validate_single_question(
