@@ -20,6 +20,7 @@ def sample_programs(profile: Dict[str, Any]) -> List[ProgramSpec]:
     This is true compositional generation. No hardcoded program catalogs.
     """
     chains = search_programs(profile, max_depth=6)
-    chains = reduce_chains(chains, min_length=3, observation=("answer",))
+    # Preserve decision operators by treating chosen_test as observable
+    chains = reduce_chains(chains, min_length=3, observation=("answer", "chosen_test"))
     programs = enumerate_bindings(chains, profile)
     return programs
