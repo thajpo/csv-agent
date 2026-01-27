@@ -20,6 +20,10 @@ from datetime import datetime
 
 from src.datagen.pipeline_ui import QuestionGenUI
 from src.core.config import config
+from src.datagen.shared.dataset_meta import (
+    load_dataset_meta,
+    generate_description_from_overview,
+)
 
 from src.envs.csv_env import LocalCSVAnalysisEnv
 from src.utils.docker import generate_session_id, cleanup_session
@@ -427,33 +431,18 @@ async def run_parallel_generation(
     for i, csv_path_str in enumerate(csv_sources, 1):
         csv_path = Path(csv_path_str)
 
-        # Load metadata
-        meta_path = csv_path.parent / "meta.json"
-        if not meta_path.exists():
-            meta_path = csv_path.with_suffix(".meta.json")
+        # Load dataset metadata using shared module
+        dataset_name, dataset_description = load_dataset_meta(csv_path)
 
-        dataset_description = None
-        if meta_path.exists():
-            try:
-                with open(meta_path) as f:
-                    meta_data = json.load(f)
-                    dataset_description = (
-                        meta_data.get("description")
-                        or meta_data.get("subtitle")
-                        or meta_data.get("title")
-                    )
-            except Exception as e:
-                ui.print_warning(f"Failed to read metadata from {meta_path}: {e}")
-
+        # Generate description from data_overview if missing
         if not dataset_description or not dataset_description.strip():
-            ui.print_error(f"Skipping {csv_path}: no description found")
-            continue
+            from src.core.prompts import generate_data_overview
 
-        # Derive dataset name
-        if csv_path.name == "data.csv":
-            dataset_name = csv_path.parent.name
-        else:
-            dataset_name = csv_path.stem
+            data_overview = generate_data_overview(str(csv_path))
+            dataset_description = generate_description_from_overview(data_overview)
+            ui.print_warning(
+                f"{dataset_name}: No description found, synthesized from data_overview"
+            )
 
         # Skip if episodes already exist (unless --regenerate)
         if csv_path_str in datasets_with_episodes:
