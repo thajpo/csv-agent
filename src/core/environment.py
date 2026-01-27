@@ -101,22 +101,6 @@ The code_line argument must EXACTLY match the code you wrote.
 """
 
 
-def parse_submitted_answer(output: str) -> str | None:
-    """
-    Extract submitted answer from execution output.
-
-    Looks for "✓ Submitted: {answer}" pattern in stdout.
-    The answer is expected to be JSON-serialized.
-
-    Returns:
-        The submitted answer value, or None if no submission found
-    """
-    submission, success = parse_submission(output)
-    if not success:
-        return None
-    return submission
-
-
 # Keywords that suggest a statistical/hypothesis answer needing structured format
 _STATISTICAL_KEYWORDS = {
     "yes",
@@ -472,22 +456,22 @@ class Environment:
         result.code = code
 
         # Check for submitted answer in output
-        submitted = parse_submitted_answer(output)
-        if submitted is not None:
+        submission, success = parse_submission(output)
+        if success and submission is not None:
             # Enforce strict protocol: answer MUST be wrapped
-            if isinstance(submitted, dict) and "__csv_agent_answer__" in submitted:
-                self.submitted_answer = submitted["__csv_agent_answer__"]
-                self.submission_metadata = submitted
+            if isinstance(submission, dict) and "__csv_agent_answer__" in submission:
+                self.submitted_answer = submission["__csv_agent_answer__"]
+                self.submission_metadata = submission
             else:
                 # Protocol violation: answer not wrapped
                 logger.error(
                     f"Protocol violation: Answer submitted without wrapper. "
-                    f"Expected {{'__csv_agent_answer__': value}}, got {type(submitted).__name__}. "
+                    f"Expected {{'__csv_agent_answer__': value}}, got {type(submission).__name__}. "
                     f"Agent must use submit() function."
                 )
                 raise ValueError(
                     "Answer must be submitted via submit() function. "
-                    f"Received unwrapped {type(submitted).__name__} instead of protocol dict."
+                    f"Received unwrapped {type(submission).__name__} instead of protocol dict."
                 )
 
             result.submitted_answer = self.submitted_answer
