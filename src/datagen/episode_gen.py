@@ -237,7 +237,11 @@ async def process_csv_task(
     episodes = []
     failures = []
     for r in results:
-        question_text = r.question.get("question_text", r.question.get("question", ""))
+        question_text = (
+            r.question.get("question_text")
+            or r.question.get("question_mechanical")
+            or r.question.get("question", "")
+        )
 
         # Compute fingerprint for manifest recording
         fingerprint = None
@@ -441,7 +445,11 @@ async def main(
 
         filtered_questions = []
         for q in task.questions:
-            question_text = q.get("question_text", q.get("question", ""))
+            question_text = (
+                q.get("question_text")
+                or q.get("question_mechanical")
+                or q.get("question", "")
+            )
             fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
             # include_failures=True means skip failures too (unless retry_failed)
             if manifest.has_llm(fingerprint, include_failures=not retry_failed):

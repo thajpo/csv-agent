@@ -215,7 +215,7 @@ async def explore_and_generate_questions(
             num_questions=num_questions,
         ),
         max_messages=100,
-        max_context_tokens=cfg.max_context_tokens,
+        max_context_tokens=config.max_context_tokens,
     )
 
     # 2. Multi-turn exploration loop
@@ -315,10 +315,22 @@ async def explore_and_generate_questions(
         )
 
     # 4. Create trace
+    trace_questions = []
+    if questions_generated:
+        for q in questions_generated:
+            trace_questions.append(
+                {
+                    "question_text": q.get("question") or q.get("question_text"),
+                    "hint": q.get("hint"),
+                    "difficulty": q.get("difficulty"),
+                    "n_steps": q.get("n_steps"),
+                }
+            )
+
     trace = ExplorationTrace(
         csv_path=csv_path,
         turns=exploration_turns,
-        questions_generated=questions_generated,
+        questions_generated=trace_questions,
         total_turns=len(exploration_turns),
         timestamp=datetime.now(),
     )

@@ -6,6 +6,7 @@ Provides two evidence strategies: ground_truth and consistency.
 
 from dataclasses import dataclass
 from typing import Literal, Any
+from csv_spec import TraceDict
 import logging
 
 
@@ -16,8 +17,8 @@ logger = logging.getLogger(__name__)
 class VerificationResult:
     success: bool
     match: bool | None
-    trace: dict | None
-    traces: list[dict]
+    trace: TraceDict | None
+    traces: list[TraceDict]
     majority_answer_hash: str | None
     error: str | None
 

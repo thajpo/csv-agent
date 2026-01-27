@@ -248,6 +248,9 @@ async def process_dataset(
 
         if success and trace:
             question_obj = Question.from_dict(q_dict)
+            question_text = (
+                q_dict.get("question_text") or q_dict.get("question_mechanical") or ""
+            )
             episode_id = str(uuid.uuid4())
 
             episode = EpisodeJSONL(
@@ -256,7 +259,7 @@ async def process_dataset(
                 csv_source=str(csv_path),
                 question=QADict(
                     id=question_obj.id,
-                    question_text=question_obj.question_text,
+                    question_text=question_text,
                     hint=question_obj.hint,
                     difficulty=question_obj.difficulty,
                     n_steps=question_obj.n_steps,
