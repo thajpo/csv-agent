@@ -5,7 +5,6 @@ Generates questions by:
 2) Compiling and executing to get ground truth
 3) Filtering program outputs
 4) Verbalizing into hypothesis-style questions
-5) Validating with a student trace to compute pass rate
 """
 
 from __future__ import annotations
@@ -14,11 +13,9 @@ import argparse
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
 
 from src.core.config import config
 from src.core.prompts import generate_data_overview
-from src.datagen.teacher import answers_match, execute_teacher_trace
 from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.synthetic.verbalizer import QuestionVerbalizer
 from src.datagen.synthetic.programs.compiler import compile_program
@@ -31,38 +28,6 @@ from src.datagen.shared.dataset_meta import (
 )
 from src.datagen.shared.filters import FORBIDDEN_METHOD_TERMS
 from src.datagen.shared.submission import parse_all_submissions
-
-
-class _NullConsole:
-    def print(self, *args, **kwargs) -> None:
-        pass
-
-
-class _SilentTraceUI:
-    def __init__(self):
-        self.console = _NullConsole()
-
-    def print_trace_start(self, mode: str) -> None:
-        return None
-
-    def print_turn(
-        self,
-        turn_num: int,
-        max_turns: int,
-        response: str,
-        code_cells: list[str],
-        execution_results: list[dict],
-    ) -> None:
-        return None
-
-    def print_trace_complete(
-        self,
-        success: bool,
-        final_answer: Any,
-        turns: int,
-        elapsed_seconds: float | None = None,
-    ) -> None:
-        return None
 
 
 OUTPUT_SCHEMAS = {
@@ -94,78 +59,11 @@ def _output_schema_for_op(op_name: str) -> str:
     return json.dumps(schema)
 
 
-async def _validate_question(
-    csv_path: str,
-    question_text: str,
-    expected_value: Any,
-    expected_hash: str,
-    data_overview: str,
-    dataset_description: str,
-    n_steps: int | None = None,
-    difficulty: str | None = None,
-) -> tuple[bool, dict]:
-    validation_model = (
-        config.synthetic_question_validation_model or config.teacher_model
-    )
-    max_turns = config.synthetic_question_validation_max_turns or config.max_turns
-    ui = _SilentTraceUI()
-
-    try:
-        trace, _conversation, _system, elapsed = await execute_teacher_trace(
-            csv_path=csv_path,
-            question=question_text,
-            model=validation_model,
-            hint=None,
-            n_steps=n_steps,
-            difficulty=difficulty,
-            mode="student",
-            dataset_description=dataset_description,
-            data_overview=data_overview,
-            max_turns=max_turns,
-            sampling_args={
-                "temperature": config.sampling_args.temperature,
-                "max_tokens": config.sampling_args.max_tokens,
-                "top_p": config.sampling_args.top_p,
-            },
-            ui=ui,
-            trace_mode="validation",
-        )
-    except Exception as exc:
-        return False, {
-            "model": validation_model,
-            "success": False,
-            "matched": False,
-            "error": f"{type(exc).__name__}: {exc}",
-        }
-
-    success = trace.get("success", False)
-    final_answer = trace.get("final_answer")
-    final_hash = trace.get("final_answer_hash")
-    matched = False
-    if success:
-        if answers_match(
-            final_hash,
-            expected_hash,
-            final_answer,
-            expected_value,
-            float_tol=config.float_tolerance,
-        ):
-            matched = True
-
-    return matched, {
-        "model": validation_model,
-        "success": success,
-        "matched": matched,
-        "final_answer_hash": final_hash,
-    }
-
-
 async def run_pipeline(
     csv_path: str,
     max_programs: int | None = None,
     max_verbalize: int | None = None,
     skip_verbalization: bool = False,
-    skip_validation: bool = False,
 ) -> None:
     csv_path_str = str(Path(csv_path).resolve())
     profiler = DataProfiler()
@@ -261,42 +159,9 @@ async def run_pipeline(
             verbalized.append({"program": item, "question": question, "hint": hint})
         await verbalizer.aclose()
 
-    if skip_validation:
-        print(f"Executed: {len(executed)}")
-        print(f"Filtered: {len(filtered)}")
-        print(f"Verbalized: {len(verbalized)}")
-        return
-
-    matched = 0
-    for item in verbalized:
-        program = item["program"]
-        expected_value = program["answer"]
-        expected_hash = ""
-        try:
-            from csv_spec import hash_artifact
-
-            expected_hash = hash_artifact(expected_value)
-        except Exception:
-            expected_hash = ""
-
-        ok, _info = await _validate_question(
-            csv_path=csv_path,
-            question_text=item["question"],
-            expected_value=expected_value,
-            expected_hash=expected_hash,
-            data_overview=data_overview,
-            dataset_description=dataset_description,
-        )
-        if ok:
-            matched += 1
-
-    total = len(verbalized)
-    pass_rate = (matched / total) if total else 0.0
-
     print(f"Executed: {len(executed)}")
     print(f"Filtered: {len(filtered)}")
     print(f"Verbalized: {len(verbalized)}")
-    print(f"Pass rate: {matched}/{total} ({pass_rate:.2%})")
 
 
 def main() -> int:
@@ -311,9 +176,6 @@ def main() -> int:
     parser.add_argument(
         "--skip-verbalization", action="store_true", help="Skip LLM verbalization"
     )
-    parser.add_argument(
-        "--skip-validation", action="store_true", help="Skip student validation"
-    )
     args = parser.parse_args()
 
     asyncio.run(
@@ -322,7 +184,6 @@ def main() -> int:
             max_programs=args.max_programs,
             max_verbalize=args.max_verbalize,
             skip_verbalization=args.skip_verbalization,
-            skip_validation=args.skip_validation,
         )
     )
     return 0

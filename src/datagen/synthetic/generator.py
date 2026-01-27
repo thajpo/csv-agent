@@ -27,7 +27,6 @@ import pandas as pd
 
 from src.core.config import config
 from src.core.prompts import generate_data_overview
-from src.datagen.teacher import answers_match, execute_teacher_trace
 from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.synthetic.templates import (
     CompositionTemplate,
@@ -141,42 +140,6 @@ def _question_is_viable(question: str, profile: dict) -> tuple[bool, str]:
     return True, "ok"
 
 
-class _NullConsole:
-    """No-op console that silently ignores all print calls."""
-
-    def print(self, *args, **kwargs) -> None:
-        pass
-
-
-class _SilentTraceUI:
-    """No-op UI for silent student validation traces."""
-
-    def __init__(self):
-        self.console = _NullConsole()
-
-    def print_trace_start(self, mode: str) -> None:
-        return None
-
-    def print_turn(
-        self,
-        turn_num: int,
-        max_turns: int,
-        response: str,
-        code_cells: list[str],
-        execution_results: list[dict],
-    ) -> None:
-        return None
-
-    def print_trace_complete(
-        self,
-        success: bool,
-        final_answer: Any,
-        turns: int,
-        elapsed_seconds: float | None = None,
-    ) -> None:
-        return None
-
-
 class CompositionalQuestionGenerator:
     """
     Generate verified questions via code composition.
@@ -245,84 +208,6 @@ class CompositionalQuestionGenerator:
             await self.env.destroy_sandbox(self.state["sandbox_id"])
         if self.verbalizer:
             await self.verbalizer.aclose()
-
-    async def _validate_question(
-        self,
-        question_text: str,
-        expected_values: list[Any],
-        expected_hashes: list[str],
-        n_steps: int | None,
-        difficulty: str | None,
-    ) -> tuple[bool, dict, dict | None]:
-        """Run a student validation trace and compare against expected answers.
-
-        Returns:
-            (matched, validation_info, trace) - trace is full TraceDict if matched, else None
-        """
-        validation_model = (
-            config.synthetic_question_validation_model or config.teacher_model
-        )
-        max_turns = config.synthetic_question_validation_max_turns or config.max_turns
-        ui = _SilentTraceUI()
-
-        try:
-            trace, _conversation, _system, elapsed = await execute_teacher_trace(
-                csv_path=str(self.csv_path),
-                question=question_text,
-                model=validation_model,
-                hint=None,
-                n_steps=n_steps,
-                difficulty=difficulty,
-                mode="student",
-                dataset_description=self.dataset_description,
-                data_overview=self.data_overview,
-                max_turns=max_turns,
-                sampling_args={
-                    "temperature": config.sampling_args.temperature,
-                    "max_tokens": config.sampling_args.max_tokens,
-                    "top_p": config.sampling_args.top_p,
-                },
-                ui=ui,
-                trace_mode="validation",
-            )
-        except Exception as exc:
-            return (
-                False,
-                {
-                    "model": validation_model,
-                    "success": False,
-                    "matched": False,
-                    "error": f"{type(exc).__name__}: {exc}",
-                },
-                None,
-            )
-
-        success = trace.get("success", False)
-        final_answer = trace.get("final_answer")
-        final_hash = trace.get("final_answer_hash")
-        matched = False
-        if success:
-            for expected_value, expected_hash in zip(expected_values, expected_hashes):
-                if answers_match(
-                    final_hash,
-                    expected_hash,
-                    final_answer,
-                    expected_value,
-                    float_tol=config.float_tolerance,
-                ):
-                    matched = True
-                    break
-
-        validation_info = {
-            "model": validation_model,
-            "success": success,
-            "matched": matched,
-            "turns": len(trace.get("turns", [])),
-            "elapsed": round(float(elapsed), 3),
-            "final_answer_hash": final_hash,
-        }
-        # Always return full trace (matched=positive for SFT, unmatched=negative for DPO)
-        return matched, validation_info, trace
 
     async def generate(
         self,
