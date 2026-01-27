@@ -8,7 +8,6 @@ module for output, keeping the environment logic separate from presentation.
 Refactored to use a sandboxed Python environment for code execution.
 """
 
-import ast
 import json
 import logging
 import re
@@ -29,6 +28,7 @@ from src.core.prompts import (
     CONTINUE_MSG,
     FINAL_MSG,
 )
+from src.datagen.shared.submission import parse_submission
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
@@ -111,29 +111,10 @@ def parse_submitted_answer(output: str) -> str | None:
     Returns:
         The submitted answer value, or None if no submission found
     """
-    match = re.search(r"✓ Submitted: (.+)", output)
-    if not match:
+    submission, success = parse_submission(output)
+    if not success:
         return None
-
-    answer_str = match.group(1).strip()
-
-    # Try JSON first (expected format)
-    try:
-        return json.loads(answer_str)
-    except (json.JSONDecodeError, ValueError):
-        pass
-
-    # Try Python literal (legacy format)
-    try:
-        return ast.literal_eval(answer_str)
-    except (ValueError, SyntaxError):
-        pass
-
-    # Fallback to raw string - log the unexpected format
-    logger.warning(
-        f"Answer not parseable as JSON/literal, returning raw string: {answer_str[:100]}"
-    )
-    return answer_str
+    return submission
 
 
 # Keywords that suggest a statistical/hypothesis answer needing structured format
@@ -239,11 +220,15 @@ class Environment:
         llm=None,
         session_id: str | None = None,
     ):
-        instance = cls(data, model, execution, task, env, state, reuse_env, llm, session_id)
+        instance = cls(
+            data, model, execution, task, env, state, reuse_env, llm, session_id
+        )
 
         # Create env and state if not provided
         if instance.env is None:
-            instance.env = CSVAnalysisEnv(csv_path=instance.csv_path, session_id=session_id)
+            instance.env = CSVAnalysisEnv(
+                csv_path=instance.csv_path, session_id=session_id
+            )
             instance.state = {}
             instance.state = await instance.env.setup_state(instance.state)
         elif instance.state is None:
@@ -444,7 +429,9 @@ class Environment:
                                 )
                         except json.JSONDecodeError:
                             # Can't parse - just truncate the line
-                            submit_line = submit_line[:max_submit_len] + "...[TRUNCATED]"
+                            submit_line = (
+                                submit_line[:max_submit_len] + "...[TRUNCATED]"
+                            )
                             logger.warning(
                                 f"Submission line too large and not parseable, truncating"
                             )
@@ -453,16 +440,18 @@ class Environment:
                 # CRITICAL: Don't include any part of the original submission in output[:keep_start]
                 # Otherwise the parser will find the truncated original instead of our clean version
                 keep_start = max(0, MAX_OUTPUT_CHARS - len(submit_line) - 100)
-                keep_start = min(keep_start, submit_idx)  # Never include original submission
+                keep_start = min(
+                    keep_start, submit_idx
+                )  # Never include original submission
                 truncated_chars = len(output) - keep_start - len(submit_line)
                 logger.warning(
                     f"Truncating output: {len(output):,} chars -> ~{keep_start + len(submit_line):,} chars "
                     f"(removed {truncated_chars:,} chars, preserved submission)"
                 )
                 output = (
-                    output[:keep_start] +
-                    f"\n\n... [TRUNCATED {truncated_chars:,} chars] ...\n\n" +
-                    submit_line
+                    output[:keep_start]
+                    + f"\n\n... [TRUNCATED {truncated_chars:,} chars] ...\n\n"
+                    + submit_line
                 )
             else:
                 # No submission found, use middle-out truncation
@@ -473,9 +462,9 @@ class Environment:
                     f"(removed {truncated_chars:,} chars from middle)"
                 )
                 output = (
-                    output[:keep_each] +
-                    f"\n\n... [TRUNCATED {truncated_chars:,} chars] ...\n\n" +
-                    output[-keep_each:]
+                    output[:keep_each]
+                    + f"\n\n... [TRUNCATED {truncated_chars:,} chars] ...\n\n"
+                    + output[-keep_each:]
                 )
 
         # Parse the string output into success/stdout/stderr
