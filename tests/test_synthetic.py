@@ -224,9 +224,9 @@ class TestTemplateExecution:
 
         answer = submission["__csv_agent_answer__"]
         assert "columns" in answer
-        assert "correlation" in answer
+        assert "association_score" in answer
         assert len(answer["columns"]) == 2
-        assert 0 <= answer["correlation"] <= 1
+        assert 0 <= answer["association_score"] <= 1
 
     @pytest.mark.asyncio
     async def test_execute_count_high_missing(self, sandbox):

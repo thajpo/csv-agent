@@ -327,21 +327,27 @@ async def explore_and_generate_questions(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Read column names for fingerprinting (validates questions match dataset)
-    import pandas as pd
-
-    try:
-        df_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
-    except UnicodeDecodeError:
-        df_columns = pd.read_csv(csv_path, nrows=0, encoding="latin-1").columns.tolist()
+    # Normalize to unified schema
+    dataset_name, _ = load_dataset_meta(csv_path)
+    question_records = []
+    for idx, q in enumerate(questions_generated, start=1):
+        question_text = q.get("question") or q.get("question_text")
+        record = {
+            "id": q.get("id") or f"llm_{dataset_name}_{idx:04d}",
+            "source": "llm",
+            "subtype": "llm",
+            "dataset": dataset_name,
+            "question_text": question_text,
+            "hint": q.get("hint"),
+            "difficulty": q.get("difficulty"),
+            "n_steps": q.get("n_steps"),
+            "dataset_description": dataset_description,
+        }
+        question_records.append(record)
 
     questions_file = output_path / "questions.json"
-    questions_payload = {
-        "dataset_columns": df_columns,
-        "questions": questions_generated,
-    }
     with open(questions_file, "w") as f:
-        json.dump(questions_payload, f, indent=2)
+        json.dump(question_records, f, indent=2)
     ui.print_saved_file(questions_file)
 
     trace_file = output_path / "exploration_trace.json"
@@ -349,7 +355,7 @@ async def explore_and_generate_questions(
         json.dump(trace.model_dump(), f, indent=2, default=str)
     ui.print_saved_file(trace_file)
 
-    return questions_generated, trace
+    return question_records, trace
 
 
 async def process_single_dataset(

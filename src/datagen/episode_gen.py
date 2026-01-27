@@ -45,6 +45,7 @@ from src.datagen.manifest import (
     compute_dataset_hash,
     compute_llm_fingerprint,
 )
+from src.datagen.shared.questions_io import load_questions
 from src.datagen.shared.dataset_meta import (
     load_dataset_meta,
     generate_description_from_overview,
@@ -72,33 +73,6 @@ def make_signal_handler(session_id: str):
         sys.exit(0)
 
     return handler
-
-
-def load_questions(questions_path: str) -> tuple[list[dict], list[str] | None]:
-    """
-    Load questions from JSON file.
-
-    Supports two formats:
-    1. New format: {"dataset_columns": [...], "questions": [...]}
-       - Includes column fingerprint for schema validation
-       - Used by LLM-generated questions (question_gen.py)
-
-    2. Legacy format: [question1, question2, ...]
-       - Plain list of question dicts
-       - Used by older synthetic generators
-
-    Returns:
-        (questions, expected_columns) - expected_columns is None for legacy format
-    """
-    with open(questions_path) as f:
-        data = json.load(f)
-
-    # New format: {"dataset_columns": [...], "questions": [...]}
-    if isinstance(data, dict) and "questions" in data:
-        return data["questions"], data.get("dataset_columns")
-
-    # Legacy format: plain list of questions
-    return data, None
 
 
 def filter_by_difficulty(
@@ -182,31 +156,7 @@ def gather_csv_tasks(
             )
             continue
 
-        questions, expected_columns = load_questions(str(questions_file))
-
-        # Validate dataset columns match (prevents running questions against wrong dataset)
-        if expected_columns is not None:
-            import pandas as pd
-
-            try:
-                actual_columns = pd.read_csv(csv_path, nrows=0).columns.tolist()
-            except UnicodeDecodeError:
-                actual_columns = pd.read_csv(
-                    csv_path, nrows=0, encoding="latin-1"
-                ).columns.tolist()
-            if set(expected_columns) != set(actual_columns):
-                missing = set(expected_columns) - set(actual_columns)
-                extra = set(actual_columns) - set(expected_columns)
-                ui.base.print_error(f"ERROR: Column mismatch for {dataset_name}")
-                if missing:
-                    ui.base.print_error(f"  Missing columns: {sorted(missing)}")
-                if extra:
-                    ui.base.print_warning(f"  Extra columns: {sorted(extra)}")
-                ui.base.print_info(
-                    "Hint",
-                    "Regenerate questions with: uv run python -m src.datagen.question_gen",
-                )
-                continue
+        questions = load_questions(str(questions_file))
 
         # Filter by difficulty distribution (unless skipped)
         if not skip_difficulty_filter:

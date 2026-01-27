@@ -198,17 +198,19 @@ async def verify_llm(
         result = await triangulate_teacher(
             csv_path=csv_path,
             question=question.get("question_text", ""),
-            hint=question.get("hint") or None,
+            hint=question.get("hint") or "",
             n_consistency=n_traces,
             **kwargs,
         )
 
+        consistency_traces = [trace for trace, _conv in result.consistency_results]
+
         return VerificationResult(
-            success=result.get("verified", False),
-            match=result.get("gold_matches_majority"),
-            trace=result.get("gold_trace"),
-            traces=result.get("consistency_traces", []),
-            majority_answer_hash=result.get("majority_answer_hash"),
+            success=result.verified,
+            match=result.verified,
+            trace=result.gold_trace,
+            traces=consistency_traces,
+            majority_answer_hash=result.majority_answer_hash,
             error=None,
         )
     except Exception as e:

@@ -339,7 +339,7 @@ class CompositionalQuestionGenerator:
             retry_failed: If True, re-process previously failed questions
 
         Returns:
-            Dict with dataset_columns and questions list
+            Dict with questions list and rejections
         """
         # 1. Profile the dataset
         print(f"Profiling dataset: {self.csv_path.name}")
@@ -353,8 +353,8 @@ class CompositionalQuestionGenerator:
         if not is_viable:
             print(f"  Skipping synthetic generation: {reason}")
             return {
-                "dataset_columns": list(profile.get("columns", {}).keys()),
                 "questions": [],
+                "rejections": {},
             }
 
         # 2. Get applicable templates
@@ -645,29 +645,40 @@ class CompositionalQuestionGenerator:
                 # Note: Hints are optional; verification handles them when present.
                 # No pre-verification student validation gate (per design doc).
 
+                template = item["template"]
+                mechanical_question = f"{template.description}. Return as JSON matching this schema: {template.output_schema}"
+                question_id = (
+                    fingerprint or f"syn_{self.dataset_name}_{uuid.uuid4().hex[:8]}"
+                )
+                code_hash = hash_artifact(item["code"])
                 accepted = {
-                    "question": question_text,
+                    "id": question_id,
+                    "source": "synthetic",
+                    "subtype": "template",
+                    "dataset": self.dataset_name,
+                    "question_mechanical": mechanical_question,
+                    "question_text": None if is_mechanical else question_text,
                     "hint": candidate.get("hint"),
-                    "n_steps": item["template"].n_steps,
-                    "difficulty": item["template"].difficulty,
-                    "category": item["template"].category,
-                    "tags": item["template"].tags,
-                    "template_name": item["template"].name,
+                    "code": item["code"],
+                    "code_hash": code_hash,
+                    "ground_truth": item["ground_truth"],
+                    "ground_truth_hash": item["answer_hash"],
+                    "ground_truth_hashes": item["answer_hashes"],
+                    "_ground_truth": item["ground_truth"],
+                    "_ground_truths": item["ground_truths"],
+                    "output_schema": template.output_schema,
+                    "n_steps": template.n_steps,
+                    "difficulty": template.difficulty,
+                    "category": template.category,
+                    "tags": template.tags,
+                    "template_name": template.name,
                     "template_params": item["params"] or None,
-                    "output_type": item["template"].output_type,
-                    "output_schema": item["template"].output_schema,
+                    "output_type": template.output_type,
                     "verbalization_attempts": attempts,
                     "candidate_index": candidate.get("candidate_index"),
                     "validation": validation_info,
-                    # Primary answer (for backward compatibility)
-                    "ground_truth_hash": item["answer_hash"],
-                    "_ground_truth": item["ground_truth"],
-                    # All valid answers (for multi-outcome validation)
-                    "ground_truth_hashes": item["answer_hashes"],
-                    "_ground_truths": item["ground_truths"],
-                    "_template": item["template"].name,
+                    "_template": template.name,
                     "_fingerprint": fingerprint,
-                    # Full trace for episode generation (validation IS the episode)
                     "_trace": validation_trace,
                 }
                 break
@@ -693,8 +704,9 @@ class CompositionalQuestionGenerator:
                         timestamp=datetime.now(),
                         csv_source=str(self.csv_path),
                         question=QADict(
-                            id=accepted.get("_fingerprint", ""),
-                            question_text=accepted["question"],
+                            id=accepted.get("id", ""),
+                            question_text=accepted.get("question_text")
+                            or accepted.get("question_mechanical"),
                             hint=accepted.get("hint"),
                             difficulty=accepted.get("difficulty"),
                             n_steps=accepted.get("n_steps"),
@@ -741,9 +753,7 @@ class CompositionalQuestionGenerator:
         )
 
         # 5. Format output
-        df = pd.read_csv(self.csv_path, nrows=0)
         output = {
-            "dataset_columns": df.columns.tolist(),
             "questions": questions,
             "rejections": rejection_log,
         }
@@ -881,11 +891,7 @@ async def generate_questions(
                 }
                 clean_questions.append(clean_q)
 
-            output = {
-                "dataset_columns": result["dataset_columns"],
-                "questions": clean_questions,
-            }
-            json.dump(output, f, indent=2)
+            json.dump(clean_questions, f, indent=2)
 
         rejections = result.get("rejections", [])
         if rejections:

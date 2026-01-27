@@ -105,6 +105,7 @@ def validate_question(q: dict) -> list[str]:
             "code_hash",
             "ground_truth",
             "ground_truth_hash",
+            "output_schema",
             "n_steps",
         ):
             if field not in q or q[field] is None:

@@ -8,6 +8,7 @@ from pathlib import Path
 import dearpygui.dearpygui as dpg
 
 from src.gui.state import state
+from src.datagen.shared.questions_io import load_questions
 
 
 def create_explorer_panel(parent: int | str):
@@ -72,7 +73,11 @@ def _load_datasets():
         return
 
     # Group by source
-    with dpg.tree_node(label=f"csv ({sum(1 for d in datasets if d[0] == 'csv')})", parent="datasets_list", default_open=True):
+    with dpg.tree_node(
+        label=f"csv ({sum(1 for d in datasets if d[0] == 'csv')})",
+        parent="datasets_list",
+        default_open=True,
+    ):
         for source, name, path in datasets:
             if source == "csv":
                 dpg.add_selectable(
@@ -80,7 +85,11 @@ def _load_datasets():
                     callback=lambda s, d, p=path: _on_dataset_select(p),
                 )
 
-    with dpg.tree_node(label=f"kaggle ({sum(1 for d in datasets if d[0] == 'kaggle')})", parent="datasets_list", default_open=True):
+    with dpg.tree_node(
+        label=f"kaggle ({sum(1 for d in datasets if d[0] == 'kaggle')})",
+        parent="datasets_list",
+        default_open=True,
+    ):
         for source, name, path in datasets:
             if source == "kaggle":
                 dpg.add_selectable(
@@ -95,28 +104,31 @@ def _load_questions():
 
     questions_dir = state.questions_dir
     if not questions_dir.exists():
-        dpg.add_text("No questions directory", parent="questions_list", color=(150, 150, 150))
+        dpg.add_text(
+            "No questions directory", parent="questions_list", color=(150, 150, 150)
+        )
         return
 
     question_files = list(questions_dir.glob("*/questions.json"))
     if not question_files:
-        dpg.add_text("No questions found", parent="questions_list", color=(150, 150, 150))
+        dpg.add_text(
+            "No questions found", parent="questions_list", color=(150, 150, 150)
+        )
         return
 
     for qf in sorted(question_files):
         dataset_name = qf.parent.name
         try:
-            with open(qf) as f:
-                data = json.load(f)
-            questions = data.get("questions", data) if isinstance(data, dict) else data
+            questions = load_questions(str(qf))
             count = len(questions)
         except Exception:
             count = "?"
+            questions = []
 
         with dpg.tree_node(label=f"{dataset_name} ({count})", parent="questions_list"):
             if isinstance(count, int):
                 for i, q in enumerate(questions[:20]):  # Limit to first 20
-                    q_text = q.get("question", "")[:50]
+                    q_text = (q.get("question_text") or q.get("question") or "")[:50]
                     difficulty = q.get("difficulty", "?")
                     dpg.add_selectable(
                         label=f"[{difficulty}] {q_text}...",
@@ -132,7 +144,9 @@ def _load_episodes():
 
     episodes_dir = state.episodes_dir
     if not episodes_dir.exists():
-        dpg.add_text("No episodes directory", parent="episodes_list", color=(150, 150, 150))
+        dpg.add_text(
+            "No episodes directory", parent="episodes_list", color=(150, 150, 150)
+        )
         return
 
     episode_files = list(episodes_dir.glob("*.jsonl"))
@@ -155,10 +169,14 @@ def _load_episodes():
                     with open(ef) as f:
                         for i, line in enumerate(f):
                             if i >= 20:
-                                dpg.add_text(f"... and {count - 20} more", color=(150, 150, 150))
+                                dpg.add_text(
+                                    f"... and {count - 20} more", color=(150, 150, 150)
+                                )
                                 break
                             ep = json.loads(line)
-                            q_text = ep.get("question", {}).get("question_text", "")[:40]
+                            q_text = ep.get("question", {}).get("question_text", "")[
+                                :40
+                            ]
                             verified = ep.get("verified", False)
                             icon = "[pass]" if verified else "[fail]"
                             color = (100, 255, 100) if verified else (255, 100, 100)
@@ -182,6 +200,7 @@ def _on_question_select(question: dict):
     state.selected_question = question
     # Show in trace viewer
     from src.gui.panels.trace import show_question
+
     show_question(question)
 
 
@@ -190,4 +209,5 @@ def _on_episode_select(episode: dict):
     state.selected_episode = episode
     # Show in trace viewer
     from src.gui.panels.trace import show_trace
+
     show_trace(episode)

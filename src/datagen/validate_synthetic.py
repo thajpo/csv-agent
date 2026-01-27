@@ -58,6 +58,7 @@ from src.datagen.manifest import (
     compute_dataset_hash,
     compute_synthetic_fingerprint_from_question,
 )
+from src.datagen.shared.questions_io import load_questions
 from src.datagen.shared.dataset_meta import (
     load_dataset_meta,
     generate_description_from_overview,
@@ -74,22 +75,6 @@ def make_signal_handler(session_id: str):
         sys.exit(0)
 
     return handler
-
-
-def load_questions(questions_path: str) -> tuple[list[dict], list[str] | None]:
-    """
-    Load questions from JSON file.
-
-    Returns:
-        (questions, expected_columns) - expected_columns is None for legacy format
-    """
-    with open(questions_path) as f:
-        data = json.load(f)
-
-    if isinstance(data, dict) and "questions" in data:
-        return data["questions"], data.get("dataset_columns")
-
-    return data, None
 
 
 def load_dataset_description(csv_path: Path) -> str:
@@ -133,7 +118,9 @@ async def validate_single_question(
             elapsed_seconds,
         ) = await execute_teacher_trace(
             csv_path=csv_path,
-            question=question_dict.get("question", ""),
+            question=question_dict.get("question_text")
+            or question_dict.get("question_mechanical")
+            or "",
             model=teacher_model,
             hint=question_dict.get("hint"),  # Synthetic questions always use hint
             max_turns=max_turns,
@@ -235,7 +222,9 @@ async def process_dataset(
     failures = []
 
     for i, q_dict in enumerate(questions, 1):
-        question_preview = q_dict.get("question", "")[:60]
+        question_preview = (
+            q_dict.get("question_text") or q_dict.get("question_mechanical") or ""
+        )[:60]
         ui.base.print_status(f"  [{i}/{len(questions)}] {question_preview}...")
 
         success, trace, elapsed, error = await validate_single_question(
@@ -314,7 +303,11 @@ async def process_dataset(
                 )
         else:
             failure_record = {
-                "question": q_dict.get("question", "")[:100],
+                "question": (
+                    q_dict.get("question_text")
+                    or q_dict.get("question_mechanical")
+                    or ""
+                )[:100],
                 "template_name": q_dict.get("template_name"),
                 "variant_index": q_dict.get("variant_index"),
                 "error": error,
@@ -493,7 +486,7 @@ async def main(
             ui.base.print_warning(f"Skipping {dataset_name}: no matching CSV found")
             continue
 
-        questions, _ = load_questions(str(qf))
+        questions = load_questions(str(qf))
 
         # Filter out already-processed questions using manifest
         # Compute dataset hash (cached per dataset)
