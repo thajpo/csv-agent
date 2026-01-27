@@ -1,0 +1,79 @@
+{
+    "episode_id": "fixture-sample-001",
+    "timestamp": "2025-01-01T00:00:00.000000",
+    "csv_source": "data/csv/test_data.csv",
+    "verified": true,
+
+    "question": {
+        "id": "q-fixture-001",
+        "question_text": "What is the mean value of column A?",
+        "hint": "Use df['A'].mean()",
+        "difficulty": "EASY",
+        "n_steps": 1,
+        "template_name": "simple_aggregate",
+        "template_params": {"column": "A", "agg": "mean"},
+        "output_type": "float",
+        "output_schema": null,
+        "ground_truth": 42.5,
+        "ground_truth_hash": "abc123def456"
+    },
+
+    "gold_trace": {
+        "turns": [
+            {
+                "turn_index": 0,
+                "reasoning": "Computing the mean of column A",
+                "code": "result = df['A'].mean()\nsubmit(result)",
+                "execution": {
+                    "success": true,
+                    "stdout": "✓ Submitted: {\"__csv_agent_answer__\": 42.5, \"hooks\": []}",
+                    "stderr": "",
+                    "hooks": [],
+                    "submitted_answer": 42.5
+                },
+                "correction": null
+            }
+        ],
+        "final_answer": 42.5,
+        "final_answer_hash": "abc123def456",
+        "success": true
+    },
+
+    "consistency_traces": [
+        {
+            "turns": [
+                {
+                    "turn_index": 0,
+                    "reasoning": null,
+                    "code": "answer = df['A'].mean()\nsubmit(answer)",
+                    "execution": {
+                        "success": true,
+                        "stdout": "✓ Submitted: {\"__csv_agent_answer__\": 42.5, \"hooks\": []}",
+                        "stderr": "",
+                        "hooks": [],
+                        "submitted_answer": 42.5
+                    },
+                    "correction": null
+                }
+            ],
+            "final_answer": 42.5,
+            "final_answer_hash": "abc123def456",
+            "success": true
+        }
+    ],
+
+    "triangulation": {
+        "n_consistency_runs": 1,
+        "n_consistency_succeeded": 1,
+        "majority_answer_hash": "abc123def456",
+        "majority_count": 1,
+        "gold_matches_majority": true
+    },
+
+    "timing": {
+        "gold_elapsed": 1.5,
+        "consistency_elapsed": [1.2],
+        "total_elapsed": 2.7,
+        "avg_elapsed": 1.35
+    }
+}

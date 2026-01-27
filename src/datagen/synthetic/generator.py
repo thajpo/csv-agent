@@ -45,6 +45,11 @@ from csv_spec import (
     TimingMetadataDict,
 )
 from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
+from src.datagen.shared.dataset_meta import (
+    load_dataset_meta,
+    generate_description_from_overview,
+)
+from src.datagen.shared.filters import FORBIDDEN_METHOD_TERMS
 
 # Dataset viability thresholds
 MIN_DATASET_ROWS = 50
@@ -202,14 +207,16 @@ class CompositionalQuestionGenerator:
         if not self.csv_path.exists():
             raise FileNotFoundError(f"CSV not found: {csv_path}")
 
-        self.dataset_name = (
-            self.csv_path.parent.name
-            if self.csv_path.name == "data.csv"
-            else self.csv_path.stem
-        )
+        # Use shared dataset meta loader
+        self.dataset_name, self.dataset_description = load_dataset_meta(str(csv_path))
+
+        # Generate description from data_overview if missing
+        if not self.dataset_description or not self.dataset_description.strip():
+            data_overview = generate_data_overview(str(csv_path))
+            self.dataset_description = generate_description_from_overview(data_overview)
+
         self.model = model or config.question_gen_model
         self.sampling_args = sampling_args or config.sampling_args.model_dump()
-        self.dataset_description = dataset_description
 
         self.profiler = DataProfiler()
         self.verbalizer: QuestionVerbalizer | None = None
@@ -254,9 +261,7 @@ class CompositionalQuestionGenerator:
         validation_model = (
             config.synthetic_question_validation_model or config.teacher_model
         )
-        max_turns = (
-            config.synthetic_question_validation_max_turns or config.max_turns
-        )
+        max_turns = config.synthetic_question_validation_max_turns or config.max_turns
         ui = _SilentTraceUI()
 
         try:
@@ -280,12 +285,16 @@ class CompositionalQuestionGenerator:
                 trace_mode="validation",
             )
         except Exception as exc:
-            return False, {
-                "model": validation_model,
-                "success": False,
-                "matched": False,
-                "error": f"{type(exc).__name__}: {exc}",
-            }, None
+            return (
+                False,
+                {
+                    "model": validation_model,
+                    "success": False,
+                    "matched": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                },
+                None,
+            )
 
         success = trace.get("success", False)
         final_answer = trace.get("final_answer")
@@ -334,7 +343,9 @@ class CompositionalQuestionGenerator:
         # 1. Profile the dataset
         print(f"Profiling dataset: {self.csv_path.name}")
         profile = self.profiler.analyze(str(self.csv_path))
-        print(f"  Shape: {profile['shape']['rows']} rows x {profile['shape']['columns']} cols")
+        print(
+            f"  Shape: {profile['shape']['rows']} rows x {profile['shape']['columns']} cols"
+        )
 
         # Dataset gates: skip degenerate inputs before template selection.
         is_viable, reason = _dataset_is_viable(profile)
@@ -358,82 +369,111 @@ class CompositionalQuestionGenerator:
             expanded_templates = expanded_templates[:n_questions]
 
         # 3. Execute all templates first (sequential - needs sandbox)
+        # Templates can call submit() multiple times for tie-aware enumeration
         print(f"\nExecuting {len(expanded_templates)} templates...")
         execution_results = []
         for i, (template, params) in enumerate(expanded_templates):
-            params_label = ", ".join(f"{k}={v}" for k, v in params.items()) if params else "default"
+            params_label = (
+                ", ".join(f"{k}={v}" for k, v in params.items())
+                if params
+                else "default"
+            )
             code = template.instantiate(profile, params=params)
 
             try:
-                result = await self._execute_code(code)
-                if result:
-                    ground_truth, answer_hash = result
+                # Use _execute_code_multi to capture ALL submit() calls
+                results = await self._execute_code_multi(code)
+                if results:
+                    # First result is primary, rest are from tie enumeration
+                    ground_truth, answer_hash = results[0]
+
                     # Skip questions where template returns an error
                     # (e.g., "No suitable categorical column found")
                     if isinstance(ground_truth, dict) and "error" in ground_truth:
                         error_msg = ground_truth.get("error", "unknown error")
-                        print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) - skipped: {error_msg}")
+                        print(
+                            f"  [{i + 1}/{len(expanded_templates)}] {template.name} ({params_label}) - skipped: {error_msg}"
+                        )
                         continue
 
-                    # Collect all valid answers (primary + alternatives)
-                    ground_truths = [ground_truth]
-                    answer_hashes = [answer_hash]
+                    # Collect all valid answers from multi-submit
+                    ground_truths = []
+                    answer_hashes = []
+                    for gt, h in results:
+                        if not (isinstance(gt, dict) and "error" in gt):
+                            if h not in answer_hashes:
+                                ground_truths.append(gt)
+                                answer_hashes.append(h)
 
-                    # Execute alternative code templates if present
+                    # Also execute alternative code templates if present
                     alt_codes = template.instantiate_alternatives(profile, params)
                     for alt_idx, alt_code in enumerate(alt_codes):
                         try:
-                            alt_result = await self._execute_code(alt_code)
-                            if alt_result:
-                                alt_gt, alt_hash = alt_result
-                                # Skip error answers and duplicates
-                                if not (isinstance(alt_gt, dict) and "error" in alt_gt):
-                                    if alt_hash not in answer_hashes:
-                                        ground_truths.append(alt_gt)
-                                        answer_hashes.append(alt_hash)
-                                else:
-                                    print(f"    [alt {alt_idx+1}] returned error: {alt_gt.get('error', 'unknown')[:50]}")
+                            alt_results = await self._execute_code_multi(alt_code)
+                            if alt_results:
+                                for alt_gt, alt_hash in alt_results:
+                                    # Skip error answers and duplicates
+                                    if not (
+                                        isinstance(alt_gt, dict) and "error" in alt_gt
+                                    ):
+                                        if alt_hash not in answer_hashes:
+                                            ground_truths.append(alt_gt)
+                                            answer_hashes.append(alt_hash)
                             else:
-                                print(f"    [alt {alt_idx+1}] no result returned")
+                                print(f"    [alt {alt_idx + 1}] no result returned")
                         except Exception as alt_exc:
-                            print(f"    [alt {alt_idx+1}] FAILED: {alt_exc}")
+                            print(f"    [alt {alt_idx + 1}] FAILED: {alt_exc}")
 
                     n_alts = len(ground_truths) - 1
                     alt_suffix = f" (+{n_alts} alt)" if n_alts > 0 else ""
 
-                    execution_results.append({
-                        "template": template,
-                        "params": params,
-                        "code": code,
-                        "ground_truth": ground_truth,  # Primary for verbalization
-                        "ground_truths": ground_truths,  # All valid answers
-                        "answer_hash": answer_hash,  # Primary hash
-                        "answer_hashes": answer_hashes,  # All valid hashes
-                    })
-                    print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) ✓{alt_suffix}")
+                    execution_results.append(
+                        {
+                            "template": template,
+                            "params": params,
+                            "code": code,
+                            "ground_truth": ground_truth,  # Primary for verbalization
+                            "ground_truths": ground_truths,  # All valid answers
+                            "answer_hash": answer_hash,  # Primary hash
+                            "answer_hashes": answer_hashes,  # All valid hashes
+                        }
+                    )
+                    print(
+                        f"  [{i + 1}/{len(expanded_templates)}] {template.name} ({params_label}) ✓{alt_suffix}"
+                    )
                 else:
-                    print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) - no answer")
+                    print(
+                        f"  [{i + 1}/{len(expanded_templates)}] {template.name} ({params_label}) - no answer"
+                    )
             except Exception as e:
-                print(f"  [{i+1}/{len(expanded_templates)}] {template.name} ({params_label}) FAILED: {e}")
+                print(
+                    f"  [{i + 1}/{len(expanded_templates)}] {template.name} ({params_label}) FAILED: {e}"
+                )
 
         # 4. Verbalize (or use mechanical questions)
         if config.synthetic_skip_verbalization:
             # Mechanical questions: use template description directly
-            print(f"\nUsing mechanical questions for {len(execution_results)} templates...")
+            print(
+                f"\nUsing mechanical questions for {len(execution_results)} templates..."
+            )
             verbalized = []
             for item in execution_results:
                 template = item["template"]
                 # Build question from template description + output schema
                 question_text = f"{template.description}. Return as JSON matching this schema: {template.output_schema}"
-                verbalized.append({
-                    "item": item,
-                    "candidates": [{
-                        "candidate_index": 1,
-                        "question": question_text,
-                        "hint": "",  # No hint for mechanical questions
-                        "raw_response": "[MECHANICAL]",
-                    }]
-                })
+                verbalized.append(
+                    {
+                        "item": item,
+                        "candidates": [
+                            {
+                                "candidate_index": 1,
+                                "question": question_text,
+                                "hint": "",  # No hint for mechanical questions
+                                "raw_response": "[MECHANICAL]",
+                            }
+                        ],
+                    }
+                )
         else:
             # LLM verbalization
             print(f"\nVerbalizing {len(execution_results)} templates...")
@@ -460,7 +500,9 @@ class CompositionalQuestionGenerator:
                     if isinstance(result, Exception):
                         question_text = "[VERBALIZATION FAILED]"
                         hint = ""
-                        raw_response = f"[VERBALIZATION ERROR: {type(result).__name__}: {result}]"
+                        raw_response = (
+                            f"[VERBALIZATION ERROR: {type(result).__name__}: {result}]"
+                        )
                     else:
                         question_text, hint, raw_response = result
                     candidates.append(
@@ -482,10 +524,16 @@ class CompositionalQuestionGenerator:
         rejection_log: list[dict] = []
 
         # Incremental JSONL output files (for resume capability)
-        accepted_jsonl = output_path / "questions_accepted.jsonl" if output_path else None
-        rejected_jsonl = output_path / "questions_rejected.jsonl" if output_path else None
+        accepted_jsonl = (
+            output_path / "questions_accepted.jsonl" if output_path else None
+        )
+        rejected_jsonl = (
+            output_path / "questions_rejected.jsonl" if output_path else None
+        )
         episodes_jsonl = output_path / "episodes.jsonl" if output_path else None
-        episodes_failed_jsonl = output_path / "episodes_failed.jsonl" if output_path else None
+        episodes_failed_jsonl = (
+            output_path / "episodes_failed.jsonl" if output_path else None
+        )
 
         # Load already-processed fingerprints for resume
         processed_fingerprints: set[str] = set()
@@ -505,12 +553,16 @@ class CompositionalQuestionGenerator:
                     fp = entry.get("_fingerprint")
                     if fp:
                         processed_fingerprints.add(fp)
-            print(f"  Resuming: skipping {len(processed_fingerprints) - len(questions)} rejected questions")
+            print(
+                f"  Resuming: skipping {len(processed_fingerprints) - len(questions)} rejected questions"
+            )
         elif retry_failed and rejected_jsonl and rejected_jsonl.exists():
             # Count how many will be retried
             with open(rejected_jsonl) as f:
                 retry_count = sum(1 for _ in f)
-            print(f"  Retry mode: will re-process {retry_count} previously rejected questions")
+            print(
+                f"  Retry mode: will re-process {retry_count} previously rejected questions"
+            )
 
         def record_rejection(
             item: dict,
@@ -545,11 +597,17 @@ class CompositionalQuestionGenerator:
             candidates = bundle["candidates"]
 
             # Compute fingerprint for this template+params combination
-            fingerprint = hash_artifact({
-                "template": item["template"].name,
-                "params": item["params"],
-                "answer_hash": item["answer_hash"],
-            })
+            # Include template CODE (not just name) so code changes trigger regeneration
+            template = item["template"]
+            fingerprint = hash_artifact(
+                {
+                    "template_name": template.name,
+                    "template_code": template.code_template,
+                    "alternative_codes": template.alternative_code_templates or [],
+                    "params": item["params"],
+                    "dataset": self.dataset_name,
+                }
+            )
 
             # Skip if already processed (resume capability)
             if fingerprint in processed_fingerprints:
@@ -561,10 +619,14 @@ class CompositionalQuestionGenerator:
                 attempts += 1
                 question_text = candidate.get("question") or ""
                 if not question_text.strip():
-                    record_rejection(item, candidate, "empty_question", fingerprint=fingerprint)
+                    record_rejection(
+                        item, candidate, "empty_question", fingerprint=fingerprint
+                    )
                     continue
                 if question_text.startswith("[VERBALIZATION FAILED"):
-                    record_rejection(item, candidate, "verbalization_failed", fingerprint=fingerprint)
+                    record_rejection(
+                        item, candidate, "verbalization_failed", fingerprint=fingerprint
+                    )
                     continue
 
                 # Skip viability filter for mechanical questions (they intentionally contain method details)
@@ -572,71 +634,15 @@ class CompositionalQuestionGenerator:
                 if not is_mechanical:
                     is_ok, reason = _question_is_viable(question_text, profile)
                     if not is_ok:
-                        record_rejection(item, candidate, reason, fingerprint=fingerprint)
+                        record_rejection(
+                            item, candidate, reason, fingerprint=fingerprint
+                        )
                         continue
 
                 validation_info = None
                 validation_trace = None
-                if config.synthetic_question_validation_enabled:
-                    matched, validation_info, validation_trace = await self._validate_question(
-                        question_text=question_text,
-                        expected_values=item["ground_truths"],
-                        expected_hashes=item["answer_hashes"],
-                        n_steps=item["template"].n_steps,
-                        difficulty=item["template"].difficulty,
-                    )
-                    if not matched:
-                        record_rejection(
-                            item,
-                            candidate,
-                            "student_validation_failed",
-                            validation=validation_info,
-                            fingerprint=fingerprint,
-                        )
-                        # Save failed trace for DPO (negative examples)
-                        if episodes_failed_jsonl and validation_trace:
-                            elapsed = validation_info.get("elapsed", 0.0)
-                            failed_episode = EpisodeJSONL(
-                                episode_id=str(uuid.uuid4()),
-                                timestamp=datetime.now(),
-                                csv_source=str(self.csv_path),
-                                question=QADict(
-                                    id=fingerprint or "",
-                                    question_text=question_text,
-                                    hint=candidate.get("hint"),
-                                    difficulty=item["template"].difficulty,
-                                    n_steps=item["template"].n_steps,
-                                    category=item["template"].category,
-                                    tags=item["template"].tags,
-                                    template_name=item["template"].name,
-                                    template_params=item["params"],
-                                    output_type=item["template"].output_type,
-                                    output_schema=item["template"].output_schema,
-                                    ground_truth=item["ground_truth"],
-                                    ground_truth_hash=item["answer_hash"],
-                                    ground_truth_hashes=item["answer_hashes"],
-                                ),
-                                gold_trace=validation_trace,  # Failed trace
-                                consistency_traces=[],
-                                verified=False,  # NOT verified - wrong answer
-                                triangulation=TriangulationMetadataDict(
-                                    n_consistency_runs=0,
-                                    n_consistency_succeeded=0,
-                                    majority_answer_hash=validation_info.get("final_answer_hash"),
-                                    majority_count=0,
-                                    gold_matches_majority=False,
-                                ),
-                                timing=TimingMetadataDict(
-                                    gold_elapsed=elapsed,
-                                    consistency_elapsed=[],
-                                    total_elapsed=elapsed,
-                                    avg_elapsed=elapsed,
-                                ),
-                                source="synthetic_failed",
-                            )
-                            with open(episodes_failed_jsonl, "a") as f:
-                                f.write(json.dumps(failed_episode, default=str) + "\n")
-                        continue
+                # Note: Hints are optional; verification handles them when present.
+                # No pre-verification student validation gate (per design doc).
 
                 accepted = {
                     "question": question_text,
@@ -670,7 +676,9 @@ class CompositionalQuestionGenerator:
                 # Incremental save question
                 if accepted_jsonl:
                     # Save question without trace (trace goes to episodes)
-                    question_entry = {k: v for k, v in accepted.items() if k != "_trace"}
+                    question_entry = {
+                        k: v for k, v in accepted.items() if k != "_trace"
+                    }
                     with open(accepted_jsonl, "a") as f:
                         f.write(json.dumps(question_entry) + "\n")
 
@@ -720,14 +728,16 @@ class CompositionalQuestionGenerator:
                         source="synthetic",
                     )
                     with open(episodes_jsonl, "a") as f:
-                        f.write(json.dumps(episode, default=str) + "\n")
+                        f.write(episode.model_dump_json() + "\n")
 
         if rejected:
             print("  Question filter rejections:")
             for reason, count in sorted(rejected.items(), key=lambda x: (-x[1], x[0])):
                 print(f"    - {reason}: {count}")
 
-        print(f"  Generated {len(questions)} questions from {len(execution_results)} templates")
+        print(
+            f"  Generated {len(questions)} questions from {len(execution_results)} templates"
+        )
 
         # 5. Format output
         df = pd.read_csv(self.csv_path, nrows=0)
@@ -742,10 +752,27 @@ class CompositionalQuestionGenerator:
 
     async def _execute_code(self, code: str) -> tuple[Any, str] | None:
         """
-        Execute code in sandbox and extract answer.
+        Execute code in sandbox and extract answer(s).
 
         Returns:
-            Tuple of (ground_truth_value, hash) or None if failed
+            Tuple of (ground_truth_value, hash) or None if failed.
+            For backward compatibility, returns just the first answer.
+            Use _execute_code_multi for multiple answers.
+        """
+        result = await self._execute_code_multi(code)
+        if not result:
+            return None
+        return result[0]  # Return first (primary) answer
+
+    async def _execute_code_multi(self, code: str) -> list[tuple[Any, str]] | None:
+        """
+        Execute code in sandbox and extract ALL submitted answers.
+
+        Templates can call submit() multiple times for tie-aware enumeration.
+        Each submission is captured and hashed separately.
+
+        Returns:
+            List of (ground_truth_value, hash) tuples, or None if no answers
         """
         # Reset sandbox state for clean execution
         await self.env.reset(
@@ -760,37 +787,63 @@ class CompositionalQuestionGenerator:
             python_state=self.state["python_state"],
         )
 
-        # Parse the submitted answer
-        answer = self._parse_submission(output)
-        if answer is None:
+        # Parse ALL submitted answers
+        answers = self._parse_all_submissions(output)
+        if not answers:
             print(f"  No answer submitted. Output: {output[:200]}")
             return None
 
-        # Hash the answer
-        answer_hash = hash_artifact(answer)
+        # Hash each answer
+        results = []
+        seen_hashes = set()
+        for answer in answers:
+            answer_hash = hash_artifact(answer)
+            # Deduplicate by hash
+            if answer_hash not in seen_hashes:
+                seen_hashes.add(answer_hash)
+                results.append((answer, answer_hash))
 
-        return answer, answer_hash
+        return results if results else None
+
+    def _parse_all_submissions(self, output: str) -> list[Any]:
+        """Extract ALL submitted answers from execution output.
+
+        Templates can call submit() multiple times for tie-aware enumeration.
+        Returns list of all valid answers found.
+        """
+        marker = "✓ Submitted: "
+        answers = []
+
+        # Find all occurrences of the marker
+        pos = 0
+        while True:
+            idx = output.find(marker, pos)
+            if idx == -1:
+                break
+
+            start = idx + len(marker)
+            end = output.find("\n", start)
+            if end == -1:
+                json_str = output[start:]
+            else:
+                json_str = output[start:end]
+
+            try:
+                submission = json.loads(json_str.strip())
+                answer = submission.get("__csv_agent_answer__")
+                if answer is not None:
+                    answers.append(answer)
+            except json.JSONDecodeError:
+                pass
+
+            pos = start
+
+        return answers
 
     def _parse_submission(self, output: str) -> Any | None:
-        """Extract submitted answer from execution output."""
-        # Look for the submission marker
-        marker = "✓ Submitted: "
-        if marker not in output:
-            return None
-
-        # Extract JSON after marker
-        start = output.index(marker) + len(marker)
-        end = output.find("\n", start)
-        if end == -1:
-            json_str = output[start:]
-        else:
-            json_str = output[start:end]
-
-        try:
-            submission = json.loads(json_str.strip())
-            return submission.get("__csv_agent_answer__")
-        except json.JSONDecodeError:
-            return None
+        """Extract first submitted answer from execution output (backward compat)."""
+        answers = self._parse_all_submissions(output)
+        return answers[0] if answers else None
 
 
 def load_dataset_description(csv_path: str) -> str:
@@ -859,7 +912,9 @@ async def generate_questions(
 
     try:
         await generator.setup()
-        result = await generator.generate(n_questions=n_questions, output_path=output_path, retry_failed=retry_failed)
+        result = await generator.generate(
+            n_questions=n_questions, output_path=output_path, retry_failed=retry_failed
+        )
 
         # Save final output (combines any resumed data with new)
         questions_file = output_path / "questions.json"
@@ -869,8 +924,10 @@ async def generate_questions(
             clean_questions = []
             for q in result["questions"]:
                 clean_q = {
-                    k: v for k, v in q.items()
-                    if k in ("_ground_truth", "_ground_truths", "_template") or not k.startswith("_")
+                    k: v
+                    for k, v in q.items()
+                    if k in ("_ground_truth", "_ground_truths", "_template")
+                    or not k.startswith("_")
                 }
                 clean_questions.append(clean_q)
 
@@ -948,7 +1005,9 @@ def main() -> int:
 
     # Setup progress writer for GUI
     if args.gui_progress:
-        progress = ProgressWriter(output_path=args.gui_progress, stage="synthetic_generator")
+        progress = ProgressWriter(
+            output_path=args.gui_progress, stage="synthetic_generator"
+        )
     else:
         progress = NoOpProgressWriter()
 
@@ -959,7 +1018,7 @@ def main() -> int:
 
     # Limit datasets for testing
     if args.max_datasets and len(csv_paths) > args.max_datasets:
-        csv_paths = csv_paths[:args.max_datasets]
+        csv_paths = csv_paths[: args.max_datasets]
 
     if not csv_paths:
         print("No CSV files found. Specify --csv or ensure data/kaggle/ has datasets.")
@@ -970,15 +1029,23 @@ def main() -> int:
 
     # Initialize progress tracking for each dataset
     for csv_path in csv_paths:
-        dataset_name = Path(csv_path).parent.name if Path(csv_path).name == "data.csv" else Path(csv_path).stem
+        dataset_name = (
+            Path(csv_path).parent.name
+            if Path(csv_path).name == "data.csv"
+            else Path(csv_path).stem
+        )
         progress.set_dataset(dataset_name, 1)  # 1 unit of work per dataset
 
     for csv_path in csv_paths:
-        dataset_name = Path(csv_path).parent.name if Path(csv_path).name == "data.csv" else Path(csv_path).stem
+        dataset_name = (
+            Path(csv_path).parent.name
+            if Path(csv_path).name == "data.csv"
+            else Path(csv_path).stem
+        )
         progress.set_current(dataset_name)
         progress.log(f"Processing: {dataset_name}")
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Processing: {csv_path}")
         print("=" * 60)
 
@@ -994,7 +1061,9 @@ def main() -> int:
             )
             total_questions += len(result["questions"])
             print(f"Generated {len(result['questions'])} questions")
-            progress.update_dataset(dataset_name, done=1, verified=len(result["questions"]))
+            progress.update_dataset(
+                dataset_name, done=1, verified=len(result["questions"])
+            )
             progress.log(f"✓ {dataset_name}: {len(result['questions'])} questions")
 
         except KeyboardInterrupt:
@@ -1008,14 +1077,18 @@ def main() -> int:
             progress.log(f"✗ {dataset_name}: {e}")
             continue
 
-    print(f"\n{'='*60}")
-    print(f"COMPLETE: {total_questions} questions from {len(csv_paths) - len(failed_csvs)} datasets")
+    print(f"\n{'=' * 60}")
+    print(
+        f"COMPLETE: {total_questions} questions from {len(csv_paths) - len(failed_csvs)} datasets"
+    )
     if failed_csvs:
         print(f"Failed: {len(failed_csvs)} datasets")
         for f in failed_csvs:
             print(f"  - {f}")
 
-    progress.log(f"Complete: {total_questions} questions from {len(csv_paths) - len(failed_csvs)} datasets")
+    progress.log(
+        f"Complete: {total_questions} questions from {len(csv_paths) - len(failed_csvs)} datasets"
+    )
     progress.complete()
     # Success if we generated any questions (some datasets may fail due to encoding, etc.)
     return 0 if total_questions > 0 else 1

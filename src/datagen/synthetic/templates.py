@@ -73,17 +73,54 @@ class CompositionTemplate:
             f"df.select_dtypes(include=['object', 'category']){drop_expr}",
         )
 
-        # Prepend helper function for index-like column detection (used in column filtering)
-        helper_code = '''
+        # Prepend helper functions for index-like column detection and tie-aware enumeration
+        # Include pre-computed ID-like columns (includes near-unique columns with ≥98% unique values)
+        helper_code = f'''
 import re as _re
+_ID_LIKE_COLS = {id_like_cols!r}  # Pre-computed from profile (includes near-unique columns)
+
 def _is_index_column(col_name):
-    """Check if column is index-like (Unnamed, ID, Person ID, etc.)."""
+    """Check if column is index-like (Unnamed, ID, Person ID, near-unique, etc.).
+
+    This checks BOTH name patterns AND the pre-computed list of ID-like columns
+    which includes columns with ≥98% unique values (likely identifiers).
+    """
+    # Check against pre-computed list first (includes near-unique columns)
+    if col_name in _ID_LIKE_COLS:
+        return True
+    # Also check name patterns for columns not in profile
     lowered = col_name.lower().strip()
     patterns = [
         r'^unnamed:\\s*\\d+$', r'^index$', r'^id$', r'^_id$',
         r'^row.?id$', r'^person.?id$', r'^serial.?no$', r'^sr.?no$'
     ]
     return any(_re.match(p, lowered) for p in patterns)
+
+def _idxmax_all(series):
+    """Return ALL indices with the maximum value (tie-aware).
+
+    Unlike series.idxmax() which returns just one, this returns all tied indices.
+    Useful for tie-aware enumeration of valid answers.
+    """
+    max_val = series.max()
+    return series[series == max_val].index.tolist()
+
+def _idxmin_all(series):
+    """Return ALL indices with the minimum value (tie-aware)."""
+    min_val = series.min()
+    return series[series == min_val].index.tolist()
+
+def _nlargest_all(series, n):
+    """Return indices of n largest values, handling ties by including all tied values.
+
+    If there are ties at the nth position, includes ALL tied values.
+    """
+    if len(series) <= n:
+        return series.index.tolist()
+    sorted_vals = series.sort_values(ascending=False)
+    threshold = sorted_vals.iloc[n-1]
+    # Include all values >= threshold
+    return series[series >= threshold].index.tolist()
 '''
         code = helper_code + code
 
@@ -121,11 +158,15 @@ def _is_index_column(col_name):
                 f"df.select_dtypes(include=['object', 'category']){drop_expr}",
             )
 
-            # Prepend helper function
-            helper_code = '''
+            # Prepend helper function with pre-computed ID-like columns
+            helper_code = f'''
 import re as _re
+_ID_LIKE_COLS = {id_like_cols!r}
+
 def _is_index_column(col_name):
-    """Check if column is index-like (Unnamed, ID, Person ID, etc.)."""
+    """Check if column is index-like (Unnamed, ID, Person ID, near-unique, etc.)."""
+    if col_name in _ID_LIKE_COLS:
+        return True
     lowered = col_name.lower().strip()
     patterns = [
         r'^unnamed:\\s*\\d+$', r'^index$', r'^id$', r'^_id$',
@@ -667,42 +708,46 @@ CONDITIONAL_NORMALITY = CompositionTemplate(
     description="Test if highest-variance column (excluding identifier-like columns) is normally distributed using Shapiro-Wilk at alpha=0.05 (sampled to 5000 rows if larger); report mean±std if normal, median+IQR if not",
     output_schema='A JSON object with exactly 3 keys. If normal: {"distribution": "normal", "mean": <number>, "std": <number>}. If non-normal: {"distribution": "non-normal", "median": <number>, "iqr": <number>}. The "iqr" value is Q3 minus Q1 as a single number. All numeric values rounded to 3 decimal places.',
     code_template="""
-# Step 1: Get the target column (highest variance numeric column)
+# Step 1: Get the target column(s) - all with highest variance (tie-aware)
 numeric_cols = df.select_dtypes('number')
 variances = numeric_cols.var()
-target_col = variances.idxmax()
-hook(target_col, "target_col = variances.idxmax()", name='target_col')
-print(f"Testing normality of: {target_col}")
+tied_target_cols = _idxmax_all(variances)  # All columns with max variance
+print(f"Highest variance column(s): {tied_target_cols}")
 
-# Step 2: Test for normality (Shapiro-Wilk, sample if large)
-sample_data = df[target_col].dropna()
-if len(sample_data) > 5000:
-    sample_data = sample_data.sample(5000, random_state=42)
-_, p_value = scipy.stats.shapiro(sample_data)
-hook(p_value, "p_value from Shapiro-Wilk test", name='p_value', depends_on=['target_col'])
-print(f"Shapiro-Wilk p-value: {p_value:.6f}")
+# Process each tied column (usually just one, but handles ties)
+for target_col in tied_target_cols:
+    hook(target_col, "target_col = variances.idxmax()", name='target_col')
+    print(f"Testing normality of: {target_col}")
 
-# Step 3: Branch based on normality
-is_normal = p_value > 0.05
-hook(is_normal, "is_normal = p_value > 0.05", name='is_normal', depends_on=['p_value'])
+    # Step 2: Test for normality (Shapiro-Wilk, sample if large)
+    sample_data = df[target_col].dropna()
+    if len(sample_data) > 5000:
+        sample_data = sample_data.sample(5000, random_state=42)
+    _, p_value = scipy.stats.shapiro(sample_data)
+    hook(p_value, "p_value from Shapiro-Wilk test", name='p_value', depends_on=['target_col'])
+    print(f"Shapiro-Wilk p-value: {p_value:.6f}")
 
-if is_normal:
-    result = {
-        "distribution": "normal",
-        "mean": round(df[target_col].mean(), 3),
-        "std": round(df[target_col].std(), 3)
-    }
-else:
-    q75, q25 = df[target_col].quantile(0.75), df[target_col].quantile(0.25)
-    result = {
-        "distribution": "non-normal",
-        "median": round(df[target_col].median(), 3),
-        "iqr": round(q75 - q25, 3)
-    }
+    # Step 3: Branch based on normality
+    is_normal = p_value > 0.05
+    hook(is_normal, "is_normal = p_value > 0.05", name='is_normal', depends_on=['p_value'])
 
-hook(result, "conditional result computed", name='result', depends_on=['is_normal'])
-print(f"Result: {result}")
-submit(result)
+    if is_normal:
+        result = {
+            "distribution": "normal",
+            "mean": round(df[target_col].mean(), 3),
+            "std": round(df[target_col].std(), 3)
+        }
+    else:
+        q75, q25 = df[target_col].quantile(0.75), df[target_col].quantile(0.25)
+        result = {
+            "distribution": "non-normal",
+            "median": round(df[target_col].median(), 3),
+            "iqr": round(q75 - q25, 3)
+        }
+
+    hook(result, "conditional result computed", name='result', depends_on=['is_normal'])
+    print(f"Result: {result}")
+    submit(result)  # Submit for each tied column
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 1,
@@ -998,9 +1043,10 @@ CORRELATION_AFTER_OUTLIER_REMOVAL = CompositionTemplate(
     description="Find strongest absolute correlation pair (excluding identifier-like columns), remove outliers beyond 3 standard deviations from both columns, recompute correlation",
     output_schema='A JSON object with exactly 4 keys: "columns" (list of 2 column names, alphabetically sorted), "original_association" (rounded to 2 decimals), "outliers_removed" (integer count), and "clean_association" (rounded to 2 decimals). Example: {"columns": ["col_a", "col_b"], "original_association": 0.8470, "outliers_removed": 12, "clean_association": 0.8910}',
     code_template="""
-# Step 1: Find the strongest correlation pair
-numeric_cols = df.select_dtypes('number')
-corr_matrix = numeric_cols.corr().abs()
+# Step 1: Find the strongest correlation pair (excluding identifier-like columns)
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not _is_index_column(c)]
+corr_matrix = df[numeric_cols].corr().abs()
 np.fill_diagonal(corr_matrix.values, 0)
 max_idx = corr_matrix.stack().idxmax()
 col1, col2 = max_idx
@@ -1328,6 +1374,85 @@ else:
         "significant": is_significant
     })
 """.strip(),
+        # File-order alternative (uses column order from CSV instead of alphabetical)
+        """
+# Step 1: Find numeric column with highest variance
+numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
+                if not _is_index_column(c)]
+variances = df[numeric_cols].var()
+target_col = variances.idxmax()
+hook(target_col, "target column (highest variance)", name='target_col')
+print(f"Target: {target_col}")
+
+# Step 2: Find a binary categorical column (FILE ORDER - first in CSV, not alphabetical)
+cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+binary_col = None
+# Check object/category columns in file order
+for col in cat_cols:  # File order (not sorted)
+    if df[col].nunique() == 2:
+        binary_col = col
+        break
+# Then check numeric columns with exactly 2 unique values (e.g., 0/1 binary)
+if binary_col is None:
+    for col in numeric_cols:  # File order
+        if col != target_col and df[col].nunique() == 2:
+            binary_col = col
+            break
+
+if binary_col is None:
+    # Create binary from numeric if no categorical (file order)
+    for col in numeric_cols:
+        if col != target_col:
+            median_val = df[col].median()
+            df['_binary_group'] = (df[col] > median_val).map({True: 'high', False: 'low'})
+            binary_col = '_binary_group'
+            break
+
+if binary_col is None:
+    submit({"error": "No binary grouping column available"})
+else:
+    hook(binary_col, "binary grouping column", name='binary_col')
+    print(f"Grouping by: {binary_col}")
+
+    # Step 3: Get the two groups (sorted for determinism)
+    raw_groups = list(df[binary_col].dropna().unique())
+    sorted_groups = sorted(raw_groups, key=str)
+    group1_val, group2_val = sorted_groups[0], sorted_groups[1]
+    group1_name, group2_name = str(group1_val), str(group2_val)
+    hook([group1_name, group2_name], "group names", name='group_names', depends_on=['binary_col'])
+
+    # Step 4: Extract data for each group
+    group1_data = df[df[binary_col] == group1_val][target_col].dropna()
+    group2_data = df[df[binary_col] == group2_val][target_col].dropna()
+    hook({"group1_n": len(group1_data), "group2_n": len(group2_data)}, "group sizes", name='group_sizes', depends_on=['group_names'])
+    print(f"Group sizes: {len(group1_data)} vs {len(group2_data)}")
+
+    # Step 5: Compute group means
+    mean1, mean2 = group1_data.mean(), group2_data.mean()
+    hook({"mean1": float(mean1), "mean2": float(mean2)}, "group means", name='group_means', depends_on=['group_sizes'])
+    print(f"Means: {mean1:.4f} vs {mean2:.4f}")
+
+    # Step 6: Perform t-test
+    t_stat, p_value = scipy.stats.ttest_ind(group1_data, group2_data)
+    hook({"t_stat": float(t_stat), "p_value": float(p_value)}, "t-test results", name='ttest', depends_on=['group_means'])
+    print(f"T-test: t={t_stat:.4f}, p={p_value:.6f}")
+
+    # Step 7: Determine significance
+    is_significant = p_value < 0.05
+    hook(is_significant, "significance at alpha=0.05", name='is_significant', depends_on=['ttest'])
+
+    submit({
+        "target_column": target_col,
+        "grouping_column": binary_col,
+        "group1": str(group1_name),
+        "group2": str(group2_name),
+        "mean1": round(float(mean1), 2),
+        "mean2": round(float(mean2), 2),
+        "test_statistic": round(float(t_stat), 2),
+        "significance_score": round(float(p_value), 4),
+        "significant": is_significant
+    })
+""".strip(),
     ],
 )
 
@@ -1409,13 +1534,12 @@ ANOVA_DISCOVERED_GROUPS = CompositionTemplate(
     description="Find first categorical column with 3-10 groups (each with n >= 10 samples), perform one-way ANOVA on highest-variance numeric column (excluding identifier-like columns)",
     output_schema='A JSON object with exactly 11 keys: "target_column", "grouping_column", "n_groups" (integer), "test_statistic" (rounded to 2 decimals), "significance_score" (rounded to 4 decimals), "significant" (boolean), "best_group" (category with highest mean), "best_mean" (rounded to 2 decimals), "worst_group" (category with lowest mean), "worst_mean" (rounded to 2 decimals), and "effect_size" (rounded to 2 decimals). Example: {"target_column": "sales", "grouping_column": "region", "n_groups": 4, "test_statistic": 15.23, "significance_score": 0.0000, "significant": true, "best_group": "West", "best_mean": 1234.5678, "worst_group": "East", "worst_mean": 890.1234, "effect_size": 0.1523}',
     code_template="""
-# Step 1: Find numeric column with highest variance
+# Step 1: Find numeric column(s) with highest variance (tie-aware)
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
                 if not _is_index_column(c)]
 variances = df[numeric_cols].var()
-target_col = variances.idxmax()
-hook(target_col, "target column (highest variance)", name='target_col')
-print(f"Target: {target_col}")
+tied_target_cols = _idxmax_all(variances)  # All columns with max variance
+print(f"Highest variance column(s): {tied_target_cols}")
 
 # Step 2: Find categorical column with 3-10 unique values
 cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
@@ -1430,60 +1554,65 @@ if group_col is None:
     cat_cardinalities = {col: df[col].nunique() for col in cat_cols[:5]}
     submit({"error": f"No categorical column with 3-10 groups. Found cardinalities: {cat_cardinalities}"})
 else:
-    hook(group_col, "grouping column", name='group_col')
-    print(f"Grouping by: {group_col}")
+    # Process each tied target column
+    for target_col in tied_target_cols:
+        hook(target_col, "target column (highest variance)", name='target_col')
+        print(f"Target: {target_col}")
 
-    # Step 3: Get group names and sizes - require minimum 10 samples per group
-    group_counts = df[group_col].value_counts()
-    valid_groups = group_counts[group_counts >= 10]
-    n_groups = len(valid_groups)
+        hook(group_col, "grouping column", name='group_col')
+        print(f"Grouping by: {group_col}")
 
-    if n_groups < 3:
-        submit({"error": f"Need 3+ groups with ≥10 samples. Found {n_groups} valid groups (sizes: {group_counts.to_dict()})"})
-    else:
-        hook({"n_groups": n_groups, "counts": valid_groups.to_dict()}, "group info", name='group_info', depends_on=['group_col'])
-        print(f"Valid groups with ≥10 samples: {n_groups}")
+        # Step 3: Get group names and sizes - require minimum 10 samples per group
+        group_counts = df[group_col].value_counts()
+        valid_groups = group_counts[group_counts >= 10]
+        n_groups = len(valid_groups)
 
-        # Step 4: Compute group means (only for valid groups)
-        df_valid = df[df[group_col].isin(valid_groups.index)]
-        group_means = df_valid.groupby(group_col)[target_col].mean()
-        hook(group_means.to_dict(), "group means", name='group_means', depends_on=['group_info'])
-        print(f"Group means:\\n{group_means.sort_values(ascending=False)}")
+        if n_groups < 3:
+            submit({"error": f"Need 3+ groups with ≥10 samples. Found {n_groups} valid groups (sizes: {group_counts.to_dict()})"})
+        else:
+            hook({"n_groups": n_groups, "counts": valid_groups.to_dict()}, "group info", name='group_info', depends_on=['group_col'])
+            print(f"Valid groups with ≥10 samples: {n_groups}")
 
-        # Step 5: Prepare data for ANOVA
-        groups_data = [df_valid[df_valid[group_col] == g][target_col].dropna().values for g in valid_groups.index]
-        min_group_size = min(len(g) for g in groups_data)
-        hook(min_group_size, "minimum group size", name='min_size', depends_on=['group_means'])
+            # Step 4: Compute group means (only for valid groups)
+            df_valid = df[df[group_col].isin(valid_groups.index)]
+            group_means = df_valid.groupby(group_col)[target_col].mean()
+            hook(group_means.to_dict(), "group means", name='group_means', depends_on=['group_info'])
+            print(f"Group means:\\n{group_means.sort_values(ascending=False)}")
 
-        # Step 6: Perform one-way ANOVA
-        f_stat, p_value = scipy.stats.f_oneway(*groups_data)
-        hook({"f_stat": float(f_stat), "p_value": float(p_value)}, "ANOVA results", name='anova', depends_on=['min_size'])
-        print(f"ANOVA: F={f_stat:.4f}, p={p_value:.6f}")
+            # Step 5: Prepare data for ANOVA
+            groups_data = [df_valid[df_valid[group_col] == g][target_col].dropna().values for g in valid_groups.index]
+            min_group_size = min(len(g) for g in groups_data)
+            hook(min_group_size, "minimum group size", name='min_size', depends_on=['group_means'])
 
-        # Step 7: Identify best and worst groups
-        best_group = group_means.idxmax()
-        worst_group = group_means.idxmin()
-        hook({"best": str(best_group), "worst": str(worst_group)}, "extreme groups", name='extremes', depends_on=['anova'])
+            # Step 6: Perform one-way ANOVA
+            f_stat, p_value = scipy.stats.f_oneway(*groups_data)
+            hook({"f_stat": float(f_stat), "p_value": float(p_value)}, "ANOVA results", name='anova', depends_on=['min_size'])
+            print(f"ANOVA: F={f_stat:.4f}, p={p_value:.6f}")
 
-        # Step 8: Effect size (eta-squared)
-        ss_between = sum(len(g) * (g.mean() - df_valid[target_col].mean())**2 for g in groups_data)
-        ss_total = ((df_valid[target_col] - df_valid[target_col].mean())**2).sum()
-        eta_squared = ss_between / ss_total if ss_total > 0 else 0
-        hook(eta_squared, "eta-squared effect size", name='effect_size', depends_on=['extremes'])
+            # Step 7: Identify best and worst groups
+            best_group = group_means.idxmax()
+            worst_group = group_means.idxmin()
+            hook({"best": str(best_group), "worst": str(worst_group)}, "extreme groups", name='extremes', depends_on=['anova'])
 
-    submit({
-        "target_column": target_col,
-        "grouping_column": group_col,
-        "n_groups": n_groups,
-        "test_statistic": round(float(f_stat), 2),
-        "significance_score": round(float(p_value), 4),
-        "significant": p_value < 0.05,
-        "best_group": str(best_group),
-        "best_mean": round(float(group_means[best_group]), 2),
-        "worst_group": str(worst_group),
-        "worst_mean": round(float(group_means[worst_group]), 2),
-        "effect_size": round(float(eta_squared), 2)
-    })
+            # Step 8: Effect size (eta-squared)
+            ss_between = sum(len(g) * (g.mean() - df_valid[target_col].mean())**2 for g in groups_data)
+            ss_total = ((df_valid[target_col] - df_valid[target_col].mean())**2).sum()
+            eta_squared = ss_between / ss_total if ss_total > 0 else 0
+            hook(eta_squared, "eta-squared effect size", name='effect_size', depends_on=['extremes'])
+
+            submit({
+                "target_column": target_col,
+                "grouping_column": group_col,
+                "n_groups": n_groups,
+                "test_statistic": round(float(f_stat), 2),
+                "significance_score": round(float(p_value), 4),
+                "significant": p_value < 0.05,
+                "best_group": str(best_group),
+                "best_mean": round(float(group_means[best_group]), 2),
+                "worst_group": str(worst_group),
+                "worst_mean": round(float(group_means[worst_group]), 2),
+                "effect_size": round(float(eta_squared), 2)
+            })
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: (
@@ -1492,87 +1621,6 @@ else:
     ),
     n_steps=9,
     difficulty="VERY_HARD",
-    alternative_code_templates=[
-        # Alternative: Exclude the highest-variance column (likely target) and use second-highest
-        """
-# Step 1: Find numeric column with second-highest variance (excluding likely target)
-numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
-                if not _is_index_column(c)]
-variances = df[numeric_cols].var()
-# Exclude highest variance (likely the target variable)
-target_candidate = variances.idxmax()
-remaining_vars = variances.drop(target_candidate)
-target_col = remaining_vars.idxmax()
-hook(target_col, "target column (second-highest variance, excluding likely target)", name='target_col')
-print(f"Target: {target_col} (excluded {target_candidate} as likely target)")
-
-# Step 2: Find categorical column with 3-10 unique values
-cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
-group_col = None
-for col in cat_cols:
-    n_unique = df[col].nunique()
-    if 3 <= n_unique <= 10:
-        group_col = col
-        break
-
-if group_col is None:
-    cat_cardinalities = {col: df[col].nunique() for col in cat_cols[:5]}
-    submit({"error": f"No categorical column with 3-10 groups. Found cardinalities: {cat_cardinalities}"})
-else:
-    hook(group_col, "grouping column", name='group_col')
-    print(f"Grouping by: {group_col}")
-
-    # Step 3: Get group names and sizes - require minimum 10 samples per group
-    group_counts = df[group_col].value_counts()
-    valid_groups = group_counts[group_counts >= 10]
-    n_groups = len(valid_groups)
-
-    if n_groups < 3:
-        submit({"error": f"Need 3+ groups with ≥10 samples. Found {n_groups} valid groups"})
-    else:
-        hook({"n_groups": n_groups, "counts": valid_groups.to_dict()}, "group info", name='group_info', depends_on=['group_col'])
-        print(f"Valid groups with ≥10 samples: {n_groups}")
-
-        # Step 4: Compute group means (only for valid groups)
-        df_valid = df[df[group_col].isin(valid_groups.index)]
-        group_means = df_valid.groupby(group_col)[target_col].mean()
-        hook(group_means.to_dict(), "group means", name='group_means', depends_on=['group_info'])
-
-        # Step 5: Prepare data for ANOVA
-        groups_data = [df_valid[df_valid[group_col] == g][target_col].dropna().values for g in valid_groups.index]
-        min_group_size = min(len(g) for g in groups_data)
-        hook(min_group_size, "minimum group size", name='min_size', depends_on=['group_means'])
-
-        # Step 6: Perform one-way ANOVA
-        f_stat, p_value = scipy.stats.f_oneway(*groups_data)
-        hook({"f_stat": float(f_stat), "p_value": float(p_value)}, "ANOVA results", name='anova', depends_on=['min_size'])
-
-        # Step 7: Identify best and worst groups
-        best_group = group_means.idxmax()
-        worst_group = group_means.idxmin()
-        hook({"best": str(best_group), "worst": str(worst_group)}, "extreme groups", name='extremes', depends_on=['anova'])
-
-        # Step 8: Effect size (eta-squared)
-        ss_between = sum(len(g) * (g.mean() - df_valid[target_col].mean())**2 for g in groups_data)
-        ss_total = ((df_valid[target_col] - df_valid[target_col].mean())**2).sum()
-        eta_squared = ss_between / ss_total if ss_total > 0 else 0
-        hook(eta_squared, "eta-squared effect size", name='effect_size', depends_on=['extremes'])
-
-    submit({
-        "target_column": target_col,
-        "grouping_column": group_col,
-        "n_groups": n_groups,
-        "test_statistic": round(float(f_stat), 2),
-        "significance_score": round(float(p_value), 4),
-        "significant": p_value < 0.05,
-        "best_group": str(best_group),
-        "best_mean": round(float(group_means[best_group]), 2),
-        "worst_group": str(worst_group),
-        "worst_mean": round(float(group_means[worst_group]), 2),
-        "effect_size": round(float(eta_squared), 2)
-    })
-""".strip(),
-    ],
 )
 
 MULTIPLE_REGRESSION_TOP_PREDICTORS = CompositionTemplate(
@@ -1589,52 +1637,61 @@ print(f"Numeric columns: {len(numeric_cols)}")
 if len(numeric_cols) < 4:
     submit({"error": "Need at least 4 numeric columns for multiple regression"})
 else:
-    # Step 2: Use the column with highest variance as target
+    # Step 2: Find all columns with highest variance (tie-aware)
     variances = df[numeric_cols].var()
-    target_col = variances.idxmax()
-    hook(target_col, "target column (highest variance)", name='target_col')
-    print(f"Target: {target_col}")
+    tied_target_cols = _idxmax_all(variances)
+    print(f"Highest variance column(s): {tied_target_cols}")
 
-    # Step 3: Compute correlations with target
-    other_cols = [c for c in numeric_cols if c != target_col]
-    correlations = df[other_cols].corrwith(df[target_col]).abs()
-    hook(correlations.to_dict(), "correlations with target", name='correlations', depends_on=['target_col'])
+    # Process each tied target column
+    for target_col in tied_target_cols:
+        hook(target_col, "target column (highest variance)", name='target_col')
+        print(f"Target: {target_col}")
 
-    # Step 4: Select top 3 predictors
-    top_3 = correlations.nlargest(3).index.tolist()
-    hook(top_3, "top 3 predictors", name='top_predictors', depends_on=['correlations'])
-    print(f"Top 3 predictors: {top_3}")
+        # Step 3: Compute correlations with target
+        other_cols = [c for c in numeric_cols if c != target_col]
+        correlations = df[other_cols].corrwith(df[target_col]).abs()
+        hook(correlations.to_dict(), "correlations with target", name='correlations', depends_on=['target_col'])
 
-    # Step 5: Check for multicollinearity
-    predictor_corr = df[top_3].corr()
-    max_predictor_corr = predictor_corr.where(np.triu(np.ones(predictor_corr.shape), k=1).astype(bool)).stack().abs().max()
-    hook(float(max_predictor_corr), "max predictor intercorrelation", name='multicollinearity', depends_on=['top_predictors'])
-    print(f"Max predictor intercorrelation: {max_predictor_corr:.4f}")
+        # Step 4: Select top 3 predictors (use _nlargest_all to handle ties)
+        top_candidates = _nlargest_all(correlations, 3)
+        # If more than 3 due to ties, use first 3 alphabetically for determinism
+        if len(top_candidates) > 3:
+            top_3 = sorted(top_candidates)[:3]
+        else:
+            top_3 = top_candidates
+        hook(top_3, "top 3 predictors", name='top_predictors', depends_on=['correlations'])
+        print(f"Top 3 predictors: {top_3}")
 
-    # Step 6: Prepare regression data
-    reg_data = df[[target_col] + top_3].dropna()
-    X = reg_data[top_3]
-    y = reg_data[target_col]
-    hook(len(reg_data), "samples for regression", name='n_samples', depends_on=['multicollinearity'])
-    print(f"Samples: {len(reg_data)}")
+        # Step 5: Check for multicollinearity
+        predictor_corr = df[top_3].corr()
+        max_predictor_corr = predictor_corr.where(np.triu(np.ones(predictor_corr.shape), k=1).astype(bool)).stack().abs().max()
+        hook(float(max_predictor_corr), "max predictor intercorrelation", name='multicollinearity', depends_on=['top_predictors'])
+        print(f"Max predictor intercorrelation: {max_predictor_corr:.4f}")
 
-    # Step 7: Fit OLS regression
-    X_with_const = sm.add_constant(X)
-    model = sm.OLS(y, X_with_const).fit()
-    hook({"r_squared": float(model.rsquared), "adj_r_squared": float(model.rsquared_adj)}, "model fit", name='model_fit', depends_on=['n_samples'])
-    print(f"R-squared: {model.rsquared:.4f}, Adjusted: {model.rsquared_adj:.4f}")
+        # Step 6: Prepare regression data
+        reg_data = df[[target_col] + top_3].dropna()
+        X = reg_data[top_3]
+        y = reg_data[target_col]
+        hook(len(reg_data), "samples for regression", name='n_samples', depends_on=['multicollinearity'])
+        print(f"Samples: {len(reg_data)}")
 
-    # Step 8: Count significant predictors
-    n_significant = sum(1 for col in top_3 if model.pvalues[col] < 0.05)
-    hook(n_significant, "significant predictors at alpha=0.05", name='n_significant', depends_on=['model_fit'])
+        # Step 7: Fit OLS regression
+        X_with_const = sm.add_constant(X)
+        model = sm.OLS(y, X_with_const).fit()
+        hook({"r_squared": float(model.rsquared), "adj_r_squared": float(model.rsquared_adj)}, "model fit", name='model_fit', depends_on=['n_samples'])
+        print(f"R-squared: {model.rsquared:.4f}, Adjusted: {model.rsquared_adj:.4f}")
 
-    submit({
-        "target": target_col,
-        "predictors": sorted(top_3),
-        "fit_score": round(float(model.rsquared), 2),
-        "fit_score_adj": round(float(model.rsquared_adj), 2),
-        "n_influential": n_significant
-    })
+        # Step 8: Count significant predictors
+        n_significant = sum(1 for col in top_3 if model.pvalues[col] < 0.05)
+        hook(n_significant, "significant predictors at alpha=0.05", name='n_significant', depends_on=['model_fit'])
+
+        submit({
+            "target": target_col,
+            "predictors": sorted(top_3),
+            "fit_score": round(float(model.rsquared), 2),
+            "fit_score_adj": round(float(model.rsquared_adj), 2),
+            "n_influential": n_significant
+        })
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 4,
@@ -1704,7 +1761,7 @@ else:
 
 MANN_WHITNEY_U_TEST = CompositionTemplate(
     name="mann_whitney_u_test",
-    description="Find binary categorical column (if none, create median split from first non-target numeric), perform Mann-Whitney U test on most-skewed numeric column (excluding identifier-like columns)",
+    description="Step 1: Find the most-skewed numeric column (excluding identifier-like columns) as the target. Step 2: Find a binary grouping column - FIRST check categorical columns (alphabetically) for one with exactly 2 unique values, THEN check numeric columns for one with exactly 2 unique values (e.g., 0/1). Step 3: ONLY if no binary column exists, create one by splitting the first non-target numeric column at its median into 'high'/'low'. Step 4: Perform Mann-Whitney U test comparing the two groups on the target column",
     output_schema='A JSON object with exactly 8 keys: "target_column", "grouping_column", "group1", "group2", "median1" (rounded to 2 decimals), "median2" (rounded to 2 decimals), "test_statistic" (rounded to 2 decimals), and "significance_score" (rounded to 4 decimals). Example: {"target_column": "score", "grouping_column": "treatment", "group1": "control", "group2": "experimental", "median1": 72.5000, "median2": 78.0000, "test_statistic": 1234.50, "significance_score": 0.0345}',
     code_template="""
 # Step 1: Find most skewed numeric column (non-parametric tests suit skewed data)
@@ -2228,45 +2285,44 @@ numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
 # Filter to positive columns (can take log)
 positive_cols = [c for c in numeric_cols if (df[c] > 0).all()]
 if len(positive_cols) < 2:
-    # Use first two numeric cols - log1p with min-shift handles non-positive values
-    positive_cols = numeric_cols[:2]
+    submit({"error": "Need at least 2 strictly positive numeric columns for log transformation analysis"})
+else:
+    skewness = {col: abs(df[col].skew()) for col in positive_cols}
+    # Sort by skewness desc, then alphabetically for deterministic tie-breaking
+    sorted_cols = sorted(skewness.items(), key=lambda x: (-x[1], x[0]))[:2]
+    sorted_cols = [col for col, _ in sorted_cols]
+    col1, col2 = sorted_cols[0], sorted_cols[1]
+    hook([col1, col2], "selected columns (most skewed)", name='selected_cols')
+    print(f"Analyzing: {col1} vs {col2}")
 
-skewness = {col: abs(df[col].skew()) for col in positive_cols}
-# Sort by skewness desc, then alphabetically for deterministic tie-breaking
-sorted_cols = sorted(skewness.items(), key=lambda x: (-x[1], x[0]))[:2]
-sorted_cols = [col for col, _ in sorted_cols]
-col1, col2 = sorted_cols[0], sorted_cols[1]
-hook([col1, col2], "selected columns (most skewed)", name='selected_cols')
-print(f"Analyzing: {col1} vs {col2}")
+    # Step 2: Compute original Pearson correlation
+    clean_data = df[[col1, col2]].dropna()
+    orig_corr = clean_data[col1].corr(clean_data[col2])
+    hook(orig_corr, "original correlation", name='orig_corr', depends_on=['selected_cols'])
+    print(f"Original Pearson: {orig_corr:.4f}")
 
-# Step 2: Compute original Pearson correlation
-clean_data = df[[col1, col2]].dropna()
-orig_corr = clean_data[col1].corr(clean_data[col2])
-hook(orig_corr, "original correlation", name='orig_corr', depends_on=['selected_cols'])
-print(f"Original Pearson: {orig_corr:.4f}")
+    # Step 3: Log-transform (add small constant to avoid log(0))
+    log_col1 = np.log1p(clean_data[col1] - clean_data[col1].min() + 1)
+    log_col2 = np.log1p(clean_data[col2] - clean_data[col2].min() + 1)
+    hook({"col1_skew_after": log_col1.skew(), "col2_skew_after": log_col2.skew()}, "skewness after transform", name='log_skew', depends_on=['orig_corr'])
 
-# Step 3: Log-transform (add small constant to avoid log(0))
-log_col1 = np.log1p(clean_data[col1] - clean_data[col1].min() + 1)
-log_col2 = np.log1p(clean_data[col2] - clean_data[col2].min() + 1)
-hook({"col1_skew_after": log_col1.skew(), "col2_skew_after": log_col2.skew()}, "skewness after transform", name='log_skew', depends_on=['orig_corr'])
+    # Step 4: Compute log-transformed correlation
+    log_corr = log_col1.corr(log_col2)
+    hook(log_corr, "log-transformed correlation", name='log_corr', depends_on=['log_skew'])
+    print(f"Log-transformed Pearson: {log_corr:.4f}")
 
-# Step 4: Compute log-transformed correlation
-log_corr = log_col1.corr(log_col2)
-hook(log_corr, "log-transformed correlation", name='log_corr', depends_on=['log_skew'])
-print(f"Log-transformed Pearson: {log_corr:.4f}")
+    # Step 5: Compare
+    improvement = abs(log_corr) - abs(orig_corr)
+    transformation_helpful = abs(log_corr) > abs(orig_corr)
+    hook({"improvement": float(improvement), "helpful": transformation_helpful}, "comparison", name='comparison', depends_on=['log_corr'])
 
-# Step 5: Compare
-improvement = abs(log_corr) - abs(orig_corr)
-transformation_helpful = abs(log_corr) > abs(orig_corr)
-hook({"improvement": float(improvement), "helpful": transformation_helpful}, "comparison", name='comparison', depends_on=['log_corr'])
-
-submit({
-    "columns": sorted([col1, col2]),
-    "original_association": round(float(orig_corr), 2),
-    "log_association": round(float(log_corr), 2),
-    "improvement": round(abs(float(improvement)), 2),
-    "transformation_helpful": transformation_helpful
-})
+    submit({
+        "columns": sorted([col1, col2]),
+        "original_association": round(float(orig_corr), 2),
+        "log_association": round(float(log_corr), 2),
+        "improvement": round(abs(float(improvement)), 2),
+        "transformation_helpful": transformation_helpful
+    })
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 2,
@@ -2423,12 +2479,13 @@ if binary_col is None:
 else:
     hook(binary_col, "grouping column", name='group_col', depends_on=['target_col'])
     groups = df[binary_col].dropna().unique()
-    g1_name, g2_name = str(groups[0]), str(groups[1])
+    sorted_groups = sorted(groups, key=str)  # Deterministic group ordering
+    g1_name, g2_name = str(sorted_groups[0]), str(sorted_groups[1])
     print(f"Groups: {g1_name} vs {g2_name}")
 
     # Step 3: Extract group data
-    g1_data = df[df[binary_col] == groups[0]][target_col].dropna()
-    g2_data = df[df[binary_col] == groups[1]][target_col].dropna()
+    g1_data = df[df[binary_col] == sorted_groups[0]][target_col].dropna()
+    g2_data = df[df[binary_col] == sorted_groups[1]][target_col].dropna()
     hook({"n1": len(g1_data), "n2": len(g2_data)}, "group sizes", name='sizes', depends_on=['group_col'])
 
     # Step 4: Check normality (Shapiro-Wilk, sample if large)

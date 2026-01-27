@@ -15,14 +15,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VerificationResult:
     success: bool
-    match: bool | None  # None if execution failed
-    trace: dict | None  # single trace for ground-truth verification
-    traces: list[dict]  # multiple traces for consistency verification
+    match: bool | None
+    trace: dict | None
+    traces: list[dict]
     majority_answer_hash: str | None
     error: str | None
 
 
-def verify_question(
+async def verify_question(
     question: dict,
     csv_path: str,
     strategy: Literal["ground_truth", "consistency"],
@@ -47,12 +47,12 @@ def verify_question(
         VerificationResult with match status and traces.
     """
     if strategy == "ground_truth":
-        return verify_synthetic(question, csv_path, **kwargs)
+        return await verify_synthetic(question, csv_path, **kwargs)
     else:
-        return verify_llm(question, csv_path, n_traces=n_traces, **kwargs)
+        return await verify_llm(question, csv_path, n_traces=n_traces, **kwargs)
 
 
-def verify_synthetic(
+async def verify_synthetic(
     question: dict,
     csv_path: str,
     **kwargs,
@@ -69,27 +69,110 @@ def verify_synthetic(
     Returns:
         VerificationResult with match status and full trace.
     """
-    # TODO: Import and call teacher.execute_teacher_trace
-    # from src.datagen.teacher import execute_teacher_trace
-    # trace, _, _, _ = await execute_teacher_trace(
-    #     csv_path=csv_path,
-    #     question=question.get("question_text") or question.get("question_mechanical"),
-    #     hint=question.get("hint"),
-    #     **kwargs,
-    # )
-    # Compare trace answer to ground_truth with hash and tolerance logic
-    logger.warning("verify_synthetic: not yet implemented, placeholder")
-    return VerificationResult(
-        success=False,
-        match=None,
-        trace=None,
-        traces=[],
-        majority_answer_hash=None,
-        error="Not implemented",
-    )
+    from src.datagen.teacher import execute_teacher_trace, answers_match
+    import time
+
+    start_time = time.time()
+
+    try:
+        # Use mechanical question or question_text if available
+        question_text = (
+            question.get("question_mechanical") or question.get("question_text") or ""
+        )
+        hint = question.get("hint")
+
+        trace, _conversation, _system, elapsed = await execute_teacher_trace(
+            csv_path=csv_path,
+            question=question_text,
+            hint=hint,
+            **kwargs,
+        )
+
+        # Check if trace succeeded
+        if not trace.get("success", False):
+            return VerificationResult(
+                success=False,
+                match=None,
+                trace=trace,
+                traces=[],
+                majority_answer_hash=None,
+                error=trace.get("error", "Unknown"),
+            )
+
+        # Get expected answer hashes
+        expected_hashes = question.get("ground_truth_hashes") or [
+            question.get("ground_truth_hash")
+        ]
+        expected_hashes = [h for h in expected_hashes if h is not None]
+
+        if not expected_hashes:
+            return VerificationResult(
+                success=False,
+                match=None,
+                trace=trace,
+                traces=[],
+                majority_answer_hash=None,
+                error="No ground_truth_hash in question",
+            )
+
+        # Fast path: exact hash match
+        actual_hash = trace.get("final_answer_hash")
+        if actual_hash in expected_hashes:
+            return VerificationResult(
+                success=True,
+                match=True,
+                trace=trace,
+                traces=[],
+                majority_answer_hash=actual_hash,
+                error=None,
+            )
+
+        # Tolerant comparison
+        expected_answers = question.get("_ground_truths") or [
+            question.get("_ground_truth")
+        ]
+        expected_answers = [a for a in expected_answers if a is not None]
+        actual_answer = trace.get("final_answer")
+
+        from src.core.config import config
+
+        float_tol = kwargs.get("float_tol", config.float_tolerance)
+
+        for exp_hash, exp_answer in zip(expected_hashes, expected_answers):
+            if answers_match(
+                exp_hash, actual_hash, exp_answer, actual_answer, float_tol=float_tol
+            ):
+                return VerificationResult(
+                    success=True,
+                    match=True,
+                    trace=trace,
+                    traces=[],
+                    majority_answer_hash=actual_hash,
+                    error=None,
+                )
+
+        return VerificationResult(
+            success=False,
+            match=False,
+            trace=trace,
+            traces=[],
+            majority_answer_hash=actual_hash,
+            error=f"Answer mismatch: expected {expected_answers}, got {actual_answer}",
+        )
+    except Exception as e:
+        elapsed = time.time() - start_time
+        logger.error(f"verify_synthetic error: {e}")
+        return VerificationResult(
+            success=False,
+            match=None,
+            trace=None,
+            traces=[],
+            majority_answer_hash=None,
+            error=str(e),
+        )
 
 
-def verify_llm(
+async def verify_llm(
     question: dict,
     csv_path: str,
     n_traces: int = 3,
@@ -109,21 +192,32 @@ def verify_llm(
     Returns:
         VerificationResult with match status and all traces.
     """
-    # TODO: Import and call teacher.triangulate_teacher
-    # from src.datagen.teacher import triangulate_teacher
-    # result = await triangulate_teacher(
-    #     csv_path=csv_path,
-    #     question=question["question_text"],
-    #     hint=question.get("hint"),
-    #     n_consistency=n_traces,
-    #     **kwargs,
-    # )
-    logger.warning("verify_llm: not yet implemented, placeholder")
-    return VerificationResult(
-        success=False,
-        match=None,
-        trace=None,
-        traces=[],
-        majority_answer_hash=None,
-        error="Not implemented",
-    )
+    from src.datagen.teacher import triangulate_teacher
+
+    try:
+        result = await triangulate_teacher(
+            csv_path=csv_path,
+            question=question.get("question_text", ""),
+            hint=question.get("hint") or None,
+            n_consistency=n_traces,
+            **kwargs,
+        )
+
+        return VerificationResult(
+            success=result.get("verified", False),
+            match=result.get("gold_matches_majority"),
+            trace=result.get("gold_trace"),
+            traces=result.get("consistency_traces", []),
+            majority_answer_hash=result.get("majority_answer_hash"),
+            error=None,
+        )
+    except Exception as e:
+        logger.error(f"verify_llm error: {e}")
+        return VerificationResult(
+            success=False,
+            match=None,
+            trace=None,
+            traces=[],
+            majority_answer_hash=None,
+            error=str(e),
+        )

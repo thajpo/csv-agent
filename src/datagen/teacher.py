@@ -405,6 +405,38 @@ IGNORABLE_ANSWER_KEYS = {
     'group2',  # Group naming differs between implementations
 }
 
+# Key pairs that can be validly swapped (group ordering equivalence)
+# When comparing two dicts, if they differ but would match when these pairs are swapped,
+# we consider them equivalent. This handles cases like:
+#   {"group1": "female", "mean1": 75} vs {"group1": "male", "mean1": 78}
+# where the groups AND their associated values are swapped.
+GROUP_SWAP_PAIRS = [
+    ('mean1', 'mean2'),
+    ('median1', 'median2'),
+    ('n1', 'n2'),
+    ('group1_n', 'group2_n'),
+    ('std1', 'std2'),
+    ('var1', 'var2'),
+    ('count1', 'count2'),
+]
+
+
+def _create_group_swapped_dict(d: dict) -> dict:
+    """Create a copy of dict with group-related paired values swapped.
+
+    For example, swaps mean1<->mean2, median1<->median2, etc.
+    This handles group ordering equivalence where the mathematical result
+    is the same but groups are enumerated in different order.
+    """
+    swapped = dict(d)
+    for key1, key2 in GROUP_SWAP_PAIRS:
+        if key1 in swapped and key2 in swapped:
+            swapped[key1], swapped[key2] = swapped[key2], swapped[key1]
+    # Also swap group1/group2 themselves (though they may be ignored)
+    if 'group1' in swapped and 'group2' in swapped:
+        swapped['group1'], swapped['group2'] = swapped['group2'], swapped['group1']
+    return swapped
+
 
 def _normalize_test_name(s: str) -> str:
     """Normalize statistical test names for comparison.
@@ -487,12 +519,29 @@ def _values_match_recursive(
 
         if keys1 != keys2:
             return False
-        for k in keys1:
-            if not _values_match_recursive(
-                v1[k], v2[k], float_tol, p_value_tol, _visited, _key=k
-            ):
-                return False
-        return True
+
+        # Try normal comparison first
+        def _compare_dict_keys(d1: dict, d2: dict, keys: set) -> bool:
+            for k in keys:
+                if not _values_match_recursive(
+                    d1[k], d2[k], float_tol, p_value_tol, _visited, _key=k
+                ):
+                    return False
+            return True
+
+        if _compare_dict_keys(v1, v2, keys1):
+            return True
+
+        # Try group-swap equivalence: check if swapping group pairs makes them match
+        # This handles cases where groups are enumerated in different order
+        # e.g., {"mean1": 75, "mean2": 78} vs {"mean1": 78, "mean2": 75}
+        has_swap_pairs = any(k1 in keys1 and k2 in keys1 for k1, k2 in GROUP_SWAP_PAIRS)
+        if has_swap_pairs:
+            v2_swapped = _create_group_swapped_dict(v2)
+            if _compare_dict_keys(v1, v2_swapped, keys1):
+                return True
+
+        return False
 
     # Both lists/tuples
     if isinstance(v1, (tuple, list)) and isinstance(v2, (tuple, list)):
