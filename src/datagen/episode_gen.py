@@ -45,6 +45,10 @@ from src.datagen.manifest import (
     compute_dataset_hash,
     compute_llm_fingerprint,
 )
+from src.datagen.shared.dataset_meta import (
+    load_dataset_meta,
+    generate_description_from_overview,
+)
 
 
 @dataclass
@@ -156,36 +160,18 @@ def gather_csv_tasks(
     tasks = []
 
     for csv_path in csv_sources:
-        # Derive dataset name (must match question_gen.py logic)
+        # Load dataset metadata using shared module
         csv_path_obj = Path(csv_path)
-        if csv_path_obj.name == "data.csv":
-            dataset_name = csv_path_obj.parent.name
-        else:
-            dataset_name = csv_path_obj.stem
+        dataset_name, dataset_description = load_dataset_meta(csv_path)
+        csv_path_obj = Path(csv_path)
 
-        # Determine dataset description (sibling meta.json or sidecar {name}.meta.json)
-        dataset_description = None
-        meta_path = csv_path_obj.parent / "meta.json"
-        if not meta_path.exists():
-            meta_path = csv_path_obj.with_suffix(".meta.json")
-        if meta_path.exists():
-            try:
-                with open(meta_path) as f:
-                    meta_data = json.load(f)
-                    dataset_description = (
-                        meta_data.get("description")
-                        or meta_data.get("subtitle")
-                        or meta_data.get("title")
-                    )
-            except Exception as e:
-                ui.base.print_warning(f"Failed to read metadata from {meta_path}: {e}")
-
+        # Generate description from data_overview if missing
         if not dataset_description or not dataset_description.strip():
-            ui.base.print_error(f"ERROR: No description found for {dataset_name}")
-            ui.base.print_info(
-                "Hint", f"Create {dataset_name}.meta.json with a 'description' field."
+            data_overview = generate_data_overview(str(csv_path))
+            dataset_description = generate_description_from_overview(data_overview)
+            ui.base.print_warning(
+                f"{dataset_name}: No description found, synthesized from data_overview"
             )
-            continue
 
         # Locate questions (structure: questions/[dataset_name]/questions.json)
         questions_file = base_questions_dir / dataset_name / "questions.json"
