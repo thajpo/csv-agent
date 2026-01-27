@@ -50,6 +50,7 @@ from src.datagen.shared.dataset_meta import (
     generate_description_from_overview,
 )
 from src.datagen.shared.filters import FORBIDDEN_METHOD_TERMS
+from src.datagen.shared.submission import parse_all_submissions
 
 # Dataset viability thresholds
 MIN_DATASET_ROWS = 50
@@ -787,8 +788,14 @@ class CompositionalQuestionGenerator:
             python_state=self.state["python_state"],
         )
 
-        # Parse ALL submitted answers
-        answers = self._parse_all_submissions(output)
+        # Parse submitted answers using shared module
+        submissions = parse_all_submissions(output)
+        if not submissions:
+            print(f"  No answer submitted. Output: {output[:200]}")
+            return None
+
+        answers = [s.get("__csv_agent_answer__") for s in submissions]
+        answers = [a for a in answers if a is not None]
         if not answers:
             print(f"  No answer submitted. Output: {output[:200]}")
             return None
@@ -805,71 +812,14 @@ class CompositionalQuestionGenerator:
 
         return results if results else None
 
-    def _parse_all_submissions(self, output: str) -> list[Any]:
-        """Extract ALL submitted answers from execution output.
-
-        Templates can call submit() multiple times for tie-aware enumeration.
-        Returns list of all valid answers found.
-        """
-        marker = "✓ Submitted: "
-        answers = []
-
-        # Find all occurrences of the marker
-        pos = 0
-        while True:
-            idx = output.find(marker, pos)
-            if idx == -1:
-                break
-
-            start = idx + len(marker)
-            end = output.find("\n", start)
-            if end == -1:
-                json_str = output[start:]
-            else:
-                json_str = output[start:end]
-
-            try:
-                submission = json.loads(json_str.strip())
-                answer = submission.get("__csv_agent_answer__")
-                if answer is not None:
-                    answers.append(answer)
-            except json.JSONDecodeError:
-                pass
-
-            pos = start
-
-        return answers
-
-    def _parse_submission(self, output: str) -> Any | None:
-        """Extract first submitted answer from execution output (backward compat)."""
-        answers = self._parse_all_submissions(output)
-        return answers[0] if answers else None
-
 
 def load_dataset_description(csv_path: str) -> str:
-    """Load dataset description from meta.json adjacent to CSV."""
-    csv_path_obj = Path(csv_path)
-
-    # Try sibling meta.json first (for data/kaggle/{slug}/data.csv structure)
-    meta_path = csv_path_obj.parent / "meta.json"
-    if not meta_path.exists():
-        # Try sidecar format (data.meta.json)
-        meta_path = csv_path_obj.with_suffix(".meta.json")
-
-    if meta_path.exists():
-        try:
-            with open(meta_path) as f:
-                meta = json.load(f)
-                return (
-                    meta.get("description")
-                    or meta.get("subtitle")
-                    or meta.get("title")
-                    or ""
-                )
-        except Exception:
-            pass
-
-    return ""
+    """Load dataset description using shared metadata helper."""
+    _dataset_name, dataset_description = load_dataset_meta(csv_path)
+    if not dataset_description or not dataset_description.strip():
+        data_overview = generate_data_overview(str(csv_path))
+        dataset_description = generate_description_from_overview(data_overview)
+    return dataset_description
 
 
 async def generate_questions(

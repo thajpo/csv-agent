@@ -17,6 +17,7 @@ from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.synthetic.templates import ALL_TEMPLATES, CompositionTemplate
 from src.envs.csv_env import LocalCSVAnalysisEnv
 from csv_spec import hash_artifact
+from src.datagen.shared.submission import parse_submission
 
 
 _KEY_ALIASES: dict[str, list[str]] = {
@@ -161,8 +162,8 @@ class TemplateExecutionSession:
             python_state=self.state["python_state"],
         )
 
-        submission = _parse_submission(output)
-        if submission is None:
+        submission, success = parse_submission(output)
+        if not success or submission is None:
             return None
 
         answer = submission.get("__csv_agent_answer__")
@@ -176,21 +177,6 @@ class TemplateExecutionSession:
         )
         self._cache[cache_key] = result
         return result
-
-
-def _parse_submission(output: str) -> dict | None:
-    marker = "✓ Submitted: "
-    if marker not in output:
-        return None
-
-    start = output.index(marker) + len(marker)
-    end = output.find("\n", start)
-    json_str = output[start:] if end == -1 else output[start:end]
-
-    try:
-        return json.loads(json_str.strip())
-    except json.JSONDecodeError:
-        return None
 
 
 def _normalize_key(key: str) -> str:

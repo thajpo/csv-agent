@@ -30,6 +30,7 @@ from src.datagen.shared.dataset_meta import (
     generate_description_from_overview,
 )
 from src.datagen.shared.filters import FORBIDDEN_METHOD_TERMS
+from src.datagen.shared.submission import parse_all_submissions
 
 
 class _NullConsole:
@@ -91,27 +92,6 @@ OUTPUT_SCHEMAS = {
 def _output_schema_for_op(op_name: str) -> str:
     schema = OUTPUT_SCHEMAS.get(op_name, {"answer": 0.0})
     return json.dumps(schema)
-
-
-def _parse_submissions(output: str) -> list[dict]:
-    marker = "✓ Submitted: "
-    submissions = []
-    pos = 0
-    while True:
-        idx = output.find(marker, pos)
-        if idx == -1:
-            break
-        start = idx + len(marker)
-        end = output.find("\n", start)
-        json_str = output[start:] if end == -1 else output[start:end]
-        try:
-            submission = json.loads(json_str.strip())
-        except json.JSONDecodeError:
-            pos = start
-            continue
-        submissions.append(submission)
-        pos = start
-    return submissions
 
 
 async def _validate_question(
@@ -220,7 +200,7 @@ async def run_pipeline(
         except Exception:
             continue
 
-        submissions = _parse_submissions(output)
+        submissions = parse_all_submissions(output)
         if not submissions:
             continue
 
