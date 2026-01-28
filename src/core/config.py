@@ -63,6 +63,27 @@ class SamplingArgs(BaseModel):
     top_p: float = 1.0
 
 
+class SyntheticConfig(BaseModel):
+    """Configuration for synthetic data generation thresholds and filters."""
+
+    # Dataset viability (Scope 1)
+    min_rows: int = 50
+    min_columns: int = 2
+    max_missing_pct: float = 95.0
+
+    # Column eligibility (Scope 2)
+    id_like_unique_threshold: float = 0.98
+    heavy_missing_threshold: float = 95.0
+
+    # Question viability (Scope 3)
+    max_sentences: int = 3
+
+    # Program output filters (Scope 4)
+    min_rows_for_stats: int = 30
+    p_value_threshold: float = 0.05
+    top_k_programs: int = 100
+
+
 # =============================================================================
 # 2. Main Application Configuration (Source of Truth)
 # =============================================================================
@@ -106,10 +127,15 @@ class Config(BaseModel):
         default={"EASY": 0.30, "MEDIUM": 0.30, "HARD": 0.20, "VERY_HARD": 0.20}
     )
     synthetic_verbalization_candidates: int = 5
-    synthetic_skip_verbalization: bool = True  # Use mechanical questions (template.description)
+    synthetic_skip_verbalization: bool = (
+        True  # Use mechanical questions (template.description)
+    )
     synthetic_question_validation_enabled: bool = True
     synthetic_question_validation_model: str | None = None
     synthetic_question_validation_max_turns: int | None = None
+
+    # Synthetic data generation configuration
+    synthetic_config: SyntheticConfig = Field(default_factory=SyntheticConfig)
 
     # pipelines: episode generation / triangulation
     n_consistency: int = 7  # Optimal for 8-worker containers (profiled)
