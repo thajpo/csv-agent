@@ -87,31 +87,6 @@ def _dataset_is_viable(profile: dict) -> tuple[bool, str]:
     return True, "ok"
 
 
-# Method terms that leak the solution approach - shared with verbalizer
-FORBIDDEN_METHOD_TERMS = [
-    "regression",
-    "t-test",
-    "anova",
-    "p-value",
-    "chi-square",
-    "bootstrap",
-    "cross-validation",
-    "k-fold",
-    "random_state",
-    "train-test",
-    "ols",
-    "pearson",
-    "spearman",
-    "ks test",
-    "kolmogorov",
-    "levene",
-    "mann-whitney",
-    "propensity",
-    "matching",
-    "confidence interval",
-]
-
-
 def _question_is_viable(question: str, profile: dict) -> tuple[bool, str]:
     """Reject questions that leak method details or column names."""
     if not question or not question.strip():
