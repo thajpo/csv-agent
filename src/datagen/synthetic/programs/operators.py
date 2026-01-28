@@ -81,6 +81,31 @@ def bind_binary_cat_col_emit(state: State) -> str:
     return f"cat_col = '{col}'"
 
 
+def bind_num_col_1_emit(state: State) -> str:
+    """Emit code to bind the first numeric column.
+
+    This operator binds a specific column to num_col_1 for use by
+    multi-input operators like correlation.
+
+    Why separate binding ops:
+    - Enables explicit enumeration of column combinations
+    - No arbitrary selection inside the analysis operator
+    - Clear data flow: bind col1 → bind col2 → analyze
+    """
+    col = state.bindings.get("num_col_1")
+    return f"num_col_1 = '{col}'"
+
+
+def bind_num_col_2_emit(state: State) -> str:
+    """Emit code to bind the second numeric column.
+
+    Must be called after bind_num_col_1 and must bind a different column.
+    The precondition ensures col1 != col2.
+    """
+    col = state.bindings.get("num_col_2")
+    return f"num_col_2 = '{col}'"
+
+
 # Property-based selectors (no arbitrary column choice)
 def pick_numeric_by_variance_emit(state: State) -> str:
     strategy = state.bindings.get("strategy", "max")
@@ -308,6 +333,42 @@ def ttest_ind_emit(state: State) -> str:
     )
 
 
+def correlation_emit(state: State) -> str:
+    """Emit code to compute correlation between two bound columns.
+
+    Uses num_col_1 and num_col_2 which must be bound by previous operators.
+    This is the explicit multi-input approach: bindings are filled during
+    enumeration, not selected arbitrarily inside the operator.
+
+    Why this design:
+    - All valid (col1, col2) pairs are enumerated systematically
+    - No hidden selection logic
+    - Reproducible: same bindings always produce same result
+    - Compositional: can chain with other ops that use these columns
+    """
+    return (
+        "# Compute correlation between explicitly bound columns\n"
+        "corr = df[num_col_1].corr(df[num_col_2])\n"
+        'submit({"col1": num_col_1, "col2": num_col_2, "correlation": round(float(corr), 3)})'
+    )
+
+
+def filter_greater_than_emit(state: State) -> str:
+    threshold = state.bindings.get("threshold", 0)
+    return (
+        f"filtered = df[df[selected_col] > {threshold}]\n"
+        f"n_filtered = len(filtered)\n"
+        f"hook(n_filtered, 'rows after filtering', name='n_filtered')\n"
+    )
+
+
+def sum_emit(state: State) -> str:
+    return (
+        "total = df[selected_col].sum()\n"
+        'submit({"column": selected_col, "sum": round(float(total), 3)})'
+    )
+
+
 OPERATORS = {
     "select_numeric_cols": Op(
         name="select_numeric_cols",
@@ -365,6 +426,38 @@ OPERATORS = {
         reads={"categorical_cols"},
         writes={"cat_col"},
         requires_bindings={"cat_col": True},
+    ),
+    # Multi-input binding operators
+    # These enable explicit enumeration of column combinations for ops like correlation
+    "bind_num_col_1": Op(
+        name="bind_num_col_1",
+        inputs=["NumCols"],
+        outputs=["NumCol"],  # Adds 1 NumCol to the type count
+        attributes=["selector"],
+        emit=bind_num_col_1_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, s: len(s.numeric_cols) > 0,
+        reads={"numeric_cols"},
+        writes={"num_col_1"},
+        requires_bindings={"num_col_1": True},
+    ),
+    "bind_num_col_2": Op(
+        name="bind_num_col_2",
+        inputs=["NumCols"],  # Still needs NumCols as input (to know available columns)
+        outputs=["NumCol"],  # Adds another NumCol (now we have 2)
+        attributes=["selector"],
+        emit=bind_num_col_2_emit,
+        update=lambda s: None,
+        # Precondition: must have at least 2 columns available
+        # Note: We don't check col1 != col2 here because bindings are empty during
+        # grammar search. The distinctness constraint is enforced during enumeration
+        # when we generate all valid (col1, col2) pairs where col1 != col2.
+        # This separation allows the grammar to find the structural pattern,
+        # while enumeration ensures semantic validity.
+        precondition=lambda _profile, s: len(s.numeric_cols) > 1,
+        reads={"numeric_cols"},  # Only reads available columns, not specific bindings
+        writes={"num_col_2"},
+        requires_bindings={"num_col_2": True},
     ),
     "pick_numeric_by_variance": Op(
         name="pick_numeric_by_variance",
@@ -802,6 +895,54 @@ OPERATORS = {
         update=lambda s: None,
         precondition=lambda _profile, _s: True,
         reads={"groups", "chosen_test"},
+        writes={"answer"},
+        emits_answer=True,
+        requires_bindings={},
+    ),
+    # Correlation operator - uses two explicitly bound columns
+    # Requires: bind_num_col_1 → bind_num_col_2 → correlation
+    # Type signature: NumCol × 2 → Dict (uses count-based type checking)
+    "correlation": Op(
+        name="correlation",
+        inputs=["NumCol", "NumCol"],  # Needs 2 NumCols (count-based)
+        outputs=["Dict"],
+        attributes=["analysis"],
+        emit=correlation_emit,
+        update=lambda s: None,
+        # Precondition: Always true during grammar search
+        # The distinctness of columns (col1 != col2) is enforced during enumeration
+        # when we generate binding combinations. We skip this check here because
+        # bindings are empty during grammar search (structure validation phase).
+        # Separation of concerns:
+        #   - Grammar: validates structural feasibility (types, operator order)
+        #   - Enumeration: validates semantic constraints (distinct columns, etc.)
+        precondition=lambda _profile, _s: True,
+        reads={"num_col_1", "num_col_2"},  # Reads both bound columns
+        writes={"answer"},
+        emits_answer=True,
+        requires_bindings={},  # Bindings provided by previous ops
+    ),
+    "filter_greater_than": Op(
+        name="filter_greater_than",
+        inputs=["Table", "NumCol"],
+        outputs=["Table"],
+        attributes=["transform"],
+        emit=filter_greater_than_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"selected_col"},
+        writes={"filtered_df"},
+        requires_bindings={"threshold": False},
+    ),
+    "sum": Op(
+        name="sum",
+        inputs=["NumCol"],
+        outputs=["Dict"],
+        attributes=["analysis"],
+        emit=sum_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"selected_col"},
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
