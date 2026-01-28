@@ -13,6 +13,9 @@ from src.datagen.synthetic.programs.grammar import search_programs
 from src.datagen.synthetic.programs.enumerate import enumerate_bindings
 from src.datagen.synthetic.programs.reduction import reduce_chains
 from src.datagen.synthetic.programs.long_chains import generate_long_chain_programs
+from src.datagen.synthetic.programs.semantic_long_chains import (
+    generate_semantic_long_programs,
+)
 
 
 def sample_programs(
@@ -53,9 +56,9 @@ def sample_programs(
 
     programs = enumerate_bindings(all_chains, profile)
 
-    # Add explicit long-chain templates (10-15 steps)
-    # These bypass the grammar limitations
-    long_programs = generate_long_chain_programs(profile)
+    # Add semantic long-chain templates (10-15 steps)
+    # These are meaningful workflows where every step affects the answer
+    semantic_long_programs = generate_semantic_long_programs(profile)
 
-    # Combine: long templates first, then discovered chains
-    return long_programs + programs
+    # Combine: semantic long chains first, then discovered chains
+    return semantic_long_programs + programs

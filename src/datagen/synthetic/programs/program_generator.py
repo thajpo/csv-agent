@@ -18,6 +18,7 @@ from src.core.config import config
 from src.core.prompts import generate_data_overview
 from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.synthetic.verbalizer import QuestionVerbalizer
+from src.datagen.synthetic.programs.template_verbalizer import TemplateVerbalizer
 from src.datagen.synthetic.programs.compiler import compile_program
 from src.datagen.synthetic.programs.filter import filter_programs
 from src.datagen.synthetic.programs.sampler import sample_programs
@@ -168,37 +169,77 @@ async def run_pipeline(
     if max_verbalize:
         filtered = filtered[:max_verbalize]
 
-    if skip_verbalization:
-        verbalized = [
-            {
-                "program": item,
-                "question": f"Analyze the data and return an answer. Return as JSON, e.g.: {_output_schema_for_op(item['ops'][-1])}",
-                "hint": "",
-            }
-            for item in filtered
-        ]
-    else:
-        verbalizer = QuestionVerbalizer(
+    # Initialize verbalizers
+    llm_verbalizer = (
+        None
+        if skip_verbalization
+        else QuestionVerbalizer(
             model=config.question_gen_model,
             sampling_args=config.sampling_args.model_dump(),
         )
-        verbalized = []
-        total_verbalize = len(filtered)
-        for idx, item in enumerate(filtered, start=1):
-            print(f"[verbalize] {idx}/{total_verbalize} {item['name']}")
-            terminal = item["ops"][-1]
-            output_schema = _output_schema_for_op(terminal)
-            question, hint, _raw = await verbalizer.verbalize(
-                code=item["code"],
-                profile=profile,
-                ground_truth=item["answer"],
-                output_schema=output_schema,
-                data_overview=data_overview,
-                dataset_description=dataset_description,
-                banned_words=list(FORBIDDEN_METHOD_TERMS),
+    )
+    template_verbalizer = TemplateVerbalizer()
+
+    verbalized = []
+    total_verbalize = len(filtered)
+
+    for idx, item in enumerate(filtered, start=1):
+        print(f"[verbalize] {idx}/{total_verbalize} {item['name']}")
+
+        n_steps = len(item["ops"])
+
+        # For long chains (10+ steps), use template verbalizer (deterministic, accurate)
+        # For short chains, optionally use LLM verbalizer
+        if n_steps >= 10:
+            # Template-based verbalization for long chains
+            # This ensures the question accurately describes the computation
+            from src.datagen.synthetic.programs.spec import ProgramSpec
+
+            spec = ProgramSpec(
+                name=item["name"],
+                ops=[],  # Not needed for verbalization
+                output_type="dict",
+                output_schema="",
+                difficulty="HARD",
             )
-            verbalized.append({"program": item, "question": question, "hint": hint})
-        await verbalizer.aclose()
+            question, hint = template_verbalizer.verbalize(spec)
+
+            # Optional: Polish with LLM (preserves meaning, adds natural language)
+            if not skip_verbalization and False:  # Set to True to enable LLM polish
+                question = await template_verbalizer.polish_with_llm(
+                    question,
+                    hint,
+                    config.question_gen_model,
+                    config.sampling_args.model_dump(),
+                )
+        else:
+            # Short chains: use LLM verbalizer or mechanical description
+            if skip_verbalization:
+                terminal = item["ops"][-1]
+                question = f"Analyze the data and return an answer. Return as JSON, e.g.: {_output_schema_for_op(terminal)}"
+                hint = ""
+            elif llm_verbalizer is not None:
+                terminal = item["ops"][-1]
+                output_schema = _output_schema_for_op(terminal)
+                question, hint, _raw = await llm_verbalizer.verbalize(
+                    code=item["code"],
+                    profile=profile,
+                    ground_truth=item["answer"],
+                    output_schema=output_schema,
+                    data_overview=data_overview,
+                    dataset_description=dataset_description,
+                    banned_words=list(FORBIDDEN_METHOD_TERMS),
+                )
+            else:
+                # Fallback if somehow we get here with no verbalizer
+                terminal = item["ops"][-1]
+                question = f"Analyze the data and return an answer. Return as JSON, e.g.: {_output_schema_for_op(terminal)}"
+                hint = ""
+
+        verbalized.append({"program": item, "question": question, "hint": hint})
+
+    if llm_verbalizer:
+        await llm_verbalizer.aclose()
 
     # Transform to unified schema and save
     output_path = (
@@ -227,6 +268,7 @@ async def run_pipeline(
             "dataset": dataset_name,
             "question_mechanical": _generate_mechanical_description(ops),
             "question_text": item["question"],
+            "question_text_llm": None,  # Optional LLM polish (not used by default)
             "hint": item["hint"],
             "code": code,
             "code_hash": hash_artifact(code),
