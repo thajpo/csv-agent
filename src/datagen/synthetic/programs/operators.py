@@ -418,6 +418,125 @@ def sum_emit(state: State) -> str:
     )
 
 
+# New chainable operators for 10-15 step complexity
+def filter_by_threshold_emit(state: State) -> str:
+    """Emit code to filter table by threshold on selected column.
+
+    This operator consumes and produces Table, enabling chaining.
+    Example chain: filter > threshold → sort → top_n → aggregate
+    """
+    col = state.bindings.get("selected_col", "selected_col")
+    threshold = state.bindings.get("threshold", 0)
+    return (
+        f"# Filter rows where {col} > {threshold}\n"
+        f"df = df[df['{col}'] > {threshold}].reset_index(drop=True)\n"
+        f"n_rows = len(df)\n"
+        f"hook(n_rows, 'rows after filter', name='n_rows')"
+    )
+
+
+def sort_by_column_emit(state: State) -> str:
+    """Emit code to sort table by selected column.
+
+    Enables ranking chains: sort → top_n → aggregate
+    """
+    col = state.bindings.get("selected_col", "selected_col")
+    ascending = state.bindings.get("ascending", True)
+    return (
+        f"# Sort by {col} (ascending={ascending})\n"
+        f"df = df.sort_values('{col}', ascending={ascending}).reset_index(drop=True)"
+    )
+
+
+def top_n_emit(state: State) -> str:
+    """Emit code to take top N rows.
+
+    After sorting, take top N for focused analysis.
+    """
+    n = state.bindings.get("n", 10)
+    return (
+        f"# Take top {n} rows\n"
+        f"df = df.head({n}).reset_index(drop=True)\n"
+        f"hook({n}, 'selected top n', name='top_n')"
+    )
+
+
+def cumulative_sum_emit(state: State) -> str:
+    """Emit code to compute cumulative sum.
+
+    Chain: bind column → cumsum → analyze trend
+    """
+    col = state.bindings.get("selected_col", "selected_col")
+    return (
+        f"# Compute cumulative sum of {col}\n"
+        f"cumsum_col = '{col}_cumsum'\n"
+        f"df[cumsum_col] = df['{col}'].cumsum()\n"
+        f"final_cumsum = df[cumsum_col].iloc[-1]\n"
+        f"hook(final_cumsum, 'cumulative sum', name='cumsum')"
+    )
+
+
+def rolling_mean_emit(state: State) -> str:
+    """Emit code to compute rolling mean.
+
+    Windowed analysis for trends.
+    """
+    col = state.bindings.get("selected_col", "selected_col")
+    window = state.bindings.get("window", 3)
+    return (
+        f"# Compute {window}-period rolling mean of {col}\n"
+        f"rolling_col = '{col}_rolling_{window}'\n"
+        f"df[rolling_col] = df['{col}'].rolling(window={window}, min_periods=1).mean()\n"
+        f"mean_rolling = df[rolling_col].mean()\n"
+        f"hook(mean_rolling, 'rolling mean', name='rolling_mean')"
+    )
+
+
+def diff_emit(state: State) -> str:
+    """Emit code to compute difference from previous row.
+
+    For change detection chains.
+    """
+    col = state.bindings.get("selected_col", "selected_col")
+    return (
+        f"# Compute difference of {col}\n"
+        f"diff_col = '{col}_diff'\n"
+        f"df[diff_col] = df['{col}'].diff().fillna(0)\n"
+        f"max_diff = df[diff_col].abs().max()\n"
+        f"hook(max_diff, 'max difference', name='max_diff')"
+    )
+
+
+def percentile_rank_emit(state: State) -> str:
+    """Emit code to compute percentile rank within column.
+
+    Ranking analysis.
+    """
+    col = state.bindings.get("selected_col", "selected_col")
+    return (
+        f"# Compute percentile rank of {col}\n"
+        f"rank_col = '{col}_percentile'\n"
+        f"df[rank_col] = df['{col}'].rank(pct=True)\n"
+        f"mean_percentile = df[rank_col].mean()\n"
+        f"hook(mean_percentile, 'mean percentile', name='mean_percentile')"
+    )
+
+
+def bin_into_quartiles_emit(state: State) -> str:
+    """Emit code to bin column into quartiles.
+
+    Categorization for grouped analysis.
+    """
+    col = state.bindings.get("selected_col", "selected_col")
+    return (
+        f"# Bin {col} into quartiles\n"
+        f"quartile_col = '{col}_quartile'\n"
+        f"df[quartile_col] = pd.qcut(df['{col}'], q=4, labels=['Q1', 'Q2', 'Q3', 'Q4'])\n"
+        f"quartile_counts = df[quartile_col].value_counts().to_dict()\n"
+        f"hook(str(quartile_counts), 'quartile distribution', name='quartiles')"
+    )
+
+
 OPERATORS = {
     "select_numeric_cols": Op(
         name="select_numeric_cols",
@@ -1038,6 +1157,104 @@ OPERATORS = {
         reads={"num_col_1"},
         writes={"answer"},
         emits_answer=True,
+        requires_bindings={},
+    ),
+    # Chainable operators for 10-15 step complexity
+    # These operators consume and produce Table, enabling long chains
+    "filter_by_threshold": Op(
+        name="filter_by_threshold",
+        inputs=["Table", "NumCol"],
+        outputs=["Table"],  # Returns modified table for chaining
+        attributes=["transform"],
+        emit=filter_by_threshold_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"selected_col"},
+        writes=set(),  # Modifies df in place
+        requires_bindings={"threshold": False},
+    ),
+    "sort_by_column": Op(
+        name="sort_by_column",
+        inputs=["Table", "NumCol"],
+        outputs=["Table"],
+        attributes=["transform"],
+        emit=sort_by_column_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"selected_col"},
+        writes=set(),
+        requires_bindings={"ascending": False},
+    ),
+    "top_n": Op(
+        name="top_n",
+        inputs=["Table"],
+        outputs=["Table"],
+        attributes=["transform"],
+        emit=top_n_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads=set(),
+        writes=set(),
+        requires_bindings={"n": False},
+    ),
+    "cumulative_sum": Op(
+        name="cumulative_sum",
+        inputs=["Table", "NumCol"],
+        outputs=["Table"],
+        attributes=["transform"],
+        emit=cumulative_sum_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"selected_col"},
+        writes=set(),
+        requires_bindings={},
+    ),
+    "rolling_mean": Op(
+        name="rolling_mean",
+        inputs=["Table", "NumCol"],
+        outputs=["Table"],
+        attributes=["transform"],
+        emit=rolling_mean_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"selected_col"},
+        writes=set(),
+        requires_bindings={"window": False},
+    ),
+    "diff": Op(
+        name="diff",
+        inputs=["Table", "NumCol"],
+        outputs=["Table"],
+        attributes=["transform"],
+        emit=diff_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"selected_col"},
+        writes=set(),
+        requires_bindings={},
+    ),
+    "percentile_rank": Op(
+        name="percentile_rank",
+        inputs=["Table", "NumCol"],
+        outputs=["Table"],
+        attributes=["transform"],
+        emit=percentile_rank_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"selected_col"},
+        writes=set(),
+        requires_bindings={},
+    ),
+    "bin_into_quartiles": Op(
+        name="bin_into_quartiles",
+        inputs=["Table", "NumCol"],
+        outputs=["Table"],
+        attributes=["transform"],
+        emit=bin_into_quartiles_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"selected_col"},
+        writes=set(),
         requires_bindings={},
     ),
 }

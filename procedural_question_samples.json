@@ -1,0 +1,126 @@
+{
+  "easy": [
+    {
+      "operators": [
+        "select_numeric_cols",
+        "bind_numeric_col",
+        "variance"
+      ],
+      "mechanical_question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute variance",
+      "ground_truth": {
+        "column": "N",
+        "variance": 651701.0
+      },
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "operators": [
+        "select_numeric_cols",
+        "pick_numeric_by_variance",
+        "variance"
+      ],
+      "mechanical_question": "Program: select relevant columns \u2192 compute variance \u2192 compute variance",
+      "ground_truth": {
+        "column": "N",
+        "variance": 651701.0
+      },
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "operators": [
+        "select_numeric_cols",
+        "bind_numeric_col",
+        "mean"
+      ],
+      "mechanical_question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute mean",
+      "ground_truth": {
+        "column": "N",
+        "mean": 1398.5
+      },
+      "difficulty": "EASY",
+      "n_steps": 3
+    }
+  ],
+  "medium": [
+    {
+      "operators": [
+        "select_numeric_cols",
+        "bind_numeric_col",
+        "zscore",
+        "mean_series"
+      ],
+      "mechanical_question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute mean",
+      "ground_truth": {
+        "metric": "mean",
+        "value": 0.0
+      },
+      "difficulty": "EASY",
+      "n_steps": 4
+    },
+    {
+      "operators": [
+        "select_numeric_cols",
+        "bind_numeric_col",
+        "zscore",
+        "mean_series"
+      ],
+      "mechanical_question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute mean",
+      "ground_truth": {
+        "metric": "mean",
+        "value": 0.0
+      },
+      "difficulty": "EASY",
+      "n_steps": 4
+    }
+  ],
+  "hard": [
+    {
+      "operators": [
+        "select_numeric_cols",
+        "bind_num_col_2",
+        "correlation"
+      ],
+      "mechanical_question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute correlation",
+      "ground_truth": {
+        "col1": "TL",
+        "col2": "IN",
+        "correlation": 0.916
+      },
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "operators": [
+        "select_numeric_cols",
+        "bind_num_col_2",
+        "correlation"
+      ],
+      "mechanical_question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute correlation",
+      "ground_truth": {
+        "col1": "TL",
+        "col2": "INTERNODE_1",
+        "correlation": 0.451
+      },
+      "difficulty": "EASY",
+      "n_steps": 3
+    },
+    {
+      "operators": [
+        "select_numeric_cols",
+        "bind_num_col_2",
+        "correlation"
+      ],
+      "mechanical_question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute correlation",
+      "ground_truth": {
+        "col1": "TL",
+        "col2": "N",
+        "correlation": -0.143
+      },
+      "difficulty": "EASY",
+      "n_steps": 3
+    }
+  ],
+  "very_hard": []
+}

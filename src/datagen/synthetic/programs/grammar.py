@@ -44,7 +44,7 @@ def list_operator_names() -> List[str]:
     return list(OPERATORS.keys())
 
 
-def search_programs(profile: dict, max_depth: int = 6) -> List[List[OpInstance]]:
+def search_programs(profile: dict, max_depth: int = 15) -> List[List[OpInstance]]:
     """Search for valid operator chains using BFS from Table state.
 
     The search tracks type COUNTS to support multi-input operators.
@@ -74,7 +74,7 @@ def search_programs(profile: dict, max_depth: int = 6) -> List[List[OpInstance]]
     valid_chains: List[List[OpInstance]] = []
 
     iteration = 0
-    max_iterations = 2000  # Safety limit to prevent infinite loops
+    max_iterations = 10000  # Increased for 10-15 step chains
 
     while queue and iteration < max_iterations:
         iteration += 1

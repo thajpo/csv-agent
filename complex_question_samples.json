@@ -1,0 +1,112 @@
+[
+  {
+    "steps": 12,
+    "operators": [
+      "select_numeric_cols",
+      "bind_numeric_col",
+      "cumulative_sum",
+      "rolling_mean",
+      "filter_by_threshold",
+      "sort_by_column",
+      "top_n",
+      "bind_num_col_1",
+      "diff",
+      "percentile_rank",
+      "bind_numeric_col",
+      "mean"
+    ],
+    "question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute mean \u2192 filter rows \u2192 bind column parameters \u2192 bind column parameters \u2192 compute mean",
+    "answer": {
+      "column": "N",
+      "mean": 1783.8
+    }
+  },
+  {
+    "steps": 12,
+    "operators": [
+      "select_numeric_cols",
+      "bind_numeric_col",
+      "cumulative_sum",
+      "rolling_mean",
+      "filter_by_threshold",
+      "sort_by_column",
+      "top_n",
+      "bind_num_col_1",
+      "diff",
+      "percentile_rank",
+      "bind_numeric_col",
+      "mean"
+    ],
+    "question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute mean \u2192 filter rows \u2192 bind column parameters \u2192 bind column parameters \u2192 compute mean",
+    "answer": {
+      "column": "N",
+      "mean": 1783.8
+    }
+  },
+  {
+    "steps": 12,
+    "operators": [
+      "select_numeric_cols",
+      "bind_numeric_col",
+      "cumulative_sum",
+      "rolling_mean",
+      "filter_by_threshold",
+      "sort_by_column",
+      "top_n",
+      "bind_num_col_1",
+      "diff",
+      "percentile_rank",
+      "bind_numeric_col",
+      "mean"
+    ],
+    "question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute mean \u2192 filter rows \u2192 bind column parameters \u2192 bind column parameters \u2192 compute mean",
+    "answer": {
+      "column": "TL",
+      "mean": 81.8
+    }
+  },
+  {
+    "steps": 12,
+    "operators": [
+      "select_numeric_cols",
+      "bind_numeric_col",
+      "cumulative_sum",
+      "rolling_mean",
+      "filter_by_threshold",
+      "sort_by_column",
+      "top_n",
+      "bind_num_col_1",
+      "diff",
+      "percentile_rank",
+      "bind_numeric_col",
+      "mean"
+    ],
+    "question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute mean \u2192 filter rows \u2192 bind column parameters \u2192 bind column parameters \u2192 compute mean",
+    "answer": {
+      "column": "TL",
+      "mean": 81.8
+    }
+  },
+  {
+    "steps": 12,
+    "operators": [
+      "select_numeric_cols",
+      "bind_numeric_col",
+      "cumulative_sum",
+      "rolling_mean",
+      "filter_by_threshold",
+      "sort_by_column",
+      "top_n",
+      "bind_num_col_1",
+      "diff",
+      "percentile_rank",
+      "bind_numeric_col",
+      "mean"
+    ],
+    "question": "Program: select relevant columns \u2192 bind column parameters \u2192 compute mean \u2192 filter rows \u2192 bind column parameters \u2192 bind column parameters \u2192 compute mean",
+    "answer": {
+      "column": "TL",
+      "mean": 81.8
+    }
+  }
+]

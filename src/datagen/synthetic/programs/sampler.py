@@ -12,15 +12,50 @@ from src.datagen.synthetic.programs.spec import ProgramSpec
 from src.datagen.synthetic.programs.grammar import search_programs
 from src.datagen.synthetic.programs.enumerate import enumerate_bindings
 from src.datagen.synthetic.programs.reduction import reduce_chains
+from src.datagen.synthetic.programs.long_chains import generate_long_chain_programs
 
 
-def sample_programs(profile: Dict[str, Any]) -> List[ProgramSpec]:
+def sample_programs(
+    profile: Dict[str, Any], target_length: int = 10
+) -> List[ProgramSpec]:
     """Generate programs via grammar search + enumeration.
 
     This is true compositional generation. No hardcoded program catalogs.
+
+    Args:
+        profile: Dataset profile
+        target_length: Target chain length (10-15 for complexity)
     """
-    chains = search_programs(profile, max_depth=6)
-    # Preserve decision operators by treating chosen_test as observable
-    chains = reduce_chains(chains, min_length=3, observation=("answer", "chosen_test"))
-    programs = enumerate_bindings(chains, profile)
-    return programs
+    chains = search_programs(profile, max_depth=15)
+
+    # For long chains, skip reduction to preserve complexity
+    # Only reduce chains shorter than target to remove true dead code
+    short_chains = [c for c in chains if len(c) < target_length]
+    long_chains = [c for c in chains if len(c) >= target_length]
+
+    # Reduce short chains only
+    reduced_short = reduce_chains(
+        short_chains, min_length=3, observation=("answer", "chosen_test")
+    )
+
+    # Keep long chains as-is (they're already complex)
+    # Just deduplicate them
+    seen = set()
+    unique_long = []
+    for chain in long_chains:
+        sig = tuple(op.op_name for op in chain)
+        if sig not in seen:
+            seen.add(sig)
+            unique_long.append(chain)
+
+    # Combine: prefer long chains, fill with short if needed
+    all_chains = unique_long + reduced_short
+
+    programs = enumerate_bindings(all_chains, profile)
+
+    # Add explicit long-chain templates (10-15 steps)
+    # These bypass the grammar limitations
+    long_programs = generate_long_chain_programs(profile)
+
+    # Combine: long templates first, then discovered chains
+    return long_programs + programs

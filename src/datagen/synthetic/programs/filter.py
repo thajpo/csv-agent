@@ -158,23 +158,38 @@ def _has_unique_winner(stdout: str, hooks: list) -> bool:
 
 
 def _interestingness_score(prog: dict) -> float:
-    """Compute deterministic interestingness score."""
+    """Compute deterministic interestingness score.
+
+    Prioritizes:
+    1. Chain length (longer = more complex)
+    2. Answer interestingness (variance, p-value, etc.)
+    """
+    ops = prog.get("ops", [])
     answer = prog.get("answer", {})
+
+    # Length bonus: exponential scaling to strongly favor long chains
+    # 10 steps = 100 points, 15 steps = 225 points
+    length_score = (len(ops) ** 2) if ops else 0
+
+    # Answer interestingness (0-100 range)
+    answer_score = 0.0
 
     if "p_value" in answer:
         # Group diff: score by effect size (1 - p_value)
-        return 1.0 - answer["p_value"]
-
-    if isinstance(answer, dict):
+        answer_score = (1.0 - answer["p_value"]) * 100
+    elif isinstance(answer, dict):
         for key in ("variance", "std", "mean", "median"):
             if key in answer and isinstance(answer[key], (int, float)):
-                return float(abs(answer[key]))
-
-    if "group" in answer:
+                # Normalize by taking log to prevent huge values from dominating
+                val = abs(answer[key])
+                answer_score = min(np.log1p(val) * 10, 100)
+                break
+    elif "group" in answer:
         # Ranking: score by gap
-        return answer.get("gap", 0.0)
+        answer_score = answer.get("gap", 0.0) * 10
 
-    return 0.0
+    # Combine: length is primary, answer quality is secondary
+    return length_score + answer_score
 
 
 def _op_names(prog: dict) -> list[str]:
