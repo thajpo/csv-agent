@@ -26,8 +26,10 @@ from src.datagen.shared.dataset_meta import (
     load_dataset_meta,
     generate_description_from_overview,
 )
-from src.datagen.shared.filters import FORBIDDEN_METHOD_TERMS
+from src.datagen.shared.filters import FORBIDDEN_METHOD_TERMS, check_program_output
 from src.datagen.shared.submission import parse_all_submissions
+from csv_spec import hash_artifact
+import uuid
 
 
 OUTPUT_SCHEMAS = {
@@ -59,12 +61,51 @@ def _output_schema_for_op(op_name: str) -> str:
     return json.dumps(schema)
 
 
+def _generate_mechanical_description(ops: list[str]) -> str:
+    """Generate a mechanical description from program operations."""
+    if not ops:
+        return "Analyze the dataset and return a result"
+
+    op_descriptions = []
+    for op in ops:
+        # Map common ops to readable descriptions
+        if "select" in op.lower():
+            op_descriptions.append("select relevant columns")
+        elif "bind" in op.lower():
+            op_descriptions.append("bind column parameters")
+        elif "group" in op.lower() or "groupby" in op.lower():
+            op_descriptions.append("group data")
+        elif "mean" in op.lower():
+            op_descriptions.append("compute mean")
+        elif "median" in op.lower():
+            op_descriptions.append("compute median")
+        elif "std" in op.lower() or "variance" in op.lower():
+            op_descriptions.append("compute variance")
+        elif "max" in op.lower() or "min" in op.lower():
+            op_descriptions.append("find extreme values")
+        elif "count" in op.lower():
+            op_descriptions.append("count records")
+        elif "filter" in op.lower():
+            op_descriptions.append("filter rows")
+        elif "correlation" in op.lower():
+            op_descriptions.append("compute correlation")
+        elif "test" in op.lower():
+            op_descriptions.append("run statistical test")
+        elif "decision" in op.lower() or "choose" in op.lower():
+            op_descriptions.append("make decision based on evidence")
+
+    if op_descriptions:
+        return f"Program: {' → '.join(op_descriptions)}"
+    return f"Execute program: {' → '.join(ops)}"
+
+
 async def run_pipeline(
     csv_path: str,
     max_programs: int | None = None,
     max_verbalize: int | None = None,
     skip_verbalization: bool = False,
-) -> None:
+    output_dir: str | None = None,
+) -> list[dict]:
     csv_path_str = str(Path(csv_path).resolve())
     profiler = DataProfiler()
     profile = profiler.analyze(csv_path_str)
@@ -154,14 +195,61 @@ async def run_pipeline(
                 output_schema=output_schema,
                 data_overview=data_overview,
                 dataset_description=dataset_description,
-                banned_words=FORBIDDEN_METHOD_TERMS,
+                banned_words=list(FORBIDDEN_METHOD_TERMS),
             )
             verbalized.append({"program": item, "question": question, "hint": hint})
         await verbalizer.aclose()
 
+    # Transform to unified schema and save
+    output_path = (
+        Path(output_dir)
+        if output_dir
+        else Path("data/questions_synthetic") / dataset_name
+    )
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    question_records = []
+    for item in verbalized:
+        program = item["program"]
+        ops = program["ops"]
+        code = program["code"]
+        answer = program["answer"]
+
+        # Generate deterministic ID
+        id_base = f"{dataset_name}_{program['name']}_{hash_artifact(code)[:8]}"
+        question_id = f"prog_{id_base}"
+
+        # Build unified schema record
+        record = {
+            "id": question_id,
+            "source": "synthetic",
+            "subtype": "program",
+            "dataset": dataset_name,
+            "question_mechanical": _generate_mechanical_description(ops),
+            "question_text": item["question"],
+            "hint": item["hint"],
+            "code": code,
+            "code_hash": hash_artifact(code),
+            "ground_truth": answer,
+            "ground_truth_hash": hash_artifact(answer),
+            "output_schema": _output_schema_for_op(ops[-1]),
+            "n_steps": len(ops),
+            "program_name": program["name"],
+            "program_ops": ops,
+        }
+        question_records.append(record)
+
+    # Save batch
+    questions_file = output_path / "questions.json"
+    with open(questions_file, "w") as f:
+        json.dump(question_records, f, indent=2)
+
     print(f"Executed: {len(executed)}")
     print(f"Filtered: {len(filtered)}")
     print(f"Verbalized: {len(verbalized)}")
+    print(f"Saved {len(question_records)} questions to {questions_file}")
+
+    return question_records
 
 
 def main() -> int:
