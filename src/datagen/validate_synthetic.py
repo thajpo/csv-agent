@@ -63,6 +63,7 @@ from src.datagen.shared.dataset_meta import (
     load_dataset_meta,
     generate_description_from_overview,
 )
+from src.datagen.shared.verification import verify_synthetic
 
 
 def make_signal_handler(session_id: str):
@@ -103,6 +104,7 @@ async def validate_single_question(
 ) -> tuple[bool, dict | None, float, str | None]:
     """
     Validate a single synthetic question by running teacher trace.
+    Uses shared verification module for consistency.
 
     Returns:
         (success, trace_dict, elapsed_time, error_message)
@@ -110,85 +112,43 @@ async def validate_single_question(
     start_time = time.time()
 
     try:
-        # Run teacher trace WITH hint (gold mode)
-        (
-            trace,
-            conversation,
-            system_prompt,
-            elapsed_seconds,
-        ) = await execute_teacher_trace(
+        # Use shared verification module
+        result = await verify_synthetic(
+            question=question_dict,
             csv_path=csv_path,
-            question=question_dict.get("question_text")
-            or question_dict.get("question_mechanical")
-            or "",
             model=teacher_model,
-            hint=question_dict.get("hint"),  # Synthetic questions always use hint
+            hint=question_dict.get("hint"),
             max_turns=max_turns,
             sampling_args=sampling_args,
             dataset_description=dataset_description,
             data_overview=data_overview,
             ui=ui,
             session_id=session_id,
+            float_tol=config.float_tolerance,
         )
 
         elapsed = time.time() - start_time
 
-        # Check if trace succeeded
-        if not trace["success"]:
+        if not result.success:
+            return False, result.trace, elapsed, result.error or "Verification failed"
+
+        # result.match indicates if answer matches ground truth
+        if result.match:
+            return True, result.trace, elapsed, None
+        else:
+            # Answer mismatch - get debug info
+            actual_answer = result.trace.get("final_answer") if result.trace else None
+            act_str = (
+                json.dumps(actual_answer, default=str)[:200]
+                if actual_answer
+                else "None"
+            )
             return (
                 False,
-                trace,
+                result.trace,
                 elapsed,
-                f"Trace failed: {trace.get('error', 'unknown')}",
+                f"Answer mismatch: got {act_str}",
             )
-
-        # Compare answer hash to ground truth (supports multiple valid answers)
-        expected_hashes = question_dict.get("ground_truth_hashes") or [
-            question_dict.get("ground_truth_hash")
-        ]
-        expected_hashes = [h for h in expected_hashes if h is not None]
-        if not expected_hashes:
-            return False, trace, elapsed, "No ground_truth_hash in question"
-
-        actual_hash = trace.get("final_answer_hash")
-        actual_answer = trace.get("final_answer")
-
-        # Fast path: exact hash match against any valid answer
-        if actual_hash in expected_hashes:
-            return True, trace, elapsed, None
-
-        # Tolerant comparison: check against all valid answers
-        expected_answers = question_dict.get("_ground_truths") or [
-            question_dict.get("_ground_truth")
-        ]
-        expected_answers = [a for a in expected_answers if a is not None]
-
-        if actual_answer is not None:
-            for exp_hash, exp_answer in zip(expected_hashes, expected_answers):
-                if answers_match(
-                    exp_hash,
-                    actual_hash,
-                    exp_answer,
-                    actual_answer,
-                    float_tol=config.float_tolerance,
-                ):
-                    return True, trace, elapsed, None
-
-        # Debug: show what differed (use primary expected answer)
-        exp_str = (
-            json.dumps(expected_answers[0], default=str)[:200]
-            if expected_answers
-            else "None"
-        )
-        act_str = (
-            json.dumps(actual_answer, default=str)[:200] if actual_answer else "None"
-        )
-        return (
-            False,
-            trace,
-            elapsed,
-            f"Answer mismatch:\n      Expected: {exp_str}\n      Got:      {act_str}",
-        )
 
     except Exception as e:
         elapsed = time.time() - start_time
