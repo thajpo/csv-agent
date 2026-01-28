@@ -353,12 +353,61 @@ def correlation_emit(state: State) -> str:
     )
 
 
+def ratio_emit(state: State) -> str:
+    """Emit code to compute ratio of two bound columns.
+
+    Computes col1 / col2 for the two explicitly bound columns.
+    This demonstrates another multi-input operator pattern.
+
+    Why add this operator:
+    - Shows the pattern generalizes beyond correlation
+    - Creates questions about relative magnitudes
+    - Can reveal interesting relationships in the data
+    """
+    return (
+        "# Compute ratio of explicitly bound columns\n"
+        "ratio = df[num_col_1] / df[num_col_2].replace(0, np.nan)\n"
+        "mean_ratio = ratio.mean()\n"
+        'submit({"col1": num_col_1, "col2": num_col_2, "mean_ratio": round(float(mean_ratio), 3)})'
+    )
+
+
 def filter_greater_than_emit(state: State) -> str:
+    """Emit code to filter rows where column > threshold.
+
+    This is a transform operator that reduces the dataset.
+    The filtered dataframe can be used by subsequent operators.
+
+    Why filtering matters:
+    - Enables conditional analysis (e.g., "for high values of X...")
+    - Creates more specific, targeted questions
+    - Can be chained: filter → group → aggregate
+
+    Design decision: We emit code that creates a filtered view,
+    but we don't overwrite df to allow flexible chaining.
+    """
     threshold = state.bindings.get("threshold", 0)
     return (
-        f"filtered = df[df[selected_col] > {threshold}]\n"
+        f"# Filter rows where {state.bindings.get('selected_col', 'selected_col')} > {threshold}\n"
+        f"filtered = df[df['{state.bindings.get('selected_col', 'selected_col')}'] > {threshold}]\n"
         f"n_filtered = len(filtered)\n"
         f"hook(n_filtered, 'rows after filtering', name='n_filtered')\n"
+    )
+
+
+def min_emit(state: State) -> str:
+    """Emit code to compute minimum of a bound column."""
+    return (
+        "min_val = df[num_col_1].min()\n"
+        'submit({"column": num_col_1, "min": round(float(min_val), 3)})'
+    )
+
+
+def max_emit(state: State) -> str:
+    """Emit code to compute maximum of a bound column."""
+    return (
+        "max_val = df[num_col_1].max()\n"
+        'submit({"column": num_col_1, "max": round(float(max_val), 3)})'
     )
 
 
@@ -943,6 +992,50 @@ OPERATORS = {
         update=lambda s: None,
         precondition=lambda _profile, _s: True,
         reads={"selected_col"},
+        writes={"answer"},
+        emits_answer=True,
+        requires_bindings={},
+    ),
+    # Additional multi-input operators demonstrating extensibility
+    # These show how the Counter-based type system enables rich composition
+    "ratio": Op(
+        name="ratio",
+        inputs=["NumCol", "NumCol"],  # Needs 2 NumCols (count-based)
+        outputs=["Dict"],
+        attributes=["analysis"],
+        emit=ratio_emit,
+        update=lambda s: None,
+        # Same pattern as correlation: structural validation in grammar,
+        # semantic validation (distinct columns) in enumeration
+        precondition=lambda _profile, _s: True,
+        reads={"num_col_1", "num_col_2"},
+        writes={"answer"},
+        emits_answer=True,
+        requires_bindings={},
+    ),
+    # Additional aggregation operators using explicit binding
+    "min": Op(
+        name="min",
+        inputs=["NumCol"],
+        outputs=["Dict"],
+        attributes=["analysis"],
+        emit=min_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"num_col_1"},
+        writes={"answer"},
+        emits_answer=True,
+        requires_bindings={},
+    ),
+    "max": Op(
+        name="max",
+        inputs=["NumCol"],
+        outputs=["Dict"],
+        attributes=["analysis"],
+        emit=max_emit,
+        update=lambda s: None,
+        precondition=lambda _profile, _s: True,
+        reads={"num_col_1"},
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
