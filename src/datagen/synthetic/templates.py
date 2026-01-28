@@ -67,7 +67,9 @@ class CompositionTemplate:
         # Inject id-like column exclusions into templates that scan numeric/object columns.
         id_like_cols = _id_like_cols(profile)
         drop_expr = f".drop(columns={id_like_cols}, errors='ignore')"
-        code = code.replace("df.select_dtypes('number')", f"df.select_dtypes('number'){drop_expr}")
+        code = code.replace(
+            "df.select_dtypes('number')", f"df.select_dtypes('number'){drop_expr}"
+        )
         code = code.replace(
             "df.select_dtypes(include=['object', 'category'])",
             f"df.select_dtypes(include=['object', 'category']){drop_expr}",
@@ -126,7 +128,9 @@ def _nlargest_all(series, n):
 
         return code
 
-    def instantiate_alternatives(self, profile: dict, params: dict[str, Any] | None = None) -> list[str]:
+    def instantiate_alternatives(
+        self, profile: dict, params: dict[str, Any] | None = None
+    ) -> list[str]:
         """Instantiate all alternative code templates with same transformations as primary."""
         if not self.alternative_code_templates:
             return []
@@ -152,7 +156,9 @@ def _nlargest_all(series, n):
             # Inject id-like column exclusions
             id_like_cols = _id_like_cols(profile)
             drop_expr = f".drop(columns={id_like_cols}, errors='ignore')"
-            code = code.replace("df.select_dtypes('number')", f"df.select_dtypes('number'){drop_expr}")
+            code = code.replace(
+                "df.select_dtypes('number')", f"df.select_dtypes('number'){drop_expr}"
+            )
             code = code.replace(
                 "df.select_dtypes(include=['object', 'category'])",
                 f"df.select_dtypes(include=['object', 'category']){drop_expr}",
@@ -205,7 +211,10 @@ def _is_id_like_column(name: str, info: dict, row_count: int) -> bool:
 
     lowered = name.strip().lower()
     # Expanded patterns: Unnamed: 0, Person ID, Row ID, etc.
-    if re.search(r"(^id$|_id$|^id_|uuid|guid|index$|^unnamed:\s*\d+$|person.?id|row.?id|serial.?no|sr.?no)", lowered):
+    if re.search(
+        r"(^id$|_id$|^id_|uuid|guid|index$|^unnamed:\s*\d+$|person.?id|row.?id|serial.?no|sr.?no)",
+        lowered,
+    ):
         return True
     unique_count = info.get("unique_count")
     if row_count and isinstance(unique_count, int):
@@ -365,7 +374,9 @@ def _has_missing_numeric(profile: dict) -> bool:
     )
 
 
-def _has_moderate_cardinality_categorical(profile: dict, min_groups: int = 3, max_groups: int = 10) -> bool:
+def _has_moderate_cardinality_categorical(
+    profile: dict, min_groups: int = 3, max_groups: int = 10
+) -> bool:
     """Check if dataset has a categorical column with suitable cardinality for group-based analysis."""
     for col in _eligible_categorical_cols(profile):
         col_info = profile.get("columns", {}).get(col, {})
@@ -1513,15 +1524,15 @@ print(f"95% CI: [{ci_lower:.4f}, {ci_upper:.4f}]")
 se = bootstrap_means.std()
 hook(se, "bootstrap standard error", name='std_error', depends_on=['confidence_interval'])
 
-    submit({
-        "column": target_col,
-        "skewness": round(float(skewness[target_col]), 2),
-        "mean": round(float(original_mean), 2),
-        "ci_lower": round(float(ci_lower), 2),
-        "ci_upper": round(float(ci_upper), 2),
-        "std_error": round(float(se), 2),
-        "n_iterations": n_bootstrap
-    })
+submit({
+    "column": target_col,
+    "skewness": round(float(skewness[target_col]), 2),
+    "mean": round(float(original_mean), 2),
+    "ci_lower": round(float(ci_lower), 2),
+    "ci_upper": round(float(ci_upper), 2),
+    "std_error": round(float(se), 2),
+    "n_iterations": n_bootstrap
+})
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: _count_numeric_cols(p) >= 2,
@@ -1616,8 +1627,8 @@ else:
 """.strip(),
     output_type="dict",
     applicable_when=lambda p: (
-        _count_numeric_cols(p) >= 1 and
-        _has_moderate_cardinality_categorical(p, min_groups=3, max_groups=10)
+        _count_numeric_cols(p) >= 1
+        and _has_moderate_cardinality_categorical(p, min_groups=3, max_groups=10)
     ),
     n_steps=9,
     difficulty="VERY_HARD",
