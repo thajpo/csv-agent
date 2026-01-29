@@ -97,21 +97,39 @@ def verbalize_long_chain_program(spec: ProgramSpec) -> tuple[str, str]:
     name = spec.name
 
     if name.startswith("cascading_"):
-        # Parse: cascading_colA_colB_catCol
-        parts = name.split("_")
-        if len(parts) >= 4:
-            col_a = parts[1]
-            col_b = parts[2]
-            cat_col = parts[3]
-            # Extract thresholds from bindings if available
-            return verbalize_cascading_filters(
-                col_a=col_a,
-                threshold_a=0,  # Will be populated from actual values
-                col_b=col_b,
-                threshold_b=0,
-                cat_col=cat_col,
-                final_col=col_a,
-            )
+        # Extract column names from the operator chain instead of parsing the name
+        # This is more reliable than parsing the underscore-separated name
+        op_bindings = {}
+        for op in spec.ops:
+            op_bindings.update(op.params)
+
+        # Get columns from bindings
+        selected_col = op_bindings.get("selected_col", "the column")
+        cat_col = op_bindings.get("cat_col", "the category")
+
+        # For cascading template, we have two filter columns
+        # Try to extract them from the chain
+        filter_cols = []
+        for op in spec.ops:
+            if op.op_name == "filter_by_threshold":
+                col = op.params.get("selected_col")
+                if col and col not in filter_cols:
+                    filter_cols.append(col)
+
+        if len(filter_cols) >= 2:
+            col_a, col_b = filter_cols[0], filter_cols[1]
+        else:
+            col_a = selected_col
+            col_b = selected_col
+
+        return verbalize_cascading_filters(
+            col_a=col_a,
+            threshold_a=op_bindings.get("threshold", 0),
+            col_b=col_b,
+            threshold_b=0,
+            cat_col=cat_col,
+            final_col=col_a,
+        )
 
     elif name.startswith("derived_pipeline_"):
         # Parse: derived_pipeline_col_w{window}
