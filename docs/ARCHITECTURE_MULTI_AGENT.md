@@ -12,18 +12,12 @@ This document coordinates parallel implementation of episode factory centralizat
 from typing import Literal
 from dataclasses import dataclass
 
-@dataclass
-class EpisodeFactoryResult:
-    episode: EpisodeJSONL
-    success: bool
-    error: str | None
-
 async def create_episode(
     question: dict,
     verification_result: VerificationResult,
     source: Literal["synthetic", "llm", "procedural"],
     csv_path: str,
-) -> EpisodeFactoryResult:
+) -> EpisodeJSONL:
     """Create episode from verification result.
     
     Args:
@@ -33,7 +27,7 @@ async def create_episode(
         csv_path: Path to source CSV
     
     Returns:
-        EpisodeFactoryResult with episode and status
+        EpisodeJSONL with verification metadata embedded (success flag, error info, etc.)
     """
 
 # Helper for ground-truth strategy (synthetic/procedural)
@@ -42,7 +36,7 @@ async def create_episode_from_ground_truth(
     csv_path: str,
     model: str,
     **kwargs
-) -> EpisodeFactoryResult:
+) -> EpisodeJSONL:
     """Convenience wrapper for ground-truth verification."""
 
 # Helper for consistency strategy (LLM)
@@ -52,7 +46,7 @@ async def create_episode_from_consistency(
     model: str,
     n_consistency: int = 5,
     **kwargs
-) -> EpisodeFactoryResult:
+) -> EpisodeJSONL:
     """Convenience wrapper for consistency verification."""
 ```
 
