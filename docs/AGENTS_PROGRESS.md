@@ -7,7 +7,8 @@
 
 ## Agent 1: Episode Factory Core
 
-**Status:** Not Started
+**Status:** In Progress
+**Started:** 2026-01-30 15:30
 **Files:**
 - `src/datagen/shared/episode_factory.py` (NEW)
 - `tests/test_episode_factory.py` (NEW)
@@ -18,6 +19,15 @@
 - [ ] Unit tests
 - [ ] All tests passing
 
+**Progress:**
+- [x] Branch created: `agent/1-episode-factory`
+- [ ] Write tests first (TDD)
+- [ ] Implement `create_episode()`
+- [ ] Implement helper functions
+- [ ] All tests passing
+
+**Blockers:** None
+
 **Notes:** 
 - Read `docs/ARCHITECTURE_MULTI_AGENT.md` for interface spec
 - Use existing `shared/verification.py` for verification logic
@@ -27,45 +37,79 @@
 
 ## Agent 2: Dead Code Detection
 
-**Status:** Not Started
+**Status:** Completed
+**Started:** 2026-01-30 15:35
+**Completed:** 2026-01-30 16:45
 **Files:**
-- `src/datagen/synthetic/programs/operators.py` (MODIFY)
+- `src/datagen/synthetic/programs/spec.py` (MODIFY - add produces/consumes fields)
+- `src/datagen/synthetic/programs/operators.py` (MODIFY - add metadata to all operators)
 - `src/datagen/synthetic/programs/dead_code_validator.py` (NEW)
 - `tests/test_dead_code_validator.py` (NEW)
 
 **Deliverables:**
-- [ ] Add produces/consumes to Op dataclass
-- [ ] Update existing operators
-- [ ] `validate_no_dead_code()` function
-- [ ] Unit tests
-- [ ] All tests passing
+- [x] Add produces/consumes to Op dataclass
+- [x] Update existing operators
+- [x] `validate_no_dead_code()` function
+- [x] Unit tests
+- [x] All tests passing
+
+**Progress:**
+- [x] Read architecture docs and existing code
+- [x] Add produces/consumes fields to Op dataclass
+- [x] Update all 39 operators with metadata
+- [x] Write tests for dead_code_validator (TDD)
+- [x] Implement validate_no_dead_code()
+- [x] Run tests until passing
+
+**Tests:** 20/20 passing
+
+**Blockers:** None
 
 **Notes:**
-- Policy: REJECT chains with dead code
-- Read `docs/ARCHITECTURE_MULTI_AGENT.md` for requirements
-- No dependencies on other agents
+- Policy: REJECT chains with dead code immediately
+- Dead code = any produced variable never consumed (except 'answer')
+- Special handling for 'df' variable in chainable operators
+- All 39 operators updated with produces/consumes metadata
+- Validator handles unknown operators gracefully (skips them)
 
 ---
 
 ## Agent 3: Analysis Pipeline
 
-**Status:** Not Started
+**Status:** Completed
+**Started:** 2026-01-30 16:00
+**Completed:** 2026-01-30 16:30
 **Files:**
 - `src/datagen/analyze_procedural.py` (NEW)
 - `tests/test_analyze_procedural.py` (NEW)
 - `tests/fixtures/mock_episodes.jsonl` (NEW)
 
 **Deliverables:**
-- [ ] CLI tool
-- [ ] JSON output + CLI table formatting
-- [ ] Mock data for testing
-- [ ] Unit tests
-- [ ] All tests passing
+- [x] CLI tool
+- [x] JSON output + CLI table formatting
+- [x] Mock data for testing
+- [x] Unit tests
+- [x] All tests passing
+
+**Progress:**
+- [x] Branch created: `agent/3-analysis-pipeline`
+- [x] Create mock episode data (7 episodes with mixed pass/fail)
+- [x] Write tests first (TDD) - 34 tests
+- [x] Implement CLI tool with argparse
+- [x] Implement grouping logic (prefix, operator, both)
+- [x] Implement report generation (JSON + table)
+- [x] All tests passing: 34/34
+
+**Tests:** 34/34 passing
+
+**Blockers:** None
 
 **Notes:**
-- Use mock data (no dependencies)
-- Group by: name prefix, operator sequence, both
-- Read `docs/ARCHITECTURE_MULTI_AGENT.md` for requirements
+- CLI supports --episodes, --group-by (prefix/operator/both), --json, --all flags
+- Groups procedural questions by name prefix, operator sequence, or both
+- Calculates pass rates per group with summary statistics
+- Mock data includes 6 procedural + 1 non-procedural episodes
+- Known operators list used to distinguish operators from column names
 
 ---
 

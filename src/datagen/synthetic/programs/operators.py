@@ -552,6 +552,8 @@ OPERATORS = {
         reads=set(),
         writes={"numeric_cols"},
         requires_bindings={},
+        produces=["numeric_cols"],
+        consumes=[],
     ),
     "select_categorical_cols": Op(
         name="select_categorical_cols",
@@ -570,6 +572,8 @@ OPERATORS = {
         reads=set(),
         writes={"categorical_cols"},
         requires_bindings={},
+        produces=["categorical_cols"],
+        consumes=[],
     ),
     "bind_numeric_col": Op(
         name="bind_numeric_col",
@@ -582,6 +586,8 @@ OPERATORS = {
         reads={"numeric_cols"},
         writes={"selected_col"},
         requires_bindings={"selected_col": True},
+        produces=["selected_col"],
+        consumes=["numeric_cols"],
     ),
     "bind_binary_cat_col": Op(
         name="bind_binary_cat_col",
@@ -594,6 +600,8 @@ OPERATORS = {
         reads={"categorical_cols"},
         writes={"cat_col"},
         requires_bindings={"cat_col": True},
+        produces=["cat_col"],
+        consumes=["categorical_cols"],
     ),
     # Multi-input binding operators
     # These enable explicit enumeration of column combinations for ops like correlation
@@ -608,6 +616,8 @@ OPERATORS = {
         reads={"numeric_cols"},
         writes={"num_col_1"},
         requires_bindings={"num_col_1": True},
+        produces=["num_col_1"],
+        consumes=["numeric_cols"],
     ),
     "bind_num_col_2": Op(
         name="bind_num_col_2",
@@ -626,6 +636,8 @@ OPERATORS = {
         reads={"numeric_cols"},  # Only reads available columns, not specific bindings
         writes={"num_col_2"},
         requires_bindings={"num_col_2": True},
+        produces=["num_col_2"],
+        consumes=["numeric_cols"],
     ),
     "pick_numeric_by_variance": Op(
         name="pick_numeric_by_variance",
@@ -638,6 +650,8 @@ OPERATORS = {
         reads={"numeric_cols"},
         writes={"selected_col"},
         requires_bindings={},
+        produces=["selected_col"],
+        consumes=["numeric_cols"],
     ),
     "pick_numeric_by_skew": Op(
         name="pick_numeric_by_skew",
@@ -650,6 +664,8 @@ OPERATORS = {
         reads={"numeric_cols"},
         writes={"selected_col"},
         requires_bindings={},
+        produces=["selected_col"],
+        consumes=["numeric_cols"],
     ),
     "pick_categorical_by_cardinality": Op(
         name="pick_categorical_by_cardinality",
@@ -662,6 +678,8 @@ OPERATORS = {
         reads={"categorical_cols"},
         writes={"cat_col"},
         requires_bindings={},
+        produces=["cat_col"],
+        consumes=["categorical_cols"],
     ),
     "zscore": Op(
         name="zscore",
@@ -674,6 +692,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes={"num_series"},
         requires_bindings={},
+        produces=["num_series"],
+        consumes=["selected_col"],
     ),
     "log1p": Op(
         name="log1p",
@@ -686,6 +706,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes={"num_series"},
         requires_bindings={},
+        produces=["num_series"],
+        consumes=["selected_col"],
     ),
     "abs": Op(
         name="abs",
@@ -698,6 +720,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes={"num_series"},
         requires_bindings={},
+        produces=["num_series"],
+        consumes=["selected_col"],
     ),
     "groupby_mean": Op(
         name="groupby_mean",
@@ -710,6 +734,8 @@ OPERATORS = {
         reads={"cat_col", "selected_col"},
         writes={"group_means"},
         requires_bindings={},
+        produces=["group_means"],
+        consumes=["cat_col", "selected_col"],
     ),
     "groupby_var": Op(
         name="groupby_var",
@@ -722,6 +748,8 @@ OPERATORS = {
         reads={"cat_col", "selected_col"},
         writes={"group_vars"},
         requires_bindings={},
+        produces=["group_vars"],
+        consumes=["cat_col", "selected_col"],
     ),
     "groupby_median": Op(
         name="groupby_median",
@@ -734,6 +762,8 @@ OPERATORS = {
         reads={"cat_col", "selected_col"},
         writes={"group_medians"},
         requires_bindings={},
+        produces=["group_medians"],
+        consumes=["cat_col", "selected_col"],
     ),
     "groupby_std": Op(
         name="groupby_std",
@@ -746,6 +776,8 @@ OPERATORS = {
         reads={"cat_col", "selected_col"},
         writes={"group_stds"},
         requires_bindings={},
+        produces=["group_stds"],
+        consumes=["cat_col", "selected_col"],
     ),
     "groupby_count": Op(
         name="groupby_count",
@@ -758,6 +790,8 @@ OPERATORS = {
         reads={"cat_col"},
         writes={"group_counts"},
         requires_bindings={},
+        produces=["group_counts"],
+        consumes=["cat_col"],
     ),
     "argmax_group": Op(
         name="argmax_group",
@@ -771,6 +805,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_means"],
     ),
     "argmin_group": Op(
         name="argmin_group",
@@ -784,6 +820,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_means"],
     ),
     "argmax_group_median": Op(
         name="argmax_group_median",
@@ -797,6 +835,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_medians"],
     ),
     "argmin_group_median": Op(
         name="argmin_group_median",
@@ -810,6 +850,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_medians"],
     ),
     "argmax_group_std": Op(
         name="argmax_group_std",
@@ -823,6 +865,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_stds"],
     ),
     "argmin_group_std": Op(
         name="argmin_group_std",
@@ -836,6 +880,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_stds"],
     ),
     "argmax_group_var": Op(
         name="argmax_group_var",
@@ -849,6 +895,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_vars"],
     ),
     "argmin_group_var": Op(
         name="argmin_group_var",
@@ -862,6 +910,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_vars"],
     ),
     "argmax_group_count": Op(
         name="argmax_group_count",
@@ -875,6 +925,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_counts"],
     ),
     "argmin_group_count": Op(
         name="argmin_group_count",
@@ -888,6 +940,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["group_counts"],
     ),
     "mean": Op(
         name="mean",
@@ -901,6 +955,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["selected_col"],
     ),
     "median": Op(
         name="median",
@@ -914,6 +970,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["selected_col"],
     ),
     "std": Op(
         name="std",
@@ -927,6 +985,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["selected_col"],
     ),
     "variance": Op(
         name="variance",
@@ -940,6 +1000,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["selected_col"],
     ),
     "mean_series": Op(
         name="mean_series",
@@ -953,6 +1015,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["num_series"],
     ),
     "median_series": Op(
         name="median_series",
@@ -966,6 +1030,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["num_series"],
     ),
     "std_series": Op(
         name="std_series",
@@ -979,6 +1045,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["num_series"],
     ),
     "max_series": Op(
         name="max_series",
@@ -992,6 +1060,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["num_series"],
     ),
     "min_series": Op(
         name="min_series",
@@ -1005,6 +1075,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["num_series"],
     ),
     "groupby_values": Op(
         name="groupby_values",
@@ -1017,6 +1089,8 @@ OPERATORS = {
         reads={"cat_col", "selected_col"},
         writes={"groups"},
         requires_bindings={},
+        produces=["groups"],
+        consumes=["cat_col", "selected_col"],
     ),
     "shapiro_p": Op(
         name="shapiro_p",
@@ -1029,6 +1103,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes={"normality_p"},
         requires_bindings={},
+        produces=["normality_p"],
+        consumes=["selected_col"],
     ),
     "levene_p": Op(
         name="levene_p",
@@ -1041,6 +1117,8 @@ OPERATORS = {
         reads={"groups"},
         writes={"equal_var_p"},
         requires_bindings={},
+        produces=["equal_var_p"],
+        consumes=["groups"],
     ),
     "choose_test": Op(
         name="choose_test",
@@ -1053,6 +1131,8 @@ OPERATORS = {
         reads={"normality_p", "equal_var_p"},
         writes={"chosen_test"},
         requires_bindings={},
+        produces=["chosen_test"],
+        consumes=["normality_p", "equal_var_p"],
     ),
     "ttest_ind": Op(
         name="ttest_ind",
@@ -1066,6 +1146,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["groups", "chosen_test"],
     ),
     # Correlation operator - uses two explicitly bound columns
     # Requires: bind_num_col_1 → bind_num_col_2 → correlation
@@ -1089,6 +1171,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},  # Bindings provided by previous ops
+        produces=["answer"],
+        consumes=["num_col_1", "num_col_2"],
     ),
     "filter_greater_than": Op(
         name="filter_greater_than",
@@ -1101,6 +1185,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes={"filtered_df"},
         requires_bindings={"threshold": False},
+        produces=["filtered_df"],
+        consumes=["selected_col"],
     ),
     "sum": Op(
         name="sum",
@@ -1114,6 +1200,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["selected_col"],
     ),
     # Additional multi-input operators demonstrating extensibility
     # These show how the Counter-based type system enables rich composition
@@ -1131,6 +1219,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["num_col_1", "num_col_2"],
     ),
     # Additional aggregation operators using explicit binding
     "min": Op(
@@ -1145,6 +1235,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["num_col_1"],
     ),
     "max": Op(
         name="max",
@@ -1158,6 +1250,8 @@ OPERATORS = {
         writes={"answer"},
         emits_answer=True,
         requires_bindings={},
+        produces=["answer"],
+        consumes=["num_col_1"],
     ),
     # Chainable operators for 10-15 step complexity
     # These operators consume and produce Table, enabling long chains
@@ -1172,6 +1266,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes=set(),  # Modifies df in place
         requires_bindings={"threshold": False},
+        produces=["df"],  # Modifies df in place
+        consumes=["selected_col"],
     ),
     "sort_by_column": Op(
         name="sort_by_column",
@@ -1184,6 +1280,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes=set(),
         requires_bindings={"ascending": False},
+        produces=["df"],  # Modifies df in place
+        consumes=["selected_col"],
     ),
     "top_n": Op(
         name="top_n",
@@ -1196,6 +1294,8 @@ OPERATORS = {
         reads=set(),
         writes=set(),
         requires_bindings={"n": False},
+        produces=["df"],  # Modifies df in place
+        consumes=[],
     ),
     "cumulative_sum": Op(
         name="cumulative_sum",
@@ -1208,6 +1308,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes=set(),
         requires_bindings={},
+        produces=["cumsum_col", "df"],  # Creates new column + modifies df
+        consumes=["selected_col"],
     ),
     "rolling_mean": Op(
         name="rolling_mean",
@@ -1220,6 +1322,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes=set(),
         requires_bindings={"window": False},
+        produces=["rolling_col", "df"],  # Creates new column + modifies df
+        consumes=["selected_col"],
     ),
     "diff": Op(
         name="diff",
@@ -1232,6 +1336,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes=set(),
         requires_bindings={},
+        produces=["diff_col", "df"],  # Creates new column + modifies df
+        consumes=["selected_col"],
     ),
     "percentile_rank": Op(
         name="percentile_rank",
@@ -1244,6 +1350,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes=set(),
         requires_bindings={},
+        produces=["rank_col", "df"],  # Creates new column + modifies df
+        consumes=["selected_col"],
     ),
     "bin_into_quartiles": Op(
         name="bin_into_quartiles",
@@ -1256,6 +1364,8 @@ OPERATORS = {
         reads={"selected_col"},
         writes=set(),
         requires_bindings={},
+        produces=["quartile_col", "df"],  # Creates new column + modifies df
+        consumes=["selected_col"],
     ),
 }
 
