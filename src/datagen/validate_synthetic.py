@@ -29,20 +29,19 @@ import signal
 import argparse
 from pathlib import Path
 
-from src.datagen.teacher import answers_match
-from datetime import datetime
-import uuid
+import asyncio
+import json
+import sys
+import signal
+import argparse
+from pathlib import Path
 from collections import defaultdict
 import time
 
-from src.datagen.teacher import execute_teacher_trace
 from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
 from csv_spec import (
     EpisodeJSONL,
-    Question,
-    QADict,
-    TriangulationMetadataDict,
     TimingMetadataDict,
 )
 from src.core.config import config
@@ -51,7 +50,6 @@ from src.utils.docker import (
     cleanup_session,
     generate_session_id,
 )
-from csv_spec import hash_artifact
 from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
 from src.datagen.manifest import (
     DatagenManifest,
@@ -63,7 +61,8 @@ from src.datagen.shared.dataset_meta import (
     load_dataset_meta,
     generate_description_from_overview,
 )
-from src.datagen.shared.verification import verify_synthetic
+from src.datagen.shared.verification import verify_synthetic, VerificationResult
+from src.datagen.shared.episode_factory import create_episode
 
 
 def make_signal_handler(session_id: str):
@@ -207,48 +206,32 @@ async def process_dataset(
             )
 
         if success and trace:
-            question_obj = Question.from_dict(q_dict)
-            question_text = (
-                q_dict.get("question_text") or q_dict.get("question_mechanical") or ""
+            # Build verification result from validation output
+            verification_result = VerificationResult(
+                success=True,
+                match=True,
+                trace=trace,
+                traces=[],
+                majority_answer_hash=trace.get("final_answer_hash"),
+                error=None,
             )
-            episode_id = str(uuid.uuid4())
 
-            episode = EpisodeJSONL(
-                episode_id=episode_id,
-                timestamp=datetime.now(),
-                csv_source=str(csv_path),
-                question=QADict(
-                    id=question_obj.id,
-                    question_text=question_text,
-                    hint=question_obj.hint,
-                    difficulty=question_obj.difficulty,
-                    n_steps=question_obj.n_steps,
-                    template_name=question_obj.template_name,
-                    template_params=question_obj.template_params,
-                    output_type=question_obj.output_type,
-                    output_schema=question_obj.output_schema,
-                    ground_truth_hash=question_obj.ground_truth_hash,
-                    ground_truth_hashes=question_obj.ground_truth_hashes,
-                    ground_truth=question_obj.ground_truth,
-                ),
-                gold_trace=trace,
-                consistency_traces=[],  # No consistency for synthetic
-                verified=True,
-                triangulation=TriangulationMetadataDict(
-                    n_consistency_runs=0,
-                    n_consistency_succeeded=0,
-                    majority_answer_hash=None,
-                    majority_count=0,
-                    gold_matches_majority=True,
-                ),
-                timing=TimingMetadataDict(
-                    gold_elapsed=elapsed,
-                    consistency_elapsed=[],
-                    total_elapsed=elapsed,
-                    avg_elapsed=elapsed,
-                ),
+            # Use episode factory to create episode
+            episode = await create_episode(
+                question=q_dict,
+                verification_result=verification_result,
                 source="synthetic",
+                csv_path=str(csv_path),
             )
+
+            # Update timing with actual elapsed time
+            episode.timing = TimingMetadataDict(
+                gold_elapsed=elapsed,
+                consistency_elapsed=[],
+                total_elapsed=elapsed,
+                avg_elapsed=elapsed,
+            )
+
             episodes.append(episode)
             ui.base.print_success(f"    ✓ Validated ({elapsed:.1f}s)")
 
@@ -260,7 +243,7 @@ async def process_dataset(
                     dataset=dataset_name,
                     template_name=q_dict.get("template_name", "unknown"),
                     template_params=q_dict.get("template_params"),
-                    episode_id=episode_id,
+                    episode_id=episode.episode_id,
                     model=teacher_model,
                     elapsed_seconds=elapsed,
                 )

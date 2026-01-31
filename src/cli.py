@@ -625,6 +625,42 @@ def cmd_stats(questions: bool, episodes: bool, gaps: bool):
     return 0
 
 
+# ============= Analyze Command =============
+
+
+def cmd_analyze(
+    episodes_file: str, group_by: str, output_json: bool, include_all: bool
+):
+    """Analyze procedural question pass rates."""
+    from pathlib import Path
+    from src.datagen.analyze_procedural import (
+        load_episodes,
+        EpisodeAnalyzer,
+        format_table,
+    )
+
+    try:
+        episodes = load_episodes(Path(episodes_file))
+    except FileNotFoundError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        return 1
+
+    analyzer = EpisodeAnalyzer(episodes)
+    report = analyzer.generate_report(
+        group_by=group_by,
+        procedural_only=not include_all,
+    )
+
+    if output_json:
+        import json
+
+        console.print(json.dumps(report, indent=2))
+    else:
+        console.print(format_table(report))
+
+    return 0
+
+
 # ============= Manifest Command =============
 
 
@@ -1114,6 +1150,34 @@ Examples:
     # manifest
     subparsers.add_parser("manifest", help="Show manifest summary and template changes")
 
+    # analyze
+    analyze_parser = subparsers.add_parser(
+        "analyze", help="Analyze procedural question pass rates"
+    )
+    analyze_sub = analyze_parser.add_subparsers(dest="analyze_type", required=True)
+
+    proc_parser = analyze_sub.add_parser(
+        "procedural", help="Analyze procedural questions"
+    )
+    proc_parser.add_argument(
+        "--episodes", required=True, help="Path to episodes JSONL file"
+    )
+    proc_parser.add_argument(
+        "--group-by",
+        choices=["prefix", "operator", "both"],
+        default="prefix",
+        help="How to group episodes (default: prefix)",
+    )
+    proc_parser.add_argument(
+        "--json", action="store_true", help="Output as JSON instead of table"
+    )
+    proc_parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="include_all",
+        help="Include non-procedural questions too",
+    )
+
     return parser
 
 
@@ -1208,6 +1272,15 @@ def main():
 
     elif args.command == "manifest":
         return cmd_manifest_summary()
+
+    elif args.command == "analyze":
+        if args.analyze_type == "procedural":
+            return cmd_analyze(
+                episodes_file=args.episodes,
+                group_by=args.group_by,
+                output_json=args.json,
+                include_all=args.include_all,
+            )
 
     return 0
 

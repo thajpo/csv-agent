@@ -12,6 +12,7 @@ class QuestionRecord(TypedDict, total=False):
     id: str
     source: Literal["synthetic", "llm"]
     subtype: Literal["template", "program", "llm"]
+    is_procedural: bool
     dataset: str
     question_text: str | None
     question_mechanical: str | None

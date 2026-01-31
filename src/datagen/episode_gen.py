@@ -16,8 +16,6 @@ import json
 import sys
 import signal
 from pathlib import Path
-from datetime import datetime
-import uuid
 from typing import Any
 from dataclasses import dataclass
 
@@ -26,9 +24,6 @@ from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.prompts import generate_data_overview
 from csv_spec import (
     EpisodeJSONL,
-    Question,
-    QADict,
-    TriangulationMetadataDict,
     TimingMetadataDict,
     BatchTriangulationResult,
 )
@@ -50,6 +45,8 @@ from src.datagen.shared.dataset_meta import (
     load_dataset_meta,
     generate_description_from_overview,
 )
+from src.datagen.shared.episode_factory import create_episode
+from src.datagen.shared.verification import VerificationResult
 
 
 @dataclass
@@ -280,50 +277,34 @@ async def process_csv_task(
             if verified_only:
                 continue
 
-        question_obj = Question.from_dict(r.question)
+        # Build verification result from triangulation output
         consistency_traces = [trace for trace, _ in r.consistency_results]
-        n_succeeded = sum(1 for t in consistency_traces if t["success"])
-        episode_id = str(uuid.uuid4())
-
-        episode_jsonl = EpisodeJSONL(
-            episode_id=episode_id,
-            timestamp=datetime.now(),
-            csv_source=task.csv_path,
-            question=QADict(
-                id=question_obj.id,
-                question_text=question_obj.question_text,
-                hint=question_obj.hint,
-                difficulty=question_obj.difficulty,
-                n_steps=question_obj.n_steps,
-                category=getattr(question_obj, "category", None),
-                tags=getattr(question_obj, "tags", None),
-                template_name=question_obj.template_name,
-                template_params=question_obj.template_params,
-                output_type=question_obj.output_type,
-                output_schema=question_obj.output_schema,
-                ground_truth_hash=question_obj.ground_truth_hash,
-                ground_truth_hashes=question_obj.ground_truth_hashes,
-                ground_truth=question_obj.ground_truth,
-            ),
-            gold_trace=r.gold_trace,
-            consistency_traces=consistency_traces,
-            verified=r.verified,
-            triangulation=TriangulationMetadataDict(
-                n_consistency_runs=len(consistency_traces),
-                n_consistency_succeeded=n_succeeded,
-                majority_answer_hash=r.majority_answer_hash,
-                majority_count=r.majority_count,
-                gold_matches_majority=r.verified,
-            ),
-            timing=TimingMetadataDict(
-                gold_elapsed=r.timing_metadata["gold_elapsed"],
-                consistency_elapsed=r.timing_metadata["consistency_elapsed"],
-                total_elapsed=r.timing_metadata["total_elapsed"],
-                avg_elapsed=r.timing_metadata["avg_elapsed"],
-            ),
+        verification_result = VerificationResult(
+            success=r.verified,
+            match=r.verified,
+            trace=r.gold_trace,
+            traces=consistency_traces,
+            majority_answer_hash=r.majority_answer_hash,
+            error=None,
         )
 
-        episodes.append(episode_jsonl)
+        # Use episode factory to create episode
+        episode = await create_episode(
+            question=r.question,
+            verification_result=verification_result,
+            source="llm",
+            csv_path=task.csv_path,
+        )
+
+        # Update timing with actual timing from triangulation
+        episode.timing = TimingMetadataDict(
+            gold_elapsed=r.timing_metadata["gold_elapsed"],
+            consistency_elapsed=r.timing_metadata["consistency_elapsed"],
+            total_elapsed=r.timing_metadata["total_elapsed"],
+            avg_elapsed=r.timing_metadata["avg_elapsed"],
+        )
+
+        episodes.append(episode)
 
         # Record success to manifest (only for verified episodes)
         if r.verified and manifest is not None and fingerprint is not None:
@@ -332,7 +313,7 @@ async def process_csv_task(
                 status="success",
                 dataset=task.dataset_name,
                 question_text=question_text,
-                episode_id=episode_id,
+                episode_id=episode.episode_id,
                 model=teacher_model,
                 n_consistency=len(r.consistency_results),
                 elapsed_seconds=r.timing_metadata.get("avg_elapsed"),

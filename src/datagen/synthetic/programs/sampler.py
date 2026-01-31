@@ -2,8 +2,9 @@
 
 Pipeline:
 1) Grammar search (typed BFS/DFS, depth 6)
-2) Enumerate all eligible column bindings
-3) Return ProgramSpecs (no arbitrary selection)
+2) Dead code validation (reject chains with dead code)
+3) Enumerate all eligible column bindings
+4) Return ProgramSpecs (no arbitrary selection)
 """
 
 from typing import List, Dict, Any
@@ -16,6 +17,7 @@ from src.datagen.synthetic.programs.long_chains import generate_long_chain_progr
 from src.datagen.synthetic.programs.semantic_long_chains import (
     generate_semantic_long_programs,
 )
+from src.datagen.synthetic.programs.dead_code_validator import validate_no_dead_code
 
 
 def sample_programs(
@@ -24,6 +26,7 @@ def sample_programs(
     """Generate programs via grammar search + enumeration.
 
     This is true compositional generation. No hardcoded program catalogs.
+    Dead code is rejected immediately.
 
     Args:
         profile: Dataset profile
@@ -54,11 +57,17 @@ def sample_programs(
     # Combine: prefer long chains, fill with short if needed
     all_chains = unique_long + reduced_short
 
-    programs = enumerate_bindings(all_chains, profile)
+    # Validate chains for dead code - reject any with dead code
+    valid_chains = [c for c in all_chains if validate_no_dead_code(c)]
+
+    programs = enumerate_bindings(valid_chains, profile)
 
     # Add semantic long-chain templates (10-15 steps)
     # These are meaningful workflows where every step affects the answer
     semantic_long_programs = generate_semantic_long_programs(profile)
 
+    # Validate semantic programs too - check the ops chain inside each ProgramSpec
+    valid_semantic = [p for p in semantic_long_programs if validate_no_dead_code(p.ops)]
+
     # Combine: semantic long chains first, then discovered chains
-    return semantic_long_programs + programs
+    return valid_semantic + programs
