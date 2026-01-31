@@ -109,6 +109,7 @@ class Op:
     2. Binding requirements - for enumeration
     3. Code emission - for execution
     4. Preconditions - for validity checking
+    5. Dataflow metadata (produces/consumes) - for dead code detection
 
     The inputs list uses COUNTS to support multi-input operators:
     - ["NumCol"] means needs 1 NumCol
@@ -118,12 +119,18 @@ class Op:
     - {"num_col_1": True} - this op needs num_col_1 bound
     - {} - no bindings needed (uses previously bound values)
 
+    Dataflow metadata for dead code detection:
+    - produces: list of variable names this op creates
+    - consumes: list of variable names this op reads/uses
+
     Example operator (correlation):
         name="correlation"
         inputs=["NumCol", "NumCol"]  # needs 2 NumCols
         outputs=["Dict"]
         attributes=["analysis"]
         requires_bindings={}  # uses num_col_1 and num_col_2 from previous binds
+        produces=["answer"]
+        consumes=["num_col_1", "num_col_2"]
     """
 
     name: str
@@ -139,3 +146,5 @@ class Op:
     requires_bindings: dict[str, bool] = field(
         default_factory=dict
     )  # binding keys this op needs filled
+    produces: list[str] = field(default_factory=list)  # variables this op creates
+    consumes: list[str] = field(default_factory=list)  # variables this op reads/uses
