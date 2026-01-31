@@ -1,0 +1,131 @@
+[
+  {
+    "dataset": "Base Dataset",
+    "csv_path": "data/csv/data.csv",
+    "total_questions": 12,
+    "by_template": {
+      "cascading": {
+        "count": 12,
+        "avg_steps": 9.0
+      }
+    },
+    "examples": [
+      {
+        "steps": 9,
+        "template": "cascading_IN_INTERNODE_1_INTERNODE_26",
+        "question": "After removing rows with non\u2011positive internode count and first internode length, which category of the later internode measurement occurs most frequently? Return as JSON, e.g.: {\"group\": \"<category>\", \"count\": 0}",
+        "hint": "Filter the data to keep rows where the count column and the first internode measurement are > 0, then determine the most common value in the categorical internode column and how many times it appears."
+      },
+      {
+        "steps": 9,
+        "template": "cascading_IN_INTERNODE_1_INTERNODE_27",
+        "question": "After keeping only records with positive internode counts, which category appears most frequently in the final internode measurement? Return as JSON, e.g.: {\"group\": \"<name>\", \"count\": 0}",
+        "hint": "Filter rows where the numeric internode count and the first internode measurement are greater than zero, then find the most common value in the last internode categorical column."
+      },
+      {
+        "steps": 9,
+        "template": "cascading_IN_N_INTERNODE_26",
+        "question": "After removing any rows with non\u2011positive ID values, which category appears most often in the dataset and how many times does it occur? Return as JSON, e.g.: {\"group\": \"<value>\", \"count\": 0}",
+        "hint": "Filter rows where the numeric ID columns are greater than zero, then examine the categorical columns and count each distinct value to identify the most frequent one and its count."
+      },
+      {
+        "steps": 9,
+        "template": "cascading_IN_N_INTERNODE_27",
+        "question": "Which category appears most frequently in the data after filtering to rows with positive IN and N values? Return as JSON, e.g.: {\"group\": \"<category>\", \"count\": 0}",
+        "hint": "Count the rows for each level of the categorical column and return the value with the highest count."
+      },
+      {
+        "steps": 9,
+        "template": "cascading_IN_TL_INTERNODE_26",
+        "question": "After removing rows where IN or TL are not positive, which categorical value appears most frequently and how many rows contain it? Return as JSON, e.g.: {\"group\": \"<name>\", \"count\": 0}",
+        "hint": "Filter the dataframe to keep rows with IN > 0 and TL > 0, then count the occurrences of each category in the categorical columns and report the category with the highest count along with that count."
+      }
+    ]
+  },
+  {
+    "dataset": "Heart Failure",
+    "csv_path": "data/kaggle/fedesoriano_heart-failure-prediction/data.csv",
+    "total_questions": 15,
+    "by_template": {
+      "cascading": {
+        "count": 15,
+        "avg_steps": 9.0
+      }
+    },
+    "examples": [
+      {
+        "steps": 9,
+        "template": "cascading_Age_Cholesterol_ExerciseAngina",
+        "question": "After removing records with non\u2011positive Age and Cholesterol, which response in the exercise\u2011angina indicator occurs most often and how many patients have it? Return as JSON, e.g.: {\"group\": \"<value>\", \"count\": 0}",
+        "hint": "Filter the data to keep rows where Age > 0, then where Cholesterol > 0. Count the frequency of each category in the exercise\u2011angina field and return the category with the highest count together with that count."
+      },
+      {
+        "steps": 9,
+        "template": "cascading_Age_Cholesterol_Sex",
+        "question": "Which category of the chosen categorical feature appears most frequently after the data filters? Return as JSON, e.g.: {\"group\": \"<category>\", \"count\": 0}",
+        "hint": "Count the rows for each category of the selected categorical column and return the category with the highest count along with that count."
+      },
+      {
+        "steps": 9,
+        "template": "cascading_Age_FastingBS_ExerciseAngina",
+        "question": "After removing any records with non\u2011positive values, which category among the categorical features appears most frequently and how many times does it occur? Return as JSON, e.g.: {\"group\": \"<name>\", \"count\": 0}",
+        "hint": "Filter rows where the numeric columns are greater than zero, then for each categorical column count the occurrences of its categories and report the category with the highest count."
+      },
+      {
+        "steps": 9,
+        "template": "cascading_Age_FastingBS_Sex",
+        "question": "After filtering out records with non\u2011positive age and fasting blood sugar, which gender category is most common and how many records does it contain? Return as JSON, e.g.: {\"group\": \"<name>\", \"count\": 0}",
+        "hint": "First keep rows where age > 0 and fasting blood sugar > 0, then count the occurrences of each gender category and report the category with the highest count along with that."
+      },
+      {
+        "steps": 9,
+        "template": "cascading_Age_HeartDisease_ExerciseAngina",
+        "question": "Among patients who have heart disease, which exercise angina category occurs most often and how many patients belong to that category? Return as JSON, e.g.: {\"group\": \"<name>\", \"count\": 0}",
+        "hint": "Filter rows where HeartDisease > 0, then count the occurrences of each category in the ExerciseAngina column and return the category with the highest count and its count."
+      }
+    ]
+  },
+  {
+    "dataset": "Video Game Sales",
+    "csv_path": "data/kaggle/gregorut_videogamesales/data.csv",
+    "total_questions": 15,
+    "by_template": {
+      "unknown": {
+        "count": 15,
+        "avg_steps": 3.0
+      }
+    },
+    "examples": [
+      {
+        "steps": 3,
+        "template": "program_0_selected_col_EU_Sales",
+        "question": "What is the average European sales figure across all games? Return as JSON, e.g.: {\"column\": \"<name>\", \"mean\": 0.0}",
+        "hint": "Calculate the mean of the chosen numeric column and round the result to three decimal places."
+      },
+      {
+        "steps": 3,
+        "template": "program_0_selected_col_Global_Sales",
+        "question": "What is the average worldwide sales across all games? Return as JSON, e.g.: {\"column\": \"<name>\", \"mean\": 0.0}",
+        "hint": "Calculate the mean of the numeric column that records total global sales."
+      },
+      {
+        "steps": 3,
+        "template": "program_0_selected_col_JP_Sales",
+        "question": "What is the average sales amount for Japan in this video game dataset? Return as JSON, e.g.: {\"column\": \"<name>\", \"mean\": 0.0}",
+        "hint": "Compute the mean of the numeric column that records Japanese sales."
+      },
+      {
+        "steps": 3,
+        "template": "program_0_selected_col_NA_Sales",
+        "question": "What is the average North American sales value for the games? Return as JSON, e.g.: {\"column\": \"<name>\", \"mean\": 0.0}",
+        "hint": "Compute the mean of the numeric column that records North American sales."
+      },
+      {
+        "steps": 3,
+        "template": "program_0_selected_col_Other_Sales",
+        "question": "What is the average value of the numeric column that captures miscellaneous sales? Return as JSON, e.g.: {\"column\": \"<name>\", \"mean\": 0.0}",
+        "hint": "Compute the mean of the selected numeric column and round it to three decimal places."
+      }
+    ]
+  }
+]

@@ -151,6 +151,33 @@ def verbalize_long_chain_program(spec: ProgramSpec) -> tuple[str, str]:
                 value_col=value_col, group_col=group_col
             )
 
+    # Check for simple 3-step aggregation programs (e.g., program_0_selected_col_EU_Sales)
+    elif (
+        len(spec.ops) == 3
+        and spec.ops[0].op_name == "select_numeric_cols"
+        and spec.ops[1].op_name == "bind_numeric_col"
+    ):
+        # Extract column name from the bind operation
+        col_name = spec.ops[1].params.get("selected_col", "the selected column")
+        final_op = spec.ops[2].op_name
+
+        # Map operator names to natural language
+        op_verbs = {
+            "mean": "average",
+            "median": "median",
+            "std": "standard deviation",
+            "variance": "variance",
+            "sum": "total",
+            "min": "minimum",
+            "max": "maximum",
+        }
+        verb = op_verbs.get(final_op, final_op)
+
+        question = f"What is the {verb} of {col_name}?"
+        hint = f"Calculate the {verb} for the {col_name} column and return it as a JSON object."
+
+        return question, hint
+
     # Fallback: return mechanical description
     ops_str = " → ".join(op.op_name for op in spec.ops)
     question = f"Execute this {len(spec.ops)}-step analysis: {ops_str}"
