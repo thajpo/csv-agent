@@ -7,16 +7,29 @@
 
 ## Agent 1: Episode Factory Core
 
-**Status:** Not Started
+**Status:** Completed
+**Started:** 2026-01-30
+**Completed:** 2026-01-30
 **Files:**
 - `src/datagen/shared/episode_factory.py` (NEW)
 - `tests/test_episode_factory.py` (NEW)
 
 **Deliverables:**
-- [ ] `create_episode()` function
-- [ ] Helper functions
-- [ ] Unit tests
-- [ ] All tests passing
+- [x] `create_episode()` function
+- [x] Helper functions (`create_episode_from_ground_truth`, `create_episode_from_consistency`)
+- [x] Unit tests (13 tests)
+- [x] All tests passing
+
+**Tests:** 13/13 passing
+
+**Implementation Summary:**
+- `create_episode()`: Core function that converts VerificationResult to EpisodeJSONL
+- `create_episode_from_ground_truth()`: Wrapper for ground-truth strategy (synthetic/procedural)
+- `create_episode_from_consistency()`: Wrapper for consistency strategy (LLM)
+- Properly handles all three source types: "synthetic", "llm", "procedural"
+- Preserves all question metadata in QADict
+- Generates unique episode IDs and timestamps
+- Calculates triangulation metadata (majority counts, etc.)
 
 **Notes:** 
 - Read `docs/ARCHITECTURE_MULTI_AGENT.md` for interface spec
