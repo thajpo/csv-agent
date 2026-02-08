@@ -329,6 +329,40 @@ class TestContainerPool:
         finally:
             await pool.stop()
 
+    @pytest.mark.asyncio
+    async def test_pool_stop_logs_container_failures(self, caplog):
+        """stop() should log container-level shutdown failures."""
+        from src.envs.container_pool import ContainerPool
+        import logging
+
+        class FakeContainer:
+            def __init__(self, container_id: str, should_fail: bool):
+                self.container_id = container_id
+                self.should_fail = should_fail
+                self.stopped = False
+
+            async def stop(self):
+                if self.should_fail:
+                    raise RuntimeError("boom")
+                self.stopped = True
+
+        ok = FakeContainer("ok-container", should_fail=False)
+        bad = FakeContainer("bad-container", should_fail=True)
+
+        pool = ContainerPool(max_containers=2, n_question_slots=1, n_consistency=1)
+        pool._containers = [ok, bad]
+        pool._started = True
+
+        caplog.set_level(logging.ERROR, logger="src.envs.container_pool")
+        await pool.stop()
+
+        assert ok.stopped is True
+        assert any(
+            "Failed to stop container bad-container: boom" in record.getMessage()
+            for record in caplog.records
+        )
+        assert pool._started is False
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

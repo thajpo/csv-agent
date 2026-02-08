@@ -33,6 +33,7 @@ Usage:
 import asyncio
 import base64
 import json
+import logging
 import os
 import uuid
 from dataclasses import dataclass, field
@@ -40,6 +41,8 @@ from pathlib import Path
 from typing import Optional
 
 from src.envs.csv_env import SETUP_CODE, PACKAGES
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -1009,7 +1012,14 @@ class ContainerPool:
 
         print(f"Stopping container pool...")
         stop_tasks = [c.stop() for c in self._containers]
-        await asyncio.gather(*stop_tasks, return_exceptions=True)
+        results = await asyncio.gather(*stop_tasks, return_exceptions=True)
+        for container, result in zip(self._containers, results):
+            if isinstance(result, Exception):
+                logger.error(
+                    "Failed to stop container %s: %s",
+                    container.container_id,
+                    result,
+                )
 
         self._containers = []
         self._available = asyncio.Queue()

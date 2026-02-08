@@ -460,13 +460,34 @@ spec candidates (not yet promoted):
     - rubric explains at least one concrete merge candidate.
 
 ## Specd
-No items promoted yet.
+- title: Reliability Hardening -> container-stop observability
+  status: in_progress
+  - behavior change: failed `ContainerPool.stop()` container stop calls are logged with container id and error while continuing shutdown.
+  - files to touch:
+    - `current.md`
+    - `src/envs/container_pool.py`
+    - `tests/test_container_pool.py`
+  - fail-first tests:
+    - add test expecting an error log when one container stop raises during pool shutdown.
+  - non-goals:
+    - no automatic container restart or retry policy in this slice.
+  - risks:
+    - shutdown logs may be noisy in unstable local Docker environments.
+  - touch points:
+    - `src/envs/container_pool.py` -> `ContainerPool.stop`
+    - `tests/test_container_pool.py` -> `TestContainerPool`
+  - line anchors:
+    - `src/envs/container_pool.py:1005`
+  - expected diff shape:
+    - modify only, ~40-90 LOC
+  - review checks:
+    - no stop exception is silently swallowed.
+    - failing container ids appear in error logs.
 
 ready-to-promote shortlist (based on recovered context):
 - Pipeline Contract Cleanup -> strict-answer-contract purge
 - Synthetic Question Quality Improvements -> ambiguity-template completion pack
 - Training and E2E Readiness -> training-path normalization
-- Reliability Hardening -> container-stop observability
 
 promotion checklist for each `Specd` item:
 - behavior change
