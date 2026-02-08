@@ -135,10 +135,8 @@ csvagent validate \
 
 | Document | Purpose |
 |----------|---------|
-| [DATA_CAPTURE.md](docs/DATA_CAPTURE.md) | Data capture architecture and training format derivation |
-| [episode_schema.md](docs/episode_schema.md) | Detailed episode JSONL schema reference |
-| [QUICKSTART_TRAINING.md](docs/QUICKSTART_TRAINING.md) | Quick start guide for training |
-| [RESEARCH_DIRECTIONS.md](docs/RESEARCH_DIRECTIONS.md) | Future research directions |
+| [current.md](current.md) | Active planning and spec funnel (`Institutional Knowledge`, `Beliefs`, `Brainstormed`, `Specd`) |
+| [AGENTS.md](AGENTS.md) | Repo collaboration and execution guardrails |
 
 **Key insight:** Episodes capture raw structured data (traces, hooks, corrections). Training formats (SFT, PRM, DPO) are derived at training time, not pre-baked. This means new training methods can reuse existing episodes without regeneration.
 

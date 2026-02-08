@@ -1,0 +1,484 @@
+# current.md
+
+Lean Flow canonical planning file.
+Last rebuilt with recovered historical context: 2026-02-08
+
+This file intentionally carries more detail now. The previous version was too sparse and hid what was near-spec.
+
+## Institutional Knowledge
+- [2026-02-08] Repo default: fail-fast contracts over backward-compat shims.
+- [2026-02-08] Planning is single-file (`current.md`), but depth matters; compression should not erase decision-critical context.
+- [2026-02-08] Implementation is allowed only from `Specd`.
+- [2026-02-08] Git history/PRs are canonical for shipped work; this file is canonical for unimplemented work.
+- [2026-02-08] Synthetic/program generation and verification are first-class, not sidecar features.
+- [2026-02-08] Question quality target is data-aware + difficult + non-procedural wording when verbalized.
+- [2026-02-08] If planning context is pruned, recover from Git history rather than guessing.
+
+## Beliefs
+- [2026-02-08] Minimal file count helps only if each remaining file is information-dense and reviewable.
+- [2026-02-08] Several brainstorm tracks were already close to spec and only needed explicit file/test contracts.
+- [2026-02-08] Reliability should gate training scale-up to avoid training on corrupted traces.
+- [2026-02-08] Pipeline contract cleanup and synthetic ambiguity cleanup should share one metadata abstraction pass where possible.
+- [2026-02-08] PM-style review improves when each candidate includes concrete touch points and expected diff shape.
+
+## Brainstormed
+
+### Pipeline Contract Cleanup
+status: open
+readiness: near-spec
+
+recovered context:
+- Original direction: unify question schema, keep synthetic mechanical canonical, separate verification from generation, and remove hidden legacy fallbacks.
+- Metadata intent was explicit `source/subtype` plus procedural tracking without brittle naming hacks.
+
+current code evidence:
+- Unified loader exists: `src/datagen/shared/questions_io.py`.
+- Centralized shared modules exist: `src/datagen/shared/{verification.py,submission.py,dataset_meta.py,episode_factory.py}`.
+- Mixed legacy still present:
+  - `src/datagen/shared/verification.py` still reads `_ground_truth` and `_ground_truths`.
+  - `src/datagen/episode_gen.py` still carries `skip_existing` legacy path.
+  - `question` fallback reads still appear in multiple paths.
+
+missing:
+- One strict answer contract (remove underscored legacy fields in runtime paths).
+- One explicit procedural metadata policy (`source="synthetic", subtype="program"` vs separate source value).
+- Cleanup of fallback reads that silently normalize old shapes.
+
+spec candidates (not yet promoted):
+- candidate: strict-answer-contract purge
+  - behavior change: reject legacy `_ground_truth*` fields at verification/load time; accept only unified keys.
+  - files to touch:
+    - `src/datagen/shared/verification.py`
+    - `src/datagen/shared/questions_io.py`
+    - `src/datagen/validate_synthetic.py`
+  - fail-first tests:
+    - add test proving legacy `_ground_truth` input now fails schema/verification.
+  - non-goals:
+    - no migration adapters for old JSON files.
+  - risks:
+    - old cached question files stop loading.
+  - touch points:
+    - `verify_synthetic` fallback branch
+    - `validate_question` required-field checks
+  - expected diff shape:
+    - modify only, ~60-120 LOC
+  - review checks:
+    - no underscored fallback keys remain in runtime verification path.
+
+- candidate: procedural-metadata normalization
+  - behavior change: enforce single policy for procedural questions and episodes, then validate consistently.
+  - files to touch:
+    - `src/datagen/shared/questions_io.py`
+    - `src/datagen/synthetic/programs/program_generator.py`
+    - `src/datagen/shared/episode_factory.py`
+    - `tests/test_program_generator_schema.py`
+    - `tests/test_episode_factory.py`
+  - fail-first tests:
+    - assert procedural records conform to one policy and fail otherwise.
+  - non-goals:
+    - no downstream analytics redesign.
+  - risks:
+    - breaks code expecting old `source="procedural"` episode labeling.
+  - touch points:
+    - `QuestionRecord` type and validation
+    - episode `source` assignment
+  - expected diff shape:
+    - modify, ~80-160 LOC
+  - review checks:
+    - procedural data is unambiguous in both question and episode artifacts.
+
+### Synthetic Question Quality Improvements
+status: open
+readiness: near-spec
+
+recovered context:
+- Prior pass-rate analysis identified ambiguity clusters:
+  - column choice ambiguity
+  - include/exclude target ambiguity
+  - implicit parameter ambiguity
+  - method-choice ambiguity.
+- Older improvement spec called out concrete templates for fixes.
+
+current code evidence:
+- Many fixes already landed in `src/datagen/synthetic/templates.py`:
+  - explicit parameters exist in several outlier descriptions.
+  - exclude-target alternatives exist for some correlation templates.
+  - `ks_normality_test` and `adaptive_two_sample_test` have more explicit method framing.
+- Remaining gaps are uneven template-by-template and not reconciled with a current pass-rate report.
+
+missing:
+- Verified completion pass for the original pending template set:
+  - `ttest_discovered_groups`
+  - `spearman_rank_correlation`
+  - `regression_most_predictive`
+  - `correlation_change_analysis`
+- Multi-path column selection policy for templates still using "first matching" logic.
+- Fresh benchmark showing whether ambiguity classes actually dropped.
+
+spec candidates (not yet promoted):
+- candidate: ambiguity-template completion pack
+  - behavior change: complete missing exclude-target/method-explicit alternatives for the unresolved templates above.
+  - files to touch:
+    - `src/datagen/synthetic/templates.py`
+    - `tests/test_synthetic.py`
+  - fail-first tests:
+    - per-template acceptance tests expecting at least one alternative execution path.
+  - non-goals:
+    - no verbalizer redesign in this slice.
+  - risks:
+    - template explosion increases generation cost.
+  - touch points:
+    - template definitions + `alternative_code_templates`
+  - expected diff shape:
+    - modify/add template blocks, ~150-350 LOC
+  - review checks:
+    - each targeted template has deterministic alternatives and stable output schema.
+
+- candidate: multi-path selection in generator
+  - behavior change: enumerate valid column choices for selected templates and accept any valid output.
+  - files to touch:
+    - `src/datagen/synthetic/generator.py`
+    - `src/datagen/synthetic/templates.py`
+    - `tests/test_synthetic.py`
+  - fail-first tests:
+    - generator test fails when only first-match path is accepted.
+  - non-goals:
+    - no global probabilistic scoring redesign.
+  - risks:
+    - runtime increase if path count is unbounded.
+  - touch points:
+    - candidate expansion + answer-hash acceptance
+  - expected diff shape:
+    - modify, ~120-220 LOC
+  - review checks:
+    - logs show multiple valid paths evaluated.
+
+### Compositional Generator Reconciliation
+status: open
+readiness: mid-spec
+
+recovered context:
+- Intended target was typed grammar search, full binding enumeration, dead-code rejection, and system-2 decision coverage.
+- Historical spec had checklist language; current code/test state appears ahead of older narrative docs.
+
+current code evidence:
+- Strong infra present:
+  - grammar/enumeration/reduction stack in `src/datagen/synthetic/programs/`.
+  - dead-code validator integrated in sampler.
+  - tests exist:
+    - `tests/test_programs_smoke.py`
+    - `tests/test_dead_code_validator.py`
+    - `tests/test_program_generator_schema.py`
+- One explicit gap is still acknowledged in tests:
+  - `test_program_count_floor` does not enforce target counts yet.
+
+missing:
+- A clear evidence matrix mapping intended requirements -> exact tests/code.
+- Final target policy on minimum accepted program counts by dataset class.
+- Confidence report on operator-family coverage and failure reasons.
+
+spec candidates (not yet promoted):
+- candidate: checklist-evidence reconciler
+  - behavior change: add machine-checkable requirement matrix and enforce missing invariants.
+  - files to touch:
+    - `tests/test_programs_smoke.py`
+    - `src/datagen/synthetic/programs/sampler.py`
+    - `src/datagen/synthetic/programs/filter.py`
+  - fail-first tests:
+    - enforce non-trivial floor policy (for example fail when zero decision chains where eligible).
+  - non-goals:
+    - no new operator families in this slice.
+  - risks:
+    - brittle tests on tiny datasets.
+  - touch points:
+    - floor/coverage assertions
+  - expected diff shape:
+    - modify, ~80-180 LOC
+  - review checks:
+    - test suite clearly signals unmet compositional guarantees.
+
+### Training and E2E Readiness
+status: open
+readiness: near-spec
+
+recovered context:
+- Training pipeline existed but ownership/pathing was inconsistent (`training/train_sft.py` vs `src/training` docs).
+- Validation intent was: real episode generation -> format conversion -> trainability sanity checks.
+
+current code evidence:
+- `training/train_sft.py` exists.
+- `src/training/prepare_finetune_data.py` exists and is active.
+- Path split remains, so ownership is still ambiguous.
+
+missing:
+- Single canonical training entrypoint and location policy.
+- One reproducible E2E smoke command set with expected outputs.
+- Clear "minimum ready" gate before running larger training jobs.
+
+spec candidates (not yet promoted):
+- candidate: training-path normalization
+  - behavior change: define canonical training script location and remove duplicate ambiguity.
+  - files to touch:
+    - `training/train_sft.py`
+    - `src/training/__init__.py`
+    - `README.md`
+  - fail-first tests:
+    - invocation test for canonical command path.
+  - non-goals:
+    - no model-quality claims.
+  - risks:
+    - user scripts pointing at old path break.
+  - touch points:
+    - module import path and docs commands
+  - expected diff shape:
+    - modify, ~60-140 LOC
+  - review checks:
+    - one documented command path works end-to-end.
+
+- candidate: E2E readiness smoke suite
+  - behavior change: add deterministic smoke workflow that validates generation + formatting + eval harness wiring.
+  - files to touch:
+    - `tests/` (new smoke test module)
+    - `README.md`
+  - fail-first tests:
+    - smoke test asserts output file count/shape and non-empty formatted examples.
+  - non-goals:
+    - no full real-API load test in CI.
+  - risks:
+    - flaky if external dependencies leak into the smoke path.
+  - touch points:
+    - fixture-based episodes and converter output
+  - expected diff shape:
+    - add tests/docs, ~120-220 LOC
+  - review checks:
+    - smoke suite is local/offline reproducible.
+
+### Reliability Hardening
+status: open
+readiness: near-spec
+
+recovered context:
+- Historical bug investigation prioritized:
+  - hook parse failures
+  - container stop failures
+  - trace alignment mismatches
+  - worker/container health checks.
+
+current code evidence:
+- Hook parser now logs malformed entries (`src/datagen/teacher.py`).
+- Trace turn mismatch now logs warnings (`src/datagen/teacher.py`).
+- Container pool stop still swallows stop exceptions without logging (`src/envs/container_pool.py`).
+- Hook grounding still uses substring matching (`src/core/environment.py`) and can false-positive.
+
+missing:
+- Explicit logging/reporting for container stop failures.
+- Worker health/recovery checks in long-running pool usage.
+- Strict hook grounding that avoids substring false positives.
+
+spec candidates (not yet promoted):
+- candidate: container-stop observability
+  - behavior change: failed container stop calls are logged with container id and error.
+  - files to touch:
+    - `src/envs/container_pool.py`
+    - `tests/` (new unit tests with mocked stop failures)
+  - fail-first tests:
+    - test expects logged errors when one `stop()` coroutine fails.
+  - non-goals:
+    - no automatic restart in this slice.
+  - risks:
+    - noisy logs if shutdown is frequently interrupted.
+  - touch points:
+    - `ContainerPool.stop()`
+  - expected diff shape:
+    - modify, ~30-90 LOC
+  - review checks:
+    - no swallowed exception path during shutdown.
+
+- candidate: strict-hook-grounding
+  - behavior change: hook `code_line` grounding requires normalized line-level exact match, not substring.
+  - files to touch:
+    - `src/core/environment.py`
+    - `tests/` (hook grounding tests)
+  - fail-first tests:
+    - `"x = 1"` must not ground against only `"x = 10"`.
+  - non-goals:
+    - no model prompt rewrite.
+  - risks:
+    - stricter grounding may increase reprompts.
+  - touch points:
+    - `validate_hooks_grounded`
+  - expected diff shape:
+    - modify, ~60-120 LOC
+  - review checks:
+    - known false-positive cases no longer pass.
+
+### Research Program Consolidation
+status: open
+readiness: early
+
+recovered context:
+- Prior research docs covered PRM vs ORM, DAG-aware credit assignment, curriculum, holdout generalization, source comparison, hint ablations, scaling, and Kaggle-solution ingestion.
+- These were informative but not compressed into executable experiment cards.
+
+missing:
+- A single experiment matrix with explicit run protocol and success criteria.
+- Priority order tied to current engineering constraints.
+
+spec candidates (not yet promoted):
+- candidate: experiment-matrix v1
+  - behavior change: add one concise research matrix section in this file with 3 immediate experiments only.
+  - files to touch:
+    - `current.md`
+  - fail-first tests:
+    - n/a (planning artifact)
+  - non-goals:
+    - no code changes.
+  - risks:
+    - drift if not maintained.
+  - touch points:
+    - research section only
+  - expected diff shape:
+    - docs-only, ~50-100 LOC
+  - review checks:
+    - each experiment has dataset/model/eval/success criteria.
+
+### Context Compression Policy
+status: open
+readiness: early
+
+recovered context:
+- Prior notes repeatedly flagged context blow-up from tool outputs.
+- Desired behavior: compact outputs while preserving verifiability.
+
+missing:
+- Explicit policy for what gets truncated, summarized, or stored verbatim.
+- Consistent instrumentation for summary quality vs information loss.
+
+spec candidates (not yet promoted):
+- candidate: tool-output compression policy v1
+  - behavior change: define strict summarization rules for stdout/log artifacts.
+  - files to touch:
+    - `current.md`
+    - `src/core/environment.py` (if enforcing output budget at runtime)
+  - fail-first tests:
+    - summarize long output while preserving key markers/hashes.
+  - non-goals:
+    - no model-level long-context optimization.
+  - risks:
+    - excessive truncation can hide failures.
+  - touch points:
+    - output feedback generation paths
+  - expected diff shape:
+    - docs-first, optional code follow-up
+  - review checks:
+    - summaries retain actionable error context.
+
+### Reliability-to-Training Gate
+status: open
+readiness: mid-spec
+
+recovered context:
+- Repeated intent: do not scale training before reliability smoke checks pass.
+
+missing:
+- Concrete gate definition (which tests, thresholds, and blockers).
+
+spec candidates (not yet promoted):
+- candidate: pre-training reliability gate
+  - behavior change: require smoke suite pass + zero critical trace integrity failures before training runs.
+  - files to touch:
+    - `current.md`
+    - `tests/` (gate suite)
+  - fail-first tests:
+    - one simulated trace-integrity failure blocks gate.
+  - non-goals:
+    - no performance benchmarking.
+  - risks:
+    - gate too strict can slow iteration.
+  - touch points:
+    - smoke tests + launch checklist
+  - expected diff shape:
+    - tests/docs, ~100-180 LOC
+  - review checks:
+    - gate failure clearly explains why training is blocked.
+
+### Research Execution Template
+status: open
+readiness: mid-spec
+
+recovered context:
+- Needed structure was repeatedly: dataset/model/eval/success criteria.
+
+missing:
+- Standard experiment card format in this file.
+- Link from each research idea to one card.
+
+spec candidates (not yet promoted):
+- candidate: experiment-card template
+  - behavior change: add reusable card format and instantiate 2 immediate cards.
+  - files to touch:
+    - `current.md`
+  - fail-first tests:
+    - n/a (planning artifact)
+  - non-goals:
+    - no infra build.
+  - risks:
+    - template used inconsistently.
+  - touch points:
+    - research planning section
+  - expected diff shape:
+    - docs-only, ~40-90 LOC
+  - review checks:
+    - every card includes measurable success criteria.
+
+### Merge Heuristics
+status: open
+readiness: early
+
+recovered context:
+- You explicitly want merged abstractions instead of parallel fragmented ideas.
+
+missing:
+- Hard criteria for when two brainstorms merge vs stay separate.
+
+spec candidates (not yet promoted):
+- candidate: merge-decision rubric
+  - behavior change: add a 5-rule rubric to decide merge/split actions.
+  - files to touch:
+    - `current.md`
+  - fail-first tests:
+    - n/a (planning artifact)
+  - non-goals:
+    - no automated clustering.
+  - risks:
+    - over-merging can hide priority differences.
+  - touch points:
+    - brainstorming process only
+  - expected diff shape:
+    - docs-only, ~30-70 LOC
+  - review checks:
+    - rubric explains at least one concrete merge candidate.
+
+## Specd
+No items promoted yet.
+
+ready-to-promote shortlist (based on recovered context):
+- Pipeline Contract Cleanup -> strict-answer-contract purge
+- Synthetic Question Quality Improvements -> ambiguity-template completion pack
+- Training and E2E Readiness -> training-path normalization
+- Reliability Hardening -> container-stop observability
+
+promotion checklist for each `Specd` item:
+- behavior change
+- files to touch
+- fail-first tests
+- non-goals
+- risks
+- touch points (path + function/class/block)
+- line anchors (optional; reviewer convenience only)
+- expected diff shape (add/modify/delete + rough LOC)
+- review checks
+
+## Recovery Notes
+- Key planning details were recovered from `HEAD` history of previously deleted markdown docs and reattached here.
+- This rebuild intentionally keeps context in-place so we do not relive the same planning loops.
