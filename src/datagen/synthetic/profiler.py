@@ -2,6 +2,7 @@
 Data Profiler for CSV datasets.
 Generates a heavy-context "Fact Bundle" for Tier 1 Question Generation.
 """
+
 import json
 
 from pathlib import Path
@@ -12,19 +13,17 @@ import pandas as pd
 from scipy import stats
 
 
-
-
 # Column name patterns that indicate index/identifier columns (not data columns)
 INDEX_LIKE_PATTERNS = [
-    r'^unnamed:\s*\d+$',  # Unnamed: 0, Unnamed: 1, etc.
-    r'^index$',
-    r'^id$',
-    r'^_id$',
-    r'^row_?id$',
-    r'^row_?num(ber)?$',
-    r'^serial_?no$',
-    r'^sr_?no$',
-    r'^person_?id$',
+    r"^unnamed:\s*\d+$",  # Unnamed: 0, Unnamed: 1, etc.
+    r"^index$",
+    r"^id$",
+    r"^_id$",
+    r"^row_?id$",
+    r"^row_?num(ber)?$",
+    r"^serial_?no$",
+    r"^sr_?no$",
+    r"^person_?id$",
 ]
 
 
@@ -36,6 +35,7 @@ def is_index_like_column(col_name: str, series: pd.Series) -> bool:
     2. Column is integer sequential (0, 1, 2, ... or 1, 2, 3, ...)
     """
     import re
+
     col_lower = col_name.lower().strip()
 
     # Check name patterns
@@ -52,10 +52,9 @@ def is_index_like_column(col_name: str, series: pd.Series) -> bool:
             if len(sorted_vals) == len(clean):
                 expected_0 = np.arange(len(sorted_vals))
                 expected_1 = np.arange(1, len(sorted_vals) + 1)
-                is_sequential = (
-                    np.array_equal(sorted_vals, expected_0) or
-                    np.array_equal(sorted_vals, expected_1)
-                )
+                is_sequential = np.array_equal(
+                    sorted_vals, expected_0
+                ) or np.array_equal(sorted_vals, expected_1)
                 if is_sequential:
                     return True
 
@@ -71,10 +70,10 @@ class DataProfiler:
     def analyze(self, csv_path: str) -> Dict[str, Any]:
         """
         Analyze a CSV file and return a structured profile.
-        
+
         Args:
             csv_path: Path to the CSV file.
-            
+
         Returns:
             Dictionary containing schema, stats, correlations, and quality metrics.
         """
@@ -84,19 +83,23 @@ class DataProfiler:
 
         # Load data
         try:
-            # First load with default settings
-            df = pd.read_csv(csv_file)
-            
+            # First load with default settings, treating common missing value indicators as NaN
+            df = pd.read_csv(
+                csv_file,
+                na_values=["?", "NA", "N/A", "na", "n/a"],
+                keep_default_na=True,
+            )
+
             # Attempt to coerce object columns to more specific types
             df = self._coerce_types(df)
-            
+
             profile = {
                 "dataset_name": csv_file.stem,
                 "shape": {"rows": len(df), "columns": len(df.columns)},
                 "columns": {},
                 "correlations": [],
                 "quality_alerts": [],
-                "sample_head": df.head(3).to_dict(orient="records")
+                "sample_head": df.head(3).to_dict(orient="records"),
             }
 
             # Column Analysis
@@ -116,12 +119,12 @@ class DataProfiler:
 
     def _coerce_types(self, df: pd.DataFrame) -> pd.DataFrame:
         """Attempt to convert object columns to numeric or datetime."""
-        for col in df.select_dtypes(include=['object']).columns:
+        for col in df.select_dtypes(include=["object"]).columns:
             # Try Numeric
             try:
                 # remove common non-numeric chars like '$', ','
-                clean_col = df[col].astype(str).str.replace(r'[$,]', '', regex=True)
-                numeric_col = pd.to_numeric(clean_col, errors='raise')
+                clean_col = df[col].astype(str).str.replace(r"[$,]", "", regex=True)
+                numeric_col = pd.to_numeric(clean_col, errors="raise")
                 df[col] = numeric_col
                 continue
             except (ValueError, TypeError):
@@ -131,14 +134,17 @@ class DataProfiler:
             try:
                 # Skip columns that are boolean-like to avoid numpy subtract issues
                 unique_vals = df[col].dropna().unique()
-                if len(unique_vals) <= 2 and all(str(v).lower() in ('true', 'false', '0', '1', 'yes', 'no') for v in unique_vals):
+                if len(unique_vals) <= 2 and all(
+                    str(v).lower() in ("true", "false", "0", "1", "yes", "no")
+                    for v in unique_vals
+                ):
                     continue
-                datetime_col = pd.to_datetime(df[col], errors='raise')
+                datetime_col = pd.to_datetime(df[col], errors="raise")
                 df[col] = datetime_col
                 continue
             except (ValueError, TypeError):
                 pass
-                
+
         return df
 
     def _analyze_column(self, col_name: str, series: pd.Series) -> Dict[str, Any]:
@@ -155,30 +161,36 @@ class DataProfiler:
         if pd.api.types.is_numeric_dtype(series):
             clean_series = series.dropna()
             if not clean_series.empty:
-                stats_dict.update({
-                    "mean": float(clean_series.mean()),
-                    "std": float(clean_series.std()),
-                    "min": float(clean_series.min()),
-                    "max": float(clean_series.max()),
-                    "q25": float(clean_series.quantile(0.25)),
-                    "median": float(clean_series.median()),
-                    "q75": float(clean_series.quantile(0.75)),
-                    "skew": float(clean_series.skew()),
-                    "type": "numeric"
-                    # outliers could be added here
-                })
-        
+                stats_dict.update(
+                    {
+                        "mean": float(clean_series.mean()),
+                        "std": float(clean_series.std()),
+                        "min": float(clean_series.min()),
+                        "max": float(clean_series.max()),
+                        "q25": float(clean_series.quantile(0.25)),
+                        "median": float(clean_series.median()),
+                        "q75": float(clean_series.quantile(0.75)),
+                        "skew": float(clean_series.skew()),
+                        "type": "numeric",
+                        # outliers could be added here
+                    }
+                )
+
         # Datetime Stats
         elif pd.api.types.is_datetime64_any_dtype(series):
             clean_series = series.dropna()
             if not clean_series.empty:
                 try:
-                    stats_dict.update({
-                        "min": str(clean_series.min()),
-                        "max": str(clean_series.max()),
-                        "range_days": (clean_series.max() - clean_series.min()).days,
-                        "type": "datetime"
-                    })
+                    stats_dict.update(
+                        {
+                            "min": str(clean_series.min()),
+                            "max": str(clean_series.max()),
+                            "range_days": (
+                                clean_series.max() - clean_series.min()
+                            ).days,
+                            "type": "datetime",
+                        }
+                    )
                 except TypeError:
                     # numpy boolean subtract error - treat as categorical
                     stats_dict["type"] = "categorical"
@@ -186,60 +198,68 @@ class DataProfiler:
         # Categorical/Text Stats
         else:
             value_counts = series.value_counts().head(5).to_dict()
-            stats_dict.update({
-                "top_values": {str(k): int(v) for k, v in value_counts.items()},
-                "type": "categorical"
-            })
-            
+            stats_dict.update(
+                {
+                    "top_values": {str(k): int(v) for k, v in value_counts.items()},
+                    "type": "categorical",
+                }
+            )
+
         return stats_dict
 
-    def _compute_correlations(self, df: pd.DataFrame, top_k: int = 5) -> List[Dict[str, Any]]:
+    def _compute_correlations(
+        self, df: pd.DataFrame, top_k: int = 5
+    ) -> List[Dict[str, Any]]:
         """Find highest correlations between numeric columns."""
-        numeric_df = df.select_dtypes(include=['number'])
+        numeric_df = df.select_dtypes(include=["number"])
         if numeric_df.shape[1] < 2:
             return []
-            
+
         corr_matrix = numeric_df.corr().abs()
-        
+
         # Select upper triangle
         upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-        
+
         # Flatten and sort
         pairs = upper.stack().reset_index()
-        pairs.columns = ['col1', 'col2', 'correlation']
-        pairs = pairs.sort_values('correlation', ascending=False).head(top_k)
-        
-        return pairs.to_dict(orient='records')
+        pairs.columns = ["col1", "col2", "correlation"]
+        pairs = pairs.sort_values("correlation", ascending=False).head(top_k)
+
+        return pairs.to_dict(orient="records")
 
     def _check_quality(self, df: pd.DataFrame) -> List[str]:
         """Identify potential data quality issues."""
         alerts = []
-        
+
         # Duplicate Rows
         dupes = df.duplicated().sum()
         if dupes > 0:
             alerts.append(f"Found {dupes} duplicate rows")
-            
+
         # Empty Columns
         for col in df.columns:
             if df[col].isnull().all():
                 alerts.append(f"Column '{col}' is entirely empty")
-                
+
         # High Cardinality Strings (potential unique IDs treated as category)
-        object_cols = df.select_dtypes(include=['object']).columns
+        object_cols = df.select_dtypes(include=["object"]).columns
         for col in object_cols:
             if df[col].nunique() == len(df):
-                alerts.append(f"Column '{col}' appears to be a unique identifier (all values unique)")
-                
+                alerts.append(
+                    f"Column '{col}' appears to be a unique identifier (all values unique)"
+                )
+
         return alerts
+
 
 if __name__ == "__main__":
     # Test on data.csv if run directly
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="data/csv/data.csv")
     args = parser.parse_args()
-    
+
     profiler = DataProfiler()
     try:
         profile = profiler.analyze(args.csv)

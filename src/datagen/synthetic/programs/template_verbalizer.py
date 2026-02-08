@@ -33,14 +33,15 @@ def verbalize_cascading_filters(
 
     question = (
         f"Which {cat_col} has the most records where {col_a} is {op_a} {threshold_a} "
-        f"and {col_b} is {op_b} {threshold_b}?"
+        f"and {col_b} is {op_b} {threshold_b}? "
+        f'Return as JSON, e.g.: {{"group": "<name>", "count": 0}}'
     )
 
     hint = (
         f"First filter to rows where {col_a} {op_a} {threshold_a}. "
         f"From those, keep only rows where {col_b} {op_b} {threshold_b}. "
         f"Group by {cat_col} and count records in each group. "
-        f"Return the {cat_col} with the highest count."
+        f'Return the {cat_col} with the highest count as a dict with "group" and "count" keys.'
     )
 
     return question, hint
@@ -54,14 +55,14 @@ def verbalize_derived_column_pipeline(
     question = (
         f"After smoothing {base_col} with a {window}-period rolling average and keeping "
         f"only records where the day-to-day change exceeds {diff_threshold}, "
-        f"what is the average {base_col}?"
+        f'what is the average {base_col}? Return as JSON, e.g.: {{"mean": 0.0}}'
     )
 
     hint = (
         f"Compute {window}-period rolling mean of {base_col}. "
         f"Calculate day-to-day differences. "
         f"Filter to records where absolute difference > {diff_threshold}. "
-        f"Compute mean of original {base_col} column for filtered records."
+        f"Compute mean of original {base_col} column for filtered records and return as a dict."
     )
 
     return question, hint
@@ -75,14 +76,14 @@ def verbalize_evidence_decision_action(
     question = (
         f"Compare {value_col} between the two groups in {group_col}. "
         f"If there's a significant difference, report the mean {value_col} "
-        f"for the group with higher variance."
+        f'for the group with higher variance. Return as JSON, e.g.: {{"group": "<name>", "mean": 0.0}}'
     )
 
     hint = (
         f"Split data by {group_col}. Check normality and variance assumptions. "
         f"Choose appropriate statistical test. "
         f"If significant difference found, identify group with higher variance "
-        f"and compute mean {value_col} for that group."
+        f'and compute mean {value_col} for that group. Return result as a dict with "group" and "mean" keys.'
     )
 
     return question, hint
@@ -173,15 +174,16 @@ def verbalize_long_chain_program(spec: ProgramSpec) -> tuple[str, str]:
         }
         verb = op_verbs.get(final_op, final_op)
 
-        question = f"What is the {verb} of {col_name}?"
-        hint = f"Calculate the {verb} for the {col_name} column and return it as a JSON object."
+        # Include specific JSON format in the question
+        question = f'What is the {verb} of {col_name}? Return as JSON, e.g.: {{"column": "<name>", "{final_op}": 0.0}}'
+        hint = f'Calculate the {verb} for the {col_name} column. You MUST submit the result as a dict with keys \'column\' and \'{final_op}\', like: submit({{"column": "{col_name}", "{final_op}": value}})'
 
         return question, hint
 
-    # Fallback: return mechanical description
+    # Fallback: return mechanical description with JSON format instruction
     ops_str = " → ".join(op.op_name for op in spec.ops)
-    question = f"Execute this {len(spec.ops)}-step analysis: {ops_str}"
-    hint = f"Follow the sequence: {ops_str}"
+    question = f"Execute this {len(spec.ops)}-step analysis: {ops_str}. Return the result as JSON."
+    hint = f"Follow the sequence: {ops_str}. Return your final answer as a JSON object using submit()."
 
     return question, hint
 

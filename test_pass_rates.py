@@ -16,6 +16,7 @@ from typing import Literal
 from src.datagen.synthetic.programs.program_generator import run_pipeline
 from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.teacher import execute_teacher_trace
+from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.config import config
 
 
@@ -44,12 +45,16 @@ async def solve_question(
         hint = ""
 
     try:
+        # Create UI instance (required parameter)
+        ui = EpisodeGenUI()
+
         # Execute teacher trace with the question
-        trace = await execute_teacher_trace(
+        trace, _conversation, _system_prompt, _elapsed = await execute_teacher_trace(
             csv_path=csv_path,
             question=question_text,
-            hint=hint,
             model=config.teacher_model,
+            hint=hint,
+            ui=ui,
         )
 
         # Check if we got an answer

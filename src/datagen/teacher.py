@@ -155,7 +155,9 @@ def compute_code_diff(failed_code: str, fixed_code: str) -> CodeDiffDict:
 
     Returns dict with removed_lines and added_lines.
     """
-    failed_lines = set(line.strip() for line in failed_code.splitlines() if line.strip())
+    failed_lines = set(
+        line.strip() for line in failed_code.splitlines() if line.strip()
+    )
     fixed_lines = set(line.strip() for line in fixed_code.splitlines() if line.strip())
 
     removed = list(failed_lines - fixed_lines)
@@ -360,21 +362,22 @@ def _normalize_string(s: str) -> str:
     - Other unicode variations via NFKC
     """
     import unicodedata
+
     # Normalize unicode first
-    s = unicodedata.normalize('NFKC', s)
+    s = unicodedata.normalize("NFKC", s)
     # Explicitly replace unicode hyphens/dashes with ASCII hyphen
-    hyphen_chars = '\u2010\u2011\u2012\u2013\u2014\u2015\u2212'  # Various dashes/minus
+    hyphen_chars = "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"  # Various dashes/minus
     for h in hyphen_chars:
-        s = s.replace(h, '-')
+        s = s.replace(h, "-")
     return s
 
 
 def _normalize_boolean_string(v: Any) -> Any:
     """Convert string booleans to actual booleans."""
     if isinstance(v, str):
-        if v.lower() == 'true':
+        if v.lower() == "true":
             return True
-        if v.lower() == 'false':
+        if v.lower() == "false":
             return False
     return v
 
@@ -384,7 +387,7 @@ def _unwrap_string_json(v: Any) -> Any:
 
     Sometimes agent returns '{"key": "val"}' as a string instead of a dict.
     """
-    if isinstance(v, str) and v.startswith('{') and v.endswith('}'):
+    if isinstance(v, str) and v.startswith("{") and v.endswith("}"):
         try:
             parsed = json.loads(v)
             if isinstance(parsed, dict):
@@ -396,13 +399,13 @@ def _unwrap_string_json(v: Any) -> Any:
 
 # Keys to ignore in dict comparison (implementation details, not answer content)
 IGNORABLE_ANSWER_KEYS = {
-    'z_threshold',
-    'max_iterations',
-    'iterations_used',
-    'const',  # Intercept in regression - may or may not be included
-    'grouping_column',  # Implementation detail - _binary_group vs actual column name
-    'group1',  # Group naming differs between implementations
-    'group2',  # Group naming differs between implementations
+    "z_threshold",
+    "max_iterations",
+    "iterations_used",
+    "const",  # Intercept in regression - may or may not be included
+    "grouping_column",  # Implementation detail - _binary_group vs actual column name
+    "group1",  # Group naming differs between implementations
+    "group2",  # Group naming differs between implementations
 }
 
 # Key pairs that can be validly swapped (group ordering equivalence)
@@ -411,13 +414,13 @@ IGNORABLE_ANSWER_KEYS = {
 #   {"group1": "female", "mean1": 75} vs {"group1": "male", "mean1": 78}
 # where the groups AND their associated values are swapped.
 GROUP_SWAP_PAIRS = [
-    ('mean1', 'mean2'),
-    ('median1', 'median2'),
-    ('n1', 'n2'),
-    ('group1_n', 'group2_n'),
-    ('std1', 'std2'),
-    ('var1', 'var2'),
-    ('count1', 'count2'),
+    ("mean1", "mean2"),
+    ("median1", "median2"),
+    ("n1", "n2"),
+    ("group1_n", "group2_n"),
+    ("std1", "std2"),
+    ("var1", "var2"),
+    ("count1", "count2"),
 ]
 
 
@@ -433,8 +436,8 @@ def _create_group_swapped_dict(d: dict) -> dict:
         if key1 in swapped and key2 in swapped:
             swapped[key1], swapped[key2] = swapped[key2], swapped[key1]
     # Also swap group1/group2 themselves (though they may be ignored)
-    if 'group1' in swapped and 'group2' in swapped:
-        swapped['group1'], swapped['group2'] = swapped['group2'], swapped['group1']
+    if "group1" in swapped and "group2" in swapped:
+        swapped["group1"], swapped["group2"] = swapped["group2"], swapped["group1"]
     return swapped
 
 
@@ -449,11 +452,11 @@ def _normalize_test_name(s: str) -> str:
     # Lowercase and remove common suffixes/prefixes
     s = s.lower()
     # Remove "test" suffix
-    s = re.sub(r'\s*test$', '', s)
+    s = re.sub(r"\s*test$", "", s)
     # Remove "(non-parametric)" and similar parentheticals
-    s = re.sub(r'\s*\([^)]*\)', '', s)
+    s = re.sub(r"\s*\([^)]*\)", "", s)
     # Remove all non-alphanumeric chars (hyphens, underscores, spaces)
-    s = re.sub(r'[^a-z0-9]', '', s)
+    s = re.sub(r"[^a-z0-9]", "", s)
     return s
 
 
@@ -566,9 +569,26 @@ def _values_match_recursive(
 
         # For non-string lists, require exact order
         for a, b in zip(v1, v2):
-            if not _values_match_recursive(a, b, float_tol, p_value_tol, _visited, _key):
+            if not _values_match_recursive(
+                a, b, float_tol, p_value_tol, _visited, _key
+            ):
                 return False
         return True
+
+    # Flexible matching: dict vs scalar (e.g., {'mean': 4.6} vs 4.6)
+    # This handles cases where the model returns just the value instead of the full dict
+    if isinstance(v1, dict) and not isinstance(v2, dict):
+        # Try to find a matching numeric value in the dict
+        for k, v in v1.items():
+            if isinstance(v, (int, float)) and isinstance(v2, (int, float)):
+                if abs(v - v2) <= float_tol:
+                    return True
+    elif isinstance(v2, dict) and not isinstance(v1, dict):
+        # Try to find a matching numeric value in the dict
+        for k, v in v2.items():
+            if isinstance(v, (int, float)) and isinstance(v1, (int, float)):
+                if abs(v - v1) <= float_tol:
+                    return True
 
     # Fallback: exact equality
     try:
@@ -935,8 +955,11 @@ async def triangulate_teacher(
         diagnostics = None
         if include_diagnostics:
             from src.datagen.diagnostics import analyze_failure
+
             consistency_traces_only = [trace for trace, _ in consistency_results]
-            diagnostics = analyze_failure(gold_trace, consistency_traces_only, float_tol)
+            diagnostics = analyze_failure(
+                gold_trace, consistency_traces_only, float_tol
+            )
 
         return TriangulationResult(
             gold_trace=gold_trace,
@@ -975,6 +998,7 @@ async def triangulate_teacher(
     diagnostics = None
     if include_diagnostics:
         from src.datagen.diagnostics import analyze_failure
+
         diagnostics = analyze_failure(gold_trace, consistency_traces, float_tol)
 
     return TriangulationResult(

@@ -1,0 +1,69 @@
+{
+  "csv_path": "data/csv/data.csv",
+  "n_target": 50,
+  "n_generated": 50,
+  "timeout_s": 60,
+  "concurrency": 5,
+  "runtime_s": 470.8719503879547,
+  "overall": {
+    "with_verbalization": {
+      "total": 50,
+      "success": 32,
+      "match": 32,
+      "success_rate": 0.64,
+      "pass_rate": 0.64,
+      "avg_time_s": 14.872440342903138
+    },
+    "without_verbalization": {
+      "total": 50,
+      "success": 1,
+      "match": 1,
+      "success_rate": 0.02,
+      "pass_rate": 0.02,
+      "avg_time_s": 18.93511939048767
+    },
+    "delta_pass_rate": 0.62
+  },
+  "by_n_steps": {
+    "3": {
+      "count": 50,
+      "with_verbalization": {
+        "total": 50,
+        "success": 32,
+        "match": 32,
+        "success_rate": 0.64,
+        "pass_rate": 0.64,
+        "avg_time_s": 14.872440342903138
+      },
+      "without_verbalization": {
+        "total": 50,
+        "success": 1,
+        "match": 1,
+        "success_rate": 0.02,
+        "pass_rate": 0.02,
+        "avg_time_s": 18.93511939048767
+      },
+      "delta_pass_rate": 0.62
+    }
+  },
+  "errors_with_verbalization_top": {
+    "Answer mismatch: expected [{'column': 'IN', 'mean': 4.648}], got 2.01": 1,
+    "Answer mismatch: expected [{'column': 'INTERNODE_3', 'mean': 1.565}], got 0.44": 1,
+    "Answer mismatch: expected [{'column': 'INTERNODE_2', 'mean': 0.837}], got 9.33": 1,
+    "Answer mismatch: expected [{'column': 'IN', 'median': 3.0}], got 1398.5": 1,
+    "Answer mismatch: expected [{'column': 'INTERNODE_3', 'median': 0.4}], got 1398.5": 1,
+    "Answer mismatch: expected [{'column': 'IN', 'std': 3.886}], got 0.33": 1,
+    "Answer mismatch: expected [{'column': 'INTERNODE_1', 'std': 0.334}], got 21.9217": 1,
+    "Answer mismatch: expected [{'column': 'IN', 'variance': 15.104}], got 480.7096": 1
+  },
+  "errors_without_verbalization_top": {
+    "Answer mismatch: expected [{'column': 'INTERNODE_3', 'mean': 1.565}], got 1398.5": 1,
+    "Answer mismatch: expected [{'column': 'INTERNODE_2', 'mean': 0.837}], got 2.53": 1,
+    "Answer mismatch: expected [{'column': 'INTERNODE_1', 'mean': 0.438}], got 1421.8": 1,
+    "Answer mismatch: expected [{'column': 'IN', 'mean': 4.648}], got 10527.01": 1,
+    "Answer mismatch: expected [{'column': 'N', 'mean': 1398.5}], got 9.32": 1,
+    "Answer mismatch: expected [{'column': 'IN', 'median': 3.0}], got 1398.5": 1,
+    "Answer mismatch: expected [{'column': 'TL', 'mean': 9.334}], got inf": 1,
+    "Answer mismatch: expected [{'column': 'INTERNODE_1', 'median': 0.3}], got 4339.0": 1
+  }
+}

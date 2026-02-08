@@ -45,6 +45,7 @@ from src.envs.csv_env import SETUP_CODE, PACKAGES
 @dataclass
 class Slot:
     """Represents a single worker slot in the pool."""
+
     container_id: str
     worker_id: int
     in_use: bool = False
@@ -177,9 +178,9 @@ import statsmodels.api as sm
 
 # Load CSV - also shared via CoW (read-only)
 try:
-    df = pd.read_csv("/data.csv")
+    df = pd.read_csv("/data.csv", na_values=['?', 'NA', 'N/A', 'na', 'n/a'], keep_default_na=True)
 except UnicodeDecodeError:
-    df = pd.read_csv("/data.csv", encoding='latin-1')
+    df = pd.read_csv("/data.csv", encoding='latin-1', na_values=['?', 'NA', 'N/A', 'na', 'n/a'], keep_default_na=True)
 print(f"Parent loaded CSV: {{df.shape[0]}} rows, {{df.shape[1]}} columns", file=sys.stderr)
 
 # Read setup code from file (written by host before fork)
@@ -255,9 +256,9 @@ def run_worker(worker_id: int):
             if request.get("reload_csv"):
                 # Reload CSV and reset namespace (for switching to new dataset)
                 try:
-                    df = pd.read_csv("/data.csv")
+                    df = pd.read_csv("/data.csv", na_values=['?', 'NA', 'N/A', 'na', 'n/a'], keep_default_na=True)
                 except UnicodeDecodeError:
-                    df = pd.read_csv("/data.csv", encoding='latin-1')
+                    df = pd.read_csv("/data.csv", encoding='latin-1', na_values=['?', 'NA', 'N/A', 'na', 'n/a'], keep_default_na=True)
                 namespace = create_restricted_namespace()
                 namespace["df"] = df
                 namespace["pd"] = pd
@@ -431,9 +432,10 @@ for pid in children:
     async def _run_docker(self, *args: str, check: bool = True) -> tuple[str, str]:
         """Run a docker command."""
         proc = await asyncio.create_subprocess_exec(
-            "docker", *args,
+            "docker",
+            *args,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await proc.communicate()
         if check and proc.returncode != 0:
@@ -449,22 +451,33 @@ for pid in children:
 
             # Check if image exists
             proc = await asyncio.create_subprocess_exec(
-                "docker", "image", "inspect", cls.IMAGE_NAME,
+                "docker",
+                "image",
+                "inspect",
+                cls.IMAGE_NAME,
                 stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL
+                stderr=asyncio.subprocess.DEVNULL,
             )
             await proc.communicate()
 
             if proc.returncode != 0:
                 print(f"Building docker image '{cls.IMAGE_NAME}'...")
                 build_proc = await asyncio.create_subprocess_exec(
-                    "docker", "build", "-t", cls.IMAGE_NAME, "-f", cls.DOCKERFILE_PATH, ".",
+                    "docker",
+                    "build",
+                    "-t",
+                    cls.IMAGE_NAME,
+                    "-f",
+                    cls.DOCKERFILE_PATH,
+                    ".",
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, stderr = await build_proc.communicate()
                 if build_proc.returncode != 0:
-                    raise RuntimeError(f"Failed to build docker image: {stderr.decode()}")
+                    raise RuntimeError(
+                        f"Failed to build docker image: {stderr.decode()}"
+                    )
                 print(f"✓ Built docker image '{cls.IMAGE_NAME}'")
 
             cls._image_checked = True
@@ -475,10 +488,14 @@ for pid in children:
 
         # Create container
         await self._run_docker(
-            "run", "-d",
-            "--name", self.container_id,
+            "run",
+            "-d",
+            "--name",
+            self.container_id,
             self.IMAGE_NAME,
-            "tail", "-f", "/dev/null"
+            "tail",
+            "-f",
+            "/dev/null",
         )
 
         # Copy CSV
@@ -489,9 +506,11 @@ for pid in children:
         # Write setup code as separate file (avoids escaping issues)
         setup_b64 = base64.b64encode(SETUP_CODE.encode()).decode()
         await self._run_docker(
-            "exec", self.container_id,
-            "python", "-c",
-            f"import base64; open('/tmp/setup_code.py', 'w').write(base64.b64decode('{setup_b64}').decode())"
+            "exec",
+            self.container_id,
+            "python",
+            "-c",
+            f"import base64; open('/tmp/setup_code.py', 'w').write(base64.b64decode('{setup_b64}').decode())",
         )
 
         # Generate worker script
@@ -500,15 +519,16 @@ for pid in children:
         # Write worker script
         script_b64 = base64.b64encode(worker_script.encode()).decode()
         await self._run_docker(
-            "exec", self.container_id,
-            "python", "-c",
-            f"import base64; open('/tmp/pool_worker.py', 'w').write(base64.b64decode('{script_b64}').decode())"
+            "exec",
+            self.container_id,
+            "python",
+            "-c",
+            f"import base64; open('/tmp/pool_worker.py', 'w').write(base64.b64decode('{script_b64}').decode())",
         )
 
         # Start worker (runs in background, forks children)
         await self._run_docker(
-            "exec", "-d", self.container_id,
-            "python", "-u", "/tmp/pool_worker.py"
+            "exec", "-d", self.container_id, "python", "-u", "/tmp/pool_worker.py"
         )
 
         # Wait for ready
@@ -518,14 +538,15 @@ for pid in children:
 
         while asyncio.get_event_loop().time() - start_time < timeout:
             stdout, _ = await self._run_docker(
-                "exec", self.container_id, "cat", ready_flag,
-                check=False
+                "exec", self.container_id, "cat", ready_flag, check=False
             )
             if "ready" in stdout:
                 break
             await asyncio.sleep(0.5)
         else:
-            raise TimeoutError(f"Container {self.container_id} workers did not become ready")
+            raise TimeoutError(
+                f"Container {self.container_id} workers did not become ready"
+            )
 
         # Create worker slot objects
         self.workers = [
@@ -541,7 +562,9 @@ for pid in children:
         # Ensure Docker image exists
         await self._ensure_image()
 
-        print(f"Starting multi-tenant container: {self.n_workers} workers for {self.csv_path.name}")
+        print(
+            f"Starting multi-tenant container: {self.n_workers} workers for {self.csv_path.name}"
+        )
 
         await self._setup_container()
 
@@ -575,14 +598,12 @@ for pid in children:
             raise FileNotFoundError(f"CSV not found: {new_csv_path}")
 
         # Copy new CSV to container (overwrites /data.csv)
-        await self._run_docker(
-            "cp", str(new_path), f"{self.container_id}:/data.csv"
-        )
+        await self._run_docker("cp", str(new_path), f"{self.container_id}:/data.csv")
 
         # Tell all workers to reload the CSV (atomic: all must succeed)
         results = await asyncio.gather(
             *[self._reload_csv_on_slot(worker) for worker in self.workers],
-            return_exceptions=True
+            return_exceptions=True,
         )
 
         # Check for failures before updating state
@@ -604,7 +625,7 @@ for pid in children:
         payload = json.dumps({"reload_csv": True})
         payload_b64 = base64.b64encode(payload.encode()).decode()
 
-        send_cmd = f'''
+        send_cmd = f"""
 import base64
 import json
 data = base64.b64decode('{payload_b64}').decode()
@@ -612,7 +633,7 @@ with open('{slot.cmd_fifo}', 'w') as f:
     f.write(data)
 with open('{slot.res_fifo}', 'r') as f:
     print(f.read())
-'''
+"""
         stdout, _ = await self._run_docker(
             "exec", slot.container_id, "python", "-c", send_cmd
         )
@@ -624,7 +645,9 @@ with open('{slot.res_fifo}', 'r') as f:
     def get_worker(self, worker_id: int) -> Slot:
         """Get worker by index."""
         if worker_id < 0 or worker_id >= len(self.workers):
-            raise IndexError(f"Worker {worker_id} not found (have {len(self.workers)} workers)")
+            raise IndexError(
+                f"Worker {worker_id} not found (have {len(self.workers)} workers)"
+            )
         return self.workers[worker_id]
 
     async def run_on_worker(self, worker_id: int, code: str) -> str:
@@ -638,7 +661,7 @@ with open('{slot.res_fifo}', 'r') as f:
         payload_b64 = base64.b64encode(payload.encode()).decode()
 
         # Send command via FIFO
-        send_cmd = f'''
+        send_cmd = f"""
 import base64
 import json
 data = base64.b64decode('{payload_b64}').decode()
@@ -646,7 +669,7 @@ with open('{slot.cmd_fifo}', 'w') as f:
     f.write(data)
 with open('{slot.res_fifo}', 'r') as f:
     print(f.read())
-'''
+"""
         stdout, stderr = await self._run_docker(
             "exec", slot.container_id, "python", "-c", send_cmd
         )
@@ -665,7 +688,9 @@ with open('{slot.res_fifo}', 'r') as f:
         if response.get("status") == "error":
             parts.append(response.get("result", "Unknown error"))
         elif response.get("result"):
-            parts.append(f"Out[{response.get('execution_count', 0)}]: {response['result']}")
+            parts.append(
+                f"Out[{response.get('execution_count', 0)}]: {response['result']}"
+            )
 
         return "\n".join(parts) if parts else ""
 
@@ -681,7 +706,9 @@ with open('{slot.res_fifo}', 'r') as f:
     def get_slot_workers(self, slot_index: int) -> list[Slot]:
         """Get all workers for a specific question slot."""
         if slot_index < 0 or slot_index >= self.n_question_slots:
-            raise IndexError(f"Slot {slot_index} not found (have {self.n_question_slots} slots)")
+            raise IndexError(
+                f"Slot {slot_index} not found (have {self.n_question_slots} slots)"
+            )
         start = slot_index * self.traces_per_slot
         end = start + self.traces_per_slot
         return self.workers[start:end]
@@ -727,9 +754,7 @@ with open('{slot.res_fifo}', 'r') as f:
         """
         Create a container_pool using only the workers needed for n_consistency.
         """
-        worker_ids = self.get_slot_worker_ids(
-            slot_index, n_consistency=n_consistency
-        )
+        worker_ids = self.get_slot_worker_ids(slot_index, n_consistency=n_consistency)
         return [
             (WorkerAdapter(self, wid), WorkerAdapter.create_state(wid))
             for wid in worker_ids
@@ -740,7 +765,7 @@ with open('{slot.res_fifo}', 'r') as f:
         payload = json.dumps({"reset": True})
         payload_b64 = base64.b64encode(payload.encode()).decode()
 
-        send_cmd = f'''
+        send_cmd = f"""
 import base64
 import json
 data = base64.b64decode('{payload_b64}').decode()
@@ -748,10 +773,8 @@ with open('{slot.cmd_fifo}', 'w') as f:
     f.write(data)
 with open('{slot.res_fifo}', 'r') as f:
     print(f.read())
-'''
-        await self._run_docker(
-            "exec", slot.container_id, "python", "-c", send_cmd
-        )
+"""
+        await self._run_docker("exec", slot.container_id, "python", "-c", send_cmd)
 
     def get_stats(self) -> dict:
         """Get container statistics."""
@@ -941,6 +964,7 @@ class ContainerPool:
         if csv_path is None:
             # Try common locations for a CSV to bootstrap with
             from src.core.config import config
+
             csv_sources = config.csv_sources
             if isinstance(csv_sources, str):
                 csv_sources = [csv_sources]
@@ -948,9 +972,13 @@ class ContainerPool:
                 csv_path = csv_sources[0]
 
         if csv_path is None:
-            raise ValueError("ContainerPool requires at least one CSV path to initialize")
+            raise ValueError(
+                "ContainerPool requires at least one CSV path to initialize"
+            )
 
-        print(f"Creating container pool: {self.max_containers} containers (session: {self.session_id})...")
+        print(
+            f"Creating container pool: {self.max_containers} containers (session: {self.session_id})..."
+        )
 
         # Create all containers in parallel
         create_tasks = []

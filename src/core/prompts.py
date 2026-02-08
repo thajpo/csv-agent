@@ -323,17 +323,27 @@ CONTINUE_MSG = "\n\nWhat will you do next?"
 FINAL_MSG = "Turn limit reached. Please call submit() with your final answer."
 
 # Exploration-specific messages
-EXPLORATION_CONTINUE_MSG = "\n\nContinue exploring the dataset. Write Python code to examine the data."
+EXPLORATION_CONTINUE_MSG = (
+    "\n\nContinue exploring the dataset. Write Python code to examine the data."
+)
 
 
 # ============= Helper Functions =============
 
+
 def generate_data_overview(csv_path: str = "data.csv") -> str:
     """Generate bootstrap exploration output for initial data inspection."""
     try:
-        df = pd.read_csv(csv_path)
+        df = pd.read_csv(
+            csv_path, na_values=["?", "NA", "N/A", "na", "n/a"], keep_default_na=True
+        )
     except UnicodeDecodeError:
-        df = pd.read_csv(csv_path, encoding='latin-1')
+        df = pd.read_csv(
+            csv_path,
+            encoding="latin-1",
+            na_values=["?", "NA", "N/A", "na", "n/a"],
+            keep_default_na=True,
+        )
     lines = []
     lines.append(f"=== SHAPE ===")
     lines.append(f"Rows: {len(df)}")
@@ -369,7 +379,9 @@ def generate_data_overview(csv_path: str = "data.csv") -> str:
     return "\n".join(lines)
 
 
-def get_exploration_continue_msg(turn_number: int, min_turns: int = 3, num_questions: int = 30) -> str:
+def get_exploration_continue_msg(
+    turn_number: int, min_turns: int = 3, num_questions: int = 30
+) -> str:
     """Get context-appropriate continue message based on turn number."""
     if turn_number < min_turns:
         return f"\n\nContinue exploring the dataset. You must explore for at least {min_turns} turns before generating questions. Write Python code to examine the data."
