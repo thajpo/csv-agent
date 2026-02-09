@@ -18,6 +18,8 @@
 - Keep discussion append-style under the active item, including inline `//` notes.
 - Never implement directly from `Brainstormed`.
 - Implement only from `Specd` items with explicit contract fields.
+- Communication-first before implementation: confirm intent with the user directly in natural dialogue, even when a spec looks complete.
+- Do not fabricate, infer, or backfill user confirmation.
 - Prune stale text after promotion or merge.
 - After merge, remove the `Specd` item. Git history is the canonical completion record.
 
@@ -30,6 +32,8 @@
 
 ## Guardrails
 - No implementation without explicit `Specd` contract.
+- No promotion to `Specd: ready` without direct user-confirmed readiness evidence (boundary, non-goals, tests, and risks).
+- Spec-gate evidence is required, but a fixed number of scripted questions is not.
 - Do not skip/disable tests to force pass.
 - Do not hide behavior changes behind ambiguous defaults.
 - Prefer fail-fast contracts over compatibility branches.

@@ -95,6 +95,10 @@ def validate_question(q: dict) -> list[str]:
         if field not in q or q[field] is None:
             errors.append(f"Missing required field: {field}")
 
+    for legacy_field in ("_ground_truth", "_ground_truths"):
+        if legacy_field in q:
+            errors.append(f"Legacy answer key not allowed: {legacy_field}")
+
     source = q.get("source")
     subtype = q.get("subtype")
 

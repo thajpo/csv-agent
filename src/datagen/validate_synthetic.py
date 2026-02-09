@@ -261,7 +261,7 @@ async def process_dataset(
             }
             # Include full expected/actual for mismatch analysis
             if "Answer mismatch" in (error or ""):
-                failure_record["expected"] = q_dict.get("_ground_truth")
+                failure_record["expected"] = q_dict.get("ground_truth")
                 failure_record["actual"] = trace.get("final_answer") if trace else None
             failures.append(failure_record)
             ui.base.print_warning(f"    ✗ Failed: {error}")

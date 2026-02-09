@@ -129,13 +129,9 @@ async def verify_synthetic(
             )
 
         # Tolerant comparison
-        # Support both _ground_truth (legacy) and ground_truth (procedural questions)
-        expected_answers = (
-            question.get("_ground_truths") or question.get("ground_truths") or []
-        )
+        expected_answers = question.get("ground_truths") or []
         if not expected_answers:
-            # Try _ground_truth first (legacy), then ground_truth (procedural)
-            gt = question.get("_ground_truth") or question.get("ground_truth")
+            gt = question.get("ground_truth")
             if gt is not None:
                 expected_answers = [gt]
         expected_answers = [a for a in expected_answers if a is not None]

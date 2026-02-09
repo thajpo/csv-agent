@@ -13,6 +13,8 @@ This file intentionally carries more detail now. The previous version was too sp
 - [2026-02-08] Synthetic/program generation and verification are first-class, not sidecar features.
 - [2026-02-08] Question quality target is data-aware + difficult + non-procedural wording when verbalized.
 - [2026-02-08] If planning context is pruned, recover from Git history rather than guessing.
+- [2026-02-08] Communication-first gate: before implementation, confirm intent with the user in natural conversation even if a spec appears complete.
+- [2026-02-08] Spec-gate is evidence-based but not rigidly questionnaire-based; do not require a fixed q-count when user confirmation is clear.
 
 ## Beliefs
 - [2026-02-08] Minimal file count helps only if each remaining file is information-dense and reviewable.
@@ -20,6 +22,7 @@ This file intentionally carries more detail now. The previous version was too sp
 - [2026-02-08] Reliability should gate training scale-up to avoid training on corrupted traces.
 - [2026-02-08] Pipeline contract cleanup and synthetic ambiguity cleanup should share one metadata abstraction pass where possible.
 - [2026-02-08] PM-style review improves when each candidate includes concrete touch points and expected diff shape.
+- [2026-02-08] Honest, straightforward dialogue is required; inferred confirmation is not acceptable evidence for readiness.
 
 ## Brainstormed
 
@@ -40,31 +43,10 @@ current code evidence:
   - `question` fallback reads still appear in multiple paths.
 
 missing:
-- One strict answer contract (remove underscored legacy fields in runtime paths).
 - One explicit procedural metadata policy (`source="synthetic", subtype="program"` vs separate source value).
 - Cleanup of fallback reads that silently normalize old shapes.
 
 spec candidates (not yet promoted):
-- candidate: strict-answer-contract purge
-  - behavior change: reject legacy `_ground_truth*` fields at verification/load time; accept only unified keys.
-  - files to touch:
-    - `src/datagen/shared/verification.py`
-    - `src/datagen/shared/questions_io.py`
-    - `src/datagen/validate_synthetic.py`
-  - fail-first tests:
-    - add test proving legacy `_ground_truth` input now fails schema/verification.
-  - non-goals:
-    - no migration adapters for old JSON files.
-  - risks:
-    - old cached question files stop loading.
-  - touch points:
-    - `verify_synthetic` fallback branch
-    - `validate_question` required-field checks
-  - expected diff shape:
-    - modify only, ~60-120 LOC
-  - review checks:
-    - no underscored fallback keys remain in runtime verification path.
-
 - candidate: procedural-metadata normalization
   - behavior change: enforce single policy for procedural questions and episodes, then validate consistently.
   - files to touch:
@@ -460,6 +442,63 @@ spec candidates (not yet promoted):
     - rubric explains at least one concrete merge candidate.
 
 ## Specd
+- title: Pipeline Contract Cleanup -> strict-answer-contract purge
+  status: ready
+  approval:
+    approved_by: user
+    approval_signal: "i accept"
+    approved_on: 2026-02-08
+    expires_on: 2026-02-13
+    approval_status: valid
+    approval_basis: strict no-backward-compat cleanup after Q&A; implement strict-answer-contract purge only.
+  - readiness evidence:
+    - [2026-02-08] user confirmed strict no-backward-compat plan in natural dialogue.
+    - [2026-02-08] boundary confirmed: remove `_ground_truth` / `_ground_truths` fallback in runtime verification/load paths only.
+    - [2026-02-08] non-goals confirmed: no migration adapters and no procedural metadata policy changes.
+    - [2026-02-08] tests confirmed: fail-first legacy-key rejection test plus synthetic validation/question-io regression checks.
+    - [2026-02-08] risk accepted: old cached question files using underscored keys fail by design.
+    - [2026-02-08] user approval signal captured: "i accept".
+    - [2026-02-09] promotion output record: ready; blockers none; rationale: contract complete and approved.
+  - behavior change: verification/load paths reject legacy `_ground_truth` and `_ground_truths` fields and accept only unified answer keys.
+  - must stay unchanged: canonical unified question schema, synthetic verification semantics, and existing non-legacy question loading behavior.
+  - files to touch:
+    - `src/datagen/shared/verification.py`
+    - `src/datagen/shared/questions_io.py`
+    - `src/datagen/validate_synthetic.py`
+  - fail-first tests:
+    - add test proving legacy `_ground_truth` input fails schema/verification.
+  - regression tests:
+    - run synthetic validation and question-io tests to confirm unified-key payloads continue to pass.
+  - non-goals:
+    - no migration adapters for old JSON files.
+    - no procedural metadata policy changes in this slice.
+  - risks:
+    - old cached question files using underscored keys stop loading by design.
+  - rollback trigger:
+    - if canonical unified-key payloads regress, pause and revert strict-key rejection until parser/tests are fixed.
+  - overlap decision:
+    - split from `procedural-metadata normalization`; this slice only removes answer-key legacy fallback paths.
+  - dependency snapshot:
+    - depends_on: none
+    - blocked_by: none
+    - parallelizable_with:
+      - `Reliability Hardening -> container-stop observability`
+    - invalidation_watch:
+      - any upstream spec or merged PR changing answer schema/validation assumptions for these touch points
+  - touch points:
+    - `src/datagen/shared/verification.py` -> `verify_synthetic` fallback branch removal
+    - `src/datagen/shared/questions_io.py` -> `validate_question` required-field checks
+    - `src/datagen/validate_synthetic.py` -> strict schema validation path
+  - line anchors:
+    - `src/datagen/shared/verification.py`
+    - `src/datagen/shared/questions_io.py`
+    - `src/datagen/validate_synthetic.py`
+  - expected diff shape:
+    - modify only, ~60-120 LOC
+  - review checks:
+    - no underscored fallback keys remain in runtime verification path.
+    - unified-key payloads still validate successfully.
+
 - title: Reliability Hardening -> container-stop observability
   status: in_progress
   - behavior change: failed `ContainerPool.stop()` container stop calls are logged with container id and error while continuing shutdown.
@@ -485,7 +524,6 @@ spec candidates (not yet promoted):
     - failing container ids appear in error logs.
 
 ready-to-promote shortlist (based on recovered context):
-- Pipeline Contract Cleanup -> strict-answer-contract purge
 - Synthetic Question Quality Improvements -> ambiguity-template completion pack
 - Training and E2E Readiness -> training-path normalization
 
