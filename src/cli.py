@@ -370,25 +370,38 @@ def _show_episode_preflight(
     """
     import json
 
-    # Count total questions available
+    def _matches_source(question: dict, selected_source: str) -> bool:
+        if selected_source == "template":
+            return question.get("subtype") == "template"
+        if selected_source == "procedural":
+            return question.get("subtype") == "program"
+        if selected_source == "llm_gen":
+            return question.get("subtype") == "llm" or question.get("source") == "llm"
+        return True
+
+    # Count total questions available for selected source
     total_questions = 0
     for qf in questions_dir.glob("*/questions.json"):
         try:
             with open(qf) as f:
                 data = json.load(f)
             questions = data.get("questions", data if isinstance(data, list) else [])
+            questions = [q for q in questions if _matches_source(q, source)]
             total_questions += len(questions)
         except Exception:
             pass
 
-    # Load existing episode question IDs
+    # Load existing episode question IDs for selected source
     existing_ids = set()
     if episodes_file.exists():
         try:
             with open(episodes_file) as f:
                 for line in f:
                     ep = json.loads(line)
-                    qid = ep.get("question", {}).get("id", "")
+                    question = ep.get("question", {})
+                    if not _matches_source(question, source):
+                        continue
+                    qid = question.get("id", "")
                     if qid:
                         existing_ids.add(qid)
         except Exception:
@@ -404,7 +417,8 @@ def _show_episode_preflight(
     bar = "█" * filled + "░" * (bar_width - filled)
 
     # Display
-    color = "green" if source == "template" else "blue"
+    color_map = {"template": "green", "procedural": "magenta", "llm_gen": "blue"}
+    color = color_map.get(source, "blue")
     console.print()
     console.print(
         Panel(
@@ -412,7 +426,7 @@ def _show_episode_preflight(
             f"[bold]Already processed:[/bold]      {existing_count:,} ({pct:.0f}%)\n"
             f"[bold]Remaining to generate:[/bold]  {remaining:,}\n\n"
             f"Progress: [{color}]{bar}[/{color}] {pct:.0f}%",
-            title=f"Episode Generation - {source.capitalize()}",
+            title=f"Episode Generation - {source}",
             border_style=color,
         )
     )
@@ -466,7 +480,7 @@ def cmd_generate_episodes(
                     output_path=str(episodes_file),
                     max_questions=max_questions,
                     skip_existing=existing_ids if not fresh else set(),
-                    subtype="template",
+                    source="template",
                 )
             )
             if result != 0:
@@ -497,7 +511,7 @@ def cmd_generate_episodes(
                     output_path=str(episodes_file),
                     max_questions=max_questions,
                     skip_existing=existing_ids if not fresh else set(),
-                    subtype="program",
+                    source="procedural",
                 )
             )
             if result != 0:
@@ -508,7 +522,7 @@ def cmd_generate_episodes(
         episodes_file = Path("data/episodes/episodes_llm.jsonl")
 
         total_q, existing, existing_ids = _show_episode_preflight(
-            "llm", questions_dir, episodes_file
+            "llm_gen", questions_dir, episodes_file
         )
         remaining = total_q - existing
 

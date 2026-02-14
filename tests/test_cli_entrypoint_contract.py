@@ -23,6 +23,11 @@ def test_inspect_questions_requires_explicit_source():
         _parse(["inspect", "questions"])
 
 
+def test_run_test_without_mode_hard_fails():
+    with pytest.raises(SystemExit):
+        _parse(["run", "--test"])
+
+
 @pytest.mark.parametrize(
     "argv, expected_mode",
     [

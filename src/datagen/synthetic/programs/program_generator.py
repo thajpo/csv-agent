@@ -283,6 +283,15 @@ async def run_pipeline(
 
     # Save batch
     questions_file = output_path / "questions.json"
+    if questions_file.exists():
+        # Preserve previously generated non-program questions (e.g., template records).
+        with open(questions_file) as f:
+            existing = json.load(f)
+        if isinstance(existing, dict):
+            existing = existing.get("questions", [])
+        preserved = [q for q in existing if q.get("subtype") != "program"]
+        question_records = preserved + question_records
+
     with open(questions_file, "w") as f:
         json.dump(question_records, f, indent=2)
 

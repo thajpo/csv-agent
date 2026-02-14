@@ -14,9 +14,12 @@ Usage (via CLI):
 import subprocess
 import sys
 import time
+import asyncio
+import json
 from pathlib import Path
 
 from src.core.config import config
+from src.datagen.validate_synthetic import main as validate_synthetic_main
 
 
 def run_stage(name: str, cmd: list[str]) -> bool:
@@ -47,6 +50,57 @@ def run_stage(name: str, cmd: list[str]) -> bool:
         return True  # Partial success is still success
     else:
         print(f"\n✗ {name} failed completely (exit code {result.returncode})")
+        return False
+
+
+def _load_existing_episode_ids(output_path: Path) -> set[str]:
+    """Load existing episode question IDs from output JSONL if present."""
+    if not output_path.exists():
+        return set()
+    existing_ids = set()
+    with open(output_path) as f:
+        for line in f:
+            try:
+                ep = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            qid = ep.get("question", {}).get("id")
+            if qid:
+                existing_ids.add(qid)
+    return existing_ids
+
+
+def run_synthetic_stage(
+    name: str,
+    max_questions: int | None,
+    source: str,
+    skip_existing: set[str] | None = None,
+) -> bool:
+    """Run synthetic episode generation in-process with source-scoped filtering."""
+    print(f"\n{'=' * 60}")
+    print(f"  {name}")
+    print(f"{'=' * 60}\n")
+
+    start = time.time()
+    result = asyncio.run(
+        validate_synthetic_main(
+            questions_dir=str(config.questions_synthetic_dir),
+            output_path=str(config.episodes_synthetic_jsonl),
+            max_questions=max_questions,
+            skip_existing=skip_existing,
+            source=source,
+        )
+    )
+    elapsed = time.time() - start
+
+    if result == 0:
+        print(f"\n✓ {name} completed in {elapsed:.1f}s")
+        return True
+    elif result == 1:
+        print(f"\n⚠ {name} completed with some failures in {elapsed:.1f}s (continuing)")
+        return True
+    else:
+        print(f"\n✗ {name} failed completely (exit code {result})")
         return False
 
 
@@ -94,23 +148,11 @@ def main(
 
     # Stage 2a: Template Episodes
     if run_template:
-        cmd = [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "src.datagen.validate_synthetic",
-            "--questions-dir",
-            str(config.questions_synthetic_dir),
-            "--output",
-            str(config.episodes_synthetic_jsonl),
-            "--subtype",
-            "template",
-        ]
-        if max_questions:
-            cmd.extend(["--max-questions", str(max_questions)])
-
-        if run_stage("Stage 2a: Generate Template Episodes", cmd):
+        if run_synthetic_stage(
+            "Stage 2a: Generate Template Episodes",
+            max_questions=max_questions,
+            source="template",
+        ):
             stages_run += 1
         else:
             stages_failed += 1
@@ -127,23 +169,13 @@ def main(
 
     # Stage 2b: Procedural Episodes
     if run_procedural:
-        cmd = [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "src.datagen.validate_synthetic",
-            "--questions-dir",
-            str(config.questions_synthetic_dir),
-            "--output",
-            str(config.episodes_synthetic_jsonl),
-            "--subtype",
-            "program",
-        ]
-        if max_questions:
-            cmd.extend(["--max-questions", str(max_questions)])
-
-        if run_stage("Stage 2b: Generate Procedural Episodes", cmd):
+        existing_ids = _load_existing_episode_ids(Path(config.episodes_synthetic_jsonl))
+        if run_synthetic_stage(
+            "Stage 2b: Generate Procedural Episodes",
+            max_questions=max_questions,
+            source="procedural",
+            skip_existing=existing_ids,
+        ):
             stages_run += 1
         else:
             stages_failed += 1
