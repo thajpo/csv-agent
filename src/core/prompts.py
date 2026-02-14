@@ -1,8 +1,7 @@
 """
 All prompts for CSV agent (teacher, student, exploration).
 
-This module consolidates prompts from authoring/prompts.py, training/prompts.py,
-and the old core/prompts.py into a single location.
+This module consolidates prompts into a single location.
 """
 
 import pandas as pd

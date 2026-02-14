@@ -3,7 +3,7 @@ name = "csv-agent-qa"
 version = "0.1.0"
 description = "Your environment description here"
 readme = "README.md"
-tags = ["placeholder-tag", "train", "eval"]
+tags = ["placeholder-tag", "eval"]
 requires-python = ">=3.13"
 dependencies = [
     "csv-spec",

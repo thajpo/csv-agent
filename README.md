@@ -1,6 +1,6 @@
 # csv-agent
 
-Synthetic training data generation pipeline for CSV analysis agents. Uses teacher triangulation to create verified question-answer pairs with execution traces.
+Synthetic data generation pipeline for CSV analysis agents. Uses teacher triangulation to create verified question-answer pairs with execution traces.
 
 ## Setup
 
@@ -76,7 +76,7 @@ csvagent generate questions --synth --dry-run  # Preview only
 
 ### Generate Episodes
 
-Episodes are verified question-answer traces for training.
+Episodes are verified question-answer traces for evaluation and downstream workflows.
 
 ```bash
 # Preview first (always safe)
@@ -138,7 +138,7 @@ csvagent validate \
 | [current.md](current.md) | Active planning and spec funnel (`Institutional Knowledge`, `Beliefs`, `Brainstormed`, `Specd`) |
 | [AGENTS.md](AGENTS.md) | Repo collaboration and execution guardrails |
 
-**Key insight:** Episodes capture raw structured data (traces, hooks, corrections). Training formats (SFT, PRM, DPO) are derived at training time, not pre-baked. This means new training methods can reuse existing episodes without regeneration.
+**Key insight:** Episodes capture raw structured data (traces, hooks, corrections) and stay reusable across downstream consumers without regenerating base data.
 
 ---
 
