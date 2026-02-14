@@ -35,7 +35,7 @@ csvagent status
 csvagent run --test
 
 # 3. Generate everything
-csvagent run --both
+csvagent run --all
 ```
 
 ---
@@ -56,7 +56,7 @@ csv-agent Data Generation Pipeline
   Questions    synthetic 1,399 (63 datasets) | llm 1,504 (75 datasets)
   Episodes     synthetic 11/11 verified (100%) | llm 0/0 verified (0%)
 
-Next: csvagent generate episodes --llm
+Next: csvagent generate episodes --llm-gen
 ```
 
 ### Generate Questions
@@ -69,9 +69,10 @@ Two paths:
 | **LLM** | Slow | Non-deterministic | Exploration, diversity |
 
 ```bash
-csvagent generate questions --synth     # Template-based (fast)
-csvagent generate questions --llm       # LLM exploration (slow)
-csvagent generate questions --synth --dry-run  # Preview only
+csvagent generate questions --template     # Template-based
+csvagent generate questions --procedural   # Program/procedural
+csvagent generate questions --llm-gen      # LLM exploration
+csvagent generate questions --all --dry-run
 ```
 
 ### Generate Episodes
@@ -80,15 +81,17 @@ Episodes are verified question-answer traces for training.
 
 ```bash
 # Preview first (always safe)
-csvagent generate episodes --synth --dry-run
-csvagent generate episodes --llm --dry-run
+csvagent generate episodes --template --dry-run
+csvagent generate episodes --procedural --dry-run
+csvagent generate episodes --llm-gen --dry-run
 
 # Generate (appends by default - won't overwrite existing)
-csvagent generate episodes --synth
-csvagent generate episodes --llm
+csvagent generate episodes --template
+csvagent generate episodes --procedural
+csvagent generate episodes --llm-gen
 
 # Start fresh (explicit overwrite)
-csvagent generate episodes --synth --fresh
+csvagent generate episodes --template --fresh
 ```
 
 **Safe defaults:**
@@ -99,10 +102,10 @@ csvagent generate episodes --synth --fresh
 ### Full Pipeline
 
 ```bash
-csvagent run --both         # Full pipeline (questions + episodes)
-csvagent run --synth        # Synthetic only
-csvagent run --llm          # LLM only
-csvagent run --triangulate  # Episodes only (skip question gen)
+csvagent run --all          # Full pipeline (questions + episodes)
+csvagent run --template     # Template only
+csvagent run --procedural   # Procedural only
+csvagent run --llm-gen      # LLM only
 csvagent run --test         # Quick e2e test (~30 seconds)
 ```
 
@@ -116,8 +119,8 @@ csvagent stats
 csvagent stats --gaps       # Show missing data
 
 # Inspect outputs
-csvagent inspect questions                    # Preview questions
-csvagent inspect questions --show-hint        # With hints
+csvagent inspect questions --source template  # Preview template questions
+csvagent inspect questions --source all --show-hint        # With hints
 csvagent inspect episodes --verified          # Show verified episodes
 csvagent inspect trace abc123                 # Deep-dive single episode
 
@@ -172,7 +175,7 @@ The pipeline uses a manifest (`data/datagen_manifest.jsonl`) to track processed 
 csvagent manifest
 
 # Force re-run of failed questions
-csvagent generate episodes --synth --retry-failed
+uv run python -m src.datagen.validate_synthetic --questions-dir data/questions_synthetic --output data/episodes/episodes_synthetic.jsonl --retry-failed
 
 # To fully reset cache, delete the manifest file
 rm data/datagen_manifest.jsonl

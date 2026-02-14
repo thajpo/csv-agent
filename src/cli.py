@@ -4,8 +4,8 @@ Unified CLI for csv-agent data generation pipeline.
 Usage:
     csvagent              # Interactive menu (default)
     csvagent status       # View data inventory
-    csvagent generate questions --synth|--llm
-    csvagent generate episodes --synth|--llm
+    csvagent generate questions --template|--procedural|--llm-gen|--all
+    csvagent generate episodes --template|--procedural|--llm-gen|--all
     csvagent run          # Full pipeline
     csvagent inspect      # Preview data
     csvagent validate     # Debug single question
@@ -87,13 +87,13 @@ def cmd_status():
 
     # Suggest next action
     if synth_q == 0:
-        console.print("[dim]Next:[/dim] csvagent generate questions --synth")
+        console.print("[dim]Next:[/dim] csvagent generate questions --template")
     elif synth_e == 0:
-        console.print("[dim]Next:[/dim] csvagent generate episodes --synth")
+        console.print("[dim]Next:[/dim] csvagent generate episodes --template")
     elif llm_q == 0:
-        console.print("[dim]Next:[/dim] csvagent generate questions --llm")
+        console.print("[dim]Next:[/dim] csvagent generate questions --llm-gen")
     elif llm_e == 0:
-        console.print("[dim]Next:[/dim] csvagent generate episodes --llm")
+        console.print("[dim]Next:[/dim] csvagent generate episodes --llm-gen")
     else:
         console.print("[dim]Pipeline complete! Run 'csvagent stats' for details.[/dim]")
 
@@ -279,11 +279,11 @@ def cmd_progress():
     console.print("[bold]Recommended Next Steps:[/bold]")
     if total_synth_e < total_synth_q:
         console.print(
-            f"  [green]→[/green] csvagent generate episodes --synth  # {remaining_synth:,} remaining"
+            f"  [green]→[/green] csvagent generate episodes --template  # {remaining_synth:,} remaining"
         )
     if total_llm_e < total_llm_q:
         console.print(
-            f"  [blue]→[/blue] csvagent generate episodes --llm   # {remaining_llm:,} remaining"
+            f"  [blue]→[/blue] csvagent generate episodes --llm-gen   # {remaining_llm:,} remaining"
         )
 
     console.print()
@@ -293,30 +293,39 @@ def cmd_progress():
 # ============= Generate Commands =============
 
 
+def _modes_from_flag(mode: str) -> tuple[bool, bool, bool]:
+    """Convert mode string to template/procedural/llm_gen booleans."""
+    template = mode in ("template", "all")
+    procedural = mode in ("procedural", "all")
+    llm_gen = mode in ("llm_gen", "all")
+    return template, procedural, llm_gen
+
+
 def cmd_generate_questions(
-    synth: bool,
-    llm: bool,
+    mode: str,
     max_datasets: int | None,
     dry_run: bool,
     regenerate: bool = False,
 ):
-    """Generate questions using synthetic templates or LLM exploration."""
-    if not synth and not llm:
-        console.print("[red]Specify --synth or --llm (or both)[/red]")
-        return 1
+    """Generate questions by mode."""
+    template, procedural, llm_gen = _modes_from_flag(mode)
 
     if dry_run:
         console.print("[bold]Dry Run - Generate Questions[/bold]\n")
-        if synth:
-            console.print(
-                f"  [green]synthetic[/green]: Will generate template-based questions"
-            )
+        if template:
+            console.print("  [green]template[/green]: Will generate template questions")
             console.print(f"    Max datasets: {max_datasets or 'all'}")
             console.print(f"    Output: data/questions_synthetic/")
-        if llm:
-            console.print(f"  [blue]llm[/blue]: Will run LLM exploration")
+        if procedural:
+            console.print(
+                "  [magenta]procedural[/magenta]: Will generate program-based questions"
+            )
             console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print(f"    Output: data/questions/")
+            console.print("    Output: data/questions_synthetic/")
+        if llm_gen:
+            console.print("  [blue]llm_gen[/blue]: Will run LLM exploration")
+            console.print(f"    Max datasets: {max_datasets or 'all'}")
+            console.print(f"    Output: data/questions_llm/")
             if regenerate:
                 console.print(f"    [yellow]Mode: Regenerate (will overwrite)[/yellow]")
         console.print("\n[dim]No changes made (dry run)[/dim]")
@@ -324,15 +333,24 @@ def cmd_generate_questions(
 
     exit_code = 0
 
-    if synth:
-        console.print("[bold]Generating synthetic questions...[/bold]")
+    if template:
+        console.print("[bold]Generating template questions...[/bold]")
         from src.datagen.synthetic.generator import main as synth_gen_main
 
         result = synth_gen_main(max_datasets=max_datasets)
         if result != 0:
             exit_code = result
 
-    if llm:
+    if procedural:
+        console.print("[bold]Generating procedural questions...[/bold]")
+        import asyncio
+        from src.datagen.synthetic.programs.runner import run_all as procedural_run_all
+
+        result = asyncio.run(procedural_run_all(max_datasets=max_datasets))
+        if result != 0:
+            exit_code = result
+
+    if llm_gen:
         console.print("[bold]Generating LLM questions...[/bold]")
         from src.datagen.question_gen import main as llm_gen_main
 
@@ -386,7 +404,7 @@ def _show_episode_preflight(
     bar = "█" * filled + "░" * (bar_width - filled)
 
     # Display
-    color = "green" if source == "synthetic" else "blue"
+    color = "green" if source == "template" else "blue"
     console.print()
     console.print(
         Panel(
@@ -403,30 +421,27 @@ def _show_episode_preflight(
 
 
 def cmd_generate_episodes(
-    synth: bool,
-    llm: bool,
+    mode: str,
     max_questions: int | None,
     dry_run: bool,
     fresh: bool = False,
 ):
     """Generate verified episodes via teacher triangulation."""
-    if not synth and not llm:
-        console.print("[red]Specify --synth or --llm (or both)[/red]")
-        return 1
+    template, procedural, llm_gen = _modes_from_flag(mode)
 
     exit_code = 0
 
-    if synth:
+    if template:
         questions_dir = Path("data/questions_synthetic")
         episodes_file = Path("data/episodes/episodes_synthetic.jsonl")
 
         total_q, existing, existing_ids = _show_episode_preflight(
-            "synthetic", questions_dir, episodes_file
+            "template", questions_dir, episodes_file
         )
         remaining = total_q - existing
 
         if remaining == 0:
-            console.print("\n[green]All synthetic questions already processed![/green]")
+            console.print("\n[green]All template questions already processed![/green]")
         elif dry_run:
             console.print(
                 f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
@@ -451,13 +466,45 @@ def cmd_generate_episodes(
                     output_path=str(episodes_file),
                     max_questions=max_questions,
                     skip_existing=existing_ids if not fresh else set(),
+                    subtype="template",
                 )
             )
             if result != 0:
                 exit_code = result
 
-    if llm:
-        questions_dir = Path("data/questions")
+    if procedural:
+        questions_dir = Path("data/questions_synthetic")
+        episodes_file = Path("data/episodes/episodes_synthetic.jsonl")
+
+        total_q, existing, existing_ids = _show_episode_preflight(
+            "procedural", questions_dir, episodes_file
+        )
+        remaining = total_q - existing
+
+        if remaining == 0:
+            console.print("\n[green]All procedural questions already processed![/green]")
+        elif dry_run:
+            console.print(
+                f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
+            )
+        else:
+            import asyncio
+            from src.datagen.validate_synthetic import main as synth_ep_main
+
+            result = asyncio.run(
+                synth_ep_main(
+                    questions_dir=str(questions_dir),
+                    output_path=str(episodes_file),
+                    max_questions=max_questions,
+                    skip_existing=existing_ids if not fresh else set(),
+                    subtype="program",
+                )
+            )
+            if result != 0:
+                exit_code = result
+
+    if llm_gen:
+        questions_dir = Path("data/questions_llm")
         episodes_file = Path("data/episodes/episodes_llm.jsonl")
 
         total_q, existing, existing_ids = _show_episode_preflight(
@@ -502,29 +549,30 @@ def cmd_generate_episodes(
 # ============= Run Command =============
 
 
-def cmd_run(mode: str, triangulate: bool, test: bool, dry_run: bool):
+def cmd_run(mode: str, test: bool, dry_run: bool):
     """Run full pipeline."""
+    template, procedural, llm_gen = _modes_from_flag(mode)
     if dry_run:
         console.print("[bold]Dry Run - Full Pipeline[/bold]\n")
         console.print(f"  Mode: {mode}")
-        console.print(f"  Triangulate only: {triangulate}")
         console.print(f"  Test mode: {test}")
 
-        if mode in ("synth", "both") and not triangulate:
-            console.print("\n  Stage 1a: Generate synthetic questions")
-        if mode in ("synth", "both"):
-            console.print("  Stage 2a: Generate synthetic episodes")
-        if mode in ("llm", "both") and not triangulate:
-            console.print("  Stage 1b: Generate LLM questions")
-        if mode in ("llm", "both"):
-            console.print("  Stage 2b: Generate LLM episodes")
+        if template:
+            console.print("\n  Stage 1a: Generate template questions")
+            console.print("  Stage 2a: Generate template episodes")
+        if procedural:
+            console.print("  Stage 1b: Generate procedural questions")
+            console.print("  Stage 2b: Generate procedural episodes")
+        if llm_gen:
+            console.print("  Stage 1c: Generate LLM questions")
+            console.print("  Stage 2c: Generate LLM episodes")
 
         console.print("\n[dim]No changes made (dry run)[/dim]")
         return 0
 
     from src.datagen.pipeline import main as run_all_main
 
-    return run_all_main(mode=mode, triangulate=triangulate, test=test)
+    return run_all_main(mode=mode, test=test)
 
 
 # ============= Inspect Commands =============
@@ -898,9 +946,10 @@ def _interactive_generate_questions():
     source = questionary.select(
         "Question generation method:",
         choices=[
-            questionary.Choice("Synthetic (fast, deterministic)", value="synth"),
-            questionary.Choice("LLM-based (slow, exploratory)", value="llm"),
-            questionary.Choice("Both", value="both"),
+            questionary.Choice("Template", value="template"),
+            questionary.Choice("Procedural", value="procedural"),
+            questionary.Choice("LLM", value="llm_gen"),
+            questionary.Choice("All", value="all"),
         ],
     ).ask()
 
@@ -915,19 +964,15 @@ def _interactive_generate_questions():
 
     dry_run = questionary.confirm("Dry run (preview only)?", default=False).ask()
 
-    synth = source in ("synth", "both")
-    llm = source in ("llm", "both")
-
     # Only ask about regenerate if LLM mode is selected
     regenerate = False
-    if llm:
+    if source in ("llm_gen", "all"):
         regenerate = questionary.confirm(
             "Regenerate questions even if episodes exist?", default=False
         ).ask()
 
     cmd_generate_questions(
-        synth=synth,
-        llm=llm,
+        mode=source,
         max_datasets=max_datasets,
         dry_run=dry_run,
         regenerate=regenerate,
@@ -939,9 +984,10 @@ def _interactive_generate_episodes():
     source = questionary.select(
         "Episode source:",
         choices=[
-            questionary.Choice("Synthetic questions", value="synth"),
-            questionary.Choice("LLM questions", value="llm"),
-            questionary.Choice("Both", value="both"),
+            questionary.Choice("Template questions", value="template"),
+            questionary.Choice("Procedural questions", value="procedural"),
+            questionary.Choice("LLM questions", value="llm_gen"),
+            questionary.Choice("All", value="all"),
         ],
     ).ask()
 
@@ -956,11 +1002,8 @@ def _interactive_generate_episodes():
 
     dry_run = questionary.confirm("Dry run (preview only)?", default=False).ask()
 
-    synth = source in ("synth", "both")
-    llm = source in ("llm", "both")
-
     cmd_generate_episodes(
-        synth=synth, llm=llm, max_questions=max_questions, dry_run=dry_run
+        mode=source, max_questions=max_questions, dry_run=dry_run
     )
 
 
@@ -969,18 +1012,15 @@ def _interactive_run():
     mode = questionary.select(
         "Pipeline mode:",
         choices=[
-            questionary.Choice("Both (synthetic + LLM)", value="both"),
-            questionary.Choice("Synthetic only", value="synth"),
-            questionary.Choice("LLM only", value="llm"),
+            questionary.Choice("All", value="all"),
+            questionary.Choice("Template only", value="template"),
+            questionary.Choice("Procedural only", value="procedural"),
+            questionary.Choice("LLM only", value="llm_gen"),
         ],
     ).ask()
 
     if mode is None:
         return
-
-    triangulate = questionary.confirm(
-        "Skip question generation (episodes only)?", default=False
-    ).ask()
 
     test = questionary.confirm(
         "Test mode (1 dataset, 1 question)?", default=False
@@ -988,12 +1028,14 @@ def _interactive_run():
 
     dry_run = questionary.confirm("Dry run (preview only)?", default=False).ask()
 
-    cmd_run(mode=mode, triangulate=triangulate, test=test, dry_run=dry_run)
+    cmd_run(mode=mode, test=test, dry_run=dry_run)
 
 
 def _interactive_inspect_questions():
     """Interactive question inspection."""
-    source = questionary.select("Question source:", choices=["synthetic", "llm"]).ask()
+    source = questionary.select(
+        "Question source:", choices=["template", "procedural", "llm_gen", "all"]
+    ).ask()
 
     if source is None:
         return
@@ -1032,10 +1074,10 @@ def build_parser():
 Examples:
   csvagent                          # Interactive menu
   csvagent status                   # View data inventory
-  csvagent generate questions --synth
-  csvagent generate episodes --llm --dry-run
-  csvagent run --both --test
-  csvagent inspect questions --source synthetic
+  csvagent generate questions --template
+  csvagent generate episodes --llm-gen --dry-run
+  csvagent run --all --test
+  csvagent inspect questions --source template
   csvagent inspect trace abc123
         """,
     )
@@ -1054,10 +1096,11 @@ Examples:
     gen_sub = gen_parser.add_subparsers(dest="gen_type", required=True)
 
     q_parser = gen_sub.add_parser("questions", help="Generate questions")
-    q_parser.add_argument(
-        "--synth", action="store_true", help="Synthetic (template-based)"
-    )
-    q_parser.add_argument("--llm", action="store_true", help="LLM exploration")
+    q_mode = q_parser.add_mutually_exclusive_group(required=True)
+    q_mode.add_argument("--template", action="store_const", dest="mode", const="template")
+    q_mode.add_argument("--procedural", action="store_const", dest="mode", const="procedural")
+    q_mode.add_argument("--llm-gen", action="store_const", dest="mode", const="llm_gen")
+    q_mode.add_argument("--all", action="store_const", dest="mode", const="all")
     q_parser.add_argument("--max-datasets", type=int, help="Limit datasets")
     q_parser.add_argument("--dry-run", action="store_true", help="Preview only")
     q_parser.add_argument(
@@ -1067,10 +1110,11 @@ Examples:
     )
 
     e_parser = gen_sub.add_parser("episodes", help="Generate episodes")
-    e_parser.add_argument(
-        "--synth", action="store_true", help="From synthetic questions"
-    )
-    e_parser.add_argument("--llm", action="store_true", help="From LLM questions")
+    e_mode = e_parser.add_mutually_exclusive_group(required=True)
+    e_mode.add_argument("--template", action="store_const", dest="mode", const="template")
+    e_mode.add_argument("--procedural", action="store_const", dest="mode", const="procedural")
+    e_mode.add_argument("--llm-gen", action="store_const", dest="mode", const="llm_gen")
+    e_mode.add_argument("--all", action="store_const", dest="mode", const="all")
     e_parser.add_argument("--max-questions", type=int, help="Max per dataset")
     e_parser.add_argument("--dry-run", action="store_true", help="Preview only")
     e_parser.add_argument(
@@ -1079,12 +1123,11 @@ Examples:
 
     # run
     run_parser = subparsers.add_parser("run", help="Run full pipeline")
-    run_mode = run_parser.add_mutually_exclusive_group()
-    run_mode.add_argument("--synth", action="store_const", dest="mode", const="synth")
-    run_mode.add_argument("--llm", action="store_const", dest="mode", const="llm")
-    run_mode.add_argument("--both", action="store_const", dest="mode", const="both")
-    run_parser.set_defaults(mode="both")
-    run_parser.add_argument("--triangulate", action="store_true", help="Episodes only")
+    run_mode = run_parser.add_mutually_exclusive_group(required=True)
+    run_mode.add_argument("--template", action="store_const", dest="mode", const="template")
+    run_mode.add_argument("--procedural", action="store_const", dest="mode", const="procedural")
+    run_mode.add_argument("--llm-gen", action="store_const", dest="mode", const="llm_gen")
+    run_mode.add_argument("--all", action="store_const", dest="mode", const="all")
     run_parser.add_argument("--test", action="store_true", help="Quick test mode")
     run_parser.add_argument("--dry-run", action="store_true", help="Preview only")
 
@@ -1096,7 +1139,9 @@ Examples:
     iq_parser.add_argument("--dataset", help="Specific dataset")
     iq_parser.add_argument("--sample", type=int, default=5, help="Number to show")
     iq_parser.add_argument(
-        "--source", choices=["synthetic", "llm"], default="synthetic"
+        "--source",
+        choices=["template", "procedural", "llm_gen", "all"],
+        required=True,
     )
     iq_parser.add_argument("--show-hint", action="store_true")
     iq_parser.add_argument("--show-answer", action="store_true")
@@ -1203,16 +1248,14 @@ def main():
     elif args.command == "generate":
         if args.gen_type == "questions":
             return cmd_generate_questions(
-                synth=args.synth,
-                llm=args.llm,
+                mode=args.mode,
                 max_datasets=args.max_datasets,
                 dry_run=args.dry_run,
                 regenerate=args.regenerate,
             )
         elif args.gen_type == "episodes":
             return cmd_generate_episodes(
-                synth=args.synth,
-                llm=args.llm,
+                mode=args.mode,
                 max_questions=args.max_questions,
                 dry_run=args.dry_run,
                 fresh=args.fresh,
@@ -1221,7 +1264,6 @@ def main():
     elif args.command == "run":
         return cmd_run(
             mode=args.mode,
-            triangulate=args.triangulate,
             test=args.test,
             dry_run=args.dry_run,
         )

@@ -343,6 +343,7 @@ async def main(
     skip_existing: set | None = None,
     difficulties: list[str] | None = None,
     retry_failed: bool = False,
+    subtype: str | None = None,
 ):
     ui = EpisodeGenUI()
 
@@ -433,6 +434,8 @@ async def main(
             continue
 
         questions = load_questions(str(qf))
+        if subtype:
+            questions = [q for q in questions if q.get("subtype") == subtype]
 
         # Filter out already-processed questions using manifest
         # Compute dataset hash (cached per dataset)
@@ -646,6 +649,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Retry questions that previously failed validation",
     )
+    parser.add_argument(
+        "--subtype",
+        choices=["template", "program"],
+        default=None,
+        help="Only process questions with this subtype",
+    )
     args = parser.parse_args()
 
     try:
@@ -660,6 +669,7 @@ if __name__ == "__main__":
                     gui_progress=args.gui_progress,
                     difficulties=args.difficulties,
                     retry_failed=args.retry_failed,
+                    subtype=args.subtype,
                 )
             )
         )

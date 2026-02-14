@@ -4,10 +4,10 @@ Full pipeline orchestrator.
 Runs all data generation stages sequentially to avoid resource conflicts.
 
 Usage (via CLI):
-    csvagent run --both        # Full pipeline (default)
-    csvagent run --synth       # Synthetic only
-    csvagent run --llm         # LLM only
-    csvagent run --triangulate # Episodes only (skip question gen)
+    csvagent run --all         # Full pipeline
+    csvagent run --template    # Template mode only
+    csvagent run --procedural  # Procedural mode only
+    csvagent run --llm-gen     # LLM generation mode only
     csvagent run --test        # Quick e2e test (1 question, 1 trace)
 """
 
@@ -51,8 +51,7 @@ def run_stage(name: str, cmd: list[str]) -> bool:
 
 
 def main(
-    mode: str = "both",
-    triangulate: bool = False,
+    mode: str = "all",
     test: bool = False,
     max_questions: int | None = None,
 ) -> int:
@@ -60,16 +59,16 @@ def main(
     Run full data generation pipeline.
 
     Args:
-        mode: "synth", "llm", or "both"
-        triangulate: Skip question generation, only run episodes
+        mode: "template", "procedural", "llm_gen", or "all"
         test: Quick e2e test (1 dataset, 1 question, 1 consistency trace)
         max_questions: Limit questions per dataset
 
     Returns:
         0 if all stages succeeded, 1 if any failed
     """
-    run_synthetic = mode in ("synth", "both")
-    run_llm = mode in ("llm", "both")
+    run_template = mode in ("template", "all")
+    run_procedural = mode in ("procedural", "all")
+    run_llm = mode in ("llm_gen", "all")
 
     # Test mode: minimal settings for fast iteration
     n_consistency = None
@@ -83,18 +82,18 @@ def main(
     stages_run = 0
     stages_failed = 0
 
-    # Stage 1: Synthetic Questions
-    if run_synthetic and not triangulate:
+    # Stage 1a: Template Questions
+    if run_template:
         cmd = ["uv", "run", "python", "-m", "src.datagen.synthetic.generator"]
         if max_datasets:
             cmd.extend(["--max-datasets", str(max_datasets)])
-        if run_stage("Stage 1a: Generate Synthetic Questions", cmd):
+        if run_stage("Stage 1a: Generate Template Questions", cmd):
             stages_run += 1
         else:
             stages_failed += 1
 
-    # Stage 2: Synthetic Episodes
-    if run_synthetic:
+    # Stage 2a: Template Episodes
+    if run_template:
         cmd = [
             "uv",
             "run",
@@ -105,26 +104,61 @@ def main(
             str(config.questions_synthetic_dir),
             "--output",
             str(config.episodes_synthetic_jsonl),
+            "--subtype",
+            "template",
         ]
         if max_questions:
             cmd.extend(["--max-questions", str(max_questions)])
 
-        if run_stage("Stage 2a: Generate Synthetic Episodes", cmd):
+        if run_stage("Stage 2a: Generate Template Episodes", cmd):
             stages_run += 1
         else:
             stages_failed += 1
 
-    # Stage 3: LLM Questions
-    if run_llm and not triangulate:
+    # Stage 1b: Procedural Questions
+    if run_procedural:
+        cmd = ["uv", "run", "python", "-m", "src.datagen.synthetic.programs.runner"]
+        if max_datasets:
+            cmd.extend(["--max-datasets", str(max_datasets)])
+        if run_stage("Stage 1b: Generate Procedural Questions", cmd):
+            stages_run += 1
+        else:
+            stages_failed += 1
+
+    # Stage 2b: Procedural Episodes
+    if run_procedural:
+        cmd = [
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "src.datagen.validate_synthetic",
+            "--questions-dir",
+            str(config.questions_synthetic_dir),
+            "--output",
+            str(config.episodes_synthetic_jsonl),
+            "--subtype",
+            "program",
+        ]
+        if max_questions:
+            cmd.extend(["--max-questions", str(max_questions)])
+
+        if run_stage("Stage 2b: Generate Procedural Episodes", cmd):
+            stages_run += 1
+        else:
+            stages_failed += 1
+
+    # Stage 1c: LLM Questions
+    if run_llm:
         cmd = ["uv", "run", "python", "-m", "src.datagen.question_gen"]
         if max_datasets:
             cmd.extend(["--max-datasets", str(max_datasets)])
-        if run_stage("Stage 1b: Generate LLM Questions", cmd):
+        if run_stage("Stage 1c: Generate LLM Questions", cmd):
             stages_run += 1
         else:
             stages_failed += 1
 
-    # Stage 4: LLM Episodes (with triangulation)
+    # Stage 2c: LLM Episodes
     if run_llm:
         cmd = [
             "uv",
@@ -143,7 +177,7 @@ def main(
         if n_consistency:
             cmd.extend(["--n-consistency", str(n_consistency)])
 
-        if run_stage("Stage 2b: Generate LLM Episodes (triangulated)", cmd):
+        if run_stage("Stage 2c: Generate LLM Episodes", cmd):
             stages_run += 1
         else:
             stages_failed += 1
@@ -155,11 +189,11 @@ def main(
     print(f"  Stages run: {stages_run}")
     print(f"  Stages failed: {stages_failed}")
 
-    if run_synthetic:
+    if run_template or run_procedural:
         synth_episodes = Path(config.episodes_synthetic_jsonl)
         if synth_episodes.exists():
             count = sum(1 for _ in open(synth_episodes))
-            print(f"  Synthetic episodes: {count}")
+            print(f"  Template/Procedural episodes: {count}")
 
     if run_llm:
         llm_episodes = Path(config.episodes_llm_jsonl)
