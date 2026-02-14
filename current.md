@@ -441,6 +441,35 @@ spec candidates (not yet promoted):
   - review checks:
     - rubric explains at least one concrete merge candidate.
 
+### Pipeline Orchestrator Refactor Follow-up
+status: open
+readiness: early
+
+discussion:
+- PR feedback indicates `src/datagen/pipeline.py` orchestration flow is hard to read after S3 fixes. // user note in PR: "this function does feel kind of mangled together."
+- Keep behavior unchanged; focus this item on structure/decomposition only.
+
+spec candidates (not yet promoted):
+- candidate: pipeline-orchestrator decomposition
+  - behavior change: split orchestration helpers for stage config, synthetic append/skip handling, and summary reporting.
+  - files to touch:
+    - `src/datagen/pipeline.py`
+    - tests that assert stage ordering/flags
+  - fail-first tests:
+    - verify `run --all` preserves stage 2a + 2b outputs and does not regress explicit mode behavior.
+  - non-goals:
+    - no command contract changes.
+    - no new generation logic.
+  - risks:
+    - accidental stage ordering regressions during extraction.
+  - touch points:
+    - stage builder helpers
+    - skip-existing ID loading and append behavior
+  - expected diff shape:
+    - refactor-only, ~80-180 LOC
+  - review checks:
+    - `pipeline.main` reads as orchestration only (minimal inline logic).
+
 ## Specd
 - title: Pipeline Contract Cleanup -> strict-answer-contract purge
   status: ready

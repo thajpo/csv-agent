@@ -372,11 +372,11 @@ def _show_episode_preflight(
 
     def _matches_source(question: dict, selected_source: str) -> bool:
         if selected_source == "template":
-            return question.get("subtype") == "template"
+            return not question.get("is_procedural", False)
         if selected_source == "procedural":
-            return question.get("subtype") == "program"
+            return question.get("is_procedural", False)
         if selected_source == "llm_gen":
-            return question.get("subtype") == "llm" or question.get("source") == "llm"
+            return question.get("source") == "llm"
         return True
 
     # Count total questions available for selected source

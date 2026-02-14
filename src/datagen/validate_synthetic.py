@@ -435,11 +435,11 @@ async def main(
 
         questions = load_questions(str(qf))
         if source:
-            source_to_subtype = {"template": "template", "procedural": "program"}
-            subtype = source_to_subtype.get(source)
-            if subtype is None:
-                raise ValueError(f"Invalid source: {source}")
-            questions = [q for q in questions if q.get("subtype") == subtype]
+            source_filters = {
+                "template": lambda q: not q.get("is_procedural", False),
+                "procedural": lambda q: q.get("is_procedural", False),
+            }
+            questions = [q for q in questions if source_filters[source](q)]
 
         # Filter out already-processed questions using manifest
         # Compute dataset hash (cached per dataset)

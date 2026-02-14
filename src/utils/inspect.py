@@ -49,12 +49,12 @@ def inspect_questions(
         else:
             files.extend(questions_dir.glob("*/questions.json"))
 
-    if source == "template":
-        subtype_filter = "template"
-    elif source == "procedural":
-        subtype_filter = "program"
-    else:
-        subtype_filter = None
+    source_filters = {
+        "template": lambda q: not q.get("is_procedural", False),
+        "procedural": lambda q: q.get("is_procedural", False),
+        "llm_gen": lambda q: q.get("source") == "llm",
+        "all": lambda q: True,
+    }
 
     if not files:
         console.print("[yellow]No questions found for selected source[/yellow]")
@@ -67,8 +67,7 @@ def inspect_questions(
         with open(qf) as f:
             data = json.load(f)
         questions = data.get("questions", data if isinstance(data, list) else [])
-        if subtype_filter:
-            questions = [q for q in questions if q.get("subtype") == subtype_filter]
+        questions = [q for q in questions if source_filters[source](q)]
         total_questions += len(questions)
         if not sample_questions and questions:
             sample_questions = questions[:sample]
@@ -349,4 +348,3 @@ Examples:
         )
     elif args.command == "trace":
         inspect_trace(episode_id=args.episode_id, output=args.output)
-
