@@ -43,7 +43,8 @@ def validate_hooks_grounded(
     """
     Validate that each hook's code_line is grounded in the executed code.
 
-    A hook is "grounded" if its code_line appears as a substring in any executed code cell.
+    A hook is "grounded" if its normalized code_line exactly matches a normalized
+    executed line.
     This prevents the model from hallucinating code_lines that weren't actually run.
 
     Args:
@@ -53,8 +54,13 @@ def validate_hooks_grounded(
     Returns:
         Tuple of (grounded_hooks, ungrounded_hooks)
     """
-    # Concatenate all code cells for searching
-    all_code = "\n".join(code_cells)
+    # Normalize executed code into a set of full lines.
+    executed_lines = set()
+    for cell in code_cells:
+        for line in cell.splitlines():
+            normalized = " ".join(line.split())
+            if normalized:
+                executed_lines.add(normalized)
 
     grounded = []
     ungrounded = []
@@ -67,9 +73,8 @@ def validate_hooks_grounded(
 
         # Normalize whitespace for matching (strip leading/trailing, collapse internal)
         normalized_code_line = " ".join(code_line.split())
-        normalized_all_code = " ".join(all_code.split())
 
-        if normalized_code_line in normalized_all_code:
+        if normalized_code_line in executed_lines:
             grounded.append(hook)
         else:
             ungrounded.append(hook)
