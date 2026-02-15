@@ -220,7 +220,7 @@ async def process_dataset(
             episode = await create_episode(
                 question=q_dict,
                 verification_result=verification_result,
-                source="synthetic",
+                source=q_dict.get("source", "template"),
                 csv_path=str(csv_path),
             )
 
@@ -436,8 +436,8 @@ async def main(
         questions = load_questions(str(qf))
         if source:
             source_filters = {
-                "template": lambda q: not q.get("is_procedural", False),
-                "procedural": lambda q: q.get("is_procedural", False),
+                "template": lambda q: q.get("source") == "template",
+                "procedural": lambda q: q.get("source") == "procedural",
             }
             questions = [q for q in questions if source_filters[source](q)]
 

@@ -60,8 +60,7 @@ async def test_program_generator_outputs_unified_schema(temp_output_dir):
     # Verify unified schema fields
     for q in questions:
         assert q["id"].startswith("prog_"), f"ID should start with prog_: {q['id']}"
-        assert q["source"] == "synthetic"
-        assert q["subtype"] == "program"
+        assert q["source"] == "procedural"
         assert "dataset" in q
         assert "question_mechanical" in q
         assert "question_text" in q

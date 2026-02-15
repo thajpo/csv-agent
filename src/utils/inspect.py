@@ -50,8 +50,8 @@ def inspect_questions(
             files.extend(questions_dir.glob("*/questions.json"))
 
     source_filters = {
-        "template": lambda q: not q.get("is_procedural", False),
-        "procedural": lambda q: q.get("is_procedural", False),
+        "template": lambda q: q.get("source") == "template",
+        "procedural": lambda q: q.get("source") == "procedural",
         "llm_gen": lambda q: q.get("source") == "llm",
         "all": lambda q: True,
     }

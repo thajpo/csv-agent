@@ -513,8 +513,7 @@ class CompositionalQuestionGenerator:
                 code_hash = hash_artifact(item["code"])
                 accepted = {
                     "id": question_id,
-                    "source": "synthetic",
-                    "subtype": "template",
+                    "source": "template",
                     "dataset": self.dataset_name,
                     "question_mechanical": mechanical_question,
                     "question_text": None if is_mechanical else question_text,
@@ -598,7 +597,7 @@ class CompositionalQuestionGenerator:
                             total_elapsed=elapsed,
                             avg_elapsed=elapsed,
                         ),
-                        source="synthetic",
+                        source="template",
                     )
                     with open(episodes_jsonl, "a") as f:
                         f.write(episode.model_dump_json() + "\n")

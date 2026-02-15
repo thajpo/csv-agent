@@ -263,8 +263,7 @@ async def run_pipeline(
         # Build unified schema record
         record = {
             "id": question_id,
-            "source": "synthetic",
-            "subtype": "program",
+            "source": "procedural",
             "dataset": dataset_name,
             "question_mechanical": _generate_mechanical_description(ops),
             "question_text": item["question"],
@@ -284,12 +283,12 @@ async def run_pipeline(
     # Save batch
     questions_file = output_path / "questions.json"
     if questions_file.exists():
-        # Preserve previously generated non-program questions (e.g., template records).
+        # Preserve previously generated non-procedural questions (e.g., template records).
         with open(questions_file) as f:
             existing = json.load(f)
         if isinstance(existing, dict):
             existing = existing.get("questions", [])
-        preserved = [q for q in existing if q.get("subtype") != "program"]
+        preserved = [q for q in existing if q.get("source") != "procedural"]
         question_records = preserved + question_records
 
     with open(questions_file, "w") as f:

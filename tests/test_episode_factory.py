@@ -129,13 +129,13 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_success,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
         assert isinstance(episode, EpisodeJSONL)
         assert episode.verified is True
-        assert episode.source == "synthetic"
+        assert episode.source == "template"
         assert episode.csv_source == "/path/to/data.csv"
         assert episode.question["question_text"] == "What is the average age?"
         assert episode.gold_trace["final_answer"] == 42.5
@@ -153,13 +153,13 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_failure,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
         assert isinstance(episode, EpisodeJSONL)
         assert episode.verified is False
-        assert episode.source == "synthetic"
+        assert episode.source == "template"
         assert episode.triangulation["gold_matches_majority"] is False
 
     @pytest.mark.asyncio
@@ -215,7 +215,7 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_success,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
@@ -236,7 +236,7 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_success,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
@@ -256,7 +256,7 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_success,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
         after = datetime.now()
@@ -299,7 +299,7 @@ class TestCreateEpisodeFromGroundTruth:
 
         assert isinstance(episode, EpisodeJSONL)
         assert episode.verified is True
-        assert episode.source == "synthetic"
+        assert episode.source == "template"
 
     @pytest.mark.asyncio
     async def test_create_from_ground_truth_with_source_override(
@@ -440,7 +440,7 @@ class TestEpisodeFactoryErrorHandling:
         episode = await create_episode(
             question=sample_question,
             verification_result=mock_result,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
@@ -467,7 +467,7 @@ class TestEpisodeFactoryErrorHandling:
         episode = await create_episode(
             question=sample_question,
             verification_result=mock_result,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 

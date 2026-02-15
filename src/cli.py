@@ -372,9 +372,9 @@ def _show_episode_preflight(
 
     def _matches_source(question: dict, selected_source: str) -> bool:
         if selected_source == "template":
-            return not question.get("is_procedural", False)
+            return question.get("source") == "template"
         if selected_source == "procedural":
-            return question.get("is_procedural", False)
+            return question.get("source") == "procedural"
         if selected_source == "llm_gen":
             return question.get("source") == "llm"
         return True
