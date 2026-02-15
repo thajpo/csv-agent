@@ -75,6 +75,7 @@ def run_synthetic_stage(
     max_questions: int | None,
     source: str,
     skip_existing: set[str] | None = None,
+    append_output: bool = False,
 ) -> bool:
     """Run synthetic episode generation in-process with source-scoped filtering."""
     print(f"\n{'=' * 60}")
@@ -88,6 +89,7 @@ def run_synthetic_stage(
             output_path=str(config.episodes_synthetic_jsonl),
             max_questions=max_questions,
             skip_existing=skip_existing,
+            append_output=append_output,
             source=source,
         )
     )
@@ -175,6 +177,7 @@ def main(
             max_questions=max_questions,
             source="procedural",
             skip_existing=existing_ids,
+            append_output=run_template,
         ):
             stages_run += 1
         else:

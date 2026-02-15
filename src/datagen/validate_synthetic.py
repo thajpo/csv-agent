@@ -341,6 +341,7 @@ async def main(
     n_workers: int = 4,
     gui_progress: str | None = None,
     skip_existing: set | None = None,
+    append_output: bool = False,
     difficulties: list[str] | None = None,
     retry_failed: bool = False,
     source: str | None = None,
@@ -405,8 +406,10 @@ async def main(
     output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
-    # Append mode if we're skipping existing, otherwise overwrite
-    append_mode = skip_existing is not None and len(skip_existing) > 0
+    # Append mode can be explicit, or inferred from skip-existing semantics.
+    append_mode = append_output or (
+        skip_existing is not None and len(skip_existing) > 0
+    )
     if not append_mode and output_jsonl.exists():
         output_jsonl.unlink()
 
