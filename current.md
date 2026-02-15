@@ -524,6 +524,36 @@ Risk:
 Notes:
 - user intent: clean up filter code and other dead code.
 
+### Repo Lint Debt Cleanup
+status: open
+readiness: early
+
+discussion:
+- Baseline PR lint is active and currently reports broad repo-level violations unrelated to active feature slices.
+- Need a dedicated cleanup pass so lint failures map to current PR scope.
+
+spec candidates (not yet promoted):
+- candidate: staged ruff debt burn-down
+  - behavior change: remove high-volume lint debt (unused imports/variables, extraneous f-strings, import ordering) in bounded batches.
+  - user intent: avoid unrelated lint failures blocking focused PR work.
+  - files to touch:
+    - `src/**`
+    - `scripts/**`
+    - optional lint config only if needed for phased rollout
+  - fail-first tests:
+    - CI `pr-checks / lint` passes on touched batches with no new violations.
+  - non-goals:
+    - no functional behavior changes.
+    - no blanket ignore rules that hide new regressions.
+  - risks:
+    - large mechanical diffs can increase merge conflict pressure.
+  - touch points:
+    - imports, formatting, unused symbol cleanup
+  - expected diff shape:
+    - multi-PR mechanical cleanup, ~100-400 LOC per slice
+  - review checks:
+    - each slice is behavior-neutral and keeps tests stable.
+
 ## Specd
 - title: Pipeline Contract Cleanup -> strict-answer-contract purge
   status: ready
