@@ -8,14 +8,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - name: Lint
         run: |
           if [ -f package.json ] && jq -e '.scripts.lint' package.json >/dev/null 2>&1; then
             npm ci
             npm run lint
           elif [ -f pyproject.toml ]; then
-            python -m pip install -e .[dev] || python -m pip install -e .
-            ruff check .
+            uv sync --dev
+            uv run ruff check .
           else
             echo "No lint command configured."
             exit 1
@@ -25,14 +31,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - name: Test
         run: |
           if [ -f package.json ] && jq -e '.scripts.test' package.json >/dev/null 2>&1; then
             npm ci
             npm test -- --runInBand
           elif [ -f pyproject.toml ]; then
-            python -m pip install -e .[dev] || python -m pip install -e .
-            pytest -q
+            uv sync --dev
+            uv run pytest -q
           else
             echo "No test command configured."
             exit 1
