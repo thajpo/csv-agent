@@ -497,6 +497,33 @@ spec candidates (not yet promoted):
   - review checks:
     - source-specific commands read/write only their source-scoped artifacts by default.
 
+### Cleanup) Filters + Dead Code Sweep
+status: open
+readiness: early
+
+Behavior change (candidate):
+- Remove unused filter/dead-code paths and standardize on one active filtering contract path.
+
+Candidate scope:
+- identify unused entrypoints (for example `apply_filters`) and stale exports.
+- either wire a single canonical filter path or delete unused wrappers.
+- remove redundant/legacy-only code that no longer has call sites.
+
+Surfaces likely involved:
+- `src/datagen/shared/filters.py`
+- `src/datagen/shared/__init__.py`
+- call sites under `src/datagen/` and related tests
+
+Non-goals:
+- no behavior-preserving shims for dead code.
+- no broad refactor beyond filtering/dead-code surfaces.
+
+Risk:
+- accidental removal of code used indirectly by scripts/tests.
+
+Notes:
+- user intent: clean up filter code and other dead code.
+
 ## Specd
 - title: Pipeline Contract Cleanup -> strict-answer-contract purge
   status: ready
