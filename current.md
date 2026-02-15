@@ -475,6 +475,28 @@ spec candidates (not yet promoted):
   - review checks:
     - `pipeline.main` reads as orchestration only (minimal inline logic).
 
+- candidate: source-split storage layout
+  - behavior change: split question/episode artifact storage by source (`template`, `procedural`, `llm`) instead of mixed synthetic files.
+  - user intent: make ownership and overwrite semantics explicit by directory/file layout.
+  - files to touch:
+    - `src/datagen/pipeline.py`
+    - `src/datagen/validate_synthetic.py`
+    - `src/datagen/synthetic/programs/program_generator.py`
+    - `src/cli.py`
+    - inspect/readers that assume mixed synthetic paths
+  - fail-first tests:
+    - assert `generate --all` and `run --all` keep each source artifact isolated with no cross-source truncation.
+  - non-goals:
+    - no schema redesign beyond storage layout.
+  - risks:
+    - migration complexity for existing mixed artifacts and scripts.
+  - touch points:
+    - output path resolution and default artifact names
+  - expected diff shape:
+    - multi-file refactor, ~120-260 LOC
+  - review checks:
+    - source-specific commands read/write only their source-scoped artifacts by default.
+
 ## Specd
 - title: Pipeline Contract Cleanup -> strict-answer-contract purge
   status: ready
