@@ -370,13 +370,16 @@ def _show_episode_preflight(
     """
     import json
 
-    def _matches_source(question: dict, selected_source: str) -> bool:
+    def _matches_source(
+        question: dict, selected_source: str, episode_source: str | None = None
+    ) -> bool:
+        question_source = question.get("source")
         if selected_source == "template":
-            return question.get("source") == "template"
+            return question_source == "template" or episode_source == "template"
         if selected_source == "procedural":
-            return question.get("source") == "procedural"
+            return question_source == "procedural" or episode_source == "procedural"
         if selected_source == "llm_gen":
-            return question.get("source") == "llm"
+            return question_source == "llm" or episode_source == "llm"
         return True
 
     # Count total questions available for selected source
@@ -399,7 +402,9 @@ def _show_episode_preflight(
                 for line in f:
                     ep = json.loads(line)
                     question = ep.get("question", {})
-                    if not _matches_source(question, source):
+                    if not _matches_source(
+                        question, source, episode_source=ep.get("source")
+                    ):
                         continue
                     qid = question.get("id", "")
                     if qid:
