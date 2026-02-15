@@ -2,7 +2,7 @@
 Test hook validation logic.
 
 Tests:
-- Hook grounding validation (code_line must be substring of executed code)
+- Hook grounding validation (code_line must exactly match executed code line)
 - Whitespace normalization in matching
 - Edge cases (empty hooks, missing code_line)
 """
@@ -24,17 +24,15 @@ class TestHookGrounding:
         assert len(grounded) == 1
         assert len(ungrounded) == 0
 
-    def test_substring_match(self):
-        """Hook code_line as substring of larger code block should be grounded."""
-        hooks = [{"code_line": "result = df['col'].mean()"}]
-        code_cells = [
-            "# Calculate mean\nresult = df['col'].mean()\nprint(result)"
-        ]
+    def test_substring_is_rejected(self):
+        """Substring-only match should be rejected."""
+        hooks = [{"code_line": "x = 1"}]
+        code_cells = ["x = 10"]
 
         grounded, ungrounded = validate_hooks_grounded(hooks, code_cells)
 
-        assert len(grounded) == 1
-        assert len(ungrounded) == 0
+        assert len(grounded) == 0
+        assert len(ungrounded) == 1
 
     def test_whitespace_normalization(self):
         """Whitespace differences should not prevent matching."""
@@ -46,15 +44,15 @@ class TestHookGrounding:
         assert len(grounded) == 1
         assert len(ungrounded) == 0
 
-    def test_multiline_normalization(self):
-        """Newlines in code_line should match after normalization."""
+    def test_multiline_code_line_is_ungrounded(self):
+        """Multiline code_line should not match when no exact executed line exists."""
         hooks = [{"code_line": "result = df.groupby('a')\n    .mean()"}]
-        code_cells = ["result = df.groupby('a')     .mean()"]
+        code_cells = ["result = df.groupby('a')", "result = result.mean()"]
 
         grounded, ungrounded = validate_hooks_grounded(hooks, code_cells)
 
-        assert len(grounded) == 1
-        assert len(ungrounded) == 0
+        assert len(grounded) == 0
+        assert len(ungrounded) == 1
 
     def test_ungrounded_hook(self):
         """Hook with code_line not in executed code should be ungrounded."""
