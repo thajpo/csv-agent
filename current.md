@@ -43,31 +43,36 @@ current code evidence:
   - `question` fallback reads still appear in multiple paths.
 
 missing:
-- One explicit procedural metadata policy (`source="synthetic", subtype="program"` vs separate source value).
+- Canonical triad schema contract across question/episode/inspect surfaces: `template | procedural | llm`.
+- Removal of parallel discriminator fields/labels that duplicate the triad concept.
 - Cleanup of fallback reads that silently normalize old shapes.
 
 spec candidates (not yet promoted):
 - candidate: procedural-metadata normalization
-  - behavior change: enforce single policy for procedural questions and episodes, then validate consistently.
+  - behavior change: enforce one triad schema end-to-end (`template|procedural|llm`) and remove parallel procedural flags/aliases from contract-facing paths.
+  - user intent: unify schema to explicit triad only; no split between boolean flags and subtype aliases.
   - files to touch:
     - `src/datagen/shared/questions_io.py`
     - `src/datagen/synthetic/programs/program_generator.py`
     - `src/datagen/shared/episode_factory.py`
+    - `src/datagen/validate_synthetic.py`
+    - `src/utils/inspect.py`
     - `tests/test_program_generator_schema.py`
     - `tests/test_episode_factory.py`
   - fail-first tests:
-    - assert procedural records conform to one policy and fail otherwise.
+    - assert triad vocabulary is the only accepted contract in touched CLI/inspect/validator surfaces.
+    - assert procedural records are represented via triad schema without auxiliary flag dependencies.
   - non-goals:
     - no downstream analytics redesign.
   - risks:
-    - breaks code expecting old `source="procedural"` episode labeling.
+    - breaks artifacts or scripts expecting legacy subtype/boolean distinctions.
   - touch points:
-    - `QuestionRecord` type and validation
-    - episode `source` assignment
+    - `QuestionRecord` type/validation contract
+    - episode source labeling + inspect filters
   - expected diff shape:
-    - modify, ~80-160 LOC
+    - modify, ~120-220 LOC
   - review checks:
-    - procedural data is unambiguous in both question and episode artifacts.
+    - all touched surfaces accept/emit only `template|procedural|llm` vocabulary.
 
 ### Synthetic Question Quality Improvements
 status: open
