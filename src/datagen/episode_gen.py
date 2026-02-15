@@ -292,7 +292,7 @@ async def process_csv_task(
         episode = await create_episode(
             question=r.question,
             verification_result=verification_result,
-            source="llm",
+            source="llm_gen",
             csv_path=task.csv_path,
         )
 

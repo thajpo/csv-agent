@@ -17,6 +17,7 @@ def sample_question() -> dict:
     """Sample question dict for testing."""
     return {
         "id": "test-123",
+        "source": "template",
         "question_text": "What is the average age?",
         "hint": "Use the 'age' column",
         "difficulty": "EASY",
@@ -129,13 +130,13 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_success,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
         assert isinstance(episode, EpisodeJSONL)
         assert episode.verified is True
-        assert episode.source == "synthetic"
+        assert episode.source == "template"
         assert episode.csv_source == "/path/to/data.csv"
         assert episode.question["question_text"] == "What is the average age?"
         assert episode.gold_trace["final_answer"] == 42.5
@@ -153,13 +154,13 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_failure,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
         assert isinstance(episode, EpisodeJSONL)
         assert episode.verified is False
-        assert episode.source == "synthetic"
+        assert episode.source == "template"
         assert episode.triangulation["gold_matches_majority"] is False
 
     @pytest.mark.asyncio
@@ -171,16 +172,18 @@ class TestCreateEpisode:
         """Test creating episode from consistency verification (LLM)."""
         from src.datagen.shared.episode_factory import create_episode
 
+        sample_question["source"] = "llm_gen"
+
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_consistency,
-            source="llm",
+            source="llm_gen",
             csv_path="/path/to/data.csv",
         )
 
         assert isinstance(episode, EpisodeJSONL)
         assert episode.verified is True
-        assert episode.source == "llm"
+        assert episode.source == "llm_gen"
         assert len(episode.consistency_traces) == 2
         assert episode.triangulation["n_consistency_runs"] == 2
 
@@ -192,6 +195,8 @@ class TestCreateEpisode:
     ):
         """Test creating episode from procedural question."""
         from src.datagen.shared.episode_factory import create_episode
+
+        sample_question["source"] = "procedural"
 
         episode = await create_episode(
             question=sample_question,
@@ -215,7 +220,7 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_success,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
@@ -236,7 +241,7 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_success,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
@@ -256,7 +261,7 @@ class TestCreateEpisode:
         episode = await create_episode(
             question=sample_question,
             verification_result=sample_verification_result_success,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
         after = datetime.now()
@@ -299,7 +304,7 @@ class TestCreateEpisodeFromGroundTruth:
 
         assert isinstance(episode, EpisodeJSONL)
         assert episode.verified is True
-        assert episode.source == "synthetic"
+        assert episode.source == "template"
 
     @pytest.mark.asyncio
     async def test_create_from_ground_truth_with_source_override(
@@ -309,6 +314,8 @@ class TestCreateEpisodeFromGroundTruth:
     ):
         """Test that source can be overridden for ground-truth."""
         from src.datagen.shared.episode_factory import create_episode_from_ground_truth
+
+        sample_question["source"] = "procedural"
 
         mock_result = VerificationResult(
             success=True,
@@ -346,6 +353,8 @@ class TestCreateEpisodeFromConsistency:
         """Test creating episode using consistency verification."""
         from src.datagen.shared.episode_factory import create_episode_from_consistency
 
+        sample_question["source"] = "llm_gen"
+
         consistency_trace: TraceDict = {
             "turns": [],
             "final_answer": 42.5,
@@ -376,7 +385,7 @@ class TestCreateEpisodeFromConsistency:
 
         assert isinstance(episode, EpisodeJSONL)
         assert episode.verified is True
-        assert episode.source == "llm"
+        assert episode.source == "llm_gen"
         assert len(episode.consistency_traces) == 2
 
     @pytest.mark.asyncio
@@ -387,6 +396,8 @@ class TestCreateEpisodeFromConsistency:
     ):
         """Test that n_consistency parameter is passed to verification."""
         from src.datagen.shared.episode_factory import create_episode_from_consistency
+
+        sample_question["source"] = "llm_gen"
 
         mock_result = VerificationResult(
             success=True,
@@ -440,7 +451,7 @@ class TestEpisodeFactoryErrorHandling:
         episode = await create_episode(
             question=sample_question,
             verification_result=mock_result,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 
@@ -467,7 +478,7 @@ class TestEpisodeFactoryErrorHandling:
         episode = await create_episode(
             question=sample_question,
             verification_result=mock_result,
-            source="synthetic",
+            source="template",
             csv_path="/path/to/data.csv",
         )
 

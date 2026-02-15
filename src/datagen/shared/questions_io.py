@@ -8,10 +8,25 @@ from pathlib import Path
 from typing import TypedDict, Literal, Any
 
 
+ALLOWED_SOURCES = ("llm_gen", "template", "procedural")
+UNIFIED_OPTIONAL_FIELDS = (
+    "question_text",
+    "question_mechanical",
+    "hint",
+    "code",
+    "code_hash",
+    "ground_truth",
+    "ground_truth_hash",
+    "output_schema",
+    "n_steps",
+    "difficulty",
+    "dataset_description",
+)
+
+
 class QuestionRecord(TypedDict, total=False):
     id: str
-    source: Literal["synthetic", "llm"]
-    subtype: Literal["template", "program", "llm"]
+    source: Literal["llm_gen", "template", "procedural"]
     is_procedural: bool
     dataset: str
     question_text: str | None
@@ -76,11 +91,12 @@ def save_questions(questions: list[QuestionRecord], path: str) -> None:
 def validate_question(q: dict) -> list[str]:
     """Return list of validation errors (empty if valid).
 
-    Validation = schema/contract checks (required fields + source-specific fields).
+    Validation = schema/contract checks (required fields + source constraints).
 
     Checks:
     - Required fields present
-    - Source-specific fields present (mechanical/code/ground_truth for synthetic, question_text for LLM)
+    - Source is one of llm_gen|template|procedural
+    - Unified optional metadata keys are always present (may be None)
 
     Args:
         q: Question dict to validate.
@@ -91,35 +107,25 @@ def validate_question(q: dict) -> list[str]:
     errors = []
 
     # Required for all
-    for field in ("id", "source", "subtype", "dataset"):
+    for field in ("id", "source", "dataset"):
         if field not in q or q[field] is None:
             errors.append(f"Missing required field: {field}")
+
+    # Unified contract: all metadata keys exist for all origin types
+    for field in UNIFIED_OPTIONAL_FIELDS:
+        if field not in q:
+            errors.append(f"Missing unified field: {field}")
+
+    if "subtype" in q:
+        errors.append("Field not allowed in unified contract: subtype")
 
     for legacy_field in ("_ground_truth", "_ground_truths"):
         if legacy_field in q:
             errors.append(f"Legacy answer key not allowed: {legacy_field}")
 
     source = q.get("source")
-    subtype = q.get("subtype")
 
-    if source == "synthetic":
-        # Required for synthetic
-        for field in (
-            "question_mechanical",
-            "code",
-            "code_hash",
-            "ground_truth",
-            "ground_truth_hash",
-            "output_schema",
-            "n_steps",
-        ):
-            if field not in q or q[field] is None:
-                errors.append(f"Missing required field for synthetic: {field}")
-    elif source == "llm":
-        # Required for LLM
-        if "question_text" not in q:
-            errors.append("Missing required field for LLM: question_text")
-    else:
+    if source not in ALLOWED_SOURCES:
         errors.append(f"Invalid source: {source}")
 
     return errors
