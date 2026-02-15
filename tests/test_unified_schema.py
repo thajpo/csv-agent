@@ -64,8 +64,7 @@ class TestTemplateUnifiedSchema:
                 assert len(errors) == 0, f"Validation errors: {errors}"
 
                 # Check required fields
-                assert q["source"] == "synthetic"
-                assert q["subtype"] == "template"
+                assert q["source"] == "template"
                 assert "question_mechanical" in q
                 assert "code" in q
                 assert "ground_truth" in q
@@ -99,8 +98,7 @@ class TestProgramUnifiedSchema:
                 errors = validate_question(q)
                 assert len(errors) == 0, f"Validation errors: {errors}"
 
-                assert q["source"] == "synthetic"
-                assert q["subtype"] == "program"
+                assert q["source"] == "procedural"
                 assert "program_name" in q
                 assert "program_ops" in q
 
@@ -118,8 +116,7 @@ class TestSyntheticVerification:
         # Create a simple synthetic question
         question = {
             "id": "test_question",
-            "source": "synthetic",
-            "subtype": "template",
+            "source": "template",
             "dataset": "test",
             "question_mechanical": "What is the mean of column A?",
             "question_text": "What is the average value?",
@@ -156,7 +153,6 @@ class TestLLMQuestionLoad:
         llm_question = {
             "id": "llm_test_001",
             "source": "llm",
-            "subtype": "llm",
             "dataset": "test_dataset",
             "question_text": "What is the correlation between age and income?",
             "hint": "Consider using correlation analysis",
@@ -176,7 +172,7 @@ class TestLLMQuestionLoad:
 
             q = loaded[0]
             assert q["source"] == "llm"
-            assert q["subtype"] == "llm"
+            
             assert "question_text" in q
             assert (
                 q["question_text"] == "What is the correlation between age and income?"

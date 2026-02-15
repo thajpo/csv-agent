@@ -220,7 +220,7 @@ async def process_dataset(
             episode = await create_episode(
                 question=q_dict,
                 verification_result=verification_result,
-                source="synthetic",
+                source=q_dict.get("source", "template"),
                 csv_path=str(csv_path),
             )
 
@@ -341,8 +341,10 @@ async def main(
     n_workers: int = 4,
     gui_progress: str | None = None,
     skip_existing: set | None = None,
+    append_output: bool = False,
     difficulties: list[str] | None = None,
     retry_failed: bool = False,
+    source: str | None = None,
 ):
     ui = EpisodeGenUI()
 
@@ -404,8 +406,10 @@ async def main(
     output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
-    # Append mode if we're skipping existing, otherwise overwrite
-    append_mode = skip_existing is not None and len(skip_existing) > 0
+    # Append mode can be explicit, or inferred from skip-existing semantics.
+    append_mode = append_output or (
+        skip_existing is not None and len(skip_existing) > 0
+    )
     if not append_mode and output_jsonl.exists():
         output_jsonl.unlink()
 
@@ -433,6 +437,12 @@ async def main(
             continue
 
         questions = load_questions(str(qf))
+        if source:
+            source_filters = {
+                "template": lambda q: q.get("source") == "template",
+                "procedural": lambda q: q.get("source") == "procedural",
+            }
+            questions = [q for q in questions if source_filters[source](q)]
 
         # Filter out already-processed questions using manifest
         # Compute dataset hash (cached per dataset)
@@ -646,6 +656,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Retry questions that previously failed validation",
     )
+    parser.add_argument(
+        "--source",
+        choices=["template", "procedural"],
+        default=None,
+        help="Only process questions for this source",
+    )
     args = parser.parse_args()
 
     try:
@@ -660,6 +676,7 @@ if __name__ == "__main__":
                     gui_progress=args.gui_progress,
                     difficulties=args.difficulties,
                     retry_failed=args.retry_failed,
+                    source=args.source,
                 )
             )
         )

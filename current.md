@@ -43,31 +43,36 @@ current code evidence:
   - `question` fallback reads still appear in multiple paths.
 
 missing:
-- One explicit procedural metadata policy (`source="synthetic", subtype="program"` vs separate source value).
+- Canonical triad schema contract across question/episode/inspect surfaces: `template | procedural | llm`.
+- Removal of parallel discriminator fields/labels that duplicate the triad concept.
 - Cleanup of fallback reads that silently normalize old shapes.
 
 spec candidates (not yet promoted):
 - candidate: procedural-metadata normalization
-  - behavior change: enforce single policy for procedural questions and episodes, then validate consistently.
+  - behavior change: enforce one triad schema end-to-end (`template|procedural|llm`) and remove parallel procedural flags/aliases from contract-facing paths.
+  - user intent: unify schema to explicit triad only; no split between boolean flags and subtype aliases.
   - files to touch:
     - `src/datagen/shared/questions_io.py`
     - `src/datagen/synthetic/programs/program_generator.py`
     - `src/datagen/shared/episode_factory.py`
+    - `src/datagen/validate_synthetic.py`
+    - `src/utils/inspect.py`
     - `tests/test_program_generator_schema.py`
     - `tests/test_episode_factory.py`
   - fail-first tests:
-    - assert procedural records conform to one policy and fail otherwise.
+    - assert triad vocabulary is the only accepted contract in touched CLI/inspect/validator surfaces.
+    - assert procedural records are represented via triad schema without auxiliary flag dependencies.
   - non-goals:
     - no downstream analytics redesign.
   - risks:
-    - breaks code expecting old `source="procedural"` episode labeling.
+    - breaks artifacts or scripts expecting legacy subtype/boolean distinctions.
   - touch points:
-    - `QuestionRecord` type and validation
-    - episode `source` assignment
+    - `QuestionRecord` type/validation contract
+    - episode source labeling + inspect filters
   - expected diff shape:
-    - modify, ~80-160 LOC
+    - modify, ~120-220 LOC
   - review checks:
-    - procedural data is unambiguous in both question and episode artifacts.
+    - all touched surfaces accept/emit only `template|procedural|llm` vocabulary.
 
 ### Synthetic Question Quality Improvements
 status: open
@@ -440,6 +445,57 @@ spec candidates (not yet promoted):
     - docs-only, ~30-70 LOC
   - review checks:
     - rubric explains at least one concrete merge candidate.
+
+### Pipeline Orchestrator Refactor Follow-up
+status: open
+readiness: early
+
+discussion:
+- PR feedback indicates `src/datagen/pipeline.py` orchestration flow is hard to read after S3 fixes. // user note in PR: "this function does feel kind of mangled together."
+- Keep behavior unchanged; focus this item on structure/decomposition only.
+
+spec candidates (not yet promoted):
+- candidate: pipeline-orchestrator decomposition
+  - behavior change: split orchestration helpers for stage config, synthetic append/skip handling, and summary reporting.
+  - files to touch:
+    - `src/datagen/pipeline.py`
+    - tests that assert stage ordering/flags
+  - fail-first tests:
+    - verify `run --all` preserves stage 2a + 2b outputs and does not regress explicit mode behavior.
+  - non-goals:
+    - no command contract changes.
+    - no new generation logic.
+  - risks:
+    - accidental stage ordering regressions during extraction.
+  - touch points:
+    - stage builder helpers
+    - skip-existing ID loading and append behavior
+  - expected diff shape:
+    - refactor-only, ~80-180 LOC
+  - review checks:
+    - `pipeline.main` reads as orchestration only (minimal inline logic).
+
+- candidate: source-split storage layout
+  - behavior change: split question/episode artifact storage by source (`template`, `procedural`, `llm`) instead of mixed synthetic files.
+  - user intent: make ownership and overwrite semantics explicit by directory/file layout.
+  - files to touch:
+    - `src/datagen/pipeline.py`
+    - `src/datagen/validate_synthetic.py`
+    - `src/datagen/synthetic/programs/program_generator.py`
+    - `src/cli.py`
+    - inspect/readers that assume mixed synthetic paths
+  - fail-first tests:
+    - assert `generate --all` and `run --all` keep each source artifact isolated with no cross-source truncation.
+  - non-goals:
+    - no schema redesign beyond storage layout.
+  - risks:
+    - migration complexity for existing mixed artifacts and scripts.
+  - touch points:
+    - output path resolution and default artifact names
+  - expected diff shape:
+    - multi-file refactor, ~120-260 LOC
+  - review checks:
+    - source-specific commands read/write only their source-scoped artifacts by default.
 
 ## Specd
 - title: Pipeline Contract Cleanup -> strict-answer-contract purge

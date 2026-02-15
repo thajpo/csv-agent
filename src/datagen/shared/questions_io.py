@@ -10,9 +10,7 @@ from typing import TypedDict, Literal, Any
 
 class QuestionRecord(TypedDict, total=False):
     id: str
-    source: Literal["synthetic", "llm"]
-    subtype: Literal["template", "program", "llm"]
-    is_procedural: bool
+    source: Literal["template", "procedural", "llm"]
     dataset: str
     question_text: str | None
     question_mechanical: str | None
@@ -91,19 +89,13 @@ def validate_question(q: dict) -> list[str]:
     errors = []
 
     # Required for all
-    for field in ("id", "source", "subtype", "dataset"):
+    for field in ("id", "source", "dataset"):
         if field not in q or q[field] is None:
             errors.append(f"Missing required field: {field}")
 
-    for legacy_field in ("_ground_truth", "_ground_truths"):
-        if legacy_field in q:
-            errors.append(f"Legacy answer key not allowed: {legacy_field}")
-
     source = q.get("source")
-    subtype = q.get("subtype")
-
-    if source == "synthetic":
-        # Required for synthetic
+    if source in ("template", "procedural"):
+        # Required for deterministic (template/procedural)
         for field in (
             "question_mechanical",
             "code",
@@ -114,7 +106,7 @@ def validate_question(q: dict) -> list[str]:
             "n_steps",
         ):
             if field not in q or q[field] is None:
-                errors.append(f"Missing required field for synthetic: {field}")
+                errors.append(f"Missing required field for {source}: {field}")
     elif source == "llm":
         # Required for LLM
         if "question_text" not in q:

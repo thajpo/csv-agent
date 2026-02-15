@@ -347,7 +347,6 @@ async def explore_and_generate_questions(
         record = {
             "id": q.get("id") or f"llm_{dataset_name}_{idx:04d}",
             "source": "llm",
-            "subtype": "llm",
             "dataset": dataset_name,
             "question_text": question_text,
             "hint": q.get("hint"),
