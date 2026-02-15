@@ -93,10 +93,6 @@ def validate_question(q: dict) -> list[str]:
         if field not in q or q[field] is None:
             errors.append(f"Missing required field: {field}")
 
-    for legacy_field in ("_ground_truth", "_ground_truths"):
-        if legacy_field in q:
-            errors.append(f"Legacy answer key not allowed: {legacy_field}")
-
     source = q.get("source")
     if source in ("template", "procedural"):
         # Required for deterministic (template/procedural)
@@ -117,10 +113,5 @@ def validate_question(q: dict) -> list[str]:
             errors.append("Missing required field for LLM: question_text")
     else:
         errors.append(f"Invalid source: {source}")
-
-    # Fail-fast triad contract: no parallel source/subtype discriminator.
-    for legacy_field in ("subtype", "is_procedural"):
-        if legacy_field in q:
-            errors.append(f"Legacy source discriminator not allowed: {legacy_field}")
 
     return errors
