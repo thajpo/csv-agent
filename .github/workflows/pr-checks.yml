@@ -21,7 +21,7 @@ jobs:
             npm run lint
           elif [ -f pyproject.toml ]; then
             uv sync --dev
-            uv run ruff check .
+            uv run --with ruff ruff check .
           else
             echo "No lint command configured."
             exit 1
