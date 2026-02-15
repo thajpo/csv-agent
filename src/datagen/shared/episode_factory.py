@@ -1,7 +1,7 @@
 """Episode factory for creating training episodes from verification results.
 
 This module centralizes episode creation for all question sources:
-- synthetic: Template-based questions with ground truth
+- template: Template-based questions with ground truth
 - llm: LLM-generated questions with consistency verification
 - procedural: Procedurally generated questions
 
@@ -10,7 +10,7 @@ Usage:
     episode = await create_episode(
         question=question_dict,
         verification_result=result,
-        source="synthetic",
+        source="template",
         csv_path="/path/to/data.csv",
     )
 
@@ -36,7 +36,7 @@ from src.datagen.shared.verification import VerificationResult, verify_question
 async def create_episode(
     question: dict,
     verification_result: VerificationResult,
-    source: Literal["synthetic", "llm", "procedural"],
+    source: Literal["template", "llm", "procedural"],
     csv_path: str,
 ) -> EpisodeJSONL:
     """Create episode from verification result.
@@ -44,7 +44,7 @@ async def create_episode(
     Args:
         question: Question metadata (must include id, question_text, hint, etc.)
         verification_result: Output from verify_question()
-        source: Origin of question ("synthetic", "llm", or "procedural")
+        source: Origin of question ("template", "procedural", or "llm")
         csv_path: Path to source CSV
 
     Returns:
@@ -133,7 +133,7 @@ def _calculate_majority_count(
 async def create_episode_from_ground_truth(
     question: dict, csv_path: str, model: str, **kwargs
 ) -> EpisodeJSONL:
-    """Convenience wrapper for ground-truth verification (synthetic/procedural).
+    """Convenience wrapper for ground-truth verification (template/procedural).
 
     Runs verification using the "ground_truth" strategy and creates an episode.
 
@@ -142,14 +142,14 @@ async def create_episode_from_ground_truth(
         csv_path: Path to CSV file
         model: Model identifier for teacher
         **kwargs: Additional arguments passed to verify_question and create_episode
-            - source: Override source (default: "synthetic")
+            - source: Override source (default: "template")
             - float_tol: Float tolerance for answer matching
             - ui: UI instance for progress display
 
     Returns:
         EpisodeJSONL created from ground-truth verification
     """
-    source = kwargs.pop("source", "synthetic")
+    source = kwargs.pop("source", "template")
 
     # Run ground-truth verification
     verification_result = await verify_question(

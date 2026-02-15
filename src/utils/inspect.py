@@ -26,48 +26,56 @@ console = Console()
 def inspect_questions(
     dataset: str | None = None,
     sample: int = 5,
-    source: str = "synthetic",
+    source: str = "template",
     show_hint: bool = False,
     show_answer: bool = False,
 ):
     """Preview generated questions."""
-    if source == "synthetic":
-        questions_dir = Path("data/questions_synthetic")
-    else:
-        questions_dir = Path("data/questions_llm")
+    if source in ("template", "procedural"):
+        questions_dirs = [Path("data/questions_synthetic")]
+    elif source == "llm_gen":
+        questions_dirs = [Path("data/questions_llm")]
+    else:  # all
+        questions_dirs = [Path("data/questions_synthetic"), Path("data/questions_llm")]
 
-    if not questions_dir.exists():
-        console.print(f"[red]Directory not found: {questions_dir}[/red]")
-        return
+    files = []
+    for questions_dir in questions_dirs:
+        if not questions_dir.exists():
+            continue
+        if dataset:
+            questions_file = questions_dir / dataset / "questions.json"
+            if questions_file.exists():
+                files.append(questions_file)
+        else:
+            files.extend(questions_dir.glob("*/questions.json"))
 
-    # Find question files
-    if dataset:
-        questions_file = questions_dir / dataset / "questions.json"
-        if not questions_file.exists():
-            console.print(f"[red]Not found: {questions_file}[/red]")
-            return
-        files = [questions_file]
-    else:
-        files = list(questions_dir.glob("*/questions.json"))
+    source_filters = {
+        "template": lambda q: q.get("source") == "template",
+        "procedural": lambda q: q.get("source") == "procedural",
+        "llm_gen": lambda q: q.get("source") == "llm",
+        "all": lambda q: True,
+    }
 
     if not files:
-        console.print(f"[yellow]No questions found in {questions_dir}[/yellow]")
+        console.print("[yellow]No questions found for selected source[/yellow]")
         return
 
     total_questions = 0
+    sample_questions: list[dict] = []
+    dataset_name = files[0].parent.name
     for qf in files:
         with open(qf) as f:
             data = json.load(f)
         questions = data.get("questions", data if isinstance(data, list) else [])
+        questions = [q for q in questions if source_filters[source](q)]
         total_questions += len(questions)
+        if not sample_questions and questions:
+            sample_questions = questions[:sample]
+            dataset_name = qf.parent.name
 
-    console.print(f"\n[bold]Found {total_questions} questions across {len(files)} datasets[/bold]\n")
-
-    # Show sample from first file (or specified dataset)
-    with open(files[0]) as f:
-        data = json.load(f)
-    questions = data.get("questions", data if isinstance(data, list) else [])[:sample]
-    dataset_name = files[0].parent.name
+    console.print(
+        f"\n[bold]Found {total_questions} questions across {len(files)} datasets[/bold]\n"
+    )
 
     table = Table(title=f"Questions from {dataset_name}")
     table.add_column("#", style="dim", width=3)
@@ -78,26 +86,26 @@ def inspect_questions(
     if show_answer:
         table.add_column("Answer", max_width=20)
 
-    for i, q in enumerate(questions, 1):
+    for i, q in enumerate(sample_questions, 1):
         row = [
             str(i),
-            q.get("difficulty", "?"),
-            q.get("question", "")[:60],
+            str(q.get("difficulty", "?")),
+            (q.get("question_text") or q.get("question_mechanical") or "")[:60],
         ]
         if show_hint:
             row.append((q.get("hint") or "")[:40])
         if show_answer:
-            ans = q.get("ground_truth") or q.get("_ground_truth")
-            row.append(str(ans)[:20] if ans else "?")
+            ans = q.get("ground_truth")
+            row.append(str(ans)[:20] if ans is not None else "?")
         table.add_row(*row)
 
     console.print(table)
 
     # Show one full question
-    if questions:
-        q = questions[0]
+    if sample_questions:
+        q = sample_questions[0]
         console.print(Panel(
-            f"[bold]{q.get('question', '')}[/bold]\n\n"
+            f"[bold]{q.get('question_text') or q.get('question_mechanical') or ''}[/bold]\n\n"
             f"[dim]Template:[/dim] {q.get('template_name', 'N/A')}\n"
             f"[dim]Difficulty:[/dim] {q.get('difficulty', 'N/A')}\n"
             f"[dim]Steps:[/dim] {q.get('n_steps', 'N/A')}\n"
@@ -301,7 +309,11 @@ Examples:
     q_parser = subparsers.add_parser("questions", help="Inspect generated questions")
     q_parser.add_argument("--dataset", help="Specific dataset name")
     q_parser.add_argument("--sample", type=int, default=5, help="Number to show")
-    q_parser.add_argument("--source", choices=["synthetic", "llm"], default="synthetic")
+    q_parser.add_argument(
+        "--source",
+        choices=["template", "procedural", "llm_gen", "all"],
+        required=True,
+    )
     q_parser.add_argument("--show-hint", action="store_true", help="Show hints")
     q_parser.add_argument("--show-answer", action="store_true", help="Show ground truth")
 
@@ -336,5 +348,3 @@ Examples:
         )
     elif args.command == "trace":
         inspect_trace(episode_id=args.episode_id, output=args.output)
-
-
