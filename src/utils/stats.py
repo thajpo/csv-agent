@@ -17,6 +17,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
+from src.core.paths import resolve_episodes_file, resolve_questions_dir
+
 
 console = Console()
 
@@ -35,8 +37,8 @@ def collect_questions_stats() -> dict:
 
     # Synthetic questions (template + procedural)
     synthetic_dirs = [
-        Path("data/questions/template"),
-        Path("data/questions/procedural"),
+        resolve_questions_dir("template"),
+        resolve_questions_dir("procedural"),
     ]
     for synth_dir in synthetic_dirs:
         if not synth_dir.exists():
@@ -57,7 +59,7 @@ def collect_questions_stats() -> dict:
                 stats["synthetic"]["by_template"][template] += 1
 
     # LLM questions
-    llm_dir = Path("data/questions/llm_gen")
+    llm_dir = resolve_questions_dir("llm_gen")
     if llm_dir.exists():
         for qf in llm_dir.glob("*/questions.json"):
             dataset = qf.parent.name
@@ -94,8 +96,8 @@ def collect_episodes_stats() -> dict:
 
     # Synthetic episodes (template + procedural)
     for synth_file in [
-        Path("data/episodes/template.jsonl"),
-        Path("data/episodes/procedural.jsonl"),
+        resolve_episodes_file("template"),
+        resolve_episodes_file("procedural"),
     ]:
         if not synth_file.exists():
             continue
@@ -117,7 +119,7 @@ def collect_episodes_stats() -> dict:
                 stats["synthetic"]["by_difficulty"][diff] += 1
 
     # LLM episodes
-    llm_file = Path("data/episodes/llm_gen.jsonl")
+    llm_file = resolve_episodes_file("llm_gen")
     if llm_file.exists():
         with open(llm_file) as f:
             for line in f:

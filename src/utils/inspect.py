@@ -18,6 +18,8 @@ from rich.table import Table
 from rich.panel import Panel
 from rich.syntax import Syntax
 
+from src.core.paths import resolve_all_episode_files, resolve_questions_dir
+
 
 console = Console()
 
@@ -31,16 +33,16 @@ def inspect_questions(
 ):
     """Preview generated questions."""
     if source == "template":
-        questions_dirs = [Path("data/questions/template")]
+        questions_dirs = [resolve_questions_dir("template")]
     elif source == "procedural":
-        questions_dirs = [Path("data/questions/procedural")]
+        questions_dirs = [resolve_questions_dir("procedural")]
     elif source == "llm_gen":
-        questions_dirs = [Path("data/questions/llm_gen")]
+        questions_dirs = [resolve_questions_dir("llm_gen")]
     else:  # all
         questions_dirs = [
-            Path("data/questions/template"),
-            Path("data/questions/procedural"),
-            Path("data/questions/llm_gen"),
+            resolve_questions_dir("template"),
+            resolve_questions_dir("procedural"),
+            resolve_questions_dir("llm_gen"),
         ]
 
     files = []
@@ -134,11 +136,7 @@ def inspect_episodes(
         episodes_file = Path(output)
     else:
         # Try source-scoped files
-        candidates = [
-            Path("data/episodes/template.jsonl"),
-            Path("data/episodes/procedural.jsonl"),
-            Path("data/episodes/llm_gen.jsonl"),
-        ]
+        candidates = resolve_all_episode_files()
         episodes_file = None
         for c in candidates:
             if c.exists():
@@ -227,11 +225,7 @@ def inspect_trace(episode_id: str, output: str | None = None):
     if output:
         episodes_file = Path(output)
     else:
-        candidates = [
-            Path("data/episodes/template.jsonl"),
-            Path("data/episodes/procedural.jsonl"),
-            Path("data/episodes/llm_gen.jsonl"),
-        ]
+        candidates = resolve_all_episode_files()
         episodes_file = None
         for c in candidates:
             if c.exists():
