@@ -450,7 +450,6 @@ def cmd_generate_episodes(
                     questions_dir=str(questions_dir),
                     output_path=str(episodes_file),
                     max_questions=max_questions,
-                    skip_existing=existing_ids if not fresh else set(),
                 )
             )
             if result != 0:
@@ -490,7 +489,6 @@ def cmd_generate_episodes(
                     questions_dir=str(questions_dir),
                     output_path=str(episodes_file),
                     max_questions=max_questions,
-                    skip_existing=existing_ids if not fresh else set(),
                 )
             )
             if result != 0:

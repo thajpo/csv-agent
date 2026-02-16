@@ -340,7 +340,6 @@ async def main(
     parallel: bool = False,
     n_workers: int = 4,
     gui_progress: str | None = None,
-    skip_existing: set | None = None,
     difficulties: list[str] | None = None,
     retry_failed: bool = False,
 ):
@@ -404,9 +403,8 @@ async def main(
     output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
-    # Append mode if we're skipping existing, otherwise overwrite
-    append_mode = skip_existing is not None and len(skip_existing) > 0
-    if not append_mode and output_jsonl.exists():
+    # Always overwrite output file
+    if output_jsonl.exists():
         output_jsonl.unlink()
 
     # Load manifest for caching
@@ -556,8 +554,7 @@ async def main(
             progress.log(f"✓ {name}: {len(episodes)} verified, {len(failures)} failed")
 
     # Write episodes
-    write_mode = "a" if append_mode else "w"
-    with open(output_jsonl, write_mode) as f:
+    with open(output_jsonl, "w") as f:
         for episode in all_episodes:
             f.write(json.dumps(episode.model_dump(), default=str) + "\n")
 
