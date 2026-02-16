@@ -352,6 +352,37 @@ def _fail_fast_on_existing_outputs(
     return True
 
 
+def _run_fail_fast_preflight(
+    *,
+    mode: str,
+    dry_run: bool,
+    explicit_overwrite: bool,
+    is_episode_generation: bool,
+) -> bool:
+    """Run fail-fast write preflight and return True when command should abort."""
+    if dry_run:
+        return False
+
+    template, procedural, llm_gen = _modes_from_flag(mode)
+    targets = (
+        _episode_output_targets(template, procedural, llm_gen)
+        if is_episode_generation
+        else _find_existing_question_outputs(template, procedural, llm_gen)
+    )
+
+    command_name = (
+        f"csvagent generate episodes --{mode}"
+        if is_episode_generation
+        else f"csvagent generate questions --{mode}"
+    )
+
+    return _fail_fast_on_existing_outputs(
+        targets,
+        explicit_overwrite=explicit_overwrite,
+        command_name=command_name,
+    )
+
+
 def cmd_generate_questions(
     mode: str,
     max_datasets: int | None,
@@ -361,16 +392,13 @@ def cmd_generate_questions(
     """Generate questions by mode."""
     template, procedural, llm_gen = _modes_from_flag(mode)
 
-    if not dry_run:
-        question_targets = _find_existing_question_outputs(
-            template, procedural, llm_gen
-        )
-        if _fail_fast_on_existing_outputs(
-            question_targets,
-            explicit_overwrite=regenerate,
-            command_name=f"csvagent generate questions --{mode}",
-        ):
-            return 2
+    if _run_fail_fast_preflight(
+        mode=mode,
+        dry_run=dry_run,
+        explicit_overwrite=regenerate,
+        is_episode_generation=False,
+    ):
+        return 2
 
     if dry_run:
         console.print("[bold]Dry Run - Generate Questions[/bold]\n")
@@ -510,14 +538,13 @@ def cmd_generate_episodes(
     """Generate verified episodes via teacher triangulation."""
     template, procedural, llm_gen = _modes_from_flag(mode)
 
-    if not dry_run:
-        episode_targets = _episode_output_targets(template, procedural, llm_gen)
-        if _fail_fast_on_existing_outputs(
-            episode_targets,
-            explicit_overwrite=fresh,
-            command_name=f"csvagent generate episodes --{mode}",
-        ):
-            return 2
+    if _run_fail_fast_preflight(
+        mode=mode,
+        dry_run=dry_run,
+        explicit_overwrite=fresh,
+        is_episode_generation=True,
+    ):
+        return 2
 
     exit_code = 0
 
