@@ -5,6 +5,7 @@ from src.cli import (
     build_parser,
     cmd_generate_questions,
     cmd_generate_episodes,
+    cmd_run,
     _fail_fast_on_existing_outputs,
     _run_fail_fast_preflight,
 )
@@ -120,3 +121,46 @@ def test_fail_fast_on_legacy_layout_presence(tmp_path, monkeypatch):
         is_episode_generation=False,
     )
     assert should_abort
+
+
+def test_run_all_preflight_blocks_pipeline_entrypoint_on_existing_output(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    existing = Path("data/episodes/llm_gen.jsonl")
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_text('{"existing": true}\n')
+
+    called = {"pipeline": False}
+
+    def _fake_pipeline_main(**kwargs):
+        called["pipeline"] = True
+        return 0
+
+    monkeypatch.setattr("src.datagen.pipeline.main", _fake_pipeline_main)
+
+    rc = cmd_run(mode="all", test=False, dry_run=False)
+    assert rc == 2
+    assert not called["pipeline"]
+
+
+def test_run_all_preflight_blocks_pipeline_entrypoint_on_unwritable_target(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+
+    called = {"pipeline": False}
+
+    def _fake_pipeline_main(**kwargs):
+        called["pipeline"] = True
+        return 0
+
+    def _deny_write_probe(_path):
+        return False, "permission denied"
+
+    monkeypatch.setattr("src.datagen.pipeline.main", _fake_pipeline_main)
+    monkeypatch.setattr("src.cli._probe_parent_write_access", _deny_write_probe)
+
+    rc = cmd_run(mode="all", test=False, dry_run=False)
+    assert rc == 2
+    assert not called["pipeline"]
