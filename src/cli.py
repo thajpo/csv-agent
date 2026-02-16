@@ -16,6 +16,7 @@ Usage:
 import argparse
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 
 import questionary
@@ -336,6 +337,90 @@ def _episode_output_targets(
     return targets
 
 
+def _question_output_roots(
+    template: bool, procedural: bool, llm_gen: bool
+) -> list[Path]:
+    """Return question output root directories touched by selected modes."""
+    targets: list[Path] = []
+    if template:
+        targets.append(Path(config.questions_template_dir))
+    if procedural:
+        targets.append(Path(config.questions_procedural_dir))
+    if llm_gen:
+        targets.append(Path(config.questions_llm_gen_dir))
+    return targets
+
+
+def _nearest_existing_parent(path: Path) -> Path | None:
+    """Return nearest existing parent directory for path."""
+    for candidate in [path, *path.parents]:
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _probe_parent_write_access(path: Path) -> tuple[bool, str | None]:
+    """Create/delete probe file in path to verify writeability."""
+    probe_name = f".csvagent-write-probe-{uuid.uuid4().hex}.tmp"
+    probe_path = path / probe_name
+    try:
+        with open(probe_path, "w", encoding="utf-8") as f:
+            f.write("probe")
+        probe_path.unlink()
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _fail_fast_on_invalid_or_unwritable_outputs(
+    targets: list[tuple[Path, str]], command_name: str
+) -> bool:
+    """Fail fast when output targets are structurally invalid or unwritable."""
+    errors: list[str] = []
+
+    for target, expected_kind in targets:
+        if target.exists():
+            if expected_kind == "dir" and not target.is_dir():
+                errors.append(f"{target} exists but is not a directory")
+                continue
+            if expected_kind == "file" and target.is_dir():
+                errors.append(f"{target} exists but is a directory")
+                continue
+
+        if expected_kind == "dir":
+            probe_parent = (
+                target if target.exists() else _nearest_existing_parent(target)
+            )
+        else:
+            probe_parent = _nearest_existing_parent(target.parent)
+
+        if probe_parent is None:
+            errors.append(f"{target} has no existing parent directory")
+            continue
+        if not probe_parent.is_dir():
+            errors.append(
+                f"{target} cannot be written because parent is not a directory: {probe_parent}"
+            )
+            continue
+
+        ok, err = _probe_parent_write_access(probe_parent)
+        if not ok:
+            errors.append(f"{target} is not writable via parent {probe_parent}: {err}")
+
+    if not errors:
+        return False
+
+    console.print(
+        f"[red]Fail-fast:[/red] Invalid or unwritable outputs detected for `{command_name}`"
+    )
+    for msg in errors[:10]:
+        console.print(f"  - {msg}")
+    if len(errors) > 10:
+        console.print(f"  ... and {len(errors) - 10} more")
+
+    return True
+
+
 def _fail_fast_on_existing_outputs(
     targets: list[Path], explicit_overwrite: bool, command_name: str
 ) -> bool:
@@ -425,6 +510,41 @@ def _run_fail_fast_preflight(
         explicit_overwrite=explicit_overwrite,
         command_name=command_name,
     )
+
+
+def _run_pipeline_fail_fast_preflight(*, mode: str, dry_run: bool) -> bool:
+    """Run fail-fast preflight for `csvagent run` before any stage entrypoint."""
+    if dry_run:
+        return False
+
+    command_name = f"csvagent run --{mode}"
+    template, procedural, llm_gen = _modes_from_flag(mode)
+
+    if _run_fail_fast_preflight(
+        mode=mode,
+        dry_run=False,
+        explicit_overwrite=False,
+        is_episode_generation=False,
+    ):
+        return True
+
+    if _run_fail_fast_preflight(
+        mode=mode,
+        dry_run=False,
+        explicit_overwrite=False,
+        is_episode_generation=True,
+    ):
+        return True
+
+    targets: list[tuple[Path, str]] = []
+    targets.extend(
+        (p, "dir") for p in _question_output_roots(template, procedural, llm_gen)
+    )
+    targets.extend(
+        (p, "file") for p in _episode_output_targets(template, procedural, llm_gen)
+    )
+
+    return _fail_fast_on_invalid_or_unwritable_outputs(targets, command_name)
 
 
 def cmd_generate_questions(
@@ -712,6 +832,10 @@ def cmd_generate_episodes(
 def cmd_run(mode: str, test: bool, dry_run: bool):
     """Run full pipeline."""
     template, procedural, llm_gen = _modes_from_flag(mode)
+
+    if _run_pipeline_fail_fast_preflight(mode=mode, dry_run=dry_run):
+        return 2
+
     if dry_run:
         console.print("[bold]Dry Run - Full Pipeline[/bold]\n")
         console.print(f"  Mode: {mode}")
