@@ -43,9 +43,10 @@ def validate_hooks_grounded(
     """
     Validate that each hook's code_line is grounded in the executed code.
 
-    A hook is "grounded" if its normalized code_line exactly matches a normalized
-    executed line.
-    This prevents the model from hallucinating code_lines that weren't actually run.
+    A hook is "grounded" if each line of its code_line exactly matches a
+    logical line from the executed code (after whitespace normalization).
+    This prevents the model from hallucinating code_lines or getting false
+    positives from substring matches (e.g., "x = 1" should NOT match "x = 10").
 
     Args:
         hooks: List of hook dicts with code_line field
@@ -54,13 +55,14 @@ def validate_hooks_grounded(
     Returns:
         Tuple of (grounded_hooks, ungrounded_hooks)
     """
-    # Normalize executed code into a set of full lines.
-    executed_lines = set()
+    # Build set of normalized code lines for exact matching
+    # Each line is normalized: strip leading/trailing whitespace, collapse internal whitespace
+    normalized_code_lines = set()
     for cell in code_cells:
-        for line in cell.splitlines():
+        for line in cell.split("\n"):
             normalized = " ".join(line.split())
-            if normalized:
-                executed_lines.add(normalized)
+            if normalized:  # Skip empty lines
+                normalized_code_lines.add(normalized)
 
     grounded = []
     ungrounded = []
@@ -68,15 +70,29 @@ def validate_hooks_grounded(
     for hook in hooks:
         code_line = hook.get("code_line", "")
         if not code_line:
+            hook["_ungrounded_reason"] = "missing code_line"
             ungrounded.append(hook)
             continue
 
-        # Normalize whitespace for matching (strip leading/trailing, collapse internal)
-        normalized_code_line = " ".join(code_line.split())
+        # Split hook code_line into individual lines and normalize each
+        hook_lines = code_line.split("\n")
+        all_lines_match = True
 
-        if normalized_code_line in executed_lines:
+        for hook_line in hook_lines:
+            normalized_hook_line = " ".join(hook_line.split())
+            if not normalized_hook_line:
+                # Skip empty lines in hook
+                continue
+
+            # Check for exact match against any normalized code line
+            if normalized_hook_line not in normalized_code_lines:
+                all_lines_match = False
+                break
+
+        if all_lines_match:
             grounded.append(hook)
         else:
+            hook["_ungrounded_reason"] = "code_line not found in executed code"
             ungrounded.append(hook)
 
     return grounded, ungrounded
