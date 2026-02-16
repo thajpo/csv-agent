@@ -1,0 +1,24 @@
+{
+  "id": "<normalized-id>",
+  "source": "procedural",
+  "dataset": "fixture_dataset",
+  "question_text": "[procedural] What is the average value of column A?",
+  "question_mechanical": "[procedural] Compute mean(A) and return scalar:float",
+  "hint": "Use df['A'].mean()",
+  "code": "result = df['A'].mean()\nsubmit(result)",
+  "code_hash": "codehash-001",
+  "ground_truth": 42.5,
+  "ground_truth_hash": "answerhash-001",
+  "ground_truth_hashes": [
+    "answerhash-001"
+  ],
+  "output_schema": "scalar:float",
+  "n_steps": 1,
+  "difficulty": "EASY",
+  "dataset_description": "fixture dataset",
+  "program_name": "mean_program",
+  "program_ops": [
+    "select_numeric_cols",
+    "mean"
+  ]
+}

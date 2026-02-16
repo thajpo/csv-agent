@@ -1,0 +1,17 @@
+{
+  "id": "<normalized-id>",
+  "source": "llm_gen",
+  "dataset": "fixture_dataset",
+  "question_text": "[llm_gen] What is the average value of column A?",
+  "question_mechanical": null,
+  "hint": "Use df['A'].mean()",
+  "code": null,
+  "code_hash": null,
+  "ground_truth": null,
+  "ground_truth_hash": null,
+  "ground_truth_hashes": null,
+  "output_schema": null,
+  "n_steps": 1,
+  "difficulty": "EASY",
+  "dataset_description": "fixture dataset"
+}

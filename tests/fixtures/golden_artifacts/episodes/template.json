@@ -1,0 +1,61 @@
+{
+  "episode_id": "<normalized-episode-id>",
+  "timestamp": "<normalized-timestamp>",
+  "csv_source": "data/csv/fixture.csv",
+  "question": {
+    "id": "<normalized-id>",
+    "question_text": "[template] What is the average value of column A?",
+    "hint": "Use df['A'].mean()",
+    "difficulty": "EASY",
+    "n_steps": 1,
+    "category": null,
+    "tags": null,
+    "template_name": "mean_template",
+    "template_params": {
+      "column": "A"
+    },
+    "output_type": "float",
+    "output_schema": "scalar:float",
+    "ground_truth_hash": "answerhash-001",
+    "ground_truth_hashes": [
+      "answerhash-001"
+    ],
+    "ground_truth": 42.5
+  },
+  "gold_trace": {
+    "turns": [
+      {
+        "turn_index": 0,
+        "reasoning": "Compute mean",
+        "code": "result = df['A'].mean()\nsubmit(result)",
+        "execution": {
+          "success": true,
+          "stdout": "\u2713 Submitted: {\"__csv_agent_answer__\": 42.5, \"hooks\": []}",
+          "stderr": "",
+          "hooks": [],
+          "submitted_answer": 42.5
+        },
+        "correction": null
+      }
+    ],
+    "final_answer": 42.5,
+    "final_answer_hash": "answerhash-001",
+    "success": true
+  },
+  "consistency_traces": [],
+  "verified": true,
+  "triangulation": {
+    "n_consistency_runs": 0,
+    "n_consistency_succeeded": 0,
+    "majority_answer_hash": "answerhash-001",
+    "majority_count": 0,
+    "gold_matches_majority": true
+  },
+  "timing": {
+    "gold_elapsed": 0.0,
+    "consistency_elapsed": [],
+    "total_elapsed": 0.0,
+    "avg_elapsed": 0.0
+  },
+  "source": "template"
+}
