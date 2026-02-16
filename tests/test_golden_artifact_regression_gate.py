@@ -68,39 +68,77 @@ def _sample_question_artifact(source: str) -> dict:
     return question
 
 
-def _sample_trace() -> dict:
-    return {
-        "turns": [
+def _sample_trace(n_turns: int = 1) -> dict:
+    if n_turns == 1:
+        return {
+            "turns": [
+                {
+                    "turn_index": 0,
+                    "reasoning": "Compute mean",
+                    "code": "result = df['A'].mean()\nsubmit(result)",
+                    "execution": {
+                        "success": True,
+                        "stdout": '\u2713 Submitted: {"__csv_agent_answer__": 42.5, "hooks": []}',
+                        "stderr": "",
+                        "hooks": [],
+                        "submitted_answer": 42.5,
+                    },
+                    "correction": None,
+                }
+            ],
+            "final_answer": 42.5,
+            "final_answer_hash": "answerhash-001",
+            "success": True,
+        }
+
+    turns = []
+    for i in range(n_turns):
+        is_last = i == n_turns - 1
+        code = f"intermediate_{i} = df['A'].mean()"
+        if is_last:
+            code += "\nsubmit(intermediate_{i})"
+
+        turns.append(
             {
-                "turn_index": 0,
-                "reasoning": "Compute mean",
-                "code": "result = df['A'].mean()\nsubmit(result)",
+                "turn_index": i,
+                "reasoning": f"Step {i + 1}: compute intermediate",
+                "code": code,
                 "execution": {
                     "success": True,
-                    "stdout": '\u2713 Submitted: {"__csv_agent_answer__": 42.5, "hooks": []}',
+                    "stdout": (
+                        '\u2713 Submitted: {"__csv_agent_answer__": 42.5, "hooks": []}'
+                        if is_last
+                        else ""
+                    ),
                     "stderr": "",
                     "hooks": [],
-                    "submitted_answer": 42.5,
+                    "submitted_answer": 42.5 if is_last else None,
                 },
                 "correction": None,
             }
-        ],
+        )
+
+    return {
+        "turns": turns,
         "final_answer": 42.5,
         "final_answer_hash": "answerhash-001",
         "success": True,
     }
 
 
-async def _sample_episode_artifact(source: str) -> dict:
+async def _sample_episode_artifact(source: str, n_turns: int = 1) -> dict:
     question = _sample_question_artifact(source)
+    trace = _sample_trace(n_turns=n_turns)
     consistency_traces = (
-        [] if source != "llm_gen" else [_sample_trace(), _sample_trace()]
+        []
+        if source != "llm_gen"
+        else [_sample_trace(n_turns=n_turns), _sample_trace(n_turns=n_turns)]
     )
 
     verification_result = VerificationResult(
         success=True,
         match=True,
-        trace=_sample_trace(),
+        trace=trace,
         traces=consistency_traces,
         majority_answer_hash="answerhash-001",
         error=None,
@@ -192,3 +230,35 @@ async def test_episode_drift_failure_check():
 
     with pytest.raises(AssertionError, match="Golden artifact drift detected"):
         _assert_matches_golden(actual, expected, _normalize_episode)
+
+
+@pytest.mark.parametrize("source", SOURCES)
+@pytest.mark.parametrize("n_turns", [1, 5])
+@pytest.mark.asyncio
+async def test_episode_turn_count_and_trace_metadata(source: str, n_turns: int):
+    episode = await _sample_episode_artifact(source, n_turns=n_turns)
+
+    gold_trace = episode["gold_trace"]
+    assert len(gold_trace["turns"]) == n_turns
+    assert [t["turn_index"] for t in gold_trace["turns"]] == list(range(n_turns))
+    assert gold_trace["final_answer_hash"] == "answerhash-001"
+
+    # execution shape stays consistent for dense-reward usage
+    for turn in gold_trace["turns"]:
+        execution = turn["execution"]
+        assert "success" in execution
+        assert "stdout" in execution
+        assert "stderr" in execution
+        assert "hooks" in execution
+        assert "submitted_answer" in execution
+
+    tri = episode["triangulation"]
+    expected_consistency = 2 if source == "llm_gen" else 0
+    assert tri["n_consistency_runs"] == expected_consistency
+    assert tri["n_consistency_succeeded"] == expected_consistency
+
+    if source == "llm_gen":
+        assert len(episode["consistency_traces"]) == 2
+        assert all(len(t["turns"]) == n_turns for t in episode["consistency_traces"])
+    else:
+        assert episode["consistency_traces"] == []
