@@ -42,7 +42,7 @@ def get_datasets_with_episodes() -> set[str]:
     Returns set of csv paths that have episodes generated.
     Used to prevent accidental question regeneration.
     """
-    episodes_path = Path(config.episodes_llm_jsonl)
+    episodes_path = Path(config.episodes_llm_gen_jsonl)
     if not episodes_path.exists():
         return set()
 
@@ -465,7 +465,7 @@ async def run_parallel_generation(
     max_tokens = config.sampling_args.max_tokens
     model = config.question_gen_model
     max_turns = config.question_gen_max_turns
-    base_output_dir = Path(config.questions_llm_dir)
+    base_output_dir = Path(config.questions_llm_gen_dir)
 
     # Check for existing episodes (lock mechanism)
     datasets_with_episodes = get_datasets_with_episodes() if not regenerate else set()

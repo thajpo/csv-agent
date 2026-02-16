@@ -720,7 +720,7 @@ async def generate_questions(
     # Prepare output path early for incremental saving
     if output_dir is None:
         dataset_name = Path(csv_path).parent.name
-        output_dir = f"{config.questions_synthetic_dir}/{dataset_name}"
+        output_dir = f"{config.questions_template_dir}/{dataset_name}"
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 

@@ -23,6 +23,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from src.core.config import config
+
 console = Console()
 
 
@@ -210,8 +212,8 @@ def cmd_progress():
         )
 
         # Estimate based on episode file timestamps
-        synth_file = Path("data/episodes/episodes_synthetic.jsonl")
-        llm_file = Path("data/episodes/episodes_llm.jsonl")
+        synth_file = Path(config.episodes_template_jsonl)
+        llm_file = Path(config.episodes_llm_gen_jsonl)
         synth_per_trace = load_per_trace_seconds(synth_file)
         llm_per_trace = load_per_trace_seconds(llm_file)
         llm_traces_remaining = estimate_llm_traces_remaining()
@@ -305,12 +307,16 @@ def _find_existing_question_outputs(
     """Return existing question output files that would be touched by selected modes."""
     existing: list[Path] = []
 
-    if template or procedural:
-        synth_root = Path("data/questions_synthetic")
-        existing.extend(sorted(synth_root.glob("*/questions.json")))
+    if template:
+        template_root = Path(config.questions_template_dir)
+        existing.extend(sorted(template_root.glob("*/questions.json")))
+
+    if procedural:
+        procedural_root = Path(config.questions_procedural_dir)
+        existing.extend(sorted(procedural_root.glob("*/questions.json")))
 
     if llm_gen:
-        llm_root = Path("data/questions_llm")
+        llm_root = Path(config.questions_llm_gen_dir)
         existing.extend(sorted(llm_root.glob("*/questions.json")))
 
     return existing
@@ -321,10 +327,12 @@ def _episode_output_targets(
 ) -> list[Path]:
     """Return episode output targets touched by selected modes."""
     targets: list[Path] = []
-    if template or procedural:
-        targets.append(Path("data/episodes/episodes_synthetic.jsonl"))
+    if template:
+        targets.append(Path(config.episodes_template_jsonl))
+    if procedural:
+        targets.append(Path(config.episodes_procedural_jsonl))
     if llm_gen:
-        targets.append(Path("data/episodes/episodes_llm.jsonl"))
+        targets.append(Path(config.episodes_llm_gen_jsonl))
     return targets
 
 
@@ -352,6 +360,39 @@ def _fail_fast_on_existing_outputs(
     return True
 
 
+def _legacy_layout_paths() -> list[Path]:
+    """Legacy mixed-layout paths that are no longer supported."""
+    return [
+        Path("data/questions_synthetic"),
+        Path("data/questions_llm"),
+        Path("data/episodes/episodes_synthetic.jsonl"),
+        Path("data/episodes/episodes_llm.jsonl"),
+    ]
+
+
+def _fail_fast_on_legacy_layout(command_name: str) -> bool:
+    """Fail fast when deprecated mixed-layout artifacts are present."""
+    existing = [p for p in _legacy_layout_paths() if p.exists()]
+    if not existing:
+        return False
+
+    console.print(
+        f"[red]Fail-fast:[/red] Deprecated mixed-layout artifacts found for `{command_name}`"
+    )
+    for path in existing:
+        console.print(f"  - {path}")
+    console.print(
+        "\nMigrate to source-scoped layout before running generation:\n"
+        "  data/questions/template/<dataset>/questions.json\n"
+        "  data/questions/procedural/<dataset>/questions.json\n"
+        "  data/questions/llm_gen/<dataset>/questions.json\n"
+        "  data/episodes/template.jsonl\n"
+        "  data/episodes/procedural.jsonl\n"
+        "  data/episodes/llm_gen.jsonl"
+    )
+    return True
+
+
 def _run_fail_fast_preflight(
     *,
     mode: str,
@@ -363,17 +404,20 @@ def _run_fail_fast_preflight(
     if dry_run:
         return False
 
+    command_name = (
+        f"csvagent generate episodes --{mode}"
+        if is_episode_generation
+        else f"csvagent generate questions --{mode}"
+    )
+
+    if _fail_fast_on_legacy_layout(command_name):
+        return True
+
     template, procedural, llm_gen = _modes_from_flag(mode)
     targets = (
         _episode_output_targets(template, procedural, llm_gen)
         if is_episode_generation
         else _find_existing_question_outputs(template, procedural, llm_gen)
-    )
-
-    command_name = (
-        f"csvagent generate episodes --{mode}"
-        if is_episode_generation
-        else f"csvagent generate questions --{mode}"
     )
 
     return _fail_fast_on_existing_outputs(
@@ -405,17 +449,17 @@ def cmd_generate_questions(
         if template:
             console.print("  [green]template[/green]: Will generate template questions")
             console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print("    Output: data/questions_synthetic/")
+            console.print(f"    Output: {config.questions_template_dir}/")
         if procedural:
             console.print(
                 "  [magenta]procedural[/magenta]: Will generate program-based questions"
             )
             console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print("    Output: data/questions_synthetic/")
+            console.print(f"    Output: {config.questions_procedural_dir}/")
         if llm_gen:
             console.print("  [blue]llm_gen[/blue]: Will run LLM exploration")
             console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print("    Output: data/questions_llm/")
+            console.print(f"    Output: {config.questions_llm_gen_dir}/")
             if regenerate:
                 console.print("    [yellow]Mode: Regenerate (will overwrite)[/yellow]")
         console.print("\n[dim]No changes made (dry run)[/dim]")
@@ -549,8 +593,8 @@ def cmd_generate_episodes(
     exit_code = 0
 
     if template:
-        questions_dir = Path("data/questions_synthetic")
-        episodes_file = Path("data/episodes/episodes_synthetic.jsonl")
+        questions_dir = Path(config.questions_template_dir)
+        episodes_file = Path(config.episodes_template_jsonl)
 
         total_q, existing = _show_episode_preflight(
             "template", questions_dir, episodes_file
@@ -589,8 +633,8 @@ def cmd_generate_episodes(
                 exit_code = result
 
     if procedural:
-        questions_dir = Path("data/questions_synthetic")
-        episodes_file = Path("data/episodes/episodes_synthetic.jsonl")
+        questions_dir = Path(config.questions_procedural_dir)
+        episodes_file = Path(config.episodes_procedural_jsonl)
 
         total_q, existing = _show_episode_preflight(
             "procedural", questions_dir, episodes_file
@@ -614,7 +658,6 @@ def cmd_generate_episodes(
                     questions_dir=str(questions_dir),
                     output_path=str(episodes_file),
                     max_questions=max_questions,
-                    append_output=template,
                     source="procedural",
                 )
             )
@@ -622,8 +665,8 @@ def cmd_generate_episodes(
                 exit_code = result
 
     if llm_gen:
-        questions_dir = Path("data/questions_llm")
-        episodes_file = Path("data/episodes/episodes_llm.jsonl")
+        questions_dir = Path(config.questions_llm_gen_dir)
+        episodes_file = Path(config.episodes_llm_gen_jsonl)
 
         total_q, existing = _show_episode_preflight(
             "llm_gen", questions_dir, episodes_file

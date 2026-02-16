@@ -24,13 +24,23 @@ console = Console()
 def collect_questions_stats() -> dict:
     """Collect statistics about generated questions."""
     stats = {
-        "synthetic": {"total": 0, "by_dataset": {}, "by_difficulty": Counter(), "by_template": Counter()},
+        "synthetic": {
+            "total": 0,
+            "by_dataset": {},
+            "by_difficulty": Counter(),
+            "by_template": Counter(),
+        },
         "llm": {"total": 0, "by_dataset": {}, "by_difficulty": Counter()},
     }
 
-    # Synthetic questions
-    synth_dir = Path("data/questions_synthetic")
-    if synth_dir.exists():
+    # Synthetic questions (template + procedural)
+    synthetic_dirs = [
+        Path("data/questions/template"),
+        Path("data/questions/procedural"),
+    ]
+    for synth_dir in synthetic_dirs:
+        if not synth_dir.exists():
+            continue
         for qf in synth_dir.glob("*/questions.json"):
             dataset = qf.parent.name
             with open(qf) as f:
@@ -47,7 +57,7 @@ def collect_questions_stats() -> dict:
                 stats["synthetic"]["by_template"][template] += 1
 
     # LLM questions
-    llm_dir = Path("data/questions_llm")
+    llm_dir = Path("data/questions/llm_gen")
     if llm_dir.exists():
         for qf in llm_dir.glob("*/questions.json"):
             dataset = qf.parent.name
@@ -68,13 +78,27 @@ def collect_questions_stats() -> dict:
 def collect_episodes_stats() -> dict:
     """Collect statistics about generated episodes."""
     stats = {
-        "synthetic": {"total": 0, "verified": 0, "by_dataset": {}, "by_difficulty": Counter()},
-        "llm": {"total": 0, "verified": 0, "by_dataset": {}, "by_difficulty": Counter()},
+        "synthetic": {
+            "total": 0,
+            "verified": 0,
+            "by_dataset": {},
+            "by_difficulty": Counter(),
+        },
+        "llm": {
+            "total": 0,
+            "verified": 0,
+            "by_dataset": {},
+            "by_difficulty": Counter(),
+        },
     }
 
-    # Synthetic episodes
-    synth_file = Path("data/episodes/episodes_synthetic.jsonl")
-    if synth_file.exists():
+    # Synthetic episodes (template + procedural)
+    for synth_file in [
+        Path("data/episodes/template.jsonl"),
+        Path("data/episodes/procedural.jsonl"),
+    ]:
+        if not synth_file.exists():
+            continue
         with open(synth_file) as f:
             for line in f:
                 ep = json.loads(line)
@@ -85,13 +109,15 @@ def collect_episodes_stats() -> dict:
                 # Extract dataset from csv_source
                 csv_source = ep.get("csv_source", "")
                 dataset = Path(csv_source).parent.name if csv_source else "unknown"
-                stats["synthetic"]["by_dataset"][dataset] = stats["synthetic"]["by_dataset"].get(dataset, 0) + 1
+                stats["synthetic"]["by_dataset"][dataset] = (
+                    stats["synthetic"]["by_dataset"].get(dataset, 0) + 1
+                )
 
                 diff = ep.get("question", {}).get("difficulty", "UNKNOWN")
                 stats["synthetic"]["by_difficulty"][diff] += 1
 
     # LLM episodes
-    llm_file = Path("data/episodes/episodes_llm.jsonl")
+    llm_file = Path("data/episodes/llm_gen.jsonl")
     if llm_file.exists():
         with open(llm_file) as f:
             for line in f:
@@ -102,7 +128,9 @@ def collect_episodes_stats() -> dict:
 
                 csv_source = ep.get("csv_source", "")
                 dataset = Path(csv_source).parent.name if csv_source else "unknown"
-                stats["llm"]["by_dataset"][dataset] = stats["llm"]["by_dataset"].get(dataset, 0) + 1
+                stats["llm"]["by_dataset"][dataset] = (
+                    stats["llm"]["by_dataset"].get(dataset, 0) + 1
+                )
 
                 diff = ep.get("question", {}).get("difficulty", "UNKNOWN")
                 stats["llm"]["by_difficulty"][diff] += 1
@@ -135,17 +163,19 @@ def collect_datasets() -> list[str]:
 
 def show_summary(q_stats: dict, e_stats: dict):
     """Show high-level summary."""
-    console.print(Panel(
-        f"[bold]Questions:[/bold]\n"
-        f"  Synthetic: {q_stats['synthetic']['total']:,} ({len(q_stats['synthetic']['by_dataset'])} datasets)\n"
-        f"  LLM: {q_stats['llm']['total']:,} ({len(q_stats['llm']['by_dataset'])} datasets)\n\n"
-        f"[bold]Episodes:[/bold]\n"
-        f"  Synthetic: {e_stats['synthetic']['total']:,} ({e_stats['synthetic']['verified']:,} verified, "
-        f"{e_stats['synthetic']['verified']/max(e_stats['synthetic']['total'],1)*100:.0f}%)\n"
-        f"  LLM: {e_stats['llm']['total']:,} ({e_stats['llm']['verified']:,} verified, "
-        f"{e_stats['llm']['verified']/max(e_stats['llm']['total'],1)*100:.0f}%)",
-        title="Data Generation Summary",
-    ))
+    console.print(
+        Panel(
+            f"[bold]Questions:[/bold]\n"
+            f"  Synthetic: {q_stats['synthetic']['total']:,} ({len(q_stats['synthetic']['by_dataset'])} datasets)\n"
+            f"  LLM: {q_stats['llm']['total']:,} ({len(q_stats['llm']['by_dataset'])} datasets)\n\n"
+            f"[bold]Episodes:[/bold]\n"
+            f"  Synthetic: {e_stats['synthetic']['total']:,} ({e_stats['synthetic']['verified']:,} verified, "
+            f"{e_stats['synthetic']['verified'] / max(e_stats['synthetic']['total'], 1) * 100:.0f}%)\n"
+            f"  LLM: {e_stats['llm']['total']:,} ({e_stats['llm']['verified']:,} verified, "
+            f"{e_stats['llm']['verified'] / max(e_stats['llm']['total'], 1) * 100:.0f}%)",
+            title="Data Generation Summary",
+        )
+    )
 
 
 def show_questions_detail(q_stats: dict):
@@ -204,11 +234,14 @@ def show_episodes_detail(e_stats: dict):
     table.add_column("Synthetic", justify="right")
     table.add_column("LLM", justify="right")
 
-    all_datasets = set(e_stats["synthetic"]["by_dataset"].keys()) | set(e_stats["llm"]["by_dataset"].keys())
+    all_datasets = set(e_stats["synthetic"]["by_dataset"].keys()) | set(
+        e_stats["llm"]["by_dataset"].keys()
+    )
     sorted_datasets = sorted(
         all_datasets,
-        key=lambda d: e_stats["synthetic"]["by_dataset"].get(d, 0) + e_stats["llm"]["by_dataset"].get(d, 0),
-        reverse=True
+        key=lambda d: e_stats["synthetic"]["by_dataset"].get(d, 0)
+        + e_stats["llm"]["by_dataset"].get(d, 0),
+        reverse=True,
     )[:10]
 
     for dataset in sorted_datasets:
@@ -230,7 +263,9 @@ def show_gaps(q_stats: dict, e_stats: dict):
     missing_synth_q = [d for d in all_datasets if d not in datasets_with_synth_q]
 
     if missing_synth_q:
-        console.print(f"[yellow]Datasets without synthetic questions ({len(missing_synth_q)}):[/yellow]")
+        console.print(
+            f"[yellow]Datasets without synthetic questions ({len(missing_synth_q)}):[/yellow]"
+        )
         for d in missing_synth_q[:10]:
             console.print(f"  • {d}")
         if len(missing_synth_q) > 10:
@@ -242,7 +277,9 @@ def show_gaps(q_stats: dict, e_stats: dict):
     have_q_no_e = [d for d in datasets_with_synth_q if d not in datasets_with_synth_e]
 
     if have_q_no_e:
-        console.print(f"[yellow]Datasets with questions but no episodes ({len(have_q_no_e)}):[/yellow]")
+        console.print(
+            f"[yellow]Datasets with questions but no episodes ({len(have_q_no_e)}):[/yellow]"
+        )
         for d in have_q_no_e[:10]:
             q_count = q_stats["synthetic"]["by_dataset"].get(d, 0)
             console.print(f"  • {d} ({q_count} questions)")
@@ -257,7 +294,9 @@ def show_gaps(q_stats: dict, e_stats: dict):
 
 def main():
     parser = argparse.ArgumentParser(description="Data generation statistics")
-    parser.add_argument("--questions", action="store_true", help="Show questions detail")
+    parser.add_argument(
+        "--questions", action="store_true", help="Show questions detail"
+    )
     parser.add_argument("--episodes", action="store_true", help="Show episodes detail")
     parser.add_argument("--gaps", action="store_true", help="Show coverage gaps")
     args = parser.parse_args()
@@ -275,5 +314,3 @@ def main():
 
     if args.gaps:
         show_gaps(q_stats, e_stats)
-
-

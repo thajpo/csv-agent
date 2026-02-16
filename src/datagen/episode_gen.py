@@ -358,8 +358,9 @@ async def main(
     if output_path is None:
         ui.base.print_error(
             "ERROR: --output is required. Use one of:\n"
-            f"  --output {config.episodes_synthetic_jsonl}  (for synthetic questions)\n"
-            f"  --output {config.episodes_llm_jsonl}  (for LLM questions)"
+            f"  --output {config.episodes_template_jsonl}  (for template questions)\n"
+            f"  --output {config.episodes_procedural_jsonl}  (for procedural questions)\n"
+            f"  --output {config.episodes_llm_gen_jsonl}  (for LLM questions)"
         )
         return 1
     output_jsonl = Path(output_path)
@@ -372,8 +373,9 @@ async def main(
     if questions_dir is None:
         ui.base.print_error(
             "ERROR: --questions-dir is required. Use one of:\n"
-            f"  --questions-dir {config.questions_synthetic_dir}  (for synthetic questions)\n"
-            f"  --questions-dir {config.questions_llm_dir}  (for LLM questions)"
+            f"  --questions-dir {config.questions_template_dir}  (for template questions)\n"
+            f"  --questions-dir {config.questions_procedural_dir}  (for procedural questions)\n"
+            f"  --questions-dir {config.questions_llm_gen_dir}  (for LLM questions)"
         )
         return 1
     base_questions_dir = Path(questions_dir)

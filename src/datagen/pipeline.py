@@ -53,9 +53,10 @@ def run_stage(name: str, cmd: list[str]) -> bool:
 
 def run_synthetic_stage(
     name: str,
+    questions_dir: str,
+    output_path: str,
     max_questions: int | None,
     source: str,
-    append_output: bool = False,
 ) -> bool:
     """Run synthetic episode generation in-process with source-scoped filtering."""
     print(f"\n{'=' * 60}")
@@ -65,10 +66,9 @@ def run_synthetic_stage(
     start = time.time()
     result = asyncio.run(
         validate_synthetic_main(
-            questions_dir=str(config.questions_synthetic_dir),
-            output_path=str(config.episodes_synthetic_jsonl),
+            questions_dir=questions_dir,
+            output_path=output_path,
             max_questions=max_questions,
-            append_output=append_output,
             source=source,
         )
     )
@@ -131,6 +131,8 @@ def main(
     if run_template:
         if run_synthetic_stage(
             "Stage 2a: Generate Template Episodes",
+            questions_dir=str(config.questions_template_dir),
+            output_path=str(config.episodes_template_jsonl),
             max_questions=max_questions,
             source="template",
         ):
@@ -152,9 +154,10 @@ def main(
     if run_procedural:
         if run_synthetic_stage(
             "Stage 2b: Generate Procedural Episodes",
+            questions_dir=str(config.questions_procedural_dir),
+            output_path=str(config.episodes_procedural_jsonl),
             max_questions=max_questions,
             source="procedural",
-            append_output=run_template,
         ):
             stages_run += 1
         else:
@@ -179,9 +182,9 @@ def main(
             "-m",
             "src.datagen.episode_gen",
             "--questions-dir",
-            str(config.questions_llm_dir),
+            str(config.questions_llm_gen_dir),
             "--output",
-            str(config.episodes_llm_jsonl),
+            str(config.episodes_llm_gen_jsonl),
             "--skip-difficulty-filter",
         ]
         if max_questions:
@@ -201,14 +204,20 @@ def main(
     print(f"  Stages run: {stages_run}")
     print(f"  Stages failed: {stages_failed}")
 
-    if run_template or run_procedural:
-        synth_episodes = Path(config.episodes_synthetic_jsonl)
-        if synth_episodes.exists():
-            count = sum(1 for _ in open(synth_episodes))
-            print(f"  Template/Procedural episodes: {count}")
+    if run_template:
+        template_episodes = Path(config.episodes_template_jsonl)
+        if template_episodes.exists():
+            count = sum(1 for _ in open(template_episodes))
+            print(f"  Template episodes: {count}")
+
+    if run_procedural:
+        procedural_episodes = Path(config.episodes_procedural_jsonl)
+        if procedural_episodes.exists():
+            count = sum(1 for _ in open(procedural_episodes))
+            print(f"  Procedural episodes: {count}")
 
     if run_llm:
-        llm_episodes = Path(config.episodes_llm_jsonl)
+        llm_episodes = Path(config.episodes_llm_gen_jsonl)
         if llm_episodes.exists():
             count = sum(1 for _ in open(llm_episodes))
             print(f"  LLM episodes: {count}")

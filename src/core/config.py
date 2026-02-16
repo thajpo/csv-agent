@@ -147,11 +147,13 @@ class Config(BaseModel):
         default_factory=lambda: {"EASY": 2, "MEDIUM": 2, "HARD": 4, "VERY_HARD": 6}
     )
 
-    # Outputs - separate paths for LLM vs synthetic pipelines
-    questions_llm_dir: str = "data/questions_llm"
-    questions_synthetic_dir: str = "data/questions_synthetic"
-    episodes_llm_jsonl: str = "data/episodes/episodes_llm.jsonl"
-    episodes_synthetic_jsonl: str = "data/episodes/episodes_synthetic.jsonl"
+    # Outputs - source-scoped paths
+    questions_template_dir: str = "data/questions/template"
+    questions_procedural_dir: str = "data/questions/procedural"
+    questions_llm_gen_dir: str = "data/questions/llm_gen"
+    episodes_template_jsonl: str = "data/episodes/template.jsonl"
+    episodes_procedural_jsonl: str = "data/episodes/procedural.jsonl"
+    episodes_llm_gen_jsonl: str = "data/episodes/llm_gen.jsonl"
 
     # Train/Test/Val Splitting
     split_seed: int = 42

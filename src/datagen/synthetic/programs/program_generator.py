@@ -244,7 +244,7 @@ async def run_pipeline(
     output_path = (
         Path(output_dir)
         if output_dir
-        else Path("data/questions_synthetic") / dataset_name
+        else Path(config.questions_procedural_dir) / dataset_name
     )
     output_path.mkdir(parents=True, exist_ok=True)
 

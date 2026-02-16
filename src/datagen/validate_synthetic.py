@@ -2,7 +2,7 @@
 Synthetic episode generation pipeline.
 
 This script validates synthetic questions by running a single teacher trace:
-1. Loads questions from questions_synthetic_dir
+1. Loads questions from a source-scoped questions directory
 2. Runs 1 teacher trace per question (WITH hint)
 3. Validates answer matches ground_truth_hash
 4. Saves successful episodes to disk, logs failures
@@ -12,13 +12,13 @@ have known ground truth from template execution.
 
 Usage:
     uv run python -m src.datagen.validate_synthetic \
-        --questions-dir data/questions_synthetic \
-        --output data/episodes/episodes_synthetic.jsonl
+        --questions-dir data/questions/template \
+        --output data/episodes/template.jsonl
 
     # Parallel mode (process multiple datasets concurrently)
     uv run python -m src.datagen.validate_synthetic \
-        --questions-dir data/questions_synthetic \
-        --output data/episodes/episodes_synthetic.jsonl \
+        --questions-dir data/questions/procedural \
+        --output data/episodes/procedural.jsonl \
         --parallel --n-workers 4
 """
 
@@ -607,13 +607,13 @@ if __name__ == "__main__":
         "--questions-dir",
         type=str,
         required=True,
-        help="Directory containing question files (e.g., data/questions_synthetic)",
+        help="Directory containing question files (e.g., data/questions/template)",
     )
     parser.add_argument(
         "--output",
         type=str,
         required=True,
-        help="Output JSONL file path (e.g., data/episodes/episodes_synthetic.jsonl)",
+        help="Output JSONL file path (e.g., data/episodes/template.jsonl)",
     )
     parser.add_argument(
         "--max-questions",
