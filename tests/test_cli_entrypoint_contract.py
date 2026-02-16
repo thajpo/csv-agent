@@ -1,6 +1,12 @@
 import pytest
+from pathlib import Path
 
-from src.cli import build_parser
+from src.cli import (
+    build_parser,
+    cmd_generate_questions,
+    cmd_generate_episodes,
+    _fail_fast_on_existing_outputs,
+)
 
 
 def _parse(argv: list[str]):
@@ -42,3 +48,46 @@ def test_run_test_without_mode_hard_fails():
 def test_canonical_modes_parse(argv, expected_mode):
     args = _parse(argv)
     assert args.mode == expected_mode
+
+
+def test_generate_questions_fail_fast_on_existing_outputs(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    existing = Path("data/questions_synthetic/sample/questions.json")
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_text("[]")
+
+    rc = cmd_generate_questions(
+        mode="template",
+        max_datasets=1,
+        dry_run=False,
+        regenerate=False,
+    )
+    assert rc == 2
+
+
+def test_generate_episodes_all_preflights_all_targets(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # Conflict exists only for llm output; --all should still fail before any run starts.
+    existing = Path("data/episodes/episodes_llm.jsonl")
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_text('{"existing": true}\n')
+
+    rc = cmd_generate_episodes(
+        mode="all",
+        max_questions=1,
+        dry_run=False,
+        fresh=False,
+    )
+    assert rc == 2
+
+
+def test_fail_fast_helper_respects_explicit_overwrite(tmp_path):
+    existing = tmp_path / "out.jsonl"
+    existing.write_text("{}\n")
+
+    assert _fail_fast_on_existing_outputs(
+        [existing], explicit_overwrite=False, command_name="x"
+    )
+    assert not _fail_fast_on_existing_outputs(
+        [existing], explicit_overwrite=True, command_name="x"
+    )

@@ -378,6 +378,7 @@ async def explore_and_generate_questions(
             "code_hash": None,
             "ground_truth": None,
             "ground_truth_hash": None,
+            "ground_truth_hashes": None,
             "output_schema": None,
             "difficulty": q.get("difficulty"),
             "n_steps": q.get("n_steps"),

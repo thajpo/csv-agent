@@ -124,6 +124,7 @@ class TestSyntheticVerification:
             "code_hash": "abc123",
             "ground_truth": 42.0,
             "ground_truth_hash": "hash123",
+            "ground_truth_hashes": ["hash123"],
             "output_schema": "scalar:float",
             "n_steps": 1,
             "difficulty": None,
@@ -163,6 +164,7 @@ class TestLLMQuestionLoad:
             "code_hash": None,
             "ground_truth": None,
             "ground_truth_hash": None,
+            "ground_truth_hashes": None,
             "output_schema": None,
             "difficulty": "medium",
             "n_steps": 2,
@@ -180,7 +182,6 @@ class TestLLMQuestionLoad:
             assert len(loaded) == 1
 
             q = loaded[0]
-            assert q["source"] == "llm_gen"
             assert q["source"] == "llm_gen"
             assert "question_text" in q
             assert (

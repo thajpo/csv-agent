@@ -260,6 +260,7 @@ async def run_pipeline(
         question_id = f"prog_{id_base}"
 
         # Build unified schema record
+        answer_hash = hash_artifact(answer)
         record = {
             "id": question_id,
             "source": "procedural",
@@ -270,7 +271,8 @@ async def run_pipeline(
             "code": code,
             "code_hash": hash_artifact(code),
             "ground_truth": answer,
-            "ground_truth_hash": hash_artifact(answer),
+            "ground_truth_hash": answer_hash,
+            "ground_truth_hashes": [answer_hash],
             "output_schema": _output_schema_for_op(ops[-1]),
             "n_steps": len(ops),
             "difficulty": None,

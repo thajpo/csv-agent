@@ -299,6 +299,90 @@ def _modes_from_flag(mode: str) -> tuple[bool, bool, bool]:
     return template, procedural, llm_gen
 
 
+def _find_existing_question_outputs(
+    template: bool, procedural: bool, llm_gen: bool
+) -> list[Path]:
+    """Return existing question output files that would be touched by selected modes."""
+    existing: list[Path] = []
+
+    if template or procedural:
+        synth_root = Path("data/questions_synthetic")
+        existing.extend(sorted(synth_root.glob("*/questions.json")))
+
+    if llm_gen:
+        llm_root = Path("data/questions_llm")
+        existing.extend(sorted(llm_root.glob("*/questions.json")))
+
+    return existing
+
+
+def _episode_output_targets(
+    template: bool, procedural: bool, llm_gen: bool
+) -> list[Path]:
+    """Return episode output targets touched by selected modes."""
+    targets: list[Path] = []
+    if template or procedural:
+        targets.append(Path("data/episodes/episodes_synthetic.jsonl"))
+    if llm_gen:
+        targets.append(Path("data/episodes/episodes_llm.jsonl"))
+    return targets
+
+
+def _fail_fast_on_existing_outputs(
+    targets: list[Path], explicit_overwrite: bool, command_name: str
+) -> bool:
+    """Enforce fail-fast write semantics unless explicit overwrite mode is set."""
+    if explicit_overwrite:
+        return False
+
+    existing = sorted({p for p in targets if p.exists()})
+    if not existing:
+        return False
+
+    console.print(
+        f"[red]Fail-fast:[/red] Existing outputs detected for `{command_name}`"
+    )
+    for path in existing[:10]:
+        console.print(f"  - {path}")
+    if len(existing) > 10:
+        console.print(f"  ... and {len(existing) - 10} more")
+    console.print(
+        "\nUse explicit overwrite mode (`--regenerate` or `--fresh`) to proceed."
+    )
+    return True
+
+
+def _run_fail_fast_preflight(
+    *,
+    mode: str,
+    dry_run: bool,
+    explicit_overwrite: bool,
+    is_episode_generation: bool,
+) -> bool:
+    """Run fail-fast write preflight and return True when command should abort."""
+    if dry_run:
+        return False
+
+    template, procedural, llm_gen = _modes_from_flag(mode)
+    targets = (
+        _episode_output_targets(template, procedural, llm_gen)
+        if is_episode_generation
+        else _find_existing_question_outputs(template, procedural, llm_gen)
+    )
+
+    command_name = (
+        f"csvagent generate episodes --{mode}"
+        if is_episode_generation
+        else f"csvagent generate questions --{mode}"
+    )
+
+    return _fail_fast_on_existing_outputs(
+        targets,
+        explicit_overwrite=explicit_overwrite,
+        command_name=command_name,
+    )
+
+
 def cmd_generate_questions(
     mode: str,
     max_datasets: int | None,
@@ -307,6 +391,14 @@ def cmd_generate_questions(
 ):
     """Generate questions by mode."""
     template, procedural, llm_gen = _modes_from_flag(mode)
+
+    if _run_fail_fast_preflight(
+        mode=mode,
+        dry_run=dry_run,
+        explicit_overwrite=regenerate,
+        is_episode_generation=False,
+    ):
+        return 2
 
     if dry_run:
         console.print("[bold]Dry Run - Generate Questions[/bold]\n")
@@ -445,6 +537,14 @@ def cmd_generate_episodes(
 ):
     """Generate verified episodes via teacher triangulation."""
     template, procedural, llm_gen = _modes_from_flag(mode)
+
+    if _run_fail_fast_preflight(
+        mode=mode,
+        dry_run=dry_run,
+        explicit_overwrite=fresh,
+        is_episode_generation=True,
+    ):
+        return 2
 
     exit_code = 0
 
@@ -1125,7 +1225,7 @@ Examples:
     q_parser.add_argument(
         "--regenerate",
         action="store_true",
-        help="Regenerate questions even if episodes exist (LLM only)",
+        help="Explicit overwrite mode for question outputs",
     )
 
     e_parser = gen_sub.add_parser("episodes", help="Generate episodes")

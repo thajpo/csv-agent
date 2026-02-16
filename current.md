@@ -20,16 +20,14 @@ Last updated: 2026-02-16
 ## Brainstormed
 
 ### Residual Contract Purge (active)
-status: in_progress
-readiness: executing
+status: done
+readiness: completed
 
 description:
 - Finish the remaining contract cleanup after merged issues #5/#6/#7.
 
 current code evidence:
-- residual `skip_existing` code paths remained in CLI + datagen runtime.
-- residual legacy `question` fallback reads remained in contract-facing code.
-- source mismatch existed in some inspect/preflight filters (`llm` vs `llm_gen`).
+- completed in commit `3057545` on `main`.
 
 files being touched:
 - `src/cli.py`
@@ -46,21 +44,43 @@ files being touched:
 - `src/datagen/question_gen.py`
 
 acceptance:
-- no `skip_existing` references remain under `src/`.
-- no contract-facing `q.get("question", ...)` fallbacks remain in touched runtime surfaces.
-- source filters consistently use `llm_gen` for LLM-generated questions.
+- met: no `skip_existing` references remain under `src/`.
+- met: contract-facing fallback cleanup completed for targeted runtime surfaces.
+- met: source filters now consistently use `llm_gen`.
 
 ### Test Hardening (active)
-status: in_progress
-readiness: executing
+status: done
+readiness: completed
 
 description:
 - Add regression tests proving residual purge invariants stay enforced.
 
 planned tests:
-- new contract test: no `skip_existing` in runtime signatures/calls.
-- source vocabulary tests for inspect/preflight (`llm_gen` only).
-- schema checks for removed parallel metadata fields.
+- completed in commit `3057545`:
+  - `tests/test_residual_contract_purge.py`
+  - full lint pass (`ruff check src tests`)
+  - full test pass (`257 passed, 6 skipped`)
+
+### Dead Code + Duplicate Functionality Sweep
+status: in_progress
+readiness: executing
+
+description:
+- delete as much dead/duplicate code as possible without behavior regressions.
+
+current code evidence:
+- broad lint/dead-code cleanup already merged in `3057545`.
+- likely duplicate functionality still exists in analysis/debug helper surfaces.
+
+execution approach:
+- run file-by-file duplicate detection + usage mapping.
+- remove dead wrappers/helpers only when covered by regression tests.
+- keep behavior-neutral mechanical removals isolated from feature changes.
+
+acceptance:
+- no dead wrappers in targeted modules.
+- no duplicate active code paths for the same contract behavior.
+- tests + lint stay green.
 
 ### Pipeline Validation + Small Batch Eval
 status: pending
@@ -74,7 +94,8 @@ notes:
 - open issue #9 (Dataset-Quality Snapshot) should be used in this phase.
 
 ## Specd
-- no active specd items (direct execution requested by user on `main`)
+
+- Unified Episode/Question Contract + No-Data-Loss Regression Gate | status: issued | issue: #14
 
 ## Recovery Notes
 - Prior planning content was heavily compressed to reduce noise and keep active work scannable.
