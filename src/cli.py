@@ -136,9 +136,7 @@ def cmd_progress():
         bar = "█" * filled + "░" * (width - filled)
         return f"{bar} {pct * 100:.0f}%"
 
-    # Questions (consider 100% if we have any)
-    synth_q_pct = 100 if total_synth_q > 0 else 0
-    llm_q_pct = 100 if total_llm_q > 0 else 0
+    # Questions
     table.add_row(
         "1. Questions",
         f"{total_synth_q:,}",
@@ -206,7 +204,7 @@ def cmd_progress():
     total_remaining = remaining_synth + remaining_llm
 
     if total_remaining > 0:
-        console.print(f"[bold yellow]Bottleneck:[/bold yellow] Episode generation")
+        console.print("[bold yellow]Bottleneck:[/bold yellow] Episode generation")
         console.print(
             f"  Remaining: {remaining_synth:,} synthetic + {remaining_llm:,} LLM = [bold]{total_remaining:,}[/bold] episodes"
         )
@@ -315,7 +313,7 @@ def cmd_generate_questions(
         if template:
             console.print("  [green]template[/green]: Will generate template questions")
             console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print(f"    Output: data/questions_synthetic/")
+            console.print("    Output: data/questions_synthetic/")
         if procedural:
             console.print(
                 "  [magenta]procedural[/magenta]: Will generate program-based questions"
@@ -325,9 +323,9 @@ def cmd_generate_questions(
         if llm_gen:
             console.print("  [blue]llm_gen[/blue]: Will run LLM exploration")
             console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print(f"    Output: data/questions_llm/")
+            console.print("    Output: data/questions_llm/")
             if regenerate:
-                console.print(f"    [yellow]Mode: Regenerate (will overwrite)[/yellow]")
+                console.print("    [yellow]Mode: Regenerate (will overwrite)[/yellow]")
         console.print("\n[dim]No changes made (dry run)[/dim]")
         return 0
 
@@ -363,10 +361,10 @@ def cmd_generate_questions(
 
 def _show_episode_preflight(
     source: str, questions_dir: Path, episodes_file: Path
-) -> tuple[int, int, set]:
+) -> tuple[int, int]:
     """
     Show pre-flight summary before episode generation.
-    Returns: (total_questions, existing_count, existing_question_ids)
+    Returns: (total_questions, existing_count)
     """
     import json
 
@@ -379,7 +377,7 @@ def _show_episode_preflight(
         if selected_source == "procedural":
             return question_source == "procedural" or episode_source == "procedural"
         if selected_source == "llm_gen":
-            return question_source == "llm" or episode_source == "llm"
+            return question_source == "llm_gen" or episode_source == "llm_gen"
         return True
 
     # Count total questions available for selected source
@@ -436,7 +434,7 @@ def _show_episode_preflight(
         )
     )
 
-    return total_questions, existing_count, existing_ids
+    return total_questions, existing_count
 
 
 def cmd_generate_episodes(
@@ -454,7 +452,7 @@ def cmd_generate_episodes(
         questions_dir = Path("data/questions_synthetic")
         episodes_file = Path("data/episodes/episodes_synthetic.jsonl")
 
-        total_q, existing, existing_ids = _show_episode_preflight(
+        total_q, existing = _show_episode_preflight(
             "template", questions_dir, episodes_file
         )
         remaining = total_q - existing
@@ -466,13 +464,13 @@ def cmd_generate_episodes(
                 f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
             )
         else:
-            if not fresh and existing > 0:
-                console.print(
-                    f"\n[dim]Mode: Append (skipping {existing:,} existing)[/dim]"
-                )
-            elif fresh:
+            if fresh:
                 console.print(
                     f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]"
+                )
+            elif existing > 0:
+                console.print(
+                    f"\n[dim]Mode: Rerun (will overwrite {existing:,} existing)[/dim]"
                 )
 
             console.print()
@@ -484,7 +482,6 @@ def cmd_generate_episodes(
                     questions_dir=str(questions_dir),
                     output_path=str(episodes_file),
                     max_questions=max_questions,
-                    skip_existing=existing_ids if not fresh else set(),
                     source="template",
                 )
             )
@@ -495,13 +492,15 @@ def cmd_generate_episodes(
         questions_dir = Path("data/questions_synthetic")
         episodes_file = Path("data/episodes/episodes_synthetic.jsonl")
 
-        total_q, existing, existing_ids = _show_episode_preflight(
+        total_q, existing = _show_episode_preflight(
             "procedural", questions_dir, episodes_file
         )
         remaining = total_q - existing
 
         if remaining == 0:
-            console.print("\n[green]All procedural questions already processed![/green]")
+            console.print(
+                "\n[green]All procedural questions already processed![/green]"
+            )
         elif dry_run:
             console.print(
                 f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
@@ -515,7 +514,7 @@ def cmd_generate_episodes(
                     questions_dir=str(questions_dir),
                     output_path=str(episodes_file),
                     max_questions=max_questions,
-                    skip_existing=existing_ids if not fresh else set(),
+                    append_output=template,
                     source="procedural",
                 )
             )
@@ -526,7 +525,7 @@ def cmd_generate_episodes(
         questions_dir = Path("data/questions_llm")
         episodes_file = Path("data/episodes/episodes_llm.jsonl")
 
-        total_q, existing, existing_ids = _show_episode_preflight(
+        total_q, existing = _show_episode_preflight(
             "llm_gen", questions_dir, episodes_file
         )
         remaining = total_q - existing
@@ -538,13 +537,13 @@ def cmd_generate_episodes(
                 f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
             )
         else:
-            if not fresh and existing > 0:
-                console.print(
-                    f"\n[dim]Mode: Append (skipping {existing:,} existing)[/dim]"
-                )
-            elif fresh:
+            if fresh:
                 console.print(
                     f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]"
+                )
+            elif existing > 0:
+                console.print(
+                    f"\n[dim]Mode: Rerun (will overwrite {existing:,} existing)[/dim]"
                 )
 
             console.print()
@@ -556,7 +555,6 @@ def cmd_generate_episodes(
                     questions_dir=str(questions_dir),
                     output_path=str(episodes_file),
                     max_questions=max_questions,
-                    skip_existing=existing_ids if not fresh else set(),
                 )
             )
             if result != 0:
@@ -1021,9 +1019,7 @@ def _interactive_generate_episodes():
 
     dry_run = questionary.confirm("Dry run (preview only)?", default=False).ask()
 
-    cmd_generate_episodes(
-        mode=source, max_questions=max_questions, dry_run=dry_run
-    )
+    cmd_generate_episodes(mode=source, max_questions=max_questions, dry_run=dry_run)
 
 
 def _interactive_run():
@@ -1116,8 +1112,12 @@ Examples:
 
     q_parser = gen_sub.add_parser("questions", help="Generate questions")
     q_mode = q_parser.add_mutually_exclusive_group(required=True)
-    q_mode.add_argument("--template", action="store_const", dest="mode", const="template")
-    q_mode.add_argument("--procedural", action="store_const", dest="mode", const="procedural")
+    q_mode.add_argument(
+        "--template", action="store_const", dest="mode", const="template"
+    )
+    q_mode.add_argument(
+        "--procedural", action="store_const", dest="mode", const="procedural"
+    )
     q_mode.add_argument("--llm-gen", action="store_const", dest="mode", const="llm_gen")
     q_mode.add_argument("--all", action="store_const", dest="mode", const="all")
     q_parser.add_argument("--max-datasets", type=int, help="Limit datasets")
@@ -1130,8 +1130,12 @@ Examples:
 
     e_parser = gen_sub.add_parser("episodes", help="Generate episodes")
     e_mode = e_parser.add_mutually_exclusive_group(required=True)
-    e_mode.add_argument("--template", action="store_const", dest="mode", const="template")
-    e_mode.add_argument("--procedural", action="store_const", dest="mode", const="procedural")
+    e_mode.add_argument(
+        "--template", action="store_const", dest="mode", const="template"
+    )
+    e_mode.add_argument(
+        "--procedural", action="store_const", dest="mode", const="procedural"
+    )
     e_mode.add_argument("--llm-gen", action="store_const", dest="mode", const="llm_gen")
     e_mode.add_argument("--all", action="store_const", dest="mode", const="all")
     e_parser.add_argument("--max-questions", type=int, help="Max per dataset")
@@ -1143,9 +1147,15 @@ Examples:
     # run
     run_parser = subparsers.add_parser("run", help="Run full pipeline")
     run_mode = run_parser.add_mutually_exclusive_group(required=True)
-    run_mode.add_argument("--template", action="store_const", dest="mode", const="template")
-    run_mode.add_argument("--procedural", action="store_const", dest="mode", const="procedural")
-    run_mode.add_argument("--llm-gen", action="store_const", dest="mode", const="llm_gen")
+    run_mode.add_argument(
+        "--template", action="store_const", dest="mode", const="template"
+    )
+    run_mode.add_argument(
+        "--procedural", action="store_const", dest="mode", const="procedural"
+    )
+    run_mode.add_argument(
+        "--llm-gen", action="store_const", dest="mode", const="llm_gen"
+    )
     run_mode.add_argument("--all", action="store_const", dest="mode", const="all")
     run_parser.add_argument("--test", action="store_true", help="Quick test mode")
     run_parser.add_argument("--dry-run", action="store_true", help="Preview only")

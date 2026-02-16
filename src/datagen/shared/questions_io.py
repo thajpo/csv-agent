@@ -27,7 +27,6 @@ UNIFIED_OPTIONAL_FIELDS = (
 class QuestionRecord(TypedDict, total=False):
     id: str
     source: Literal["llm_gen", "template", "procedural"]
-    is_procedural: bool
     dataset: str
     question_text: str | None
     question_mechanical: str | None

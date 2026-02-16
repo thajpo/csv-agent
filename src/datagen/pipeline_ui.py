@@ -12,7 +12,6 @@ import textwrap
 import threading
 from typing import Any
 
-from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 
@@ -249,7 +248,7 @@ class EpisodeGenUI:
             return
 
         if mode == "gold":
-            self.console.print(f"[dim]  ⏱️  Starting gold trace execution...[/dim]")
+            self.console.print("[dim]  ⏱️  Starting gold trace execution...[/dim]")
         else:
             self.console.print(
                 f"[dim]  ⏱️  Starting consistency trace {mode} execution...[/dim]"

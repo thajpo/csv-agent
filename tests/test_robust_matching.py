@@ -1,7 +1,5 @@
 
 import pandas as pd
-import numpy as np
-import pytest
 from src.datagen.teacher import answers_match
 
 def test_dataframe_exact_match():

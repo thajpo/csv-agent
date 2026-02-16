@@ -43,13 +43,13 @@ async def main():
     print("\n" + "="*60)
     print("RESULTS")
     print("="*60)
-    print(f"\nGold Trace (with hint):")
+    print("\nGold Trace (with hint):")
     print(f"  Success: {result.gold_trace['success']}")
     print(f"  Final Answer: {result.gold_trace['final_answer']}")
     print(f"  Final Hash: {result.gold_trace['final_answer_hash']}")
     print(f"  Turns: {len(result.gold_trace['turns'])}")
 
-    print(f"\nConsistency Traces (without hint):")
+    print("\nConsistency Traces (without hint):")
     for i, trace in enumerate(consistency_traces, 1):
         print(f"  Trace {i}:")
         print(f"    Success: {trace['success']}")

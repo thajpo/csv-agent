@@ -12,10 +12,8 @@ Usage (via CLI):
 """
 
 import subprocess
-import sys
 import time
 import asyncio
-import json
 from pathlib import Path
 
 from src.core.config import config
@@ -53,28 +51,10 @@ def run_stage(name: str, cmd: list[str]) -> bool:
         return False
 
 
-def _load_existing_episode_ids(output_path: Path) -> set[str]:
-    """Load existing episode question IDs from output JSONL if present."""
-    if not output_path.exists():
-        return set()
-    existing_ids = set()
-    with open(output_path) as f:
-        for line in f:
-            try:
-                ep = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            qid = ep.get("question", {}).get("id")
-            if qid:
-                existing_ids.add(qid)
-    return existing_ids
-
-
 def run_synthetic_stage(
     name: str,
     max_questions: int | None,
     source: str,
-    skip_existing: set[str] | None = None,
     append_output: bool = False,
 ) -> bool:
     """Run synthetic episode generation in-process with source-scoped filtering."""
@@ -88,7 +68,6 @@ def run_synthetic_stage(
             questions_dir=str(config.questions_synthetic_dir),
             output_path=str(config.episodes_synthetic_jsonl),
             max_questions=max_questions,
-            skip_existing=skip_existing,
             append_output=append_output,
             source=source,
         )
@@ -171,12 +150,10 @@ def main(
 
     # Stage 2b: Procedural Episodes
     if run_procedural:
-        existing_ids = _load_existing_episode_ids(Path(config.episodes_synthetic_jsonl))
         if run_synthetic_stage(
             "Stage 2b: Generate Procedural Episodes",
             max_questions=max_questions,
             source="procedural",
-            skip_existing=existing_ids,
             append_output=run_template,
         ):
             stages_run += 1
@@ -219,7 +196,7 @@ def main(
 
     # Summary
     print(f"\n{'=' * 60}")
-    print(f"  PIPELINE COMPLETE")
+    print("  PIPELINE COMPLETE")
     print(f"{'=' * 60}")
     print(f"  Stages run: {stages_run}")
     print(f"  Stages failed: {stages_failed}")

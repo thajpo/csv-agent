@@ -3,7 +3,6 @@
 Dead code detection policy: REJECT chains with dead code immediately.
 """
 
-import pytest
 from src.datagen.synthetic.programs.spec import OpInstance
 from src.datagen.synthetic.programs.dead_code_validator import validate_no_dead_code
 

@@ -12,7 +12,7 @@ Tests:
 import asyncio
 import pytest
 import pytest_asyncio
-from src.envs.container_pool import MultiTenantContainer, Slot, WorkerAdapter
+from src.envs.container_pool import MultiTenantContainer, WorkerAdapter
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -314,7 +314,7 @@ class TestContainerPool:
 
             # Acquire with first CSV
             container = await pool.acquire("data/csv/data.csv")
-            result1 = await container.run_on_worker(0, "df.shape")
+            await container.run_on_worker(0, "df.shape")
             await pool.release(container)
 
             # Acquire with second CSV (should switch)

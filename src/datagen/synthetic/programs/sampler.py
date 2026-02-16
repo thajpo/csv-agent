@@ -13,7 +13,6 @@ from src.datagen.synthetic.programs.spec import ProgramSpec
 from src.datagen.synthetic.programs.grammar import search_programs
 from src.datagen.synthetic.programs.enumerate import enumerate_bindings
 from src.datagen.synthetic.programs.reduction import reduce_chains
-from src.datagen.synthetic.programs.long_chains import generate_long_chain_programs
 from src.datagen.synthetic.programs.semantic_long_chains import (
     generate_semantic_long_programs,
 )

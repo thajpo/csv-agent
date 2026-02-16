@@ -10,11 +10,8 @@ Refactored to use a sandboxed Python environment for code execution.
 
 import json
 import logging
-import re
 
 import pandas as pd
-
-logger = logging.getLogger(__name__)
 
 from src.core.model import APILLM
 from src.utils.parsing import (
@@ -32,6 +29,8 @@ from src.datagen.shared.submission import parse_submission
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
+
+logger = logging.getLogger(__name__)
 
 # Max output chars before truncation (~12.5K tokens at 4 chars/token)
 MAX_OUTPUT_CHARS = 50_000
@@ -422,7 +421,7 @@ class Environment:
                             truncated_json = json.dumps(submit_json, default=str)
                             submit_line = submit_line[:json_start] + truncated_json
                             logger.warning(
-                                f"Truncated hooks in submission (was too large for context)"
+                                "Truncated hooks in submission (was too large for context)"
                             )
 
                             # Step 2: If still too large, the answer itself is huge
@@ -447,7 +446,7 @@ class Environment:
                                 submit_line[:max_submit_len] + "...[TRUNCATED]"
                             )
                             logger.warning(
-                                f"Submission line too large and not parseable, truncating"
+                                "Submission line too large and not parseable, truncating"
                             )
 
                 # Keep start + submission line

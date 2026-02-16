@@ -8,7 +8,7 @@ for data analysis tasks with pandas/numpy/scipy pre-loaded.
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 import uuid
 
 import verifiers as vf

@@ -11,7 +11,6 @@ Why template-based:
 - Optional LLM polish: can add natural language variation without changing meaning
 """
 
-from typing import Optional
 from src.datagen.synthetic.programs.spec import ProgramSpec
 
 

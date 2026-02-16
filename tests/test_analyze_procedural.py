@@ -12,7 +12,6 @@ Run with: uv run pytest tests/test_analyze_procedural.py -v
 
 import json
 import sys
-from io import StringIO
 from pathlib import Path
 
 import pytest

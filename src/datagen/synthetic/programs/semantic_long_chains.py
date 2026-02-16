@@ -193,13 +193,11 @@ def generate_semantic_long_programs(profile: dict) -> List[ProgramSpec]:
     """
     from src.datagen.synthetic.programs.operators import (
         get_eligible_numeric_cols,
-        get_eligible_categorical_cols,
         get_eligible_binary_categorical_cols,
     )
 
     programs = []
     numeric_cols = get_eligible_numeric_cols(profile)
-    cat_cols = get_eligible_categorical_cols(profile)
     binary_cat_cols = get_eligible_binary_categorical_cols(profile)
 
     # Generate cascading filter templates

@@ -29,12 +29,6 @@ import signal
 import argparse
 from pathlib import Path
 
-import asyncio
-import json
-import sys
-import signal
-import argparse
-from pathlib import Path
 from collections import defaultdict
 import time
 
@@ -46,7 +40,6 @@ from csv_spec import (
 )
 from src.core.config import config
 from src.utils.docker import (
-    cleanup_csv_sandbox_containers,
     cleanup_session,
     generate_session_id,
 )
@@ -345,7 +338,6 @@ async def main(
     parallel: bool = False,
     n_workers: int = 4,
     gui_progress: str | None = None,
-    skip_existing: set | None = None,
     append_output: bool = False,
     difficulties: list[str] | None = None,
     retry_failed: bool = False,
@@ -411,11 +403,8 @@ async def main(
     output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
-    # Append mode can be explicit, or inferred from skip-existing semantics.
-    append_mode = append_output or (
-        skip_existing is not None and len(skip_existing) > 0
-    )
-    if not append_mode and output_jsonl.exists():
+    # Fresh start unless append_output is explicitly requested
+    if not append_output and output_jsonl.exists():
         output_jsonl.unlink()
 
     # Load manifest for caching
@@ -571,7 +560,7 @@ async def main(
             progress.log(f"✓ {name}: {len(episodes)} verified, {len(failures)} failed")
 
     # Write episodes
-    write_mode = "a" if append_mode else "w"
+    write_mode = "a" if append_output else "w"
     with open(output_jsonl, write_mode) as f:
         for episode in all_episodes:
             f.write(json.dumps(episode.model_dump(), default=str) + "\n")

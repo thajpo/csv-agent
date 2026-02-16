@@ -4,7 +4,6 @@ These tests verify that all question sources output valid unified schema.
 """
 
 import pytest
-import pytest_asyncio
 import json
 import tempfile
 from pathlib import Path
@@ -155,7 +154,6 @@ class TestLLMQuestionLoad:
         # Create a mock LLM question
         llm_question = {
             "id": "llm_test_001",
-            "source": "llm_gen",
             "source": "llm_gen",
             "dataset": "test_dataset",
             "question_text": "What is the correlation between age and income?",

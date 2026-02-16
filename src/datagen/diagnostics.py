@@ -279,8 +279,8 @@ def format_diagnostic_summary(diagnostics: DiagnosticMetadataDict) -> str:
         f"Category: {diagnostics['failure_category'].upper()}",
         f"Confidence: {diagnostics['classification_confidence']:.0%}",
         f"Reasoning: {diagnostics['classification_reasoning']}",
-        f"",
-        f"Distribution:",
+        "",
+        "Distribution:",
         f"  Traces: {dist['successful_traces']}/{dist['total_traces']} succeeded",
         f"  Clusters: {dist['cluster_count']}",
         f"  Entropy: {dist['entropy']:.2f}",
@@ -288,10 +288,10 @@ def format_diagnostic_summary(diagnostics: DiagnosticMetadataDict) -> str:
     ]
 
     if diagnostics.get("gold_matches_majority"):
-        lines.append(f"  Gold: matches majority ✓")
+        lines.append("  Gold: matches majority ✓")
     elif diagnostics.get("gold_cluster_index") is not None:
         lines.append(f"  Gold: in cluster {diagnostics['gold_cluster_index']} (not majority)")
     else:
-        lines.append(f"  Gold: no cluster match")
+        lines.append("  Gold: no cluster match")
 
     return "\n".join(lines)

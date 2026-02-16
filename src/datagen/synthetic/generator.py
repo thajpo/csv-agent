@@ -23,7 +23,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 
 from src.core.config import config
 from src.core.prompts import generate_data_overview
@@ -392,9 +391,6 @@ class CompositionalQuestionGenerator:
             output_path / "questions_rejected.jsonl" if output_path else None
         )
         episodes_jsonl = output_path / "episodes.jsonl" if output_path else None
-        episodes_failed_jsonl = (
-            output_path / "episodes_failed.jsonl" if output_path else None
-        )
 
         # Load already-processed fingerprints for resume
         processed_fingerprints: set[str] = set()

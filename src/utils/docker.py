@@ -209,12 +209,12 @@ def check_resource_availability(
     if available_mem > 0:
         usable_memory = max(0, available_mem - MIN_FREE_MEMORY_GB)
         max_new_containers = int(usable_memory / memory_per_container_gb)
-        total_after = existing + requested_containers
-        total_memory_needed = total_after * memory_per_container_gb
 
         warning = None
 
-        if available_mem < MIN_FREE_MEMORY_GB + (requested_containers * memory_per_container_gb):
+        if available_mem < MIN_FREE_MEMORY_GB + (
+            requested_containers * memory_per_container_gb
+        ):
             warning = (
                 f"Low memory: {available_mem:.1f}GB available, "
                 f"need ~{requested_containers * memory_per_container_gb:.1f}GB for {requested_containers} containers. "

@@ -5,7 +5,7 @@ Provides two evidence strategies: ground_truth and consistency.
 """
 
 from dataclasses import dataclass
-from typing import Literal, Any
+from typing import Literal
 from csv_spec import TraceDict
 import logging
 
@@ -71,9 +71,6 @@ async def verify_synthetic(
         VerificationResult with match status and full trace.
     """
     from src.datagen.teacher import execute_teacher_trace, answers_match
-    import time
-
-    start_time = time.time()
 
     try:
         # Use mechanical question or question_text if available
@@ -163,7 +160,6 @@ async def verify_synthetic(
             error=f"Answer mismatch: expected {expected_answers}, got {actual_answer}",
         )
     except Exception as e:
-        elapsed = time.time() - start_time
         logger.error(f"verify_synthetic error: {e}")
         return VerificationResult(
             success=False,

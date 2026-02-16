@@ -25,7 +25,6 @@ from src.core.prompts import generate_data_overview
 from csv_spec import (
     EpisodeJSONL,
     TimingMetadataDict,
-    BatchTriangulationResult,
 )
 from src.core.config import config
 from src.utils.docker import (
@@ -132,9 +131,7 @@ def gather_csv_tasks(
 
     for csv_path in csv_sources:
         # Load dataset metadata using shared module
-        csv_path_obj = Path(csv_path)
         dataset_name, dataset_description = load_dataset_meta(csv_path)
-        csv_path_obj = Path(csv_path)
 
         # Generate description from data_overview if missing
         if not dataset_description or not dataset_description.strip():
@@ -237,7 +234,7 @@ async def process_csv_task(
         question_text = (
             r.question.get("question_text")
             or r.question.get("question_mechanical")
-            or r.question.get("question", "")
+            or ""
         )
 
         # Compute fingerprint for manifest recording
@@ -329,7 +326,6 @@ async def main(
     max_questions: int | None = None,
     skip_difficulty_filter: bool = False,
     difficulties: list[str] | None = None,
-    skip_existing: set | None = None,
     retry_failed: bool = False,
 ):
     # Create global UI instance
@@ -369,9 +365,7 @@ async def main(
     output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
-    # Append mode if we're skipping existing, otherwise overwrite
-    append_mode = skip_existing is not None and len(skip_existing) > 0
-    if not append_mode and output_jsonl.exists():
+    if output_jsonl.exists():
         output_jsonl.unlink()
 
     # Get parent directory of questions (must be specified explicitly)
@@ -426,11 +420,7 @@ async def main(
 
         filtered_questions = []
         for q in task.questions:
-            question_text = (
-                q.get("question_text")
-                or q.get("question_mechanical")
-                or q.get("question", "")
-            )
+            question_text = q.get("question_text") or q.get("question_mechanical") or ""
             fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
             # include_failures=True means skip failures too (unless retry_failed)
             if manifest.has_llm(fingerprint, include_failures=not retry_failed):
@@ -443,23 +433,6 @@ async def main(
     new_total = sum(len(t.questions) for t in tasks)
     if original_total > new_total:
         ui.base.print_status(f"Skipping {original_total - new_total} cached questions")
-
-    # Legacy skip_existing support (for backward compatibility)
-    if skip_existing:
-        original_total = sum(len(t.questions) for t in tasks)
-        for task in tasks:
-            task.questions = [
-                q
-                for q in task.questions
-                if q.get("id", q.get("ground_truth_hash", "")) not in skip_existing
-            ]
-        # Remove tasks with no questions after filtering
-        tasks = [t for t in tasks if t.questions]
-        new_total = sum(len(t.questions) for t in tasks)
-        if original_total > new_total:
-            ui.base.print_status(
-                f"Skipping {original_total - new_total} already-processed questions"
-            )
 
     # Limit questions per dataset if specified
     if max_questions is not None:
@@ -610,8 +583,7 @@ async def main(
     # Write all episodes to output file
     total_verified = sum(1 for ep in all_episodes if ep.verified)
 
-    write_mode = "a" if append_mode else "w"
-    with open(output_jsonl, write_mode) as f:
+    with open(output_jsonl, "w") as f:
         for episode in all_episodes:
             f.write(json.dumps(episode.model_dump(), default=str) + "\n")
 

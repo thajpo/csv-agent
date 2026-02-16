@@ -8,7 +8,6 @@ Tests:
 - False positive rejection (substring matching removed)
 """
 
-import pytest
 from src.core.environment import validate_hooks_grounded
 
 

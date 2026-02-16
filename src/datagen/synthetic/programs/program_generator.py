@@ -27,10 +27,9 @@ from src.datagen.shared.dataset_meta import (
     load_dataset_meta,
     generate_description_from_overview,
 )
-from src.datagen.shared.filters import FORBIDDEN_METHOD_TERMS, check_program_output
+from src.datagen.shared.filters import FORBIDDEN_METHOD_TERMS
 from src.datagen.shared.submission import parse_all_submissions
 from csv_spec import hash_artifact
-import uuid
 
 
 OUTPUT_SCHEMAS = {

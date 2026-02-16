@@ -5,7 +5,6 @@ Centralizes dataset viability, column eligibility, and program output filters.
 
 import re
 from dataclasses import dataclass
-from typing import Any
 
 from src.core.config import config
 
@@ -207,7 +206,6 @@ def apply_filters(question: dict, profile: dict) -> FilterResult:
     based on question type. For more control, use individual check functions.
     """
     source = question.get("source")
-    subtype = question.get("subtype")
 
     # All sources need dataset viability
     result = check_dataset_viability(profile)

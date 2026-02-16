@@ -9,7 +9,6 @@ Combines functionality for:
 
 import re
 import textwrap
-from typing import Any
 
 # Use CodeCellResult from conversation.py instead of ExecutionResult
 from src.core.conversation import CodeCellResult

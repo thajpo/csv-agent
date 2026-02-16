@@ -31,7 +31,7 @@ def create_trace_panel(parent: int | str):
 def show_question(question: dict):
     """Display a question in the trace viewer."""
     # Update header
-    q_text = question.get("question", "")
+    q_text = question.get("question_text") or question.get("question_mechanical") or ""
     hint = question.get("hint", "")
     difficulty = question.get("difficulty", "?")
     template = question.get("template_name", "")

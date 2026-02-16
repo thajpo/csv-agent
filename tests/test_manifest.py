@@ -1,10 +1,8 @@
 """Tests for datagen manifest module."""
 
-import json
 import tempfile
 from pathlib import Path
 
-import pytest
 
 from src.datagen.manifest import (
     DatagenManifest,

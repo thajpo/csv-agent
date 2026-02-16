@@ -18,6 +18,12 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
+from src.core.model import APILLM
+from src.core.conversation import ConversationHistory, CodeCellResult
+from csv_spec import ExplorationTurn, ExplorationTrace
+from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, get_exploration_continue_msg
+from src.utils.parsing import parse_execution_result, extract_python_cells
+
 from src.datagen.pipeline_ui import QuestionGenUI
 from src.core.config import config
 from src.datagen.shared.dataset_meta import (
@@ -26,7 +32,7 @@ from src.datagen.shared.dataset_meta import (
 )
 
 from src.envs.csv_env import LocalCSVAnalysisEnv
-from src.utils.docker import generate_session_id, cleanup_session
+from src.utils.docker import generate_session_id
 
 
 def get_datasets_with_episodes() -> set[str]:
@@ -52,12 +58,6 @@ def get_datasets_with_episodes() -> set[str]:
                 continue
     return datasets
 
-
-from src.core.model import APILLM
-from src.core.conversation import ConversationHistory, CodeCellResult
-from csv_spec import ExplorationTurn, ExplorationTrace
-from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, get_exploration_continue_msg
-from src.utils.parsing import parse_execution_result, extract_python_cells
 
 # Rebuild Pydantic model to resolve forward reference to CodeCellResult
 ExplorationTurn.model_rebuild()
@@ -93,11 +93,34 @@ def try_parse_questions(response: str) -> list[dict] | None:
 
     def validate_questions(questions: list) -> bool:
         """Check if questions list has valid structure."""
-        return all(
-            isinstance(q, dict)
-            and all(key in q for key in ["question", "hint", "n_steps", "difficulty"])
-            for q in questions
-        )
+
+        def _has_required_shape(q: dict) -> bool:
+            question_text = q.get("question_text") or q.get("question")
+            return (
+                isinstance(question_text, str)
+                and question_text.strip() != ""
+                and "hint" in q
+                and "n_steps" in q
+                and "difficulty" in q
+            )
+
+        return all(isinstance(q, dict) and _has_required_shape(q) for q in questions)
+
+    def normalize_questions(questions: list[dict]) -> list[dict]:
+        """Normalize parser output to unified question_text-based shape."""
+        normalized: list[dict] = []
+        for q in questions:
+            question_text = (q.get("question_text") or q.get("question") or "").strip()
+            item = {
+                "question_text": question_text,
+                "hint": q.get("hint"),
+                "n_steps": q.get("n_steps"),
+                "difficulty": q.get("difficulty"),
+            }
+            if "id" in q:
+                item["id"] = q.get("id")
+            normalized.append(item)
+        return normalized
 
     # Strategy 1: Look for ```json fenced blocks (preferred format)
     json_pattern = r"```json\s*\n(.*?)```"
@@ -107,7 +130,7 @@ def try_parse_questions(response: str) -> list[dict] | None:
             data = json.loads(matches[0])
             if "questions" in data and isinstance(data["questions"], list):
                 if validate_questions(data["questions"]):
-                    return data["questions"]
+                    return normalize_questions(data["questions"])
         except json.JSONDecodeError:
             pass  # Strategy failed, try next
 
@@ -119,7 +142,7 @@ def try_parse_questions(response: str) -> list[dict] | None:
             data = json.loads(matches[0])
             if "questions" in data and isinstance(data["questions"], list):
                 if validate_questions(data["questions"]):
-                    return data["questions"]
+                    return normalize_questions(data["questions"])
         except json.JSONDecodeError:
             pass  # Strategy failed, try next
 
@@ -131,7 +154,7 @@ def try_parse_questions(response: str) -> list[dict] | None:
             data = json.loads(matches[0])
             if "questions" in data and isinstance(data["questions"], list):
                 if validate_questions(data["questions"]):
-                    return data["questions"]
+                    return normalize_questions(data["questions"])
         except json.JSONDecodeError:
             pass  # Strategy failed, return None below
 
@@ -198,7 +221,7 @@ async def explore_and_generate_questions(
     state = {}
     state = await env.setup_state(state)
 
-    ui.print_status(f"CSVAnalysisEnv initialized with sandbox")
+    ui.print_status("CSVAnalysisEnv initialized with sandbox")
 
     llm = APILLM(
         model=model,
@@ -320,7 +343,7 @@ async def explore_and_generate_questions(
         for q in questions_generated:
             trace_questions.append(
                 {
-                    "question_text": q.get("question") or q.get("question_text"),
+                    "question_text": q.get("question_text"),
                     "hint": q.get("hint"),
                     "difficulty": q.get("difficulty"),
                     "n_steps": q.get("n_steps"),
@@ -343,10 +366,9 @@ async def explore_and_generate_questions(
     dataset_name, _ = load_dataset_meta(csv_path)
     question_records = []
     for idx, q in enumerate(questions_generated, start=1):
-        question_text = q.get("question") or q.get("question_text")
+        question_text = q.get("question_text")
         record = {
             "id": q.get("id") or f"llm_{dataset_name}_{idx:04d}",
-            "source": "llm_gen",
             "source": "llm_gen",
             "dataset": dataset_name,
             "question_text": question_text,

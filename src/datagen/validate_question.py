@@ -278,7 +278,7 @@ def main():
     # Load question
     if args.questions_file:
         q = load_question_from_file(args.questions_file, args.index)
-        question = q.get("question", q.get("question_text", ""))
+        question = q.get("question_text") or q.get("question_mechanical", "")
         hint = q.get("hint")
         expected_answer = q.get("ground_truth")
         expected_hash = q.get("ground_truth_hash")

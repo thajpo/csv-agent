@@ -34,13 +34,11 @@ import asyncio
 import base64
 import json
 import logging
-import os
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
-from src.envs.csv_env import SETUP_CODE, PACKAGES
+from src.envs.csv_env import SETUP_CODE
 
 logger = logging.getLogger(__name__)
 
@@ -1010,7 +1008,7 @@ class ContainerPool:
         if not self._started:
             return
 
-        print(f"Stopping container pool...")
+        print("Stopping container pool...")
         stop_tasks = [c.stop() for c in self._containers]
         results = await asyncio.gather(*stop_tasks, return_exceptions=True)
         for container, result in zip(self._containers, results):
@@ -1025,7 +1023,7 @@ class ContainerPool:
         self._available = asyncio.Queue()
         self._csv_by_container = {}
         self._started = False
-        print(f"✓ Container pool stopped")
+        print("✓ Container pool stopped")
 
     async def acquire(self, csv_path: str) -> MultiTenantContainer:
         """

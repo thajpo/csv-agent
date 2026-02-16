@@ -23,8 +23,6 @@ from typing import Any, List
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 from src.core.environment import Environment
 from csv_spec import (
     TraceDict,
@@ -38,6 +36,8 @@ from csv_spec import (
 )
 from csv_spec import hash_artifact
 from csv_spec import normalize_value
+
+logger = logging.getLogger(__name__)
 
 
 def extract_trace_metrics(trace: TraceDict) -> dict:
@@ -737,9 +737,6 @@ async def execute_teacher_trace(
     conversation_messages = final_state.conversation.to_openai_messages()
     system_prompt = conversation_messages[0]["content"] if conversation_messages else ""
 
-    # Get code cells from environment (already extracted during execution)
-    code_cells = final_state.code_cells
-
     # Extract assistant messages (used for turn counting and UI display)
     assistant_messages = [
         msg for msg in conversation_messages if msg.get("role") == "assistant"
@@ -790,9 +787,6 @@ async def execute_teacher_trace(
 
     # Get final answer from environment's tracked submission
     final_answer = final_state.submitted_answer
-    final_answer_hash = (
-        hash_artifact(final_answer) if final_answer is not None else None
-    )
 
     # Check if execution was successful (submitted an answer)
     execution_success = final_answer is not None

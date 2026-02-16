@@ -1,13 +1,10 @@
 """Tests for shared filters module."""
 
-import pytest
 from src.datagen.shared.filters import (
     check_dataset_viability,
     check_column_eligibility,
     check_question_viability,
     check_program_output,
-    FilterResult,
-    FORBIDDEN_METHOD_TERMS,
 )
 
 
@@ -168,7 +165,6 @@ class TestProgramOutput:
         assert result.reason == "no_answer_submitted"
 
     def test_fails_nan_answer(self):
-        import math
 
         result = check_program_output({"answer": float("nan"), "row_count": 50})
         assert result.passed is False

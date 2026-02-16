@@ -255,8 +255,6 @@ class EpisodeAnalyzer:
         Raises:
             ValueError: If group_by is invalid
         """
-        episodes = self.filter_procedural() if procedural_only else self.episodes
-
         if group_by == "prefix":
             groups = self.group_by_name_prefix()
             grouping_name = "name_prefix"

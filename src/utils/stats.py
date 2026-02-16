@@ -10,7 +10,7 @@ Usage (via CLI):
 
 import argparse
 import json
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 
 from rich.console import Console

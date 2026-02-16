@@ -4,7 +4,6 @@ Smoke tests for csv-spec contract between trainer and environment.
 Tests the action→step→result flow using csv_spec types.
 """
 
-import pytest
 from csv_spec import (
     parse_action,
     parse_step_result,

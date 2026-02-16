@@ -128,7 +128,9 @@ def _load_questions():
         with dpg.tree_node(label=f"{dataset_name} ({count})", parent="questions_list"):
             if isinstance(count, int):
                 for i, q in enumerate(questions[:20]):  # Limit to first 20
-                    q_text = (q.get("question_text") or q.get("question") or "")[:50]
+                    q_text = (
+                        q.get("question_text") or q.get("question_mechanical") or ""
+                    )[:50]
                     difficulty = q.get("difficulty", "?")
                     dpg.add_selectable(
                         label=f"[{difficulty}] {q_text}...",

@@ -5,7 +5,6 @@ Provides consistent behavior across LLM and synthetic generation pipelines.
 """
 
 from pathlib import Path
-from typing import Optional
 import json
 
 

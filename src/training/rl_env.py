@@ -10,11 +10,8 @@ Uses csv-spec for contract types between trainer and environment.
 """
 
 import json
-from pathlib import Path
-from typing import Any
 
 from datasets import Dataset
-import verifiers as vf
 from verifiers import MultiTurnEnv
 from verifiers.types import State, Messages
 

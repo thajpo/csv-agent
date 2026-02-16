@@ -345,25 +345,25 @@ def generate_data_overview(csv_path: str = "data.csv") -> str:
             keep_default_na=True,
         )
     lines = []
-    lines.append(f"=== SHAPE ===")
+    lines.append("=== SHAPE ===")
     lines.append(f"Rows: {len(df)}")
     lines.append(f"Columns: {len(df.columns)}")
     lines.append("")
-    lines.append(f"=== COLUMNS ===")
+    lines.append("=== COLUMNS ===")
     for col, dtype in df.dtypes.items():
         lines.append(f"{col}: {dtype}")
     lines.append("")
-    lines.append(f"=== HEAD (first 5 rows) ===")
+    lines.append("=== HEAD (first 5 rows) ===")
     lines.append(df.head().to_string())
     lines.append("")
-    lines.append(f"=== NUMERIC SUMMARY ===")
+    lines.append("=== NUMERIC SUMMARY ===")
     numeric_cols = df.select_dtypes(include=["number"]).columns
     if len(numeric_cols) > 0:
         lines.append(df[numeric_cols].describe().to_string())
     else:
         lines.append("No numeric columns")
     lines.append("")
-    lines.append(f"=== MISSING VALUES ===")
+    lines.append("=== MISSING VALUES ===")
     missing = df.isnull().sum()
     if missing.sum() > 0:
         lines.append(missing[missing > 0].to_string())

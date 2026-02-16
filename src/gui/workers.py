@@ -35,7 +35,7 @@ def count_docker_containers() -> int:
             timeout=2,
         )
         if result.returncode == 0:
-            lines = [l for l in result.stdout.strip().split("\n") if l]
+            lines = [line for line in result.stdout.strip().split("\n") if line]
             return len(lines)
     except Exception:
         pass

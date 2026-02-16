@@ -21,7 +21,7 @@ Usage:
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 from csv_spec import (
     EpisodeJSONL,
@@ -71,7 +71,9 @@ async def create_episode(
     # Build QADict from question
     qa_dict: QADict = {
         "id": question.get("id"),
-        "question_text": question.get("question_text") or question.get("question", ""),
+        "question_text": question.get("question_text")
+        or question.get("question_mechanical")
+        or "",
         "hint": question.get("hint"),
         "difficulty": question.get("difficulty"),
         "n_steps": question.get("n_steps"),

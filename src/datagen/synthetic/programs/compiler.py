@@ -1,6 +1,5 @@
 """Compiles ProgramSpec into executable code with hooks."""
 
-from typing import Any
 
 from src.datagen.synthetic.programs.spec import ProgramSpec, State
 from src.datagen.synthetic.programs.operators import get_operator

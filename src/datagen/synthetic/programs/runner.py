@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from pathlib import Path
 
 from src.core.config import config
 from src.datagen.synthetic.programs.program_generator import run_pipeline

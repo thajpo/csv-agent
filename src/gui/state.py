@@ -5,7 +5,6 @@ Shared application state for the GUI.
 from dataclasses import dataclass, field
 from pathlib import Path
 from subprocess import Popen
-from typing import Any
 
 
 @dataclass

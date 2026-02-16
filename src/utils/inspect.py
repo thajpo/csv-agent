@@ -11,7 +11,6 @@ Usage (via CLI):
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 from rich.console import Console
@@ -52,7 +51,7 @@ def inspect_questions(
     source_filters = {
         "template": lambda q: q.get("source") == "template",
         "procedural": lambda q: q.get("source") == "procedural",
-        "llm_gen": lambda q: q.get("source") == "llm",
+        "llm_gen": lambda q: q.get("source") == "llm_gen",
         "all": lambda q: True,
     }
 

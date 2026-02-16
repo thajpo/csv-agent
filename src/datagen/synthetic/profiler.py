@@ -6,11 +6,10 @@ Generates a heavy-context "Fact Bundle" for Tier 1 Question Generation.
 import json
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 
 # Column name patterns that indicate index/identifier columns (not data columns)

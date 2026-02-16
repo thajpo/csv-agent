@@ -5,10 +5,9 @@ Test-first development for the episode factory module.
 
 import pytest
 from datetime import datetime
-from typing import Any
 from unittest.mock import patch, AsyncMock
 
-from csv_spec import EpisodeJSONL, TraceDict, QADict
+from csv_spec import EpisodeJSONL, TraceDict
 from src.datagen.shared.verification import VerificationResult
 
 
