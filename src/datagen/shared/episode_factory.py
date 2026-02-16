@@ -2,7 +2,7 @@
 
 This module centralizes episode creation for all question sources:
 - template: Template-based questions with ground truth
-- llm: LLM-generated questions with consistency verification
+- llm_gen: LLM-generated questions with consistency verification
 - procedural: Procedurally generated questions
 
 Usage:
@@ -33,10 +33,13 @@ from csv_spec import (
 from src.datagen.shared.verification import VerificationResult, verify_question
 
 
+ALLOWED_SOURCES = ("llm_gen", "template", "procedural")
+
+
 async def create_episode(
     question: dict,
     verification_result: VerificationResult,
-    source: Literal["template", "llm", "procedural"],
+    source: Literal["llm_gen", "template", "procedural"],
     csv_path: str,
 ) -> EpisodeJSONL:
     """Create episode from verification result.
@@ -44,7 +47,7 @@ async def create_episode(
     Args:
         question: Question metadata (must include id, question_text, hint, etc.)
         verification_result: Output from verify_question()
-        source: Origin of question ("template", "procedural", or "llm")
+        source: Origin of question ("llm_gen", "template", or "procedural")
         csv_path: Path to source CSV
 
     Returns:
@@ -53,6 +56,17 @@ async def create_episode(
     # Generate unique episode ID
     episode_id = str(uuid.uuid4())
     timestamp = datetime.now()
+
+    if source not in ALLOWED_SOURCES:
+        raise ValueError(f"Invalid episode source: {source}")
+
+    question_source = question.get("source")
+    if question_source not in ALLOWED_SOURCES:
+        raise ValueError(f"Invalid question source: {question_source}")
+    if source != question_source:
+        raise ValueError(
+            f"Episode source mismatch: source={source} question.source={question_source}"
+        )
 
     # Build QADict from question
     qa_dict: QADict = {
@@ -142,14 +156,15 @@ async def create_episode_from_ground_truth(
         csv_path: Path to CSV file
         model: Model identifier for teacher
         **kwargs: Additional arguments passed to verify_question and create_episode
-            - source: Override source (default: "template")
+            - source: Override source (default: question["source"])
             - float_tol: Float tolerance for answer matching
             - ui: UI instance for progress display
 
     Returns:
         EpisodeJSONL created from ground-truth verification
     """
-    source = kwargs.pop("source", "template")
+    source = kwargs.pop("source", question.get("source"))
+    source = kwargs.pop("source", question.get("source"))
 
     # Run ground-truth verification
     verification_result = await verify_question(
@@ -202,6 +217,6 @@ async def create_episode_from_consistency(
     return await create_episode(
         question=question,
         verification_result=verification_result,
-        source="llm",
+        source=question.get("source", "llm_gen"),
         csv_path=csv_path,
     )

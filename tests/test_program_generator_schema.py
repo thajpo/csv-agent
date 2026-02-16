@@ -71,6 +71,8 @@ async def test_program_generator_outputs_unified_schema(temp_output_dir):
         assert "ground_truth_hash" in q
         assert "output_schema" in q
         assert "n_steps" in q
+        assert "difficulty" in q
+        assert "dataset_description" in q
         assert "program_name" in q
         assert "program_ops" in q
 

@@ -523,11 +523,10 @@ class CompositionalQuestionGenerator:
                     "ground_truth": item["ground_truth"],
                     "ground_truth_hash": item["answer_hash"],
                     "ground_truth_hashes": item["answer_hashes"],
-                    "_ground_truth": item["ground_truth"],
-                    "_ground_truths": item["ground_truths"],
                     "output_schema": template.output_schema,
                     "n_steps": template.n_steps,
                     "difficulty": template.difficulty,
+                    "dataset_description": self.dataset_description,
                     "category": template.category,
                     "tags": template.tags,
                     "template_name": template.name,
@@ -575,7 +574,7 @@ class CompositionalQuestionGenerator:
                             template_params=accepted.get("template_params"),
                             output_type=accepted.get("output_type"),
                             output_schema=accepted.get("output_schema"),
-                            ground_truth=accepted.get("_ground_truth"),
+                            ground_truth=accepted.get("ground_truth"),
                             ground_truth_hash=accepted.get("ground_truth_hash"),
                             ground_truth_hashes=accepted.get("ground_truth_hashes"),
                         ),
@@ -597,7 +596,7 @@ class CompositionalQuestionGenerator:
                             total_elapsed=elapsed,
                             avg_elapsed=elapsed,
                         ),
-                        source="template",
+                        source=accepted.get("source"),
                     )
                     with open(episodes_jsonl, "a") as f:
                         f.write(episode.model_dump_json() + "\n")
@@ -739,15 +738,9 @@ async def generate_questions(
         questions_file = output_path / "questions.json"
 
         with open(questions_file, "w") as f:
-            # Keep ground_truth and template for evaluation, but mark as internal
             clean_questions = []
             for q in result["questions"]:
-                clean_q = {
-                    k: v
-                    for k, v in q.items()
-                    if k in ("_ground_truth", "_ground_truths", "_template")
-                    or not k.startswith("_")
-                }
+                clean_q = {k: v for k, v in q.items() if not k.startswith("_")}
                 clean_questions.append(clean_q)
 
             json.dump(clean_questions, f, indent=2)

@@ -267,7 +267,6 @@ async def run_pipeline(
             "dataset": dataset_name,
             "question_mechanical": _generate_mechanical_description(ops),
             "question_text": item["question"],
-            "question_text_llm": None,  # Optional LLM polish (not used by default)
             "hint": item["hint"],
             "code": code,
             "code_hash": hash_artifact(code),
@@ -275,6 +274,8 @@ async def run_pipeline(
             "ground_truth_hash": hash_artifact(answer),
             "output_schema": _output_schema_for_op(ops[-1]),
             "n_steps": len(ops),
+            "difficulty": None,
+            "dataset_description": dataset_description,
             "program_name": program["name"],
             "program_ops": ops,
         }

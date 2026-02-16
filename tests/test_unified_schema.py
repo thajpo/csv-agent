@@ -120,12 +120,15 @@ class TestSyntheticVerification:
             "dataset": "test",
             "question_mechanical": "What is the mean of column A?",
             "question_text": "What is the average value?",
+            "hint": None,
             "code": "df['A'].mean()",
             "code_hash": "abc123",
             "ground_truth": 42.0,
             "ground_truth_hash": "hash123",
             "output_schema": "scalar:float",
             "n_steps": 1,
+            "difficulty": None,
+            "dataset_description": None,
         }
 
         # Run verification
@@ -152,12 +155,20 @@ class TestLLMQuestionLoad:
         # Create a mock LLM question
         llm_question = {
             "id": "llm_test_001",
-            "source": "llm",
+            "source": "llm_gen",
+            "source": "llm_gen",
             "dataset": "test_dataset",
             "question_text": "What is the correlation between age and income?",
+            "question_mechanical": None,
             "hint": "Consider using correlation analysis",
+            "code": None,
+            "code_hash": None,
+            "ground_truth": None,
+            "ground_truth_hash": None,
+            "output_schema": None,
             "difficulty": "medium",
             "n_steps": 2,
+            "dataset_description": None,
         }
 
         # Save to temp file
@@ -171,8 +182,8 @@ class TestLLMQuestionLoad:
             assert len(loaded) == 1
 
             q = loaded[0]
-            assert q["source"] == "llm"
-            
+            assert q["source"] == "llm_gen"
+            assert q["source"] == "llm_gen"
             assert "question_text" in q
             assert (
                 q["question_text"] == "What is the correlation between age and income?"

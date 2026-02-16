@@ -214,8 +214,8 @@ def apply_filters(question: dict, profile: dict) -> FilterResult:
     if not result.passed:
         return result
 
-    # Synthetic questions need question viability check
-    if source == "synthetic":
+    # Template/procedural questions need question viability check
+    if source in ("template", "procedural"):
         question_text = question.get("question_text") or question.get(
             "question_mechanical", ""
         )

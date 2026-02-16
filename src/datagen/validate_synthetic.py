@@ -217,10 +217,15 @@ async def process_dataset(
             )
 
             # Use episode factory to create episode
+            source = q_dict.get("source")
+            if source not in ("llm_gen", "template", "procedural"):
+                raise ValueError(
+                    f"Invalid question source for episode creation: {source}"
+                )
             episode = await create_episode(
                 question=q_dict,
                 verification_result=verification_result,
-                source=q_dict.get("source", "template"),
+                source=source,
                 csv_path=str(csv_path),
             )
 
