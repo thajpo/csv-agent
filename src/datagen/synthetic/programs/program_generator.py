@@ -283,6 +283,34 @@ async def run_pipeline(
 
     # Save batch
     questions_file = output_path / "questions.json"
+    if questions_file.exists():
+        # Merge with existing records to avoid dropping prior template/procedural data
+        # when a run produces a partial or empty procedural batch.
+        with open(questions_file) as f:
+            existing = json.load(f)
+        if isinstance(existing, dict):
+            existing = existing.get("questions", [])
+        existing = existing if isinstance(existing, list) else []
+
+        merged_by_id: dict[str, dict] = {}
+        passthrough_without_id: list[dict] = []
+
+        for q in existing:
+            qid = q.get("id")
+            if qid:
+                merged_by_id[qid] = q
+            else:
+                passthrough_without_id.append(q)
+
+        for q in question_records:
+            qid = q.get("id")
+            if qid:
+                merged_by_id[qid] = q
+            else:
+                passthrough_without_id.append(q)
+
+        question_records = passthrough_without_id + list(merged_by_id.values())
+
     with open(questions_file, "w") as f:
         json.dump(question_records, f, indent=2)
 

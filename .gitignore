@@ -25,6 +25,7 @@ smoke_test/
 
 # Runtime logs
 logs/
+data/*.log
 
 # OS files
 .DS_Store

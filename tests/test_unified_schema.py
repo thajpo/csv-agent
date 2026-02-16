@@ -156,6 +156,7 @@ class TestLLMQuestionLoad:
         llm_question = {
             "id": "llm_test_001",
             "source": "llm_gen",
+            "source": "llm_gen",
             "dataset": "test_dataset",
             "question_text": "What is the correlation between age and income?",
             "question_mechanical": None,
@@ -181,6 +182,7 @@ class TestLLMQuestionLoad:
             assert len(loaded) == 1
 
             q = loaded[0]
+            assert q["source"] == "llm_gen"
             assert q["source"] == "llm_gen"
             assert "question_text" in q
             assert (

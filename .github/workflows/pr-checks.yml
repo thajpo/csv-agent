@@ -1,0 +1,51 @@
+name: pr-checks
+
+on:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Lint
+        run: |
+          if [ -f package.json ] && jq -e '.scripts.lint' package.json >/dev/null 2>&1; then
+            npm ci
+            npm run lint
+          elif [ -f pyproject.toml ]; then
+            uv sync --dev
+            uv run --with ruff ruff check .
+          else
+            echo "No lint command configured."
+            exit 1
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Test
+        run: |
+          if [ -f package.json ] && jq -e '.scripts.test' package.json >/dev/null 2>&1; then
+            npm ci
+            npm test -- --runInBand
+          elif [ -f pyproject.toml ]; then
+            uv sync --dev
+            uv run pytest -q
+          else
+            echo "No test command configured."
+            exit 1
+          fi

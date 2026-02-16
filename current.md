@@ -43,31 +43,36 @@ current code evidence:
   - `question` fallback reads still appear in multiple paths.
 
 missing:
-- One explicit procedural metadata policy (`source="synthetic", subtype="program"` vs separate source value).
+- Canonical triad schema contract across question/episode/inspect surfaces: `template | procedural | llm`.
+- Removal of parallel discriminator fields/labels that duplicate the triad concept.
 - Cleanup of fallback reads that silently normalize old shapes.
 
 spec candidates (not yet promoted):
 - candidate: procedural-metadata normalization
-  - behavior change: enforce single policy for procedural questions and episodes, then validate consistently.
+  - behavior change: enforce one triad schema end-to-end (`template|procedural|llm`) and remove parallel procedural flags/aliases from contract-facing paths.
+  - user intent: unify schema to explicit triad only; no split between boolean flags and subtype aliases.
   - files to touch:
     - `src/datagen/shared/questions_io.py`
     - `src/datagen/synthetic/programs/program_generator.py`
     - `src/datagen/shared/episode_factory.py`
+    - `src/datagen/validate_synthetic.py`
+    - `src/utils/inspect.py`
     - `tests/test_program_generator_schema.py`
     - `tests/test_episode_factory.py`
   - fail-first tests:
-    - assert procedural records conform to one policy and fail otherwise.
+    - assert triad vocabulary is the only accepted contract in touched CLI/inspect/validator surfaces.
+    - assert procedural records are represented via triad schema without auxiliary flag dependencies.
   - non-goals:
     - no downstream analytics redesign.
   - risks:
-    - breaks code expecting old `source="procedural"` episode labeling.
+    - breaks artifacts or scripts expecting legacy subtype/boolean distinctions.
   - touch points:
-    - `QuestionRecord` type and validation
-    - episode `source` assignment
+    - `QuestionRecord` type/validation contract
+    - episode source labeling + inspect filters
   - expected diff shape:
-    - modify, ~80-160 LOC
+    - modify, ~120-220 LOC
   - review checks:
-    - procedural data is unambiguous in both question and episode artifacts.
+    - all touched surfaces accept/emit only `template|procedural|llm` vocabulary.
 
 ### Synthetic Question Quality Improvements
 status: open
@@ -441,102 +446,116 @@ spec candidates (not yet promoted):
   - review checks:
     - rubric explains at least one concrete merge candidate.
 
+### Pipeline Orchestrator Refactor Follow-up
+status: open
+readiness: early
+
+discussion:
+- PR feedback indicates `src/datagen/pipeline.py` orchestration flow is hard to read after S3 fixes. // user note in PR: "this function does feel kind of mangled together."
+- Keep behavior unchanged; focus this item on structure/decomposition only.
+
+spec candidates (not yet promoted):
+- candidate: pipeline-orchestrator decomposition
+  - behavior change: split orchestration helpers for stage config, synthetic append/skip handling, and summary reporting.
+  - files to touch:
+    - `src/datagen/pipeline.py`
+    - tests that assert stage ordering/flags
+  - fail-first tests:
+    - verify `run --all` preserves stage 2a + 2b outputs and does not regress explicit mode behavior.
+  - non-goals:
+    - no command contract changes.
+    - no new generation logic.
+  - risks:
+    - accidental stage ordering regressions during extraction.
+  - touch points:
+    - stage builder helpers
+    - skip-existing ID loading and append behavior
+  - expected diff shape:
+    - refactor-only, ~80-180 LOC
+  - review checks:
+    - `pipeline.main` reads as orchestration only (minimal inline logic).
+
+- candidate: source-split storage layout
+  - behavior change: split question/episode artifact storage by source (`template`, `procedural`, `llm`) instead of mixed synthetic files.
+  - user intent: make ownership and overwrite semantics explicit by directory/file layout.
+  - files to touch:
+    - `src/datagen/pipeline.py`
+    - `src/datagen/validate_synthetic.py`
+    - `src/datagen/synthetic/programs/program_generator.py`
+    - `src/cli.py`
+    - inspect/readers that assume mixed synthetic paths
+  - fail-first tests:
+    - assert `generate --all` and `run --all` keep each source artifact isolated with no cross-source truncation.
+  - non-goals:
+    - no schema redesign beyond storage layout.
+  - risks:
+    - migration complexity for existing mixed artifacts and scripts.
+  - touch points:
+    - output path resolution and default artifact names
+  - expected diff shape:
+    - multi-file refactor, ~120-260 LOC
+  - review checks:
+    - source-specific commands read/write only their source-scoped artifacts by default.
+
+### Cleanup) Filters + Dead Code Sweep
+status: open
+readiness: early
+
+Behavior change (candidate):
+- Remove unused filter/dead-code paths and standardize on one active filtering contract path.
+
+Candidate scope:
+- identify unused entrypoints (for example `apply_filters`) and stale exports.
+- either wire a single canonical filter path or delete unused wrappers.
+- remove redundant/legacy-only code that no longer has call sites.
+
+Surfaces likely involved:
+- `src/datagen/shared/filters.py`
+- `src/datagen/shared/__init__.py`
+- call sites under `src/datagen/` and related tests
+
+Non-goals:
+- no behavior-preserving shims for dead code.
+- no broad refactor beyond filtering/dead-code surfaces.
+
+Risk:
+- accidental removal of code used indirectly by scripts/tests.
+
+Notes:
+- user intent: clean up filter code and other dead code.
+
+### Repo Lint Debt Cleanup
+status: open
+readiness: early
+
+discussion:
+- Baseline PR lint is active and currently reports broad repo-level violations unrelated to active feature slices.
+- Need a dedicated cleanup pass so lint failures map to current PR scope.
+
+spec candidates (not yet promoted):
+- candidate: staged ruff debt burn-down
+  - behavior change: remove high-volume lint debt (unused imports/variables, extraneous f-strings, import ordering) in bounded batches.
+  - user intent: avoid unrelated lint failures blocking focused PR work.
+  - files to touch:
+    - `src/**`
+    - `scripts/**`
+    - optional lint config only if needed for phased rollout
+  - fail-first tests:
+    - CI `pr-checks / lint` passes on touched batches with no new violations.
+  - non-goals:
+    - no functional behavior changes.
+    - no blanket ignore rules that hide new regressions.
+  - risks:
+    - large mechanical diffs can increase merge conflict pressure.
+  - touch points:
+    - imports, formatting, unused symbol cleanup
+  - expected diff shape:
+    - multi-PR mechanical cleanup, ~100-400 LOC per slice
+  - review checks:
+    - each slice is behavior-neutral and keeps tests stable.
+
 ## Specd
-- title: Pipeline Contract Cleanup -> strict-answer-contract purge
-  status: ready
-  approval:
-    approved_by: user
-    approval_signal: "i accept"
-    approved_on: 2026-02-08
-    expires_on: 2026-02-13
-    approval_status: valid
-    approval_basis: strict no-backward-compat cleanup after Q&A; implement strict-answer-contract purge only.
-  - readiness evidence:
-    - [2026-02-08] user confirmed strict no-backward-compat plan in natural dialogue.
-    - [2026-02-08] boundary confirmed: remove `_ground_truth` / `_ground_truths` fallback in runtime verification/load paths only.
-    - [2026-02-08] non-goals confirmed: no migration adapters and no procedural metadata policy changes.
-    - [2026-02-08] tests confirmed: fail-first legacy-key rejection test plus synthetic validation/question-io regression checks.
-    - [2026-02-08] risk accepted: old cached question files using underscored keys fail by design.
-    - [2026-02-08] user approval signal captured: "i accept".
-    - [2026-02-09] promotion output record: ready; blockers none; rationale: contract complete and approved.
-  - behavior change: verification/load paths reject legacy `_ground_truth` and `_ground_truths` fields and accept only unified answer keys.
-  - must stay unchanged: canonical unified question schema, synthetic verification semantics, and existing non-legacy question loading behavior.
-  - files to touch:
-    - `src/datagen/shared/verification.py`
-    - `src/datagen/shared/questions_io.py`
-    - `src/datagen/validate_synthetic.py`
-  - fail-first tests:
-    - add test proving legacy `_ground_truth` input fails schema/verification.
-  - regression tests:
-    - run synthetic validation and question-io tests to confirm unified-key payloads continue to pass.
-  - non-goals:
-    - no migration adapters for old JSON files.
-    - no procedural metadata policy changes in this slice.
-  - risks:
-    - old cached question files using underscored keys stop loading by design.
-  - rollback trigger:
-    - if canonical unified-key payloads regress, pause and revert strict-key rejection until parser/tests are fixed.
-  - overlap decision:
-    - split from `procedural-metadata normalization`; this slice only removes answer-key legacy fallback paths.
-  - dependency snapshot:
-    - depends_on: none
-    - blocked_by: none
-    - parallelizable_with:
-      - `Reliability Hardening -> container-stop observability`
-    - invalidation_watch:
-      - any upstream spec or merged PR changing answer schema/validation assumptions for these touch points
-  - touch points:
-    - `src/datagen/shared/verification.py` -> `verify_synthetic` fallback branch removal
-    - `src/datagen/shared/questions_io.py` -> `validate_question` required-field checks
-    - `src/datagen/validate_synthetic.py` -> strict schema validation path
-  - line anchors:
-    - `src/datagen/shared/verification.py`
-    - `src/datagen/shared/questions_io.py`
-    - `src/datagen/validate_synthetic.py`
-  - expected diff shape:
-    - modify only, ~60-120 LOC
-  - review checks:
-    - no underscored fallback keys remain in runtime verification path.
-    - unified-key payloads still validate successfully.
-
-- title: Reliability Hardening -> container-stop observability
-  status: in_progress
-  - behavior change: failed `ContainerPool.stop()` container stop calls are logged with container id and error while continuing shutdown.
-  - files to touch:
-    - `current.md`
-    - `src/envs/container_pool.py`
-    - `tests/test_container_pool.py`
-  - fail-first tests:
-    - add test expecting an error log when one container stop raises during pool shutdown.
-  - non-goals:
-    - no automatic container restart or retry policy in this slice.
-  - risks:
-    - shutdown logs may be noisy in unstable local Docker environments.
-  - touch points:
-    - `src/envs/container_pool.py` -> `ContainerPool.stop`
-    - `tests/test_container_pool.py` -> `TestContainerPool`
-  - line anchors:
-    - `src/envs/container_pool.py:1005`
-  - expected diff shape:
-    - modify only, ~40-90 LOC
-  - review checks:
-    - no stop exception is silently swallowed.
-    - failing container ids appear in error logs.
-
-ready-to-promote shortlist (based on recovered context):
-- Synthetic Question Quality Improvements -> ambiguity-template completion pack
-- Training and E2E Readiness -> training-path normalization
-
-promotion checklist for each `Specd` item:
-- behavior change
-- files to touch
-- fail-first tests
-- non-goals
-- risks
-- touch points (path + function/class/block)
-- line anchors (optional; reviewer convenience only)
-- expected diff shape (add/modify/delete + rough LOC)
-- review checks
+- no active specd items
 
 ## Recovery Notes
 - Key planning details were recovered from `HEAD` history of previously deleted markdown docs and reattached here.
