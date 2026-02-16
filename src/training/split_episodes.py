@@ -224,7 +224,7 @@ def main():
         "--input",
         type=str,
         required=True,
-        help="Input episodes JSONL file (e.g., data/episodes/episodes_synthetic.jsonl)",
+        help="Input episodes JSONL file (e.g., data/episodes/template.jsonl)",
     )
     parser.add_argument(
         "--output-dir",

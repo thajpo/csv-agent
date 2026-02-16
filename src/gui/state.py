@@ -57,12 +57,14 @@ class AppState:
     # Pipeline execution
     pipeline: PipelineProgress = field(default_factory=PipelineProgress)
     process: Popen | None = None
-    progress_file: Path = field(default_factory=lambda: Path("/tmp/claude/gui_progress.json"))
+    progress_file: Path = field(
+        default_factory=lambda: Path("/tmp/claude/gui_progress.json")
+    )
 
     # Data paths
     data_dir: Path = field(default_factory=lambda: Path("data"))
     csv_sources: list[Path] = field(default_factory=list)
-    questions_dir: Path = field(default_factory=lambda: Path("data/questions_synthetic"))
+    questions_dir: Path = field(default_factory=lambda: Path("data/questions/template"))
     episodes_dir: Path = field(default_factory=lambda: Path("data/episodes"))
 
     # Selected items

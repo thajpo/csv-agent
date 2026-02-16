@@ -6,6 +6,7 @@ from src.cli import (
     cmd_generate_questions,
     cmd_generate_episodes,
     _fail_fast_on_existing_outputs,
+    _run_fail_fast_preflight,
 )
 
 
@@ -52,7 +53,7 @@ def test_canonical_modes_parse(argv, expected_mode):
 
 def test_generate_questions_fail_fast_on_existing_outputs(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    existing = Path("data/questions_synthetic/sample/questions.json")
+    existing = Path("data/questions/template/sample/questions.json")
     existing.parent.mkdir(parents=True, exist_ok=True)
     existing.write_text("[]")
 
@@ -68,7 +69,7 @@ def test_generate_questions_fail_fast_on_existing_outputs(tmp_path, monkeypatch)
 def test_generate_episodes_all_preflights_all_targets(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     # Conflict exists only for llm output; --all should still fail before any run starts.
-    existing = Path("data/episodes/episodes_llm.jsonl")
+    existing = Path("data/episodes/llm_gen.jsonl")
     existing.parent.mkdir(parents=True, exist_ok=True)
     existing.write_text('{"existing": true}\n')
 
@@ -91,3 +92,31 @@ def test_fail_fast_helper_respects_explicit_overwrite(tmp_path):
     assert not _fail_fast_on_existing_outputs(
         [existing], explicit_overwrite=True, command_name="x"
     )
+
+
+def test_source_scoped_question_preflight_does_not_cross_fail(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    procedural_existing = Path("data/questions/procedural/sample/questions.json")
+    procedural_existing.parent.mkdir(parents=True, exist_ok=True)
+    procedural_existing.write_text("[]")
+
+    should_abort = _run_fail_fast_preflight(
+        mode="template",
+        dry_run=False,
+        explicit_overwrite=False,
+        is_episode_generation=False,
+    )
+    assert not should_abort
+
+
+def test_fail_fast_on_legacy_layout_presence(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    Path("data/questions_synthetic").mkdir(parents=True, exist_ok=True)
+
+    should_abort = _run_fail_fast_preflight(
+        mode="template",
+        dry_run=False,
+        explicit_overwrite=False,
+        is_episode_generation=False,
+    )
+    assert should_abort

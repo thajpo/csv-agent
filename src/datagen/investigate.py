@@ -27,7 +27,6 @@ from rich.table import Table
 from rich.panel import Panel
 
 
-
 console = Console()
 
 
@@ -64,7 +63,9 @@ def analyze_diagnostics_file(path: Path) -> dict:
         "categories": dict(categories),
         "by_category": by_category,
         "by_template": by_template,
-        "avg_entropy": sum(entropy_values) / len(entropy_values) if entropy_values else 0,
+        "avg_entropy": sum(entropy_values) / len(entropy_values)
+        if entropy_values
+        else 0,
     }
 
 
@@ -107,8 +108,7 @@ def print_template_breakdown(analysis: dict) -> None:
     table.add_column("Fail%", justify="right")
 
     for template, counts in sorted(
-        analysis["by_template"].items(),
-        key=lambda x: -sum(x[1].values())
+        analysis["by_template"].items(), key=lambda x: -sum(x[1].values())
     )[:15]:  # Top 15 templates
         total = sum(counts.values())
         good = counts.get("good", 0)
@@ -167,9 +167,11 @@ async def run_diagnostic_batch(
     from src.core.prompts import generate_data_overview
 
     # Find a dataset with questions
-    questions_dir = Path("data/questions_synthetic")
+    questions_dir = Path("data/questions/template")
     if not questions_dir.exists():
-        console.print("[red]No synthetic questions found. Run question generation first.[/red]")
+        console.print(
+            "[red]No synthetic questions found. Run question generation first.[/red]"
+        )
         raise SystemExit(1)
 
     # Get first available dataset
@@ -193,13 +195,21 @@ async def run_diagnostic_batch(
 
     # Filter by template if specified
     if template_filter:
-        questions = [q for q in questions if template_filter.lower() in q.get("template_name", "").lower()]
+        questions = [
+            q
+            for q in questions
+            if template_filter.lower() in q.get("template_name", "").lower()
+        ]
         if not questions:
-            console.print(f"[red]No questions matching template filter: {template_filter}[/red]")
+            console.print(
+                f"[red]No questions matching template filter: {template_filter}[/red]"
+            )
             raise SystemExit(1)
 
     questions = questions[:limit]
-    console.print(f"[bold]Running diagnostic batch on {len(questions)} questions from {dataset_dir.name}[/bold]")
+    console.print(
+        f"[bold]Running diagnostic batch on {len(questions)} questions from {dataset_dir.name}[/bold]"
+    )
 
     # Generate data overview
     data_overview = generate_data_overview(str(csv_path))
@@ -227,7 +237,10 @@ async def run_diagnostic_batch(
         for r in results:
             if r.diagnostics:
                 record = {
-                    "question": (r.question.get("question_text") or r.question.get("question", ""))[:200],
+                    "question": (
+                        r.question.get("question_text")
+                        or r.question.get("question", "")
+                    )[:200],
                     "template_name": r.question.get("template_name"),
                     "difficulty": r.question.get("difficulty"),
                     "verified": r.verified,
@@ -265,42 +278,46 @@ Examples:
     )
 
     parser.add_argument(
-        "--batch", action="store_true",
-        help="Run a diagnostic batch on synthetic questions"
+        "--batch",
+        action="store_true",
+        help="Run a diagnostic batch on synthetic questions",
     )
     parser.add_argument(
-        "--limit", type=int, default=10,
-        help="Number of questions to process (default: 10)"
+        "--limit",
+        type=int,
+        default=10,
+        help="Number of questions to process (default: 10)",
     )
     parser.add_argument(
-        "--template", type=str,
-        help="Filter questions by template name (substring match)"
+        "--template",
+        type=str,
+        help="Filter questions by template name (substring match)",
     )
     parser.add_argument(
-        "--analyze", type=Path,
-        help="Analyze diagnostics from a JSONL file"
+        "--analyze", type=Path, help="Analyze diagnostics from a JSONL file"
     )
     parser.add_argument(
-        "--summary", type=Path,
-        help="Show summary statistics from a JSONL file"
+        "--summary", type=Path, help="Show summary statistics from a JSONL file"
     )
     parser.add_argument(
-        "--examples", type=str,
-        help="Show example failures for a category (e.g., 'ambiguous')"
+        "--examples",
+        type=str,
+        help="Show example failures for a category (e.g., 'ambiguous')",
     )
     parser.add_argument(
-        "--output", type=Path,
-        help="Output path for diagnostic results"
+        "--output", type=Path, help="Output path for diagnostic results"
     )
 
     args = parser.parse_args()
 
     if args.batch:
-        output_path = asyncio.run(run_diagnostic_batch(
-            limit=args.limit,
-            output_path=args.output,
-            template_filter=args.template,
-        ))
+        output_path = asyncio.run(
+            run_diagnostic_batch(
+                limit=args.limit,
+                output_path=args.output,
+                template_filter=args.template,
+            )
+        )
         # Auto-analyze the results
         analysis = analyze_diagnostics_file(output_path)
         console.print()

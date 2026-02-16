@@ -8,7 +8,7 @@ Usage:
     # From a questions file:
     uv run python -m src.datagen.validate_question \
         --csv data/csv/data.csv \
-        --questions-file data/questions_synthetic/marketing-data/questions.json \
+        --questions-file data/questions/template/marketing-data/questions.json \
         --index 0
 
     # Custom question:

@@ -30,12 +30,18 @@ def inspect_questions(
     show_answer: bool = False,
 ):
     """Preview generated questions."""
-    if source in ("template", "procedural"):
-        questions_dirs = [Path("data/questions_synthetic")]
+    if source == "template":
+        questions_dirs = [Path("data/questions/template")]
+    elif source == "procedural":
+        questions_dirs = [Path("data/questions/procedural")]
     elif source == "llm_gen":
-        questions_dirs = [Path("data/questions_llm")]
+        questions_dirs = [Path("data/questions/llm_gen")]
     else:  # all
-        questions_dirs = [Path("data/questions_synthetic"), Path("data/questions_llm")]
+        questions_dirs = [
+            Path("data/questions/template"),
+            Path("data/questions/procedural"),
+            Path("data/questions/llm_gen"),
+        ]
 
     files = []
     for questions_dir in questions_dirs:
@@ -103,15 +109,17 @@ def inspect_questions(
     # Show one full question
     if sample_questions:
         q = sample_questions[0]
-        console.print(Panel(
-            f"[bold]{q.get('question_text') or q.get('question_mechanical') or ''}[/bold]\n\n"
-            f"[dim]Template:[/dim] {q.get('template_name', 'N/A')}\n"
-            f"[dim]Difficulty:[/dim] {q.get('difficulty', 'N/A')}\n"
-            f"[dim]Steps:[/dim] {q.get('n_steps', 'N/A')}\n"
-            f"[dim]Hint:[/dim] {q.get('hint', 'None')[:100]}",
-            title="Full Question #1",
-            expand=False
-        ))
+        console.print(
+            Panel(
+                f"[bold]{q.get('question_text') or q.get('question_mechanical') or ''}[/bold]\n\n"
+                f"[dim]Template:[/dim] {q.get('template_name', 'N/A')}\n"
+                f"[dim]Difficulty:[/dim] {q.get('difficulty', 'N/A')}\n"
+                f"[dim]Steps:[/dim] {q.get('n_steps', 'N/A')}\n"
+                f"[dim]Hint:[/dim] {q.get('hint', 'None')[:100]}",
+                title="Full Question #1",
+                expand=False,
+            )
+        )
 
 
 def inspect_episodes(
@@ -125,10 +133,11 @@ def inspect_episodes(
     if output:
         episodes_file = Path(output)
     else:
-        # Try synthetic first, then LLM
+        # Try source-scoped files
         candidates = [
-            Path("data/episodes/episodes_synthetic.jsonl"),
-            Path("data/episodes/episodes_llm.jsonl"),
+            Path("data/episodes/template.jsonl"),
+            Path("data/episodes/procedural.jsonl"),
+            Path("data/episodes/llm_gen.jsonl"),
         ]
         episodes_file = None
         for c in candidates:
@@ -138,7 +147,7 @@ def inspect_episodes(
 
     if not episodes_file or not episodes_file.exists():
         console.print("[red]No episodes file found[/red]")
-        console.print("Try: --output data/episodes/episodes_synthetic.jsonl")
+        console.print("Try: --output data/episodes/template.jsonl")
         return
 
     # Count total and load sample
@@ -159,7 +168,9 @@ def inspect_episodes(
             if len(episodes) < count:
                 episodes.append(ep)
 
-    console.print(f"\n[bold]{episodes_file.name}[/bold]: {total} episodes ({verified_count} verified)\n")
+    console.print(
+        f"\n[bold]{episodes_file.name}[/bold]: {total} episodes ({verified_count} verified)\n"
+    )
 
     if not episodes:
         console.print("[yellow]No episodes match filter[/yellow]")
@@ -217,8 +228,9 @@ def inspect_trace(episode_id: str, output: str | None = None):
         episodes_file = Path(output)
     else:
         candidates = [
-            Path("data/episodes/episodes_synthetic.jsonl"),
-            Path("data/episodes/episodes_llm.jsonl"),
+            Path("data/episodes/template.jsonl"),
+            Path("data/episodes/procedural.jsonl"),
+            Path("data/episodes/llm_gen.jsonl"),
         ]
         episodes_file = None
         for c in candidates:
@@ -247,14 +259,16 @@ def inspect_trace(episode_id: str, output: str | None = None):
     question = episode.get("question", {})
     gold_trace = episode.get("gold_trace", {})
 
-    console.print(Panel(
-        f"[bold]{question.get('question_text', '')}[/bold]\n\n"
-        f"[dim]Verified:[/dim] {'Yes' if episode.get('verified') else 'No'}\n"
-        f"[dim]Difficulty:[/dim] {question.get('difficulty', 'N/A')}\n"
-        f"[dim]Template:[/dim] {question.get('template_name', 'N/A')}\n"
-        f"[dim]Hint:[/dim] {question.get('hint', 'None')}",
-        title=f"Episode {episode.get('episode_id', '')[:10]}",
-    ))
+    console.print(
+        Panel(
+            f"[bold]{question.get('question_text', '')}[/bold]\n\n"
+            f"[dim]Verified:[/dim] {'Yes' if episode.get('verified') else 'No'}\n"
+            f"[dim]Difficulty:[/dim] {question.get('difficulty', 'N/A')}\n"
+            f"[dim]Template:[/dim] {question.get('template_name', 'N/A')}\n"
+            f"[dim]Hint:[/dim] {question.get('hint', 'None')}",
+            title=f"Episode {episode.get('episode_id', '')[:10]}",
+        )
+    )
 
     # Show each turn
     for i, turn in enumerate(gold_trace.get("turns", []), 1):
@@ -270,7 +284,9 @@ def inspect_trace(episode_id: str, output: str | None = None):
             console.print(Syntax(code, "python", theme="monokai", line_numbers=True))
 
         if execution.get("stdout"):
-            console.print(Panel(execution["stdout"][:500], title="stdout", style="green"))
+            console.print(
+                Panel(execution["stdout"][:500], title="stdout", style="green")
+            )
 
         if execution.get("stderr"):
             console.print(Panel(execution["stderr"][:300], title="stderr", style="red"))
@@ -279,15 +295,19 @@ def inspect_trace(episode_id: str, output: str | None = None):
         if hooks:
             console.print(f"[dim]Hooks ({len(hooks)}):[/dim]")
             for h in hooks[:3]:
-                console.print(f"  {h.get('variable_name', '?')}: {str(h.get('value', '?'))[:50]}")
+                console.print(
+                    f"  {h.get('variable_name', '?')}: {str(h.get('value', '?'))[:50]}"
+                )
 
     # Final answer
-    console.print(Panel(
-        f"[bold]{gold_trace.get('final_answer', 'None')}[/bold]\n"
-        f"[dim]Hash:[/dim] {gold_trace.get('final_answer_hash', 'N/A')[:20]}",
-        title="Final Answer",
-        style="green" if episode.get("verified") else "red"
-    ))
+    console.print(
+        Panel(
+            f"[bold]{gold_trace.get('final_answer', 'None')}[/bold]\n"
+            f"[dim]Hash:[/dim] {gold_trace.get('final_answer_hash', 'N/A')[:20]}",
+            title="Final Answer",
+            style="green" if episode.get("verified") else "red",
+        )
+    )
 
 
 def main():
@@ -300,7 +320,7 @@ Examples:
   uv run python -m src.utils.inspect questions --dataset titanic --show-hint
   uv run python -m src.utils.inspect episodes --verified --count 10
   uv run python -m src.utils.inspect trace abc123
-        """
+        """,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -314,7 +334,9 @@ Examples:
         required=True,
     )
     q_parser.add_argument("--show-hint", action="store_true", help="Show hints")
-    q_parser.add_argument("--show-answer", action="store_true", help="Show ground truth")
+    q_parser.add_argument(
+        "--show-answer", action="store_true", help="Show ground truth"
+    )
 
     # Episodes subcommand
     e_parser = subparsers.add_parser("episodes", help="Inspect generated episodes")

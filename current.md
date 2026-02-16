@@ -96,6 +96,7 @@ notes:
 ## Specd
 
 - Unified Episode/Question Contract + No-Data-Loss Regression Gate | status: issued | issue: #14
+- Source-Split Artifact Storage Layout | status: issued | issue: #16
 
 ## Recovery Notes
 - Prior planning content was heavily compressed to reduce noise and keep active work scannable.
