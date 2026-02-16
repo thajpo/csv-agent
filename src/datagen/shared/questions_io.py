@@ -17,6 +17,7 @@ UNIFIED_OPTIONAL_FIELDS = (
     "code_hash",
     "ground_truth",
     "ground_truth_hash",
+    "ground_truth_hashes",
     "output_schema",
     "n_steps",
     "difficulty",
@@ -35,6 +36,7 @@ class QuestionRecord(TypedDict, total=False):
     code_hash: str | None
     ground_truth: Any
     ground_truth_hash: str | None
+    ground_truth_hashes: list[str] | None
     output_schema: str | None
     n_steps: int | None
     difficulty: str | None

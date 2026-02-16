@@ -166,7 +166,6 @@ async def create_episode_from_ground_truth(
         EpisodeJSONL created from ground-truth verification
     """
     source = kwargs.pop("source", question.get("source"))
-    source = kwargs.pop("source", question.get("source"))
 
     # Run ground-truth verification
     verification_result = await verify_question(
