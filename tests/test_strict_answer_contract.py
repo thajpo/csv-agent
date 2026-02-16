@@ -10,8 +10,7 @@ from src.datagen.shared.verification import verify_synthetic
 def _synthetic_question(**overrides):
     question = {
         "id": "q1",
-        "source": "synthetic",
-        "subtype": "template",
+        "source": "template",
         "dataset": "test",
         "question_mechanical": "Return 1",
         "code": "submit(1)",
