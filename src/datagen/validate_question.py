@@ -280,7 +280,7 @@ def main():
         q = load_question_from_file(args.questions_file, args.index)
         question = q.get("question", q.get("question_text", ""))
         hint = q.get("hint")
-        expected_answer = q.get("ground_truth") or q.get("_ground_truth")
+        expected_answer = q.get("ground_truth")
         expected_hash = q.get("ground_truth_hash")
     else:
         question = args.question

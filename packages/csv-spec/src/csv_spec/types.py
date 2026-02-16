@@ -41,7 +41,9 @@ class QADict(TypedDict, total=False):
     output_type: str | None
     output_schema: str | None
     ground_truth_hash: str | None
-    ground_truth_hashes: list[str] | None  # All valid answer hashes (for multi-outcome validation)
+    ground_truth_hashes: (
+        list[str] | None
+    )  # All valid answer hashes (for multi-outcome validation)
     ground_truth: Any | None
 
 
@@ -248,7 +250,9 @@ class Question(BaseModel):
     output_type: str | None = None
     output_schema: str | None = None
     ground_truth_hash: str | None = None
-    ground_truth_hashes: list[str] | None = None  # All valid answer hashes (for multi-outcome validation)
+    ground_truth_hashes: list[str] | None = (
+        None  # All valid answer hashes (for multi-outcome validation)
+    )
 
     # Synthetic question evaluation fields
     ground_truth: Any | None = None  # Actual ground truth value (for synthetic)
@@ -275,8 +279,6 @@ class Question(BaseModel):
             data["question_text"] = data.pop("question")
 
         # Map internal fields to public fields (synthetic questions)
-        if "_ground_truth" in data:
-            data["ground_truth"] = data.pop("_ground_truth")
         if "_template" in data:
             data["template"] = data.pop("_template")
 

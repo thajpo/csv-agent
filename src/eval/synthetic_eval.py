@@ -405,15 +405,7 @@ class SyntheticEvaluator:
                                     self.p_value_tol,
                                 )
                     else:
-                        expected_answer = question.get("_ground_truth")
-                        if expected_answer is None:
-                            continue
-                        matched, reason = _compare_answers(
-                            expected_answer,
-                            teacher_answer,
-                            self.float_tol,
-                            self.p_value_tol,
-                        )
+                        continue
 
                     (matches, expected_count, teacher_count, recall, precision) = (
                         _compute_hook_metrics(teacher_hooks, expected_hooks)

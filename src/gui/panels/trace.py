@@ -23,7 +23,9 @@ def create_trace_panel(parent: int | str):
 
         # Trace content
         with dpg.child_window(tag="trace_content", height=-1, border=False):
-            dpg.add_text("Select a question or episode from the explorer", color=(150, 150, 150))
+            dpg.add_text(
+                "Select a question or episode from the explorer", color=(150, 150, 150)
+            )
 
 
 def show_question(question: dict):
@@ -37,17 +39,24 @@ def show_question(question: dict):
 
     dpg.set_value("trace_question", q_text)
     dpg.set_value("trace_hint", f"Hint: {hint}" if hint else "")
-    dpg.set_value("trace_metadata", f"Difficulty: {difficulty} | Steps: {n_steps} | Template: {template}")
+    dpg.set_value(
+        "trace_metadata",
+        f"Difficulty: {difficulty} | Steps: {n_steps} | Template: {template}",
+    )
 
     # Clear content
     dpg.delete_item("trace_content", children_only=True)
 
     # Show ground truth if available
-    gt = question.get("_ground_truth")
+    gt = question.get("ground_truth")
     if gt is not None:
         with dpg.group(parent="trace_content"):
             dpg.add_text("Ground Truth:", color=(100, 255, 100))
-            gt_text = json.dumps(gt, indent=2, default=str) if isinstance(gt, (dict, list)) else str(gt)
+            gt_text = (
+                json.dumps(gt, indent=2, default=str)
+                if isinstance(gt, (dict, list))
+                else str(gt)
+            )
             dpg.add_input_text(
                 default_value=gt_text,
                 multiline=True,
@@ -131,7 +140,11 @@ def _render_trace(trace: dict, title: str, color: tuple):
         # Final answer
         answer = trace.get("final_answer")
         if answer is not None:
-            answer_text = json.dumps(answer, default=str) if isinstance(answer, (dict, list)) else str(answer)
+            answer_text = (
+                json.dumps(answer, default=str)
+                if isinstance(answer, (dict, list))
+                else str(answer)
+            )
             dpg.add_text(f"Answer: {answer_text[:100]}", color=color)
 
         success = trace.get("success", False)
@@ -177,7 +190,9 @@ def _render_turn(turn: dict):
         if execution:
             success = execution.get("success", False)
             status_color = (100, 255, 100) if success else (255, 100, 100)
-            dpg.add_text(f"Execution: {'Success' if success else 'Failed'}", color=status_color)
+            dpg.add_text(
+                f"Execution: {'Success' if success else 'Failed'}", color=status_color
+            )
 
             stdout = execution.get("stdout", "")
             if stdout:
@@ -208,5 +223,7 @@ def _render_turn(turn: dict):
                     for hook in hooks:
                         name = hook.get("variable_name", "?")
                         value = hook.get("value")
-                        value_str = json.dumps(value, default=str)[:100] if value else "None"
+                        value_str = (
+                            json.dumps(value, default=str)[:100] if value else "None"
+                        )
                         dpg.add_text(f"{name}: {value_str}")
