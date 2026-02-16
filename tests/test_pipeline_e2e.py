@@ -316,6 +316,83 @@ class TestTriangulationLogic:
         assert answers_match(None, None, {"a": 1.0}, {"a": 1.05}, float_tol=0.1)
 
 
+class TestPipelineOrchestrationModes:
+    @pytest.mark.parametrize(
+        "mode, expected_sources",
+        [
+            ("template", ["template"]),
+            ("procedural", ["procedural"]),
+            ("llm_gen", ["llm_gen"]),
+            ("all", ["template", "procedural", "llm_gen"]),
+        ],
+    )
+    def test_source_table_mode_selection(self, mode, expected_sources):
+        from src.datagen.pipeline import _source_specs_for_mode
+
+        selected = [spec["mode"] for spec in _source_specs_for_mode(mode)]
+        assert selected == expected_sources
+
+    def test_all_mode_preserves_stage_order_and_test_flags(self, monkeypatch, tmp_path):
+        from src.datagen import pipeline
+
+        monkeypatch.setattr(
+            config, "questions_template_dir", str(tmp_path / "q_template")
+        )
+        monkeypatch.setattr(
+            config, "questions_procedural_dir", str(tmp_path / "q_procedural")
+        )
+        monkeypatch.setattr(config, "questions_llm_gen_dir", str(tmp_path / "q_llm"))
+        monkeypatch.setattr(
+            config, "episodes_template_jsonl", str(tmp_path / "e_template.jsonl")
+        )
+        monkeypatch.setattr(
+            config, "episodes_procedural_jsonl", str(tmp_path / "e_procedural.jsonl")
+        )
+        monkeypatch.setattr(
+            config, "episodes_llm_gen_jsonl", str(tmp_path / "e_llm.jsonl")
+        )
+
+        calls = []
+
+        def _fake_run_stage(name, cmd):
+            calls.append(("stage", name, cmd))
+            return True
+
+        def _fake_run_synth(name, questions_dir, output_path, max_questions, source):
+            calls.append(
+                (
+                    "synthetic",
+                    name,
+                    source,
+                    questions_dir,
+                    output_path,
+                    max_questions,
+                )
+            )
+            return True
+
+        monkeypatch.setattr(pipeline, "run_stage", _fake_run_stage)
+        monkeypatch.setattr(pipeline, "run_synthetic_stage", _fake_run_synth)
+
+        rc = pipeline.main(mode="all", test=True)
+        assert rc == 0
+
+        assert [entry[1] for entry in calls] == [
+            "Stage 1a: Generate Template Questions",
+            "Stage 2a: Generate Template Episodes",
+            "Stage 1b: Generate Procedural Questions",
+            "Stage 2b: Generate Procedural Episodes",
+            "Stage 1c: Generate LLM Questions",
+            "Stage 2c: Generate LLM Episodes",
+        ]
+
+        question_stages = [entry for entry in calls if entry[0] == "stage"]
+        assert question_stages[0][2][-2:] == ["--max-datasets", "1"]
+        assert question_stages[1][2][-2:] == ["--max-datasets", "1"]
+        assert question_stages[2][2][-2:] == ["--max-datasets", "1"]
+        assert "--n-consistency" in question_stages[3][2]
+
+
 @pytest.mark.live
 class TestAPISmoke:
     """Minimal API integration test. Run with: pytest --run-live"""
