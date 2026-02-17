@@ -111,7 +111,6 @@ def cmd_progress():
     import json
     from datetime import datetime
 
-    from src.core.config import config
     from src.utils.stats import collect_questions_stats, collect_episodes_stats
 
     q_stats = collect_questions_stats()
@@ -964,7 +963,6 @@ def cmd_analyze(
 def cmd_manifest_summary():
     """Show manifest summary - cached questions and template changes."""
     from src.datagen.manifest import DatagenManifest, compute_dataset_hash
-    from src.core.config import config
 
     manifest = DatagenManifest()
     manifest.load()
