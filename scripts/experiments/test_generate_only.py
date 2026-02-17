@@ -1,7 +1,6 @@
 """Quick test - just generate procedural questions and inspect them."""
 
 import asyncio
-import json
 import tempfile
 from src.datagen.synthetic.programs.program_generator import run_pipeline
 
@@ -29,9 +28,9 @@ async def main():
             print(f"  Steps: {q.get('n_steps', 'N/A')}")
             print(f"  Difficulty: {q.get('difficulty', 'N/A')}")
             print(f"  Ground truth: {q.get('ground_truth')}")
-            print(f"\n  Verbalized question:")
+            print("\n  Verbalized question:")
             print(f"  {q.get('question_text', '')[:200]}...")
-            print(f"\n  Mechanical question:")
+            print("\n  Mechanical question:")
             print(f"  {q.get('question_mechanical', '')}")
             print(
                 f"\n  Hint: {q.get('hint', '')[:100] if q.get('hint') else 'None'}..."

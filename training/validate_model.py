@@ -69,7 +69,7 @@ def load_model(model_path: str, base_model: str | None = None):
             )
             model = PeftModel.from_pretrained(model, model_path)
         else:
-            raise ValueError(f"LoRA adapter found but no base_model specified and none in config")
+            raise ValueError("LoRA adapter found but no base_model specified and none in config")
     else:
         print(f"Loading merged model: {model_path}")
         model = AutoModelForCausalLM.from_pretrained(

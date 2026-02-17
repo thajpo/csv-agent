@@ -10,11 +10,9 @@ This script:
 import asyncio
 import json
 import tempfile
-from pathlib import Path
 from typing import Literal
 
 from src.datagen.synthetic.programs.program_generator import run_pipeline
-from src.datagen.synthetic.profiler import DataProfiler
 from src.datagen.teacher import execute_teacher_trace
 from src.datagen.pipeline_ui import EpisodeGenUI
 from src.core.config import config
@@ -148,7 +146,7 @@ async def test_dataset(csv_path: str, dataset_name: str, n_questions: int = 10):
         stats_with = calc_stats(with_verbalization)
         stats_without = calc_stats(without_verbalization)
 
-        print(f"\nResults:")
+        print("\nResults:")
         print(
             f"  With verbalization:    {stats_with['answer_matches']}/{stats_with['total']} correct ({stats_with['match_rate']:.1%})"
         )

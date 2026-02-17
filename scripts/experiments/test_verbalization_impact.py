@@ -1,7 +1,6 @@
 """Quick pass rate test - 2 questions with timing."""
 
 import asyncio
-import json
 import tempfile
 import time
 from src.datagen.synthetic.programs.program_generator import run_pipeline
@@ -114,7 +113,7 @@ async def main():
         with_time = sum(r["elapsed"] for r in with_v)
         without_time = sum(r["elapsed"] for r in without_v)
 
-        print(f"\nPass Rates:")
+        print("\nPass Rates:")
         print(
             f"  With verbalization:    {with_match}/{len(questions)} ({with_match / len(questions) * 100:.0f}%)"
         )
@@ -122,7 +121,7 @@ async def main():
             f"  Without verbalization: {without_match}/{len(questions)} ({without_match / len(questions) * 100:.0f}%)"
         )
 
-        print(f"\nTiming:")
+        print("\nTiming:")
         print(
             f"  With verbalization:    {with_time:.1f}s total, {with_time / len(questions):.1f}s avg"
         )
@@ -135,7 +134,7 @@ async def main():
         elif with_match < without_match:
             print(f"\n✗ Verbalization hurts ({with_match - without_match} correct)")
         else:
-            print(f"\n= No difference in accuracy")
+            print("\n= No difference in accuracy")
 
         # Per-question breakdown
         print("\n" + "=" * 70)

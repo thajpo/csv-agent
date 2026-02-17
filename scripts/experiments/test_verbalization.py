@@ -7,7 +7,6 @@ verbalization quality.
 import asyncio
 import json
 import tempfile
-from pathlib import Path
 from src.datagen.synthetic.programs.program_generator import run_pipeline
 from src.datagen.synthetic.profiler import DataProfiler
 
@@ -23,7 +22,7 @@ async def test_dataset(csv_path: str, dataset_name: str, max_questions: int = 20
     profiler = DataProfiler()
     profile = profiler.analyze(csv_path)
 
-    print(f"\nDataset Profile:")
+    print("\nDataset Profile:")
     print(f"  Rows: {profile['shape']['rows']}")
     print(f"  Columns: {profile['shape']['columns']}")
     numeric_cols = [
@@ -78,7 +77,7 @@ async def test_dataset(csv_path: str, dataset_name: str, max_questions: int = 20
             }
 
         # Show examples
-        print(f"\nVerbalization Examples:")
+        print("\nVerbalization Examples:")
         for i, q in enumerate(questions[:5], 1):
             print(f"\n{i}. {q['n_steps']} steps - {q.get('program_name', 'unknown')}")
             print(f"   Q: {q['question_text'][:100]}...")

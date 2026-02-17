@@ -102,7 +102,7 @@ async def main():
         print(f"      Rate: {len(questions) / gen_elapsed:.1f} questions/sec")
 
         # Analyze question types
-        print(f"\n[2/3] Analyzing question characteristics...")
+        print("\n[2/3] Analyzing question characteristics...")
 
         simple_agg = sum(1 for q in questions if q.get("n_steps", 0) == 3)
         long_chain = sum(1 for q in questions if q.get("n_steps", 0) > 3)
@@ -120,7 +120,7 @@ async def main():
         print(f"      Scalar ground truth: {scalar_gt}")
 
         # Sample a few questions for detailed inspection
-        print(f"\n[3/3] Sample questions:")
+        print("\n[3/3] Sample questions:")
         for i, q in enumerate(questions[:5]):
             print(f"\n  Q{i + 1}: {q.get('program_name', 'unknown')}")
             print(f"    Steps: {q.get('n_steps', 'N/A')}")
@@ -129,7 +129,7 @@ async def main():
 
         # Summary
         total_elapsed = time.time() - start_time
-        print(f"\n" + "=" * 70)
+        print("\n" + "=" * 70)
         print("SUMMARY")
         print("=" * 70)
         print(f"Total questions generated: {len(questions)}")

@@ -16,14 +16,12 @@ Commands:
 """
 
 import argparse
-import asyncio
 import json
 import subprocess
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 
 def _load_episodes(episodes_dir: Path) -> dict[str, list[dict]]:
@@ -101,7 +99,7 @@ def cmd_containers(args):
                 print(f"  • {c['name']} - {c['status']}")
             if len(exited) > 5:
                 print(f"  ... and {len(exited) - 5} more")
-            print(f"\n  Fix: uv run python -c \"from src.utils.docker import cleanup_csv_sandbox_containers; cleanup_csv_sandbox_containers()\"")
+            print("\n  Fix: uv run python -c \"from src.utils.docker import cleanup_csv_sandbox_containers; cleanup_csv_sandbox_containers()\"")
     else:
         print("  No csv-agent containers found (good!)")
 

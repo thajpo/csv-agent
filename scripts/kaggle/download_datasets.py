@@ -151,7 +151,7 @@ def download_dataset(
         csv_files = list(temp_path.glob("**/*.csv"))
 
         if not csv_files:
-            print(f"  ⚠ No CSV files found, skipping")
+            print("  ⚠ No CSV files found, skipping")
             return None
 
         # Filter: single-CSV only
@@ -215,7 +215,7 @@ def iter_popular_datasets(api, max_size_mb: float = 50.0):
 
         except Exception as e:
             if "429" in str(e):
-                print(f"  Rate limited, waiting 5s...")
+                print("  Rate limited, waiting 5s...")
                 time.sleep(5)
                 continue
             print(f"  Error fetching page {page}: {e}")
@@ -298,7 +298,7 @@ def main():
         slug = ref.replace("/", "_")
         existing_dir = output_dir / slug
         if (existing_dir / "data.csv").exists():
-            print(f"  ✓ Already exists, counting as success")
+            print("  ✓ Already exists, counting as success")
             manifest.append({"ref": ref, "slug": slug})
             skipped_exists += 1
             successful_downloads += 1
@@ -308,7 +308,7 @@ def main():
         try:
             dataset_dir = download_dataset(api, ref, output_dir, max_size_mb=args.max_size)
         except DownloadTimeout:
-            print(f"  ⚠ Download timed out (>60s), skipping")
+            print("  ⚠ Download timed out (>60s), skipping")
             skipped_filter += 1
             continue
         except Exception as e:
