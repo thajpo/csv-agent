@@ -25,29 +25,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from src.core.config import config
+from src.core.source_specs import SourceSpec, source_specs_for_mode
 
 console = Console()
-
-SOURCE_SPECS = (
-    {
-        "mode": "template",
-        "color": "green",
-        "question_output_dir_attr": "questions_template_dir",
-        "episode_output_file_attr": "episodes_template_jsonl",
-    },
-    {
-        "mode": "procedural",
-        "color": "magenta",
-        "question_output_dir_attr": "questions_procedural_dir",
-        "episode_output_file_attr": "episodes_procedural_jsonl",
-    },
-    {
-        "mode": "llm_gen",
-        "color": "blue",
-        "question_output_dir_attr": "questions_llm_gen_dir",
-        "episode_output_file_attr": "episodes_llm_gen_jsonl",
-    },
-)
 
 
 # ============= Status Command =============
@@ -325,18 +305,17 @@ def _modes_from_flag(mode: str) -> tuple[bool, bool, bool]:
 
 def _source_specs_from_flags(
     template: bool, procedural: bool, llm_gen: bool
-) -> list[dict[str, str]]:
+) -> list[SourceSpec]:
     flags = {
         "template": template,
         "procedural": procedural,
         "llm_gen": llm_gen,
     }
-    return [spec for spec in SOURCE_SPECS if flags[spec["mode"]]]
+    return [spec for spec in source_specs_for_mode("all") if flags[spec["mode"]]]
 
 
-def _source_specs_for_mode(mode: str) -> list[dict[str, str]]:
-    template, procedural, llm_gen = _modes_from_flag(mode)
-    return _source_specs_from_flags(template, procedural, llm_gen)
+def _source_specs_for_mode(mode: str) -> list[SourceSpec]:
+    return source_specs_for_mode(mode)
 
 
 def _find_existing_question_outputs(

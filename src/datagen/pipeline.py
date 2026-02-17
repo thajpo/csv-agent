@@ -17,38 +17,12 @@ import asyncio
 from pathlib import Path
 
 from src.core.config import config
+from src.core.source_specs import SourceSpec, source_specs_for_mode
 from src.datagen.validate_synthetic import main as validate_synthetic_main
 
-SOURCE_SPECS = (
-    {
-        "mode": "template",
-        "question_stage": "Stage 1a: Generate Template Questions",
-        "episode_stage": "Stage 2a: Generate Template Episodes",
-        "question_module": "src.datagen.synthetic.generator",
-        "question_dir_attr": "questions_template_dir",
-        "episode_path_attr": "episodes_template_jsonl",
-    },
-    {
-        "mode": "procedural",
-        "question_stage": "Stage 1b: Generate Procedural Questions",
-        "episode_stage": "Stage 2b: Generate Procedural Episodes",
-        "question_module": "src.datagen.synthetic.programs.runner",
-        "question_dir_attr": "questions_procedural_dir",
-        "episode_path_attr": "episodes_procedural_jsonl",
-    },
-    {
-        "mode": "llm_gen",
-        "question_stage": "Stage 1c: Generate LLM Questions",
-        "episode_stage": "Stage 2c: Generate LLM Episodes",
-        "question_module": "src.datagen.question_gen",
-        "question_dir_attr": "questions_llm_gen_dir",
-        "episode_path_attr": "episodes_llm_gen_jsonl",
-    },
-)
 
-
-def _source_specs_for_mode(mode: str) -> list[dict[str, str]]:
-    return [spec for spec in SOURCE_SPECS if mode in (spec["mode"], "all")]
+def _source_specs_for_mode(mode: str) -> list[SourceSpec]:
+    return source_specs_for_mode(mode)
 
 
 def run_stage(name: str, cmd: list[str]) -> bool:
@@ -165,9 +139,9 @@ def main(
                 "-m",
                 "src.datagen.episode_gen",
                 "--questions-dir",
-                str(getattr(config, spec["question_dir_attr"])),
+                str(getattr(config, spec["question_output_dir_attr"])),
                 "--output",
-                str(getattr(config, spec["episode_path_attr"])),
+                str(getattr(config, spec["episode_output_file_attr"])),
                 "--skip-difficulty-filter",
             ]
             if max_questions:
@@ -183,8 +157,8 @@ def main(
 
         if run_synthetic_stage(
             spec["episode_stage"],
-            questions_dir=str(getattr(config, spec["question_dir_attr"])),
-            output_path=str(getattr(config, spec["episode_path_attr"])),
+            questions_dir=str(getattr(config, spec["question_output_dir_attr"])),
+            output_path=str(getattr(config, spec["episode_output_file_attr"])),
             max_questions=max_questions,
             source=spec["mode"],
         ):
