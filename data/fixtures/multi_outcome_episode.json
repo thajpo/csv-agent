@@ -1,0 +1,90 @@
+{
+  "episode_id": "fixture-multi-outcome-001",
+  "timestamp": "2025-01-01T00:00:00.000000",
+  "csv_source": "data/mock/data.csv",
+  "verified": true,
+  "question": {
+    "id": "q-multi-outcome-001",
+    "question_text": "What is the representative answer for this controlled ambiguity fixture?",
+    "hint": "Either canonical form is accepted",
+    "difficulty": "MEDIUM",
+    "n_steps": 1,
+    "template_name": "fixture_multi_outcome",
+    "template_params": {},
+    "output_type": "dict",
+    "output_schema": null,
+    "ground_truth": {
+      "answer": 42
+    },
+    "ground_truth_hash": "multihash-aaa111",
+    "ground_truth_hashes": [
+      "multihash-aaa111",
+      "multihash-bbb222"
+    ]
+  },
+  "gold_trace": {
+    "turns": [
+      {
+        "turn_index": 0,
+        "reasoning": "Fixture response with one valid hash",
+        "code": "submit({'answer': 42})",
+        "execution": {
+          "success": true,
+          "stdout": "✓ Submitted: {\"__csv_agent_answer__\": {\"answer\": 42}, \"hooks\": []}",
+          "stderr": "",
+          "hooks": [],
+          "submitted_answer": {
+            "answer": 42
+          }
+        },
+        "correction": null
+      }
+    ],
+    "final_answer": {
+      "answer": 42
+    },
+    "final_answer_hash": "multihash-aaa111",
+    "success": true
+  },
+  "consistency_traces": [
+    {
+      "turns": [
+        {
+          "turn_index": 0,
+          "reasoning": null,
+          "code": "submit({'answer': 42})",
+          "execution": {
+            "success": true,
+            "stdout": "✓ Submitted: {\"__csv_agent_answer__\": {\"answer\": 42}, \"hooks\": []}",
+            "stderr": "",
+            "hooks": [],
+            "submitted_answer": {
+              "answer": 42
+            }
+          },
+          "correction": null
+        }
+      ],
+      "final_answer": {
+        "answer": 42
+      },
+      "final_answer_hash": "multihash-bbb222",
+      "success": true
+    }
+  ],
+  "triangulation": {
+    "n_consistency_runs": 1,
+    "n_consistency_succeeded": 1,
+    "majority_answer_hash": "multihash-aaa111",
+    "majority_count": 1,
+    "gold_matches_majority": true
+  },
+  "timing": {
+    "gold_elapsed": 1.0,
+    "consistency_elapsed": [
+      0.9
+    ],
+    "total_elapsed": 1.9,
+    "avg_elapsed": 0.95
+  }
+}

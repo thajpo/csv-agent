@@ -304,7 +304,7 @@ class TestContainerPool:
         from pathlib import Path
 
         # Skip if second CSV doesn't exist
-        csv2 = Path("data/kaggle/breast-cancer/data.csv")
+        csv2 = Path("data/mock/data.csv")
         if not csv2.exists():
             pytest.skip("Second test CSV not available")
 
