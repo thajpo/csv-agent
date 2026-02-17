@@ -25,6 +25,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from src.core.config import config
+from src.core.paths import resolve_episodes_file, resolve_questions_dir
 from src.core.source_specs import SourceSpec, source_specs_for_mode
 
 console = Console()
@@ -110,7 +111,6 @@ def cmd_progress():
     import json
     from datetime import datetime
 
-    from src.core.config import config
     from src.utils.stats import collect_questions_stats, collect_episodes_stats
 
     q_stats = collect_questions_stats()
@@ -214,8 +214,8 @@ def cmd_progress():
         )
 
         # Estimate based on episode file timestamps
-        synth_file = Path(config.episodes_template_jsonl)
-        llm_file = Path(config.episodes_llm_gen_jsonl)
+        synth_file = resolve_episodes_file("template")
+        llm_file = resolve_episodes_file("llm_gen")
         synth_per_trace = load_per_trace_seconds(synth_file)
         llm_per_trace = load_per_trace_seconds(llm_file)
         llm_traces_remaining = estimate_llm_traces_remaining()
@@ -325,7 +325,7 @@ def _find_existing_question_outputs(
     existing: list[Path] = []
 
     for spec in _source_specs_from_flags(template, procedural, llm_gen):
-        root = Path(getattr(config, spec["question_output_dir_attr"]))
+        root = resolve_questions_dir(spec["mode"])
         existing.extend(sorted(root.glob("*/questions.json")))
 
     return existing
@@ -336,7 +336,7 @@ def _episode_output_targets(
 ) -> list[Path]:
     """Return episode output targets touched by selected modes."""
     return [
-        Path(getattr(config, spec["episode_output_file_attr"]))
+        resolve_episodes_file(spec["mode"])
         for spec in _source_specs_from_flags(template, procedural, llm_gen)
     ]
 
@@ -346,7 +346,7 @@ def _question_output_roots(
 ) -> list[Path]:
     """Return question output root directories touched by selected modes."""
     return [
-        Path(getattr(config, spec["question_output_dir_attr"]))
+        resolve_questions_dir(spec["mode"])
         for spec in _source_specs_from_flags(template, procedural, llm_gen)
     ]
 
@@ -580,9 +580,7 @@ def cmd_generate_questions(
                 console.print("  [blue]llm_gen[/blue]: Will run LLM exploration")
 
             console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print(
-                f"    Output: {getattr(config, spec['question_output_dir_attr'])}/"
-            )
+            console.print(f"    Output: {resolve_questions_dir(source_mode)}/")
             if source_mode == "llm_gen" and regenerate:
                 console.print("    [yellow]Mode: Regenerate (will overwrite)[/yellow]")
         console.print("\n[dim]No changes made (dry run)[/dim]")
@@ -716,8 +714,8 @@ def cmd_generate_episodes(
 
     for spec in source_specs:
         source_mode = spec["mode"]
-        questions_dir = Path(getattr(config, spec["question_output_dir_attr"]))
-        episodes_file = Path(getattr(config, spec["episode_output_file_attr"]))
+        questions_dir = resolve_questions_dir(source_mode)
+        episodes_file = resolve_episodes_file(source_mode)
 
         total_q, existing = _show_episode_preflight(
             source_mode, questions_dir, episodes_file
@@ -965,7 +963,6 @@ def cmd_analyze(
 def cmd_manifest_summary():
     """Show manifest summary - cached questions and template changes."""
     from src.datagen.manifest import DatagenManifest, compute_dataset_hash
-    from src.core.config import config
 
     manifest = DatagenManifest()
     manifest.load()
