@@ -10,7 +10,7 @@ from src.datagen.synthetic.programs.operators import get_operator
 from src.envs.csv_env import LocalCSVAnalysisEnv
 from pathlib import Path
 
-DATA_CSV = Path("data/csv/data.csv")
+DATA_CSV = Path("data/mock/data.csv")
 
 
 @pytest_asyncio.fixture(scope="module")
