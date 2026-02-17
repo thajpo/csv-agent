@@ -13,12 +13,10 @@ Usage (via CLI):
 
 import subprocess
 import time
-import asyncio
 from pathlib import Path
 
 from src.core.config import config
 from src.core.source_specs import SourceSpec, source_specs_for_mode
-from src.datagen.validate_synthetic import main as validate_synthetic_main
 
 
 def _source_specs_for_mode(mode: str) -> list[SourceSpec]:
@@ -63,31 +61,23 @@ def run_synthetic_stage(
     max_questions: int | None,
     source: str,
 ) -> bool:
-    """Run synthetic episode generation in-process with source-scoped filtering."""
-    print(f"\n{'=' * 60}")
-    print(f"  {name}")
-    print(f"{'=' * 60}\n")
-
-    start = time.time()
-    result = asyncio.run(
-        validate_synthetic_main(
-            questions_dir=questions_dir,
-            output_path=output_path,
-            max_questions=max_questions,
-            source=source,
-        )
-    )
-    elapsed = time.time() - start
-
-    if result == 0:
-        print(f"\n✓ {name} completed in {elapsed:.1f}s")
-        return True
-    elif result == 1:
-        print(f"\n⚠ {name} completed with some failures in {elapsed:.1f}s (continuing)")
-        return True
-    else:
-        print(f"\n✗ {name} failed completely (exit code {result})")
-        return False
+    """Run source-scoped episode generation via the unified module CLI."""
+    cmd = [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "src.datagen.episode_gen",
+        "--questions-dir",
+        questions_dir,
+        "--output",
+        output_path,
+        "--source",
+        source,
+    ]
+    if max_questions is not None:
+        cmd.extend(["--max-questions", str(max_questions)])
+    return run_stage(name, cmd)
 
 
 def main(
@@ -142,6 +132,8 @@ def main(
                 str(getattr(config, spec["question_output_dir_attr"])),
                 "--output",
                 str(getattr(config, spec["episode_output_file_attr"])),
+                "--source",
+                "llm_gen",
                 "--skip-difficulty-filter",
             ]
             if max_questions:

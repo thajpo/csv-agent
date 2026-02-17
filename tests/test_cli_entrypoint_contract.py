@@ -179,3 +179,26 @@ def test_run_all_preflight_blocks_pipeline_entrypoint_on_unwritable_target(
     rc = cmd_run(mode="all", test=False, dry_run=False)
     assert rc == 2
     assert not called["pipeline"]
+
+
+def test_generate_episodes_uses_unified_entrypoint_for_all_sources(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+
+    calls = []
+
+    async def _fake_episode_main(**kwargs):
+        calls.append(kwargs["source"])
+        return 0
+
+    monkeypatch.setattr("src.cli._run_fail_fast_preflight", lambda **kwargs: False)
+    monkeypatch.setattr(
+        "src.cli._show_episode_preflight", lambda *args, **kwargs: (1, 0)
+    )
+    monkeypatch.setattr("src.datagen.episode_gen.main", _fake_episode_main)
+
+    rc = cmd_generate_episodes(mode="all", max_questions=2, dry_run=False, fresh=True)
+
+    assert rc == 0
+    assert calls == ["template", "procedural", "llm_gen"]

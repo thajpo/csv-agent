@@ -1118,8 +1118,17 @@ async def batch_triangulate(
         has_focus = ui.acquire_focus(focus_id)
 
         try:
+            question_prompt = (
+                q_dict.get("question_text") or q_dict.get("question_mechanical") or ""
+            )
+            if not question_prompt.strip():
+                raise ValueError("Question missing question_text/question_mechanical")
+
+            ui_question = dict(q_dict)
+            ui_question["question"] = question_prompt
+
             ui.print_question_header(
-                q_num=q_index + 1, total=len(questions), question=q_dict
+                q_num=q_index + 1, total=len(questions), question=ui_question
             )
 
             if dynamic_triangulation:
@@ -1147,7 +1156,7 @@ async def batch_triangulate(
 
             result = await triangulate_teacher(
                 csv_path=csv_path,
-                question=q_dict["question"],
+                question=question_prompt,
                 hint=q_dict.get("hint", ""),
                 n_steps=q_dict.get("n_steps"),
                 difficulty=q_dict.get("difficulty"),
