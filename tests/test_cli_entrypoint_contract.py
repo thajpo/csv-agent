@@ -8,6 +8,7 @@ from src.cli import (
     cmd_run,
     _fail_fast_on_existing_outputs,
     _run_fail_fast_preflight,
+    _source_specs_for_mode,
 )
 
 
@@ -50,6 +51,20 @@ def test_run_test_without_mode_hard_fails():
 def test_canonical_modes_parse(argv, expected_mode):
     args = _parse(argv)
     assert args.mode == expected_mode
+
+
+@pytest.mark.parametrize(
+    "mode, expected_sources",
+    [
+        ("template", ["template"]),
+        ("procedural", ["procedural"]),
+        ("llm_gen", ["llm_gen"]),
+        ("all", ["template", "procedural", "llm_gen"]),
+    ],
+)
+def test_source_table_mode_selection(mode, expected_sources):
+    selected = [spec["mode"] for spec in _source_specs_for_mode(mode)]
+    assert selected == expected_sources
 
 
 def test_generate_questions_fail_fast_on_existing_outputs(tmp_path, monkeypatch):

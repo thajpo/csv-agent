@@ -25,6 +25,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from src.core.config import config
+from src.core.source_specs import SourceSpec, source_specs_for_mode
 
 console = Console()
 
@@ -302,23 +303,30 @@ def _modes_from_flag(mode: str) -> tuple[bool, bool, bool]:
     return template, procedural, llm_gen
 
 
+def _source_specs_from_flags(
+    template: bool, procedural: bool, llm_gen: bool
+) -> list[SourceSpec]:
+    flags = {
+        "template": template,
+        "procedural": procedural,
+        "llm_gen": llm_gen,
+    }
+    return [spec for spec in source_specs_for_mode("all") if flags[spec["mode"]]]
+
+
+def _source_specs_for_mode(mode: str) -> list[SourceSpec]:
+    return source_specs_for_mode(mode)
+
+
 def _find_existing_question_outputs(
     template: bool, procedural: bool, llm_gen: bool
 ) -> list[Path]:
     """Return existing question output files that would be touched by selected modes."""
     existing: list[Path] = []
 
-    if template:
-        template_root = Path(config.questions_template_dir)
-        existing.extend(sorted(template_root.glob("*/questions.json")))
-
-    if procedural:
-        procedural_root = Path(config.questions_procedural_dir)
-        existing.extend(sorted(procedural_root.glob("*/questions.json")))
-
-    if llm_gen:
-        llm_root = Path(config.questions_llm_gen_dir)
-        existing.extend(sorted(llm_root.glob("*/questions.json")))
+    for spec in _source_specs_from_flags(template, procedural, llm_gen):
+        root = Path(getattr(config, spec["question_output_dir_attr"]))
+        existing.extend(sorted(root.glob("*/questions.json")))
 
     return existing
 
@@ -327,28 +335,20 @@ def _episode_output_targets(
     template: bool, procedural: bool, llm_gen: bool
 ) -> list[Path]:
     """Return episode output targets touched by selected modes."""
-    targets: list[Path] = []
-    if template:
-        targets.append(Path(config.episodes_template_jsonl))
-    if procedural:
-        targets.append(Path(config.episodes_procedural_jsonl))
-    if llm_gen:
-        targets.append(Path(config.episodes_llm_gen_jsonl))
-    return targets
+    return [
+        Path(getattr(config, spec["episode_output_file_attr"]))
+        for spec in _source_specs_from_flags(template, procedural, llm_gen)
+    ]
 
 
 def _question_output_roots(
     template: bool, procedural: bool, llm_gen: bool
 ) -> list[Path]:
     """Return question output root directories touched by selected modes."""
-    targets: list[Path] = []
-    if template:
-        targets.append(Path(config.questions_template_dir))
-    if procedural:
-        targets.append(Path(config.questions_procedural_dir))
-    if llm_gen:
-        targets.append(Path(config.questions_llm_gen_dir))
-    return targets
+    return [
+        Path(getattr(config, spec["question_output_dir_attr"]))
+        for spec in _source_specs_from_flags(template, procedural, llm_gen)
+    ]
 
 
 def _nearest_existing_parent(path: Path) -> Path | None:
@@ -554,7 +554,7 @@ def cmd_generate_questions(
     regenerate: bool = False,
 ):
     """Generate questions by mode."""
-    template, procedural, llm_gen = _modes_from_flag(mode)
+    source_specs = _source_specs_for_mode(mode)
 
     if _run_fail_fast_preflight(
         mode=mode,
@@ -566,49 +566,51 @@ def cmd_generate_questions(
 
     if dry_run:
         console.print("[bold]Dry Run - Generate Questions[/bold]\n")
-        if template:
-            console.print("  [green]template[/green]: Will generate template questions")
+        for spec in source_specs:
+            source_mode = spec["mode"]
+            if source_mode == "template":
+                console.print(
+                    "  [green]template[/green]: Will generate template questions"
+                )
+            elif source_mode == "procedural":
+                console.print(
+                    "  [magenta]procedural[/magenta]: Will generate program-based questions"
+                )
+            else:
+                console.print("  [blue]llm_gen[/blue]: Will run LLM exploration")
+
             console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print(f"    Output: {config.questions_template_dir}/")
-        if procedural:
             console.print(
-                "  [magenta]procedural[/magenta]: Will generate program-based questions"
+                f"    Output: {getattr(config, spec['question_output_dir_attr'])}/"
             )
-            console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print(f"    Output: {config.questions_procedural_dir}/")
-        if llm_gen:
-            console.print("  [blue]llm_gen[/blue]: Will run LLM exploration")
-            console.print(f"    Max datasets: {max_datasets or 'all'}")
-            console.print(f"    Output: {config.questions_llm_gen_dir}/")
-            if regenerate:
+            if source_mode == "llm_gen" and regenerate:
                 console.print("    [yellow]Mode: Regenerate (will overwrite)[/yellow]")
         console.print("\n[dim]No changes made (dry run)[/dim]")
         return 0
 
     exit_code = 0
 
-    if template:
-        console.print("[bold]Generating template questions...[/bold]")
-        from src.datagen.synthetic.generator import main as synth_gen_main
+    for spec in source_specs:
+        source_mode = spec["mode"]
+        if source_mode == "template":
+            console.print("[bold]Generating template questions...[/bold]")
+            from src.datagen.synthetic.generator import main as synth_gen_main
 
-        result = synth_gen_main(max_datasets=max_datasets)
-        if result != 0:
-            exit_code = result
+            result = synth_gen_main(max_datasets=max_datasets)
+        elif source_mode == "procedural":
+            console.print("[bold]Generating procedural questions...[/bold]")
+            import asyncio
+            from src.datagen.synthetic.programs.runner import (
+                run_all as procedural_run_all,
+            )
 
-    if procedural:
-        console.print("[bold]Generating procedural questions...[/bold]")
-        import asyncio
-        from src.datagen.synthetic.programs.runner import run_all as procedural_run_all
+            result = asyncio.run(procedural_run_all(max_datasets=max_datasets))
+        else:
+            console.print("[bold]Generating LLM questions...[/bold]")
+            from src.datagen.question_gen import main as llm_gen_main
 
-        result = asyncio.run(procedural_run_all(max_datasets=max_datasets))
-        if result != 0:
-            exit_code = result
+            result = llm_gen_main(max_datasets=max_datasets, regenerate=regenerate)
 
-    if llm_gen:
-        console.print("[bold]Generating LLM questions...[/bold]")
-        from src.datagen.question_gen import main as llm_gen_main
-
-        result = llm_gen_main(max_datasets=max_datasets, regenerate=regenerate)
         if result != 0:
             exit_code = result
 
@@ -700,7 +702,7 @@ def cmd_generate_episodes(
     fresh: bool = False,
 ):
     """Generate verified episodes via teacher triangulation."""
-    template, procedural, llm_gen = _modes_from_flag(mode)
+    source_specs = _source_specs_for_mode(mode)
 
     if _run_fail_fast_preflight(
         mode=mode,
@@ -712,22 +714,32 @@ def cmd_generate_episodes(
 
     exit_code = 0
 
-    if template:
-        questions_dir = Path(config.questions_template_dir)
-        episodes_file = Path(config.episodes_template_jsonl)
+    for spec in source_specs:
+        source_mode = spec["mode"]
+        questions_dir = Path(getattr(config, spec["question_output_dir_attr"]))
+        episodes_file = Path(getattr(config, spec["episode_output_file_attr"]))
 
         total_q, existing = _show_episode_preflight(
-            "template", questions_dir, episodes_file
+            source_mode, questions_dir, episodes_file
         )
         remaining = total_q - existing
 
         if remaining == 0:
-            console.print("\n[green]All template questions already processed![/green]")
-        elif dry_run:
+            if source_mode == "llm_gen":
+                console.print("\n[green]All LLM questions already processed![/green]")
+            else:
+                console.print(
+                    f"\n[green]All {source_mode} questions already processed![/green]"
+                )
+            continue
+
+        if dry_run:
             console.print(
                 f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
             )
-        else:
+            continue
+
+        if source_mode in {"template", "llm_gen"}:
             if fresh:
                 console.print(
                     f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]"
@@ -737,80 +749,10 @@ def cmd_generate_episodes(
                     f"\n[dim]Mode: Rerun (will overwrite {existing:,} existing)[/dim]"
                 )
 
-            console.print()
-            import asyncio
-            from src.datagen.validate_synthetic import main as synth_ep_main
+        console.print()
+        import asyncio
 
-            result = asyncio.run(
-                synth_ep_main(
-                    questions_dir=str(questions_dir),
-                    output_path=str(episodes_file),
-                    max_questions=max_questions,
-                    source="template",
-                )
-            )
-            if result != 0:
-                exit_code = result
-
-    if procedural:
-        questions_dir = Path(config.questions_procedural_dir)
-        episodes_file = Path(config.episodes_procedural_jsonl)
-
-        total_q, existing = _show_episode_preflight(
-            "procedural", questions_dir, episodes_file
-        )
-        remaining = total_q - existing
-
-        if remaining == 0:
-            console.print(
-                "\n[green]All procedural questions already processed![/green]"
-            )
-        elif dry_run:
-            console.print(
-                f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
-            )
-        else:
-            import asyncio
-            from src.datagen.validate_synthetic import main as synth_ep_main
-
-            result = asyncio.run(
-                synth_ep_main(
-                    questions_dir=str(questions_dir),
-                    output_path=str(episodes_file),
-                    max_questions=max_questions,
-                    source="procedural",
-                )
-            )
-            if result != 0:
-                exit_code = result
-
-    if llm_gen:
-        questions_dir = Path(config.questions_llm_gen_dir)
-        episodes_file = Path(config.episodes_llm_gen_jsonl)
-
-        total_q, existing = _show_episode_preflight(
-            "llm_gen", questions_dir, episodes_file
-        )
-        remaining = total_q - existing
-
-        if remaining == 0:
-            console.print("\n[green]All LLM questions already processed![/green]")
-        elif dry_run:
-            console.print(
-                f"\n[dim]Dry run: Would generate up to {remaining:,} episodes[/dim]"
-            )
-        else:
-            if fresh:
-                console.print(
-                    f"\n[yellow]Mode: Fresh start (will overwrite {existing:,} existing)[/yellow]"
-                )
-            elif existing > 0:
-                console.print(
-                    f"\n[dim]Mode: Rerun (will overwrite {existing:,} existing)[/dim]"
-                )
-
-            console.print()
-            import asyncio
+        if source_mode == "llm_gen":
             from src.datagen.episode_gen import main as llm_ep_main
 
             result = asyncio.run(
@@ -820,8 +762,20 @@ def cmd_generate_episodes(
                     max_questions=max_questions,
                 )
             )
-            if result != 0:
-                exit_code = result
+        else:
+            from src.datagen.validate_synthetic import main as synth_ep_main
+
+            result = asyncio.run(
+                synth_ep_main(
+                    questions_dir=str(questions_dir),
+                    output_path=str(episodes_file),
+                    max_questions=max_questions,
+                    source=source_mode,
+                )
+            )
+
+        if result != 0:
+            exit_code = result
 
     return exit_code
 
@@ -831,7 +785,7 @@ def cmd_generate_episodes(
 
 def cmd_run(mode: str, test: bool, dry_run: bool):
     """Run full pipeline."""
-    template, procedural, llm_gen = _modes_from_flag(mode)
+    source_specs = _source_specs_for_mode(mode)
 
     if _run_pipeline_fail_fast_preflight(mode=mode, dry_run=dry_run):
         return 2
@@ -841,15 +795,27 @@ def cmd_run(mode: str, test: bool, dry_run: bool):
         console.print(f"  Mode: {mode}")
         console.print(f"  Test mode: {test}")
 
-        if template:
-            console.print("\n  Stage 1a: Generate template questions")
-            console.print("  Stage 2a: Generate template episodes")
-        if procedural:
-            console.print("  Stage 1b: Generate procedural questions")
-            console.print("  Stage 2b: Generate procedural episodes")
-        if llm_gen:
-            console.print("  Stage 1c: Generate LLM questions")
-            console.print("  Stage 2c: Generate LLM episodes")
+        stage_labels = {
+            "template": (
+                "Stage 1a: Generate template questions",
+                "Stage 2a: Generate template episodes",
+            ),
+            "procedural": (
+                "Stage 1b: Generate procedural questions",
+                "Stage 2b: Generate procedural episodes",
+            ),
+            "llm_gen": (
+                "Stage 1c: Generate LLM questions",
+                "Stage 2c: Generate LLM episodes",
+            ),
+        }
+        for idx, spec in enumerate(source_specs):
+            question_stage, episode_stage = stage_labels[spec["mode"]]
+            if idx == 0:
+                console.print(f"\n  {question_stage}")
+            else:
+                console.print(f"  {question_stage}")
+            console.print(f"  {episode_stage}")
 
         console.print("\n[dim]No changes made (dry run)[/dim]")
         return 0

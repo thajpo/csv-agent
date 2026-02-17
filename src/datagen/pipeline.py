@@ -17,7 +17,12 @@ import asyncio
 from pathlib import Path
 
 from src.core.config import config
+from src.core.source_specs import SourceSpec, source_specs_for_mode
 from src.datagen.validate_synthetic import main as validate_synthetic_main
+
+
+def _source_specs_for_mode(mode: str) -> list[SourceSpec]:
+    return source_specs_for_mode(mode)
 
 
 def run_stage(name: str, cmd: list[str]) -> bool:
@@ -101,9 +106,8 @@ def main(
     Returns:
         0 if all stages succeeded, 1 if any failed
     """
-    run_template = mode in ("template", "all")
-    run_procedural = mode in ("procedural", "all")
-    run_llm = mode in ("llm_gen", "all")
+    source_specs = _source_specs_for_mode(mode)
+    selected_modes = {spec["mode"] for spec in source_specs}
 
     # Test mode: minimal settings for fast iteration
     n_consistency = None
@@ -117,82 +121,47 @@ def main(
     stages_run = 0
     stages_failed = 0
 
-    # Stage 1a: Template Questions
-    if run_template:
-        cmd = ["uv", "run", "python", "-m", "src.datagen.synthetic.generator"]
+    for spec in source_specs:
+        question_cmd = ["uv", "run", "python", "-m", spec["question_module"]]
         if max_datasets:
-            cmd.extend(["--max-datasets", str(max_datasets)])
-        if run_stage("Stage 1a: Generate Template Questions", cmd):
+            question_cmd.extend(["--max-datasets", str(max_datasets)])
+
+        if run_stage(spec["question_stage"], question_cmd):
             stages_run += 1
         else:
             stages_failed += 1
 
-    # Stage 2a: Template Episodes
-    if run_template:
+        if spec["mode"] == "llm_gen":
+            episode_cmd = [
+                "uv",
+                "run",
+                "python",
+                "-m",
+                "src.datagen.episode_gen",
+                "--questions-dir",
+                str(getattr(config, spec["question_output_dir_attr"])),
+                "--output",
+                str(getattr(config, spec["episode_output_file_attr"])),
+                "--skip-difficulty-filter",
+            ]
+            if max_questions:
+                episode_cmd.extend(["--max-questions", str(max_questions)])
+            if n_consistency:
+                episode_cmd.extend(["--n-consistency", str(n_consistency)])
+
+            if run_stage(spec["episode_stage"], episode_cmd):
+                stages_run += 1
+            else:
+                stages_failed += 1
+            continue
+
         if run_synthetic_stage(
-            "Stage 2a: Generate Template Episodes",
-            questions_dir=str(config.questions_template_dir),
-            output_path=str(config.episodes_template_jsonl),
+            spec["episode_stage"],
+            questions_dir=str(getattr(config, spec["question_output_dir_attr"])),
+            output_path=str(getattr(config, spec["episode_output_file_attr"])),
             max_questions=max_questions,
-            source="template",
+            source=spec["mode"],
         ):
-            stages_run += 1
-        else:
-            stages_failed += 1
-
-    # Stage 1b: Procedural Questions
-    if run_procedural:
-        cmd = ["uv", "run", "python", "-m", "src.datagen.synthetic.programs.runner"]
-        if max_datasets:
-            cmd.extend(["--max-datasets", str(max_datasets)])
-        if run_stage("Stage 1b: Generate Procedural Questions", cmd):
-            stages_run += 1
-        else:
-            stages_failed += 1
-
-    # Stage 2b: Procedural Episodes
-    if run_procedural:
-        if run_synthetic_stage(
-            "Stage 2b: Generate Procedural Episodes",
-            questions_dir=str(config.questions_procedural_dir),
-            output_path=str(config.episodes_procedural_jsonl),
-            max_questions=max_questions,
-            source="procedural",
-        ):
-            stages_run += 1
-        else:
-            stages_failed += 1
-
-    # Stage 1c: LLM Questions
-    if run_llm:
-        cmd = ["uv", "run", "python", "-m", "src.datagen.question_gen"]
-        if max_datasets:
-            cmd.extend(["--max-datasets", str(max_datasets)])
-        if run_stage("Stage 1c: Generate LLM Questions", cmd):
-            stages_run += 1
-        else:
-            stages_failed += 1
-
-    # Stage 2c: LLM Episodes
-    if run_llm:
-        cmd = [
-            "uv",
-            "run",
-            "python",
-            "-m",
-            "src.datagen.episode_gen",
-            "--questions-dir",
-            str(config.questions_llm_gen_dir),
-            "--output",
-            str(config.episodes_llm_gen_jsonl),
-            "--skip-difficulty-filter",
-        ]
-        if max_questions:
-            cmd.extend(["--max-questions", str(max_questions)])
-        if n_consistency:
-            cmd.extend(["--n-consistency", str(n_consistency)])
-
-        if run_stage("Stage 2c: Generate LLM Episodes", cmd):
             stages_run += 1
         else:
             stages_failed += 1
@@ -204,19 +173,19 @@ def main(
     print(f"  Stages run: {stages_run}")
     print(f"  Stages failed: {stages_failed}")
 
-    if run_template:
+    if "template" in selected_modes:
         template_episodes = Path(config.episodes_template_jsonl)
         if template_episodes.exists():
             count = sum(1 for _ in open(template_episodes))
             print(f"  Template episodes: {count}")
 
-    if run_procedural:
+    if "procedural" in selected_modes:
         procedural_episodes = Path(config.episodes_procedural_jsonl)
         if procedural_episodes.exists():
             count = sum(1 for _ in open(procedural_episodes))
             print(f"  Procedural episodes: {count}")
 
-    if run_llm:
+    if "llm_gen" in selected_modes:
         llm_episodes = Path(config.episodes_llm_gen_jsonl)
         if llm_episodes.exists():
             count = sum(1 for _ in open(llm_episodes))
