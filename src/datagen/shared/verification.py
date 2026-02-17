@@ -4,10 +4,11 @@ Centralizes correctness checking for both LLM and synthetic questions.
 Provides two evidence strategies: ground_truth and consistency.
 """
 
-from dataclasses import dataclass
-from typing import Literal
-from csv_spec import TraceDict
 import logging
+from dataclasses import dataclass
+from typing import Any, Literal, Mapping
+
+from csv_spec import TraceDict
 
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,24 @@ class VerificationResult:
     traces: list[TraceDict]
     majority_answer_hash: str | None
     error: str | None
+
+
+def resolve_question_prompt(question: Mapping[str, Any]) -> str:
+    """Resolve canonical runtime prompt text from a question record.
+
+    Resolution order is strict:
+    1) question_text
+    2) question_mechanical
+    """
+    question_text = question.get("question_text")
+    if isinstance(question_text, str) and question_text.strip():
+        return question_text
+
+    mechanical = question.get("question_mechanical")
+    if isinstance(mechanical, str) and mechanical.strip():
+        return mechanical
+
+    return ""
 
 
 async def verify_question(
@@ -73,10 +92,17 @@ async def verify_synthetic(
     from src.datagen.teacher import execute_teacher_trace, answers_match
 
     try:
-        # Use mechanical question or question_text if available
-        question_text = (
-            question.get("question_mechanical") or question.get("question_text") or ""
-        )
+        question_text = resolve_question_prompt(question)
+        if not question_text:
+            return VerificationResult(
+                success=False,
+                match=None,
+                trace=None,
+                traces=[],
+                majority_answer_hash=None,
+                error="Missing question_text/question_mechanical",
+            )
+
         hint = question.get("hint")
 
         trace, _conversation, _system, elapsed = await execute_teacher_trace(
@@ -125,31 +151,31 @@ async def verify_synthetic(
                 error=None,
             )
 
-        # Tolerant comparison
-        expected_answers = question.get("ground_truths") or []
-        if not expected_answers:
-            gt = question.get("ground_truth")
-            if gt is not None:
-                expected_answers = [gt]
-        expected_answers = [a for a in expected_answers if a is not None]
+        # Tolerant comparison against unified contract field only
+        expected_answer = question.get("ground_truth")
         actual_answer = trace.get("final_answer")
 
         from src.core.config import config
 
         float_tol = kwargs.get("float_tol", config.float_tolerance)
 
-        for exp_hash, exp_answer in zip(expected_hashes, expected_answers):
-            if answers_match(
-                exp_hash, actual_hash, exp_answer, actual_answer, float_tol=float_tol
-            ):
-                return VerificationResult(
-                    success=True,
-                    match=True,
-                    trace=trace,
-                    traces=[],
-                    majority_answer_hash=actual_hash,
-                    error=None,
-                )
+        if expected_answer is not None:
+            for exp_hash in expected_hashes:
+                if answers_match(
+                    exp_hash,
+                    actual_hash,
+                    expected_answer,
+                    actual_answer,
+                    float_tol=float_tol,
+                ):
+                    return VerificationResult(
+                        success=True,
+                        match=True,
+                        trace=trace,
+                        traces=[],
+                        majority_answer_hash=actual_hash,
+                        error=None,
+                    )
 
         return VerificationResult(
             success=False,
@@ -157,7 +183,7 @@ async def verify_synthetic(
             trace=trace,
             traces=[],
             majority_answer_hash=actual_hash,
-            error=f"Answer mismatch: expected {expected_answers}, got {actual_answer}",
+            error=f"Answer mismatch: expected hashes {expected_hashes}, got {actual_answer}",
         )
     except Exception as e:
         logger.error(f"verify_synthetic error: {e}")
@@ -194,9 +220,20 @@ async def verify_llm(
     from src.datagen.teacher import triangulate_teacher
 
     try:
+        question_text = resolve_question_prompt(question)
+        if not question_text:
+            return VerificationResult(
+                success=False,
+                match=None,
+                trace=None,
+                traces=[],
+                majority_answer_hash=None,
+                error="Missing question_text/question_mechanical",
+            )
+
         result = await triangulate_teacher(
             csv_path=csv_path,
-            question=question.get("question_text", ""),
+            question=question_text,
             hint=question.get("hint") or "",
             n_consistency=n_traces,
             **kwargs,

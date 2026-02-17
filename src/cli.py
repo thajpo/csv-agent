@@ -592,9 +592,10 @@ def cmd_generate_questions(
         source_mode = spec["mode"]
         if source_mode == "template":
             console.print("[bold]Generating template questions...[/bold]")
-            from src.datagen.synthetic.generator import main as synth_gen_main
-
-            result = synth_gen_main(max_datasets=max_datasets)
+            cmd = ["uv", "run", "python", "-m", "src.datagen.synthetic.generator"]
+            if max_datasets:
+                cmd.extend(["--max-datasets", str(max_datasets)])
+            result = subprocess.run(cmd).returncode
         elif source_mode == "procedural":
             console.print("[bold]Generating procedural questions...[/bold]")
             import asyncio
@@ -750,27 +751,16 @@ def cmd_generate_episodes(
         console.print()
         import asyncio
 
-        if source_mode == "llm_gen":
-            from src.datagen.episode_gen import main as llm_ep_main
+        from src.datagen.episode_gen import main as episode_gen_main
 
-            result = asyncio.run(
-                llm_ep_main(
-                    questions_dir=str(questions_dir),
-                    output_path=str(episodes_file),
-                    max_questions=max_questions,
-                )
+        result = asyncio.run(
+            episode_gen_main(
+                questions_dir=str(questions_dir),
+                output_path=str(episodes_file),
+                max_questions=max_questions,
+                source=source_mode,
             )
-        else:
-            from src.datagen.validate_synthetic import main as synth_ep_main
-
-            result = asyncio.run(
-                synth_ep_main(
-                    questions_dir=str(questions_dir),
-                    output_path=str(episodes_file),
-                    max_questions=max_questions,
-                    source=source_mode,
-                )
-            )
+        )
 
         if result != 0:
             exit_code = result

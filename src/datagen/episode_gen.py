@@ -1,74 +1,107 @@
-"""
-Episode generation pipeline.
+"""Unified episode generation pipeline.
 
-This module:
-1. Loads questions from JSON files (one per dataset)
-2. Runs teacher triangulation on each question
-3. Saves verified episodes to disk
-
-Usage (via CLI):
-    csvagent generate episodes --llm     # LLM episodes
-    csvagent generate episodes --synth   # Synthetic episodes
+This module generates episodes for all question sources:
+- llm_gen: consistency triangulation
+- template: single-trace ground-truth verification
+- procedural: single-trace ground-truth verification
 """
 
+import argparse
 import asyncio
 import json
-import sys
 import signal
-from pathlib import Path
-from typing import Any
+import sys
+import time
+from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal, cast
 
-from src.datagen.teacher import batch_triangulate
-from src.datagen.pipeline_ui import EpisodeGenUI
-from src.core.prompts import generate_data_overview
-from csv_spec import (
-    EpisodeJSONL,
-    TimingMetadataDict,
-)
+from csv_spec import EpisodeJSONL, TimingMetadataDict
+
 from src.core.config import config
-from src.utils.docker import (
-    cleanup_csv_sandbox_containers,
-    cleanup_session,
-    generate_session_id,
-    check_resource_availability,
-)
-from src.envs.container_pool import ContainerPool
+from src.core.prompts import generate_data_overview
 from src.datagen.manifest import (
     DatagenManifest,
     compute_dataset_hash,
     compute_llm_fingerprint,
+    compute_synthetic_fingerprint_from_question,
 )
-from src.datagen.shared.questions_io import load_questions
+from src.datagen.pipeline_ui import EpisodeGenUI
 from src.datagen.shared.dataset_meta import (
-    load_dataset_meta,
     generate_description_from_overview,
+    load_dataset_meta,
 )
 from src.datagen.shared.episode_factory import create_episode
-from src.datagen.shared.verification import VerificationResult
+from src.datagen.shared.questions_io import load_questions
+from src.datagen.shared.verification import (
+    VerificationResult,
+    resolve_question_prompt,
+    verify_question,
+)
+from src.datagen.teacher import batch_triangulate
+from src.envs.container_pool import ContainerPool
+from src.utils.docker import (
+    check_resource_availability,
+    cleanup_csv_sandbox_containers,
+    cleanup_session,
+    generate_session_id,
+)
+
+
+SourceMode = Literal["llm_gen", "template", "procedural"]
+ALLOWED_SOURCES: tuple[SourceMode, ...] = ("llm_gen", "template", "procedural")
 
 
 @dataclass
 class CSVTask:
-    """Represents a single CSV processing task."""
+    """Represents a single dataset task for episode generation."""
 
     csv_path: str
     dataset_name: str
     dataset_description: str
     questions: list[dict]
     questions_file: Path
+    source: SourceMode
 
 
 def make_signal_handler(session_id: str):
     """Create a signal handler that cleans up only this session's containers."""
 
     def handler(signum, frame):
-        print(f"\n\n🛑 Interrupted! Cleaning up session {session_id} containers...")
+        print(f"\n\nInterrupted. Cleaning up session {session_id} containers...")
         cleanup_session(session_id)
-        print("✓ Cleanup complete")
+        print("Cleanup complete")
         sys.exit(0)
 
     return handler
+
+
+def infer_source_from_questions_dir(questions_dir: Path) -> SourceMode | None:
+    """Infer source mode from questions dir name when possible."""
+    inferred = questions_dir.name
+    if inferred in ALLOWED_SOURCES:
+        return inferred  # type: ignore[return-value]
+    return None
+
+
+def build_csv_source_map() -> dict[str, str]:
+    """Build dataset_name -> csv_path map from configured sources."""
+    csv_sources = config.csv_sources
+    if isinstance(csv_sources, str):
+        csv_sources = [csv_sources]
+
+    csv_by_name: dict[str, str] = {}
+    for csv_path in csv_sources:
+        csv_path_obj = Path(csv_path)
+        dataset_name = (
+            csv_path_obj.parent.name
+            if csv_path_obj.name == "data.csv"
+            else csv_path_obj.stem
+        )
+        csv_by_name[dataset_name] = str(csv_path)
+
+    return csv_by_name
 
 
 def filter_by_difficulty(
@@ -76,18 +109,7 @@ def filter_by_difficulty(
     distribution: dict[str, float],
     total_target: int,
 ) -> tuple[list[dict], bool]:
-    """
-    Select questions matching target difficulty distribution.
-
-    Args:
-        questions: All questions from questions.json
-        distribution: {difficulty: fraction} e.g., {"EASY": 0.30, ...}
-        total_target: Total questions desired
-
-    Returns:
-        (filtered_questions, success)
-        success=False if any difficulty has insufficient questions
-    """
+    """Select questions matching target difficulty distribution."""
     result = []
     allocations = []
     base_total = 0
@@ -95,7 +117,7 @@ def filter_by_difficulty(
     for idx, (difficulty, fraction) in enumerate(distribution.items()):
         exact = total_target * fraction
         base = int(exact)
-        fractional_part = exact - base  # Used for rounding remainder allocation
+        fractional_part = exact - base
         allocations.append([idx, difficulty, base, fractional_part])
         base_total += base
 
@@ -111,79 +133,157 @@ def filter_by_difficulty(
         count_needed = counts_by_difficulty.get(difficulty, 0)
         matching = [q for q in questions if q.get("difficulty") == difficulty]
         if len(matching) < count_needed:
-            return [], False  # Insufficient questions for this difficulty
-        result.extend(matching[:count_needed])  # First N (deterministic)
+            return [], False
+        result.extend(matching[:count_needed])
+
     return result, True
 
 
 def gather_csv_tasks(
-    csv_sources: list[str],
-    base_questions_dir: Path,
+    source: SourceMode,
+    questions_dir: Path,
     ui: EpisodeGenUI,
-    skip_difficulty_filter: bool = False,
+    skip_difficulty_filter: bool,
 ) -> list[CSVTask]:
-    """
-    Gather all valid CSV tasks with their questions and metadata.
+    """Gather valid dataset tasks from questions directory."""
+    csv_by_name = build_csv_source_map()
+    question_files = sorted(questions_dir.glob("*/questions.json"))
 
-    Returns a list of CSVTask objects for CSVs that have valid questions and descriptions.
-    """
-    tasks = []
+    tasks: list[CSVTask] = []
+    for questions_file in question_files:
+        dataset_name = questions_file.parent.name
+        csv_path = csv_by_name.get(dataset_name)
+        if not csv_path:
+            ui.base.print_warning(f"Skipping {dataset_name}: no matching CSV found")
+            continue
 
-    for csv_path in csv_sources:
-        # Load dataset metadata using shared module
-        dataset_name, dataset_description = load_dataset_meta(csv_path)
+        questions = load_questions(str(questions_file))
+        questions = [q for q in questions if q.get("source") == source]
+        if not questions:
+            continue
 
-        # Generate description from data_overview if missing
+        _meta_dataset_name, dataset_description = load_dataset_meta(csv_path)
         if not dataset_description or not dataset_description.strip():
             data_overview = generate_data_overview(str(csv_path))
             dataset_description = generate_description_from_overview(data_overview)
             ui.base.print_warning(
-                f"{dataset_name}: No description found, synthesized from data_overview"
+                f"{dataset_name}: no description found, synthesized from data overview"
             )
 
-        # Locate questions (structure: questions/[dataset_name]/questions.json)
-        questions_file = base_questions_dir / dataset_name / "questions.json"
-
-        if not questions_file.exists():
-            ui.base.print_warning(
-                f"Skipping {dataset_name}: No questions found at {questions_file}"
-            )
-            continue
-
-        questions = load_questions(str(questions_file))
-
-        # Filter by difficulty distribution (unless skipped)
-        if not skip_difficulty_filter:
+        if source == "llm_gen" and not skip_difficulty_filter:
             filtered_questions, filter_ok = filter_by_difficulty(
                 questions,
                 config.question_difficulty_distribution,
                 config.num_questions_to_generate,
             )
-            if not filter_ok:
-                # Use all available questions instead of skipping the CSV entirely
+            if filter_ok:
+                questions = filtered_questions
+            else:
                 ui.base.print_warning(
                     f"{dataset_name}: insufficient questions for target distribution "
-                    f"(need {config.num_questions_to_generate} with {config.question_difficulty_distribution}). "
-                    f"Using all {len(questions)} available questions instead."
+                    f"(need {config.num_questions_to_generate} with "
+                    f"{config.question_difficulty_distribution}). Using all "
+                    f"{len(questions)} available questions instead."
                 )
-                # Don't filter - use all questions as-is
-            else:
-                questions = filtered_questions
 
         tasks.append(
             CSVTask(
-                csv_path=csv_path,
+                csv_path=str(csv_path),
                 dataset_name=dataset_name,
                 dataset_description=dataset_description,
                 questions=questions,
                 questions_file=questions_file,
+                source=source,
             )
         )
 
     return tasks
 
 
-async def process_csv_task(
+def compute_question_fingerprint(
+    question: dict,
+    source: SourceMode,
+    dataset_hash: str,
+) -> str | None:
+    """Compute manifest fingerprint for a question by source."""
+    if source == "llm_gen":
+        question_text = resolve_question_prompt(question)
+        if not question_text:
+            return None
+        return compute_llm_fingerprint(question_text, dataset_hash)
+    return compute_synthetic_fingerprint_from_question(question, dataset_hash)
+
+
+def filter_cached_questions(
+    tasks: list[CSVTask],
+    source: SourceMode,
+    manifest: DatagenManifest,
+    retry_failed: bool,
+    ui: EpisodeGenUI,
+) -> tuple[list[CSVTask], dict[str, str]]:
+    """Filter tasks by manifest cache and return dataset hash cache."""
+    dataset_hashes: dict[str, str] = {}
+    original_total = sum(len(task.questions) for task in tasks)
+
+    for task in tasks:
+        if task.csv_path not in dataset_hashes:
+            dataset_hashes[task.csv_path] = compute_dataset_hash(task.csv_path)
+        dataset_hash = dataset_hashes[task.csv_path]
+
+        filtered_questions = []
+        for question in task.questions:
+            fingerprint = compute_question_fingerprint(
+                question=question,
+                source=source,
+                dataset_hash=dataset_hash,
+            )
+            if fingerprint is None:
+                filtered_questions.append(question)
+                continue
+
+            if source == "llm_gen":
+                exists = manifest.has_llm(
+                    fingerprint,
+                    include_failures=not retry_failed,
+                )
+            else:
+                exists = manifest.has_synthetic(
+                    fingerprint,
+                    include_failures=not retry_failed,
+                )
+
+            if not exists:
+                filtered_questions.append(question)
+
+        task.questions = filtered_questions
+
+    tasks = [task for task in tasks if task.questions]
+    new_total = sum(len(task.questions) for task in tasks)
+    if original_total > new_total:
+        ui.base.print_status(f"Skipping {original_total - new_total} cached questions")
+
+    return tasks, dataset_hashes
+
+
+def print_manifest_stats(
+    source: SourceMode, manifest: DatagenManifest, ui: EpisodeGenUI
+) -> None:
+    """Print source-scoped manifest summary."""
+    stats = manifest.stats()
+    if source == "llm_gen":
+        if stats["llm_total"] > 0:
+            ui.base.print_status(
+                f"Manifest loaded: {stats['llm_success']} success, {stats['llm_failure']} failures"
+            )
+        return
+
+    if stats["synthetic_total"] > 0:
+        ui.base.print_status(
+            f"Manifest loaded: {stats['synthetic_success']} success, {stats['synthetic_failure']} failures"
+        )
+
+
+async def process_llm_task(
     task: CSVTask,
     teacher_model: str,
     n_consistency: int,
@@ -195,22 +295,10 @@ async def process_csv_task(
     external_container: Any = None,
     manifest: DatagenManifest | None = None,
     dataset_hash: str | None = None,
-) -> list[EpisodeJSONL]:
-    """
-    Process a single CSV task and return generated episodes.
-
-    This is the core worker function for both sequential and parallel modes.
-
-    Args:
-        external_container: Optional pre-created container from ContainerPool.
-                           If provided, the container is reused instead of created.
-        manifest: Optional manifest for recording results
-        dataset_hash: Optional dataset hash for fingerprinting
-    """
-    # Generate data overview
+) -> tuple[list[EpisodeJSONL], list[dict]]:
+    """Process one dataset in LLM triangulation mode."""
     data_overview = generate_data_overview(task.csv_path)
 
-    # Run batch triangulation (uses external container if provided)
     results = await batch_triangulate(
         csv_path=task.csv_path,
         questions=task.questions,
@@ -228,38 +316,35 @@ async def process_csv_task(
         float_tol=float_tol,
     )
 
-    episodes = []
-    failures = []
-    for r in results:
-        question_text = (
-            r.question.get("question_text")
-            or r.question.get("question_mechanical")
-            or ""
-        )
+    episodes: list[EpisodeJSONL] = []
+    failures: list[dict] = []
+    for result in results:
+        question_text = resolve_question_prompt(result.question)
 
-        # Compute fingerprint for manifest recording
         fingerprint = None
         if manifest is not None and dataset_hash is not None:
-            fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
+            fingerprint = compute_question_fingerprint(
+                question=result.question,
+                source="llm_gen",
+                dataset_hash=dataset_hash,
+            )
 
-        if not r.verified:
-            # Log unverified for later analysis
+        if not result.verified:
             failures.append(
                 {
                     "question": question_text[:100],
-                    "gold_answer": r.gold_trace.get("final_answer")
-                    if r.gold_trace
+                    "gold_answer": result.gold_trace.get("final_answer")
+                    if result.gold_trace
                     else None,
-                    "gold_success": r.gold_trace.get("success")
-                    if r.gold_trace
+                    "gold_success": result.gold_trace.get("success")
+                    if result.gold_trace
                     else False,
-                    "majority_answer": r.majority_answer_hash,
-                    "majority_count": r.majority_count,
-                    "n_consistency": len(r.consistency_results),
+                    "majority_answer": result.majority_answer_hash,
+                    "majority_count": result.majority_count,
+                    "n_consistency": len(result.consistency_results),
                 }
             )
 
-            # Record failure to manifest
             if manifest is not None and fingerprint is not None:
                 manifest.record_llm(
                     fingerprint=fingerprint,
@@ -267,44 +352,38 @@ async def process_csv_task(
                     dataset=task.dataset_name,
                     question_text=question_text,
                     model=teacher_model,
-                    n_consistency=len(r.consistency_results),
-                    elapsed_seconds=r.timing_metadata.get("avg_elapsed"),
+                    n_consistency=len(result.consistency_results),
+                    elapsed_seconds=result.timing_metadata.get("avg_elapsed"),
                 )
 
             if verified_only:
                 continue
 
-        # Build verification result from triangulation output
-        consistency_traces = [trace for trace, _ in r.consistency_results]
+        consistency_traces = [trace for trace, _ in result.consistency_results]
         verification_result = VerificationResult(
-            success=r.verified,
-            match=r.verified,
-            trace=r.gold_trace,
+            success=result.verified,
+            match=result.verified,
+            trace=result.gold_trace,
             traces=consistency_traces,
-            majority_answer_hash=r.majority_answer_hash,
+            majority_answer_hash=result.majority_answer_hash,
             error=None,
         )
 
-        # Use episode factory to create episode
         episode = await create_episode(
-            question=r.question,
+            question=result.question,
             verification_result=verification_result,
             source="llm_gen",
             csv_path=task.csv_path,
         )
-
-        # Update timing with actual timing from triangulation
         episode.timing = TimingMetadataDict(
-            gold_elapsed=r.timing_metadata["gold_elapsed"],
-            consistency_elapsed=r.timing_metadata["consistency_elapsed"],
-            total_elapsed=r.timing_metadata["total_elapsed"],
-            avg_elapsed=r.timing_metadata["avg_elapsed"],
+            gold_elapsed=result.timing_metadata["gold_elapsed"],
+            consistency_elapsed=result.timing_metadata["consistency_elapsed"],
+            total_elapsed=result.timing_metadata["total_elapsed"],
+            avg_elapsed=result.timing_metadata["avg_elapsed"],
         )
-
         episodes.append(episode)
 
-        # Record success to manifest (only for verified episodes)
-        if r.verified and manifest is not None and fingerprint is not None:
+        if result.verified and manifest is not None and fingerprint is not None:
             manifest.record_llm(
                 fingerprint=fingerprint,
                 status="success",
@@ -312,190 +391,172 @@ async def process_csv_task(
                 question_text=question_text,
                 episode_id=episode.episode_id,
                 model=teacher_model,
-                n_consistency=len(r.consistency_results),
-                elapsed_seconds=r.timing_metadata.get("avg_elapsed"),
+                n_consistency=len(result.consistency_results),
+                elapsed_seconds=result.timing_metadata.get("avg_elapsed"),
             )
 
     return episodes, failures
 
 
-async def main(
-    questions_dir: str | None = None,
-    output_path: str | None = None,
-    n_consistency: int | None = None,
-    max_questions: int | None = None,
-    skip_difficulty_filter: bool = False,
-    difficulties: list[str] | None = None,
-    retry_failed: bool = False,
-):
-    # Create global UI instance
-    ui = EpisodeGenUI()
+async def process_ground_truth_task(
+    task: CSVTask,
+    teacher_model: str,
+    max_turns: int,
+    sampling_args: dict,
+    float_tol: float,
+    ui: EpisodeGenUI,
+    session_id: str,
+    manifest: DatagenManifest | None = None,
+    dataset_hash: str | None = None,
+) -> tuple[list[EpisodeJSONL], list[dict]]:
+    """Process one dataset in ground-truth verification mode."""
+    data_overview = generate_data_overview(task.csv_path)
+    episodes: list[EpisodeJSONL] = []
+    failures: list[dict] = []
 
-    # Generate session ID for container isolation
-    session_id = generate_session_id()
-    ui.base.print_status(f"Session ID: {session_id}")
+    for index, question in enumerate(task.questions, 1):
+        question_preview = resolve_question_prompt(question)[:60]
+        ui.base.print_status(f"  [{index}/{len(task.questions)}] {question_preview}...")
 
-    # Register signal handler for Ctrl+C (session-scoped cleanup)
-    signal_handler = make_signal_handler(session_id)
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-
-    # config is already imported from src.core.config
-    teacher_model = config.teacher_model
-    n_consistency = n_consistency if n_consistency is not None else config.n_consistency
-    max_turns = config.max_turns
-    float_tol = config.float_tolerance
-    verified_only = config.verified_only
-    temperature = config.sampling_args.temperature
-    max_tokens = config.sampling_args.max_tokens
-
-    # Handle single csv or list of csvs
-    csv_sources = config.csv_sources
-    if isinstance(csv_sources, str):
-        csv_sources = [csv_sources]
-
-    # Output as single JSONL file (must be specified explicitly)
-    if output_path is None:
-        ui.base.print_error(
-            "ERROR: --output is required. Use one of:\n"
-            f"  --output {config.episodes_template_jsonl}  (for template questions)\n"
-            f"  --output {config.episodes_procedural_jsonl}  (for procedural questions)\n"
-            f"  --output {config.episodes_llm_gen_jsonl}  (for LLM questions)"
+        start = time.time()
+        verification_result = await verify_question(
+            question=question,
+            csv_path=task.csv_path,
+            strategy="ground_truth",
+            model=teacher_model,
+            max_turns=max_turns,
+            sampling_args=sampling_args,
+            dataset_description=task.dataset_description,
+            data_overview=data_overview,
+            ui=ui,
+            session_id=session_id,
+            float_tol=float_tol,
         )
-        return 1
-    output_jsonl = Path(output_path)
-    output_jsonl.parent.mkdir(parents=True, exist_ok=True)
+        elapsed = time.time() - start
 
-    if output_jsonl.exists():
-        output_jsonl.unlink()
+        fingerprint = None
+        if manifest is not None and dataset_hash is not None:
+            fingerprint = compute_question_fingerprint(
+                question=question,
+                source=task.source,
+                dataset_hash=dataset_hash,
+            )
 
-    # Get parent directory of questions (must be specified explicitly)
-    if questions_dir is None:
-        ui.base.print_error(
-            "ERROR: --questions-dir is required. Use one of:\n"
-            f"  --questions-dir {config.questions_template_dir}  (for template questions)\n"
-            f"  --questions-dir {config.questions_procedural_dir}  (for procedural questions)\n"
-            f"  --questions-dir {config.questions_llm_gen_dir}  (for LLM questions)"
+        success = (
+            verification_result.success
+            and verification_result.match is True
+            and verification_result.trace is not None
         )
-        return 1
-    base_questions_dir = Path(questions_dir)
+        if success:
+            episode = await create_episode(
+                question=question,
+                verification_result=verification_result,
+                source=task.source,
+                csv_path=task.csv_path,
+            )
+            episode.timing = TimingMetadataDict(
+                gold_elapsed=elapsed,
+                consistency_elapsed=[],
+                total_elapsed=elapsed,
+                avg_elapsed=elapsed,
+            )
+            episodes.append(episode)
+            ui.base.print_success(f"    Validated ({elapsed:.1f}s)")
 
-    # Sampling args
-    sampling_args = {
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
+            if manifest is not None and fingerprint is not None:
+                manifest.record_synthetic(
+                    fingerprint=fingerprint,
+                    status="success",
+                    dataset=task.dataset_name,
+                    template_name=question.get("template_name", "unknown"),
+                    template_params=question.get("template_params"),
+                    episode_id=episode.episode_id,
+                    model=teacher_model,
+                    elapsed_seconds=elapsed,
+                )
+            continue
 
-    # Gather all valid CSV tasks
-    tasks = gather_csv_tasks(
-        csv_sources, base_questions_dir, ui, skip_difficulty_filter
-    )
+        trace = verification_result.trace
+        failure_record = {
+            "question": resolve_question_prompt(question)[:100],
+            "template_name": question.get("template_name"),
+            "variant_index": question.get("variant_index"),
+            "error": verification_result.error,
+            "elapsed": elapsed,
+        }
+        if trace is not None and verification_result.match is False:
+            failure_record["expected"] = question.get("ground_truth")
+            failure_record["actual"] = trace.get("final_answer")
 
-    # Filter by specific difficulties if requested
-    if difficulties:
-        allowed = set(d.upper() for d in difficulties)
-        for task in tasks:
-            task.questions = [
-                q for q in task.questions if q.get("difficulty", "").upper() in allowed
-            ]
-        # Remove tasks with no questions after filtering
-        tasks = [t for t in tasks if t.questions]
+        failures.append(failure_record)
+        ui.base.print_warning(f"    Failed: {verification_result.error}")
 
-    # Load manifest for caching
-    dataset_hashes: dict[str, str] = {}
-    manifest = DatagenManifest()
-    manifest.load()
-    stats = manifest.stats()
-    if stats["llm_total"] > 0:
-        ui.base.print_status(
-            f"Manifest loaded: {stats['llm_success']} success, "
-            f"{stats['llm_failure']} failures"
-        )
+        if manifest is not None and fingerprint is not None:
+            manifest.record_synthetic(
+                fingerprint=fingerprint,
+                status="failure",
+                dataset=task.dataset_name,
+                template_name=question.get("template_name", "unknown"),
+                template_params=question.get("template_params"),
+                model=teacher_model,
+                elapsed_seconds=elapsed,
+            )
 
-    # Filter questions using manifest
-    original_total = sum(len(t.questions) for t in tasks)
-    for task in tasks:
-        # Compute dataset hash (cached)
-        if task.csv_path not in dataset_hashes:
-            dataset_hashes[task.csv_path] = compute_dataset_hash(task.csv_path)
-        dataset_hash = dataset_hashes[task.csv_path]
+    return episodes, failures
 
-        filtered_questions = []
-        for q in task.questions:
-            question_text = q.get("question_text") or q.get("question_mechanical") or ""
-            fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
-            # include_failures=True means skip failures too (unless retry_failed)
-            if manifest.has_llm(fingerprint, include_failures=not retry_failed):
-                continue  # Skip - already processed
-            filtered_questions.append(q)
-        task.questions = filtered_questions
 
-    # Remove tasks with no questions after filtering
-    tasks = [t for t in tasks if t.questions]
-    new_total = sum(len(t.questions) for t in tasks)
-    if original_total > new_total:
-        ui.base.print_status(f"Skipping {original_total - new_total} cached questions")
-
-    # Limit questions per dataset if specified
-    if max_questions is not None:
-        for task in tasks:
-            if len(task.questions) > max_questions:
-                task.questions = task.questions[:max_questions]
-
-    if not tasks:
-        ui.base.print_error(
-            "No valid CSV tasks found. Check questions and metadata files."
-        )
-        return 1
-
-    # Cleanup any stale containers ONCE before starting (avoids race conditions in parallel mode)
+async def run_llm_pipeline(
+    tasks: list[CSVTask],
+    n_consistency: int,
+    teacher_model: str,
+    max_turns: int,
+    sampling_args: dict,
+    float_tol: float,
+    verified_only: bool,
+    ui: EpisodeGenUI,
+    session_id: str,
+    manifest: DatagenManifest,
+    dataset_hashes: dict[str, str],
+) -> tuple[list[EpisodeJSONL], list[dict], bool]:
+    """Run pooled LLM triangulation pipeline across tasks."""
     ui.base.print_status("Cleaning up old containers...")
     cleanup_csv_sandbox_containers()
 
-    ui.base.print_section(f"Found {len(tasks)} CSV datasets to process")
-    for task in tasks:
-        ui.base.print_status(
-            f"  • {task.dataset_name}: {len(task.questions)} questions"
-        )
-
-    all_episodes = []
-
-    # Always use container pool for efficiency
     max_concurrent = config.max_concurrent_containers
     if config.dynamic_triangulation and config.triangulation_by_difficulty:
         from src.datagen.teacher import resolve_n_consistency
 
         max_consistency = n_consistency
         for task in tasks:
-            for q in task.questions:
+            for question in task.questions:
                 max_consistency = max(
                     max_consistency,
                     resolve_n_consistency(
-                        q, n_consistency, config.triangulation_by_difficulty
+                        question,
+                        n_consistency,
+                        config.triangulation_by_difficulty,
                     ),
                 )
     else:
         max_consistency = n_consistency
 
-    # Pre-flight resource check - auto-adjust to safe container count
     resource_status = check_resource_availability(max_concurrent)
     if resource_status.recommended_max_containers < 1:
-        # No room at all - must wait
         ui.base.print_error(
-            f"❌ Insufficient resources: {resource_status.available_memory_gb:.1f}GB available, "
+            f"Insufficient resources: {resource_status.available_memory_gb:.1f}GB available, "
             f"{resource_status.existing_containers} containers already running."
         )
         ui.base.print_error(
-            "   Wait for other scripts to finish, or run: "
+            "Wait for other scripts to finish, or run: "
             'uv run python -c "from src.utils.docker import cleanup_csv_sandbox_containers; cleanup_csv_sandbox_containers()"'
         )
-        return 1
-    elif resource_status.recommended_max_containers < max_concurrent:
-        # Reduce parallelism to safe level
+        return [], [], True
+
+    if resource_status.recommended_max_containers < max_concurrent:
         original = max_concurrent
         max_concurrent = resource_status.recommended_max_containers
         ui.base.print_warning(
-            f"⚠️  Reducing parallelism: {original} → {max_concurrent} containers "
+            f"Reducing parallelism: {original} -> {max_concurrent} containers "
             f"({resource_status.available_memory_gb:.1f}GB available, "
             f"{resource_status.existing_containers} containers from other sessions)"
         )
@@ -506,10 +567,9 @@ async def main(
         )
 
     ui.base.print_section(
-        f"Processing {len(tasks)} CSVs ({max_concurrent} containers pooled)"
+        f"Processing {len(tasks)} datasets ({max_concurrent} containers pooled)"
     )
 
-    # Create container pool (containers created once, reused across CSVs)
     pool = ContainerPool(
         max_containers=max_concurrent,
         n_question_slots=config.n_question_slots,
@@ -521,12 +581,10 @@ async def main(
     async def process_task_wrapper(
         task: CSVTask,
     ) -> tuple[CSVTask, list[EpisodeJSONL], list[dict]]:
-        # Acquire container from pool (blocks until one is available)
         container = await pool.acquire(task.csv_path)
-        # Get dataset hash if manifest is active
-        task_dataset_hash = dataset_hashes.get(task.csv_path) if manifest else None
+        task_dataset_hash = dataset_hashes.get(task.csv_path)
         try:
-            episodes, failures = await process_csv_task(
+            episodes, failures = await process_llm_task(
                 task=task,
                 teacher_model=teacher_model,
                 n_consistency=n_consistency,
@@ -539,72 +597,386 @@ async def main(
                 manifest=manifest,
                 dataset_hash=task_dataset_hash,
             )
-            return (task, episodes, failures)
+            return task, episodes, failures
         finally:
-            # Release container back to pool for reuse
             await pool.release(container)
 
-    # Create tasks for asyncio.as_completed
     pending_tasks = [asyncio.create_task(process_task_wrapper(task)) for task in tasks]
 
-    # Process as each completes (provides real-time progress)
     completed_count = 0
-    all_failures = []
+    all_episodes: list[EpisodeJSONL] = []
+    all_failures: list[dict] = []
     had_error = False
+
     try:
         for coro in asyncio.as_completed(pending_tasks):
             task_result, episodes, failures = await coro
             completed_count += 1
 
-            n_verified = sum(1 for ep in episodes if ep.verified)
+            n_verified = sum(1 for episode in episodes if episode.verified)
             ui.base.print_success(
-                f"✓ [{completed_count}/{len(tasks)}] {task_result.dataset_name}: "
+                f"[{completed_count}/{len(tasks)}] {task_result.dataset_name}: "
                 f"{len(episodes)} episodes ({n_verified} verified)"
             )
+
             all_episodes.extend(episodes)
-            # Tag failures with dataset for analysis
-            for f in failures:
-                f["dataset"] = task_result.dataset_name
+            for failure in failures:
+                failure["dataset"] = task_result.dataset_name
             all_failures.extend(failures)
-    except Exception as e:
+    except Exception as error:
         had_error = True
-        ui.base.print_error(f"ERROR: Episode generation failed: {e}")
+        ui.base.print_error(f"Episode generation failed: {error}")
     finally:
-        # Cancel remaining tasks before stopping pool to avoid tearing down live workers
         for task in pending_tasks:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*pending_tasks, return_exceptions=True)
-
-        # Stop the pool (destroys all containers)
         await pool.stop()
 
+    return all_episodes, all_failures, had_error
+
+
+async def run_ground_truth_pipeline(
+    tasks: list[CSVTask],
+    teacher_model: str,
+    max_turns: int,
+    sampling_args: dict,
+    float_tol: float,
+    ui: EpisodeGenUI,
+    session_id: str,
+    manifest: DatagenManifest,
+    dataset_hashes: dict[str, str],
+    parallel: bool,
+    n_workers: int,
+) -> tuple[list[EpisodeJSONL], list[dict], dict[str, int], bool]:
+    """Run ground-truth validation pipeline across tasks."""
+    all_episodes: list[EpisodeJSONL] = []
+    all_failures: list[dict] = []
+    failure_by_template: dict[str, int] = defaultdict(int)
+    had_error = False
+
+    async def process_one_task(
+        task: CSVTask,
+    ) -> tuple[CSVTask, list[EpisodeJSONL], list[dict]]:
+        ui.base.print_section(
+            f"Processing {task.dataset_name}: {len(task.questions)} questions"
+        )
+        episodes, failures = await process_ground_truth_task(
+            task=task,
+            teacher_model=teacher_model,
+            max_turns=max_turns,
+            sampling_args=sampling_args,
+            float_tol=float_tol,
+            ui=ui,
+            session_id=session_id,
+            manifest=manifest,
+            dataset_hash=dataset_hashes.get(task.csv_path),
+        )
+        return task, episodes, failures
+
+    if parallel and len(tasks) > 1:
+        semaphore = asyncio.Semaphore(max(1, n_workers))
+
+        async def process_with_limit(
+            task: CSVTask,
+        ) -> tuple[CSVTask, list[EpisodeJSONL], list[dict]]:
+            async with semaphore:
+                return await process_one_task(task)
+
+        results = await asyncio.gather(
+            *(process_with_limit(task) for task in tasks),
+            return_exceptions=True,
+        )
+        for result in results:
+            if isinstance(result, Exception):
+                had_error = True
+                ui.base.print_error(f"Dataset failed with exception: {result}")
+                continue
+            task_result, episodes, failures = result
+            all_episodes.extend(episodes)
+            all_failures.extend(failures)
+            for failure in failures:
+                failure_by_template[failure.get("template_name", "unknown")] += 1
+            ui.base.print_success(
+                f"{task_result.dataset_name}: {len(episodes)} verified, {len(failures)} failed"
+            )
+    else:
+        for task in tasks:
+            try:
+                task_result, episodes, failures = await process_one_task(task)
+            except Exception as error:
+                had_error = True
+                ui.base.print_error(
+                    f"Dataset {task.dataset_name} failed with exception: {error}"
+                )
+                continue
+
+            all_episodes.extend(episodes)
+            all_failures.extend(failures)
+            for failure in failures:
+                failure_by_template[failure.get("template_name", "unknown")] += 1
+            ui.base.print_success(
+                f"{task_result.dataset_name}: {len(episodes)} verified, {len(failures)} failed"
+            )
+
+    return all_episodes, all_failures, failure_by_template, had_error
+
+
+def failure_log_name(source: SourceMode) -> str:
+    """Return failures sidecar filename for the source."""
+    if source == "llm_gen":
+        return "failures_llm.jsonl"
+    return "failures_synthetic.jsonl"
+
+
+async def main(
+    questions_dir: str,
+    output_path: str,
+    source: str | None = None,
+    max_questions: int | None = None,
+    n_consistency: int | None = None,
+    skip_difficulty_filter: bool = False,
+    difficulties: list[str] | None = None,
+    retry_failed: bool = False,
+    parallel: bool = False,
+    n_workers: int = 4,
+) -> int:
+    """Generate episodes for a single source mode."""
+    ui = EpisodeGenUI()
+
+    questions_dir_path = Path(questions_dir)
+    if source is None:
+        source = infer_source_from_questions_dir(questions_dir_path)
+    if source not in ALLOWED_SOURCES:
+        ui.base.print_error(
+            "Invalid or missing source. Use --source with one of: "
+            "template, procedural, llm_gen."
+        )
+        return 2
+    source_mode = cast(SourceMode, source)
+
+    if not questions_dir_path.exists():
+        ui.base.print_error(f"Questions directory not found: {questions_dir}")
+        return 2
+
+    output_jsonl = Path(output_path)
+    output_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    if output_jsonl.exists():
+        output_jsonl.unlink()
+
+    session_id = generate_session_id()
+    ui.base.print_status(f"Session ID: {session_id}")
+
+    signal_handler = make_signal_handler(session_id)
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    teacher_model = config.teacher_model
+    n_consistency = n_consistency if n_consistency is not None else config.n_consistency
+    max_turns = config.max_turns
+    float_tol = config.float_tolerance
+    verified_only = config.verified_only
+    sampling_args = {
+        "temperature": config.sampling_args.temperature,
+        "max_tokens": config.sampling_args.max_tokens,
+    }
+
+    tasks = gather_csv_tasks(
+        source=source_mode,
+        questions_dir=questions_dir_path,
+        ui=ui,
+        skip_difficulty_filter=skip_difficulty_filter,
+    )
+
+    if difficulties:
+        allowed = {difficulty.upper() for difficulty in difficulties}
+        for task in tasks:
+            task.questions = [
+                question
+                for question in task.questions
+                if str(question.get("difficulty", "")).upper() in allowed
+            ]
+        tasks = [task for task in tasks if task.questions]
+
+    manifest = DatagenManifest()
+    manifest.load()
+    print_manifest_stats(source=source_mode, manifest=manifest, ui=ui)
+
+    tasks, dataset_hashes = filter_cached_questions(
+        tasks=tasks,
+        source=source_mode,
+        manifest=manifest,
+        retry_failed=retry_failed,
+        ui=ui,
+    )
+
+    if max_questions is not None:
+        for task in tasks:
+            if len(task.questions) > max_questions:
+                task.questions = task.questions[:max_questions]
+
+    tasks = [task for task in tasks if task.questions]
+    if not tasks:
+        ui.base.print_error("No valid dataset tasks found.")
+        return 2
+
+    ui.base.print_section(f"Found {len(tasks)} datasets to process")
+    for task in tasks:
+        ui.base.print_status(f"  {task.dataset_name}: {len(task.questions)} questions")
+
+    if source_mode == "llm_gen":
+        all_episodes, all_failures, had_error = await run_llm_pipeline(
+            tasks=tasks,
+            n_consistency=n_consistency,
+            teacher_model=teacher_model,
+            max_turns=max_turns,
+            sampling_args=sampling_args,
+            float_tol=float_tol,
+            verified_only=verified_only,
+            ui=ui,
+            session_id=session_id,
+            manifest=manifest,
+            dataset_hashes=dataset_hashes,
+        )
+        failure_by_template: dict[str, int] = {}
+    else:
+        (
+            all_episodes,
+            all_failures,
+            failure_by_template,
+            had_error,
+        ) = await run_ground_truth_pipeline(
+            tasks=tasks,
+            teacher_model=teacher_model,
+            max_turns=max_turns,
+            sampling_args=sampling_args,
+            float_tol=float_tol,
+            ui=ui,
+            session_id=session_id,
+            manifest=manifest,
+            dataset_hashes=dataset_hashes,
+            parallel=parallel,
+            n_workers=n_workers,
+        )
+
     if had_error:
-        return 1
+        return 2
 
-    # Write all episodes to output file
-    total_verified = sum(1 for ep in all_episodes if ep.verified)
-
-    with open(output_jsonl, "w") as f:
+    with open(output_jsonl, "w") as output_file:
         for episode in all_episodes:
-            f.write(json.dumps(episode.model_dump(), default=str) + "\n")
+            output_file.write(json.dumps(episode.model_dump(), default=str) + "\n")
 
-    # Display final summary
     ui.base.print_section("PIPELINE COMPLETE")
     ui.base.print_key_value("Output file", str(output_jsonl))
-    ui.base.print_key_value("Total sources", len(tasks))
-    ui.base.print_key_value("Total episodes saved", len(all_episodes))
-    ui.base.print_key_value("Total verified", total_verified)
-    ui.base.print_key_value("Total unverified", len(all_failures))
+    ui.base.print_key_value("Total datasets", len(tasks))
+    ui.base.print_key_value("Total episodes", len(all_episodes))
+    ui.base.print_key_value("Total failures", len(all_failures))
 
-    # Write failures to log file for later investigation
+    if all_failures and source_mode != "llm_gen":
+        ui.base.print_empty_line()
+        ui.base.print_status("Failures by template:")
+        for template, count in sorted(
+            failure_by_template.items(), key=lambda item: -item[1]
+        ):
+            ui.base.print_status(f"  {template}: {count}")
+
     if all_failures:
-        failures_log = output_jsonl.parent / "failures_llm.jsonl"
-        with open(failures_log, "w") as f:
+        failures_log = output_jsonl.parent / failure_log_name(source_mode)
+        with open(failures_log, "w") as failure_file:
             for failure in all_failures:
-                f.write(json.dumps(failure, default=str) + "\n")
+                failure_file.write(json.dumps(failure, default=str) + "\n")
         ui.base.print_status(f"Failures logged to: {failures_log}")
 
     ui.base.print_empty_line()
 
+    if not all_episodes:
+        return 2
+    if all_failures:
+        return 1
     return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build argparse parser for module execution."""
+    parser = argparse.ArgumentParser(description="Unified episode generation pipeline")
+    parser.add_argument(
+        "--questions-dir",
+        type=str,
+        required=True,
+        help="Directory containing question files (e.g. data/questions/template)",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        required=True,
+        help="Output JSONL file path",
+    )
+    parser.add_argument(
+        "--source",
+        choices=list(ALLOWED_SOURCES),
+        default=None,
+        help="Question source mode (template, procedural, llm_gen)",
+    )
+    parser.add_argument(
+        "--max-questions",
+        type=int,
+        default=None,
+        help="Max questions per dataset",
+    )
+    parser.add_argument(
+        "--n-consistency",
+        type=int,
+        default=None,
+        help="Consistency traces for llm_gen",
+    )
+    parser.add_argument(
+        "--skip-difficulty-filter",
+        action="store_true",
+        help="Skip LLM difficulty distribution filter",
+    )
+    parser.add_argument(
+        "--difficulties",
+        nargs="+",
+        default=None,
+        help="Filter to specific difficulty values",
+    )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="Retry questions that previously failed",
+    )
+    parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help="Process datasets in parallel for ground-truth modes",
+    )
+    parser.add_argument(
+        "--n-workers",
+        type=int,
+        default=4,
+        help="Parallel workers for ground-truth modes",
+    )
+    return parser
+
+
+if __name__ == "__main__":
+    args = build_parser().parse_args()
+    try:
+        raise SystemExit(
+            asyncio.run(
+                main(
+                    questions_dir=args.questions_dir,
+                    output_path=args.output,
+                    source=args.source,
+                    max_questions=args.max_questions,
+                    n_consistency=args.n_consistency,
+                    skip_difficulty_filter=args.skip_difficulty_filter,
+                    difficulties=args.difficulties,
+                    retry_failed=args.retry_failed,
+                    parallel=args.parallel,
+                    n_workers=args.n_workers,
+                )
+            )
+        )
+    except KeyboardInterrupt:
+        raise SystemExit(0)

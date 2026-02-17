@@ -14,11 +14,14 @@ def test_no_skip_existing_left_in_runtime_paths():
     targets = [
         "src/cli.py",
         "src/datagen/episode_gen.py",
-        "src/datagen/validate_synthetic.py",
         "src/datagen/pipeline.py",
     ]
     for rel in targets:
         assert "skip_existing" not in _read(rel), f"Found skip_existing in {rel}"
+
+
+def test_validate_synthetic_module_removed():
+    assert not (ROOT / "src/datagen/validate_synthetic.py").exists()
 
 
 def test_no_legacy_question_fallback_in_contract_surfaces():
@@ -26,10 +29,14 @@ def test_no_legacy_question_fallback_in_contract_surfaces():
         "src/datagen/validate_question.py",
         "src/datagen/episode_gen.py",
         "src/datagen/shared/episode_factory.py",
+        "src/datagen/teacher.py",
     ]
     for rel in strict_targets:
         text = _read(rel)
         assert 'get("question",' not in text, f"Legacy question fallback left in {rel}"
+
+    teacher_text = _read("src/datagen/teacher.py")
+    assert 'q_dict["question"]' not in teacher_text
 
     explorer_text = _read("src/gui/panels/explorer.py")
     trace_text = _read("src/gui/panels/trace.py")
