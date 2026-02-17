@@ -2,18 +2,18 @@
 """
 Failure investigation CLI for rapid iteration.
 
-Quick diagnostic tool to understand WHY synthetic questions fail triangulation.
+Quick diagnostic tool to understand why synthetic questions fail triangulation.
 Designed for fast feedback loops during template development.
 
 Usage:
     # Run diagnostic batch on synthetic questions (quick test)
-    uv run python -m src.datagen.investigate --batch --limit 10
+    uv run python scripts/experiments/investigate_failures.py --batch --limit 10
 
     # Analyze results from a batch run
-    uv run python -m src.datagen.investigate --analyze results.jsonl
+    uv run python scripts/experiments/investigate_failures.py --analyze results.jsonl
 
     # Show category breakdown from a diagnostic batch
-    uv run python -m src.datagen.investigate --summary results.jsonl
+    uv run python scripts/experiments/investigate_failures.py --summary results.jsonl
 """
 
 import argparse
@@ -23,8 +23,8 @@ from collections import Counter
 from pathlib import Path
 
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
 
 console = Console()
@@ -41,7 +41,6 @@ def analyze_diagnostics_file(path: Path) -> dict:
     if not records:
         return {"error": "No records found"}
 
-    # Category breakdown
     categories = Counter()
     by_category: dict[str, list] = {}
     by_template: dict[str, Counter] = {}
@@ -109,7 +108,7 @@ def print_template_breakdown(analysis: dict) -> None:
 
     for template, counts in sorted(
         analysis["by_template"].items(), key=lambda x: -sum(x[1].values())
-    )[:15]:  # Top 15 templates
+    )[:15]:
         total = sum(counts.values())
         good = counts.get("good", 0)
         ambig = counts.get("ambiguous", 0)
@@ -161,12 +160,11 @@ async def run_diagnostic_batch(
     template_filter: str | None = None,
 ) -> Path:
     """Run a small diagnostic batch and save results."""
-    from src.datagen.teacher import batch_triangulate
-    from src.datagen.pipeline_ui import EpisodeGenUI
     from src.core.config import config
     from src.core.prompts import generate_data_overview
+    from src.datagen.pipeline_ui import EpisodeGenUI
+    from src.datagen.teacher import batch_triangulate
 
-    # Find a dataset with questions
     questions_dir = Path("data/questions/template")
     if not questions_dir.exists():
         console.print(
@@ -174,7 +172,6 @@ async def run_diagnostic_batch(
         )
         raise SystemExit(1)
 
-    # Get first available dataset
     datasets = list(questions_dir.iterdir())
     if not datasets:
         console.print("[red]No datasets with questions found.[/red]")
@@ -188,12 +185,10 @@ async def run_diagnostic_batch(
         console.print(f"[red]CSV not found: {csv_path}[/red]")
         raise SystemExit(1)
 
-    # Load questions (handle both dict and list formats)
     with open(questions_file) as f:
         data = json.load(f)
     questions = data.get("questions", data) if isinstance(data, dict) else data
 
-    # Filter by template if specified
     if template_filter:
         questions = [
             q
@@ -211,10 +206,7 @@ async def run_diagnostic_batch(
         f"[bold]Running diagnostic batch on {len(questions)} questions from {dataset_dir.name}[/bold]"
     )
 
-    # Generate data overview
     data_overview = generate_data_overview(str(csv_path))
-
-    # Run triangulation with diagnostics
     ui = EpisodeGenUI()
 
     results = await batch_triangulate(
@@ -229,7 +221,6 @@ async def run_diagnostic_batch(
         include_diagnostics=True,
     )
 
-    # Save results
     output_path = output_path or Path(f"data/investigate_{dataset_dir.name}.jsonl")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -246,7 +237,6 @@ async def run_diagnostic_batch(
                     "verified": r.verified,
                     **r.diagnostics,
                 }
-                # Flatten answer_distribution for easier analysis
                 if "answer_distribution" in record:
                     dist = record.pop("answer_distribution")
                     record["cluster_count"] = dist.get("cluster_count", 0)
@@ -260,20 +250,20 @@ async def run_diagnostic_batch(
     return output_path
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Investigate synthetic question failures",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
     # Run quick diagnostic batch
-    uv run python -m src.datagen.investigate --batch --limit 5
+    uv run python scripts/experiments/investigate_failures.py --batch --limit 5
 
     # Analyze results
-    uv run python -m src.datagen.investigate --analyze data/investigate_*.jsonl
+    uv run python scripts/experiments/investigate_failures.py --analyze data/investigate_*.jsonl
 
     # Focus on specific template
-    uv run python -m src.datagen.investigate --batch --template MAX_VARIANCE --limit 5
+    uv run python scripts/experiments/investigate_failures.py --batch --template MAX_VARIANCE --limit 5
         """,
     )
 
@@ -318,7 +308,6 @@ Examples:
                 template_filter=args.template,
             )
         )
-        # Auto-analyze the results
         analysis = analyze_diagnostics_file(output_path)
         console.print()
         print_summary_table(analysis)
