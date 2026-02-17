@@ -4,7 +4,6 @@ This uses verify_question() which is the proper API and should be faster.
 """
 
 import asyncio
-import json
 import tempfile
 from src.datagen.synthetic.programs.program_generator import run_pipeline
 from src.datagen.shared.verification import verify_question
@@ -114,7 +113,7 @@ async def main():
         elif with_match < without_match:
             print(f"\n✗ Verbalization hurts ({with_match - without_match} questions)")
         else:
-            print(f"\n= No difference")
+            print("\n= No difference")
 
         # Show examples
         print("\nExample questions:")

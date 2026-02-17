@@ -300,7 +300,7 @@ async def bisection_container_search(
     results.append(result)
     
     if not result.success:
-        print(f"    ✗ Baseline failed! Check Docker resources.")
+        print("    ✗ Baseline failed! Check Docker resources.")
         return 0, results
     
     print(f"    ✓ Baseline OK: {result.startup_time:.1f}s startup, {result.memory_mb:.0f}MB")
@@ -416,22 +416,22 @@ def print_summary(results: ProfilerResults):
     print("📋 PROFILER RESULTS")
     print("=" * 60)
     
-    print(f"\n🎯 Optimal Configuration:")
+    print("\n🎯 Optimal Configuration:")
     print(f"  n_workers per container: {results.optimal_workers}")
     print(f"  max_concurrent_containers: {results.optimal_containers}")
     
-    print(f"\n📊 Worker Scaling:")
+    print("\n📊 Worker Scaling:")
     for r in sorted(results.worker_scaling, key=lambda x: x.n_workers):
         if r.success:
             print(f"  {r.n_workers:2d} workers: {r.throughput:.1f} ops/s, {r.memory_mb:.0f}MB")
     
-    print(f"\n📊 Container Scaling:")
+    print("\n📊 Container Scaling:")
     for r in sorted(results.container_scaling, key=lambda x: x.n_containers):
         status = "✓" if r.success else "✗"
         print(f"  {r.n_containers:2d} containers: {status}")
     
-    print(f"\n💡 Recommendation:")
-    print(f"  Update config.py with:")
+    print("\n💡 Recommendation:")
+    print("  Update config.py with:")
     print(f"    n_consistency: {results.optimal_workers - 1}")
     print(f"    max_concurrent_containers: {results.optimal_containers}")
 

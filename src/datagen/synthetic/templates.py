@@ -562,7 +562,8 @@ hook(corr_matrix.shape, "correlation matrix computed", name='corr_shape')
 print(f"Correlation matrix: {corr_matrix.shape[0]} x {corr_matrix.shape[1]}")
 
 # Step 2: Find the maximum off-diagonal correlation
-np.fill_diagonal(corr_matrix.values, 0)  # Zero out diagonal
+diag_mask = np.eye(len(corr_matrix), dtype=bool)
+corr_matrix = corr_matrix.mask(diag_mask, 0)  # Zero out diagonal
 max_corr_idx = corr_matrix.stack().idxmax()
 hook(max_corr_idx, "max_corr_idx = corr_matrix.stack().idxmax()", name='max_corr_idx')
 print(f"Strongest correlation pair: {max_corr_idx}")
@@ -594,7 +595,8 @@ hook(corr_matrix.shape, "correlation matrix computed (excluding target)", name='
 print(f"Correlation matrix: {corr_matrix.shape[0]} x {corr_matrix.shape[1]}")
 
 # Step 3: Find the maximum off-diagonal correlation
-np.fill_diagonal(corr_matrix.values, 0)
+diag_mask = np.eye(len(corr_matrix), dtype=bool)
+corr_matrix = corr_matrix.mask(diag_mask, 0)
 max_corr_idx = corr_matrix.stack().idxmax()
 hook(max_corr_idx, "max_corr_idx among features", name='max_corr_idx')
 print(f"Strongest correlation pair (features only): {max_corr_idx}")
@@ -615,7 +617,8 @@ hook(corr_matrix.shape, "correlation matrix computed (signed)", name='corr_shape
 print(f"Correlation matrix: {corr_matrix.shape[0]} x {corr_matrix.shape[1]}")
 
 # Step 2: Find the maximum off-diagonal correlation by absolute value
-np.fill_diagonal(corr_matrix.values, 0)
+diag_mask = np.eye(len(corr_matrix), dtype=bool)
+corr_matrix = corr_matrix.mask(diag_mask, 0)
 abs_corr = corr_matrix.abs()
 max_corr_idx = abs_corr.stack().idxmax()
 hook(max_corr_idx, "max_corr_idx by absolute value", name='max_corr_idx')
@@ -642,7 +645,8 @@ corr_matrix = numeric_cols.corr().abs()
 hook(corr_matrix.shape, "correlation matrix computed", name='corr_shape')
 
 # Step 2: Find minimum correlation (mask diagonal)
-np.fill_diagonal(corr_matrix.values, np.nan)
+diag_mask = np.eye(len(corr_matrix), dtype=bool)
+corr_matrix = corr_matrix.mask(diag_mask, np.nan)
 min_corr_idx = corr_matrix.stack().idxmin()
 hook(min_corr_idx, "min_corr_idx found", name='min_corr_idx')
 print(f"Weakest correlation pair: {min_corr_idx}")
@@ -673,7 +677,8 @@ corr_matrix = feature_cols.corr().abs()
 hook(corr_matrix.shape, "correlation matrix computed (excluding target)", name='corr_shape')
 
 # Step 3: Find minimum correlation (mask diagonal)
-np.fill_diagonal(corr_matrix.values, np.nan)
+diag_mask = np.eye(len(corr_matrix), dtype=bool)
+corr_matrix = corr_matrix.mask(diag_mask, np.nan)
 min_corr_idx = corr_matrix.stack().idxmin()
 hook(min_corr_idx, "min_corr_idx among features", name='min_corr_idx')
 print(f"Weakest correlation pair (features only): {min_corr_idx}")
@@ -693,7 +698,8 @@ corr_matrix = numeric_cols.corr()
 hook(corr_matrix.shape, "correlation matrix computed (signed)", name='corr_shape')
 
 # Step 2: Find minimum absolute correlation (mask diagonal)
-np.fill_diagonal(corr_matrix.values, np.nan)
+diag_mask = np.eye(len(corr_matrix), dtype=bool)
+corr_matrix = corr_matrix.mask(diag_mask, np.nan)
 abs_corr = corr_matrix.abs()
 min_corr_idx = abs_corr.stack().idxmin()
 hook(min_corr_idx, "min_corr_idx by absolute value", name='min_corr_idx')
@@ -1058,7 +1064,8 @@ CORRELATION_AFTER_OUTLIER_REMOVAL = CompositionTemplate(
 numeric_cols = [c for c in df.select_dtypes('number').columns.tolist()
                 if not _is_index_column(c)]
 corr_matrix = df[numeric_cols].corr().abs()
-np.fill_diagonal(corr_matrix.values, 0)
+diag_mask = np.eye(len(corr_matrix), dtype=bool)
+corr_matrix = corr_matrix.mask(diag_mask, 0)
 max_idx = corr_matrix.stack().idxmax()
 col1, col2 = max_idx
 original_corr = corr_matrix.loc[col1, col2]
@@ -1861,7 +1868,8 @@ print(f"Numeric columns: {len(numeric_cols)}")
 
 # Step 2: Compute Spearman correlation matrix
 spearman_matrix = df[numeric_cols].corr(method='spearman').abs()
-np.fill_diagonal(spearman_matrix.values, 0)
+diag_mask = np.eye(len(spearman_matrix), dtype=bool)
+spearman_matrix = spearman_matrix.mask(diag_mask, 0)
 hook(spearman_matrix.shape, "Spearman correlation matrix computed", name='corr_matrix')
 
 # Step 3: Find strongest pair

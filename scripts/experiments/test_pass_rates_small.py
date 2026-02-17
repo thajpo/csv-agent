@@ -1,7 +1,6 @@
 """Quick pass rate test - smaller subset for faster results."""
 
 import asyncio
-import json
 import tempfile
 from src.datagen.synthetic.programs.program_generator import run_pipeline
 from src.datagen.shared.verification import verify_question
@@ -111,7 +110,7 @@ async def main():
         elif with_match < without_match:
             print(f"\n✗ Verbalization hurts ({with_match - without_match} questions)")
         else:
-            print(f"\n= No difference")
+            print("\n= No difference")
 
         # Show examples
         print("\nExample questions:")

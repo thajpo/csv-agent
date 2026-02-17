@@ -12,7 +12,6 @@ import json
 from pathlib import Path
 
 from datasets import Dataset, DatasetDict
-from huggingface_hub import HfApi
 
 
 def load_jsonl(path: Path) -> list[dict]:
