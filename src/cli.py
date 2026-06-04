@@ -16,6 +16,7 @@ Usage:
 import argparse
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import questionary
@@ -427,6 +428,97 @@ def _run_fail_fast_preflight(
     )
 
 
+def _run_output_targets(template: bool, procedural: bool, llm_gen: bool) -> list[Path]:
+    """Return output targets touched by `csvagent run`."""
+    targets: list[Path] = []
+
+    if template:
+        targets.append(Path(config.questions_template_dir))
+        targets.append(Path(config.episodes_template_jsonl))
+
+    if procedural:
+        targets.append(Path(config.questions_procedural_dir))
+        targets.append(Path(config.episodes_procedural_jsonl))
+
+    if llm_gen:
+        targets.append(Path(config.questions_llm_gen_dir))
+        targets.append(Path(config.episodes_llm_gen_jsonl))
+
+    return targets
+
+
+def _probe_target_writeability(target: Path) -> tuple[bool, str | None]:
+    """Probe write access for a target by create/delete in its writable directory."""
+    probe_dir = target if target.exists() and target.is_dir() else target.parent
+
+    try:
+        probe_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w", dir=probe_dir, prefix=".csvagent_write_probe_", delete=False
+        ) as probe:
+            probe_path = Path(probe.name)
+        probe_path.unlink()
+    except OSError as exc:
+        return False, str(exc)
+
+    return True, None
+
+
+def _fail_fast_on_unwriteable_targets(targets: list[Path], command_name: str) -> bool:
+    """Fail fast when selected output targets cannot be safely written."""
+    failures: list[tuple[Path, str]] = []
+
+    for target in targets:
+        writeable, detail = _probe_target_writeability(target)
+        if writeable:
+            continue
+        failures.append((target, detail or "write probe failed"))
+
+    if not failures:
+        return False
+
+    console.print(
+        f"[red]Fail-fast:[/red] Unwriteable output targets for `{command_name}`"
+    )
+    for target, detail in failures:
+        console.print(f"  - {target}: {detail}")
+    return True
+
+
+def _run_fail_fast_preflight_for_run(*, mode: str, dry_run: bool) -> bool:
+    """Run fail-fast preflight for `csvagent run` before any stage invocation."""
+    if dry_run:
+        return False
+
+    command_name = f"csvagent run --{mode}"
+
+    if _fail_fast_on_legacy_layout(command_name):
+        return True
+
+    template, procedural, llm_gen = _modes_from_flag(mode)
+
+    question_targets = _find_existing_question_outputs(template, procedural, llm_gen)
+    if _fail_fast_on_existing_outputs(
+        question_targets,
+        explicit_overwrite=False,
+        command_name=command_name,
+    ):
+        return True
+
+    episode_targets = _episode_output_targets(template, procedural, llm_gen)
+    if _fail_fast_on_existing_outputs(
+        episode_targets,
+        explicit_overwrite=False,
+        command_name=command_name,
+    ):
+        return True
+
+    return _fail_fast_on_unwriteable_targets(
+        _run_output_targets(template, procedural, llm_gen),
+        command_name=command_name,
+    )
+
+
 def cmd_generate_questions(
     mode: str,
     max_datasets: int | None,
@@ -712,6 +804,10 @@ def cmd_generate_episodes(
 def cmd_run(mode: str, test: bool, dry_run: bool):
     """Run full pipeline."""
     template, procedural, llm_gen = _modes_from_flag(mode)
+
+    if _run_fail_fast_preflight_for_run(mode=mode, dry_run=dry_run):
+        return 2
+
     if dry_run:
         console.print("[bold]Dry Run - Full Pipeline[/bold]\n")
         console.print(f"  Mode: {mode}")

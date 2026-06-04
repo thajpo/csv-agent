@@ -1,0 +1,195 @@
+{
+  "template": {
+    "episode_id": "tmpl-ep-a11f2e",
+    "timestamp": "2026-02-16T10:01:02.123456",
+    "csv_source": "data/fixtures/smoke/student_performance/data.csv",
+    "question": {
+      "id": "tmpl-q-83f1a9",
+      "question_text": "What is the average exam score?",
+      "hint": "Use pandas mean over the exam_score column.",
+      "difficulty": "EASY",
+      "n_steps": 1,
+      "template_name": "mean_exam_score",
+      "template_params": {
+        "column": "exam_score"
+      },
+      "output_type": "float",
+      "output_schema": "scalar:float",
+      "ground_truth_hash": "hash-template-answer",
+      "ground_truth_hashes": [
+        "hash-template-answer"
+      ],
+      "ground_truth": 82.5
+    },
+    "gold_trace": {
+      "turns": [
+        {
+          "turn_index": 0,
+          "reasoning": "Compute mean on target column.",
+          "code": "submit(df['exam_score'].mean())",
+          "execution": {
+            "success": true,
+            "stdout": "82.5",
+            "stderr": "",
+            "hooks": [],
+            "submitted_answer": 82.5
+          }
+        }
+      ],
+      "final_answer": 82.5,
+      "final_answer_hash": "hash-template-answer",
+      "success": true
+    },
+    "consistency_traces": [],
+    "verified": true,
+    "triangulation": {
+      "n_consistency_runs": 0,
+      "n_consistency_succeeded": 0,
+      "majority_answer_hash": "hash-template-answer",
+      "majority_count": 1,
+      "gold_matches_majority": true
+    },
+    "timing": {
+      "gold_elapsed": 0.5,
+      "consistency_elapsed": [],
+      "total_elapsed": 0.5,
+      "avg_elapsed": 0.5
+    },
+    "source": "template"
+  },
+  "procedural": {
+    "episode_id": "proc-ep-b22g3f",
+    "timestamp": "2026-02-16T10:02:03.123456",
+    "csv_source": "data/fixtures/smoke/student_performance/data.csv",
+    "question": {
+      "id": "proc-q-914be2",
+      "question_text": "How many students scored above 90?",
+      "hint": "Use a boolean filter and len().",
+      "difficulty": "EASY",
+      "n_steps": 1,
+      "template_name": "count_above_threshold",
+      "template_params": {
+        "column": "exam_score",
+        "threshold": 90
+      },
+      "output_type": "int",
+      "output_schema": "scalar:int",
+      "ground_truth_hash": "hash-procedural-answer",
+      "ground_truth_hashes": [
+        "hash-procedural-answer"
+      ],
+      "ground_truth": 12
+    },
+    "gold_trace": {
+      "turns": [
+        {
+          "turn_index": 0,
+          "reasoning": "Filter rows where exam_score > 90.",
+          "code": "submit(int((df['exam_score'] > 90).sum()))",
+          "execution": {
+            "success": true,
+            "stdout": "12",
+            "stderr": "",
+            "hooks": [],
+            "submitted_answer": 12
+          }
+        }
+      ],
+      "final_answer": 12,
+      "final_answer_hash": "hash-procedural-answer",
+      "success": true
+    },
+    "consistency_traces": [],
+    "verified": true,
+    "triangulation": {
+      "n_consistency_runs": 0,
+      "n_consistency_succeeded": 0,
+      "majority_answer_hash": "hash-procedural-answer",
+      "majority_count": 1,
+      "gold_matches_majority": true
+    },
+    "timing": {
+      "gold_elapsed": 0.6,
+      "consistency_elapsed": [],
+      "total_elapsed": 0.6,
+      "avg_elapsed": 0.6
+    },
+    "source": "procedural"
+  },
+  "llm_gen": {
+    "episode_id": "llm-ep-c33h4g",
+    "timestamp": "2026-02-16T10:03:04.123456",
+    "csv_source": "data/fixtures/smoke/student_performance/data.csv",
+    "question": {
+      "id": "llm-q-40a7dd",
+      "question_text": "Is there a relationship between study hours and exam score?",
+      "hint": "Consider a correlation check.",
+      "difficulty": "MEDIUM",
+      "n_steps": 2,
+      "template_name": null,
+      "template_params": null,
+      "output_type": null,
+      "output_schema": null,
+      "ground_truth_hash": null,
+      "ground_truth_hashes": null,
+      "ground_truth": null
+    },
+    "gold_trace": {
+      "turns": [
+        {
+          "turn_index": 0,
+          "reasoning": "Run correlation on two columns.",
+          "code": "submit(df['study_hours'].corr(df['exam_score']))",
+          "execution": {
+            "success": true,
+            "stdout": "0.71",
+            "stderr": "",
+            "hooks": [],
+            "submitted_answer": 0.71
+          }
+        }
+      ],
+      "final_answer": 0.71,
+      "final_answer_hash": "hash-llm-answer",
+      "success": true
+    },
+    "consistency_traces": [
+      {
+        "turns": [
+          {
+            "turn_index": 0,
+            "reasoning": "Compute same correlation as consistency run.",
+            "code": "submit(df['study_hours'].corr(df['exam_score']))",
+            "execution": {
+              "success": true,
+              "stdout": "0.71",
+              "stderr": "",
+              "hooks": [],
+              "submitted_answer": 0.71
+            }
+          }
+        ],
+        "final_answer": 0.71,
+        "final_answer_hash": "hash-llm-answer",
+        "success": true
+      }
+    ],
+    "verified": true,
+    "triangulation": {
+      "n_consistency_runs": 1,
+      "n_consistency_succeeded": 1,
+      "majority_answer_hash": "hash-llm-answer",
+      "majority_count": 1,
+      "gold_matches_majority": true
+    },
+    "timing": {
+      "gold_elapsed": 0.8,
+      "consistency_elapsed": [
+        0.7
+      ],
+      "total_elapsed": 1.5,
+      "avg_elapsed": 0.75
+    },
+    "source": "llm_gen"
+  }
+}

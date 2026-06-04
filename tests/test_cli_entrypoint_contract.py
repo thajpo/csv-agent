@@ -5,7 +5,9 @@ from src.cli import (
     build_parser,
     cmd_generate_questions,
     cmd_generate_episodes,
+    cmd_run,
     _fail_fast_on_existing_outputs,
+    _fail_fast_on_unwriteable_targets,
     _run_fail_fast_preflight,
 )
 
@@ -120,3 +122,76 @@ def test_fail_fast_on_legacy_layout_presence(tmp_path, monkeypatch):
         is_episode_generation=False,
     )
     assert should_abort
+
+
+def test_run_all_preflight_aborts_before_pipeline_main(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    existing = Path("data/episodes/llm_gen.jsonl")
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_text('{"existing": true}\n')
+
+    import src.datagen.pipeline as pipeline
+
+    invoked = {"called": False}
+
+    def _unexpected_pipeline_main(*, mode, test):
+        invoked["called"] = True
+        raise AssertionError("pipeline should not run when preflight fails")
+
+    monkeypatch.setattr(pipeline, "main", _unexpected_pipeline_main)
+
+    rc = cmd_run(mode="all", test=False, dry_run=False)
+
+    assert rc == 2
+    assert not invoked["called"]
+
+
+def test_run_preflight_writeability_failure_aborts_before_pipeline_main(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+
+    import src.cli as cli
+    import src.datagen.pipeline as pipeline
+
+    invoked = {"called": False}
+
+    def _unexpected_pipeline_main(*, mode, test):
+        invoked["called"] = True
+        raise AssertionError("pipeline should not run when preflight fails")
+
+    def _fail_llm_target(target: Path):
+        if target == Path("data/episodes/llm_gen.jsonl"):
+            return False, "permission denied"
+        return True, None
+
+    monkeypatch.setattr(pipeline, "main", _unexpected_pipeline_main)
+    monkeypatch.setattr(cli, "_probe_target_writeability", _fail_llm_target)
+
+    rc = cmd_run(mode="all", test=False, dry_run=False)
+
+    assert rc == 2
+    assert not invoked["called"]
+
+
+def test_unwriteable_target_failure_message_includes_target_path(monkeypatch):
+    import src.cli as cli
+
+    emitted: list[str] = []
+
+    def _capture(*args, **kwargs):
+        emitted.append(" ".join(str(arg) for arg in args))
+
+    def _always_fail(target: Path):
+        return False, "permission denied"
+
+    monkeypatch.setattr(cli.console, "print", _capture)
+    monkeypatch.setattr(cli, "_probe_target_writeability", _always_fail)
+
+    target = Path("data/episodes/llm_gen.jsonl")
+    should_abort = _fail_fast_on_unwriteable_targets(
+        [target], command_name="csvagent run --all"
+    )
+
+    assert should_abort
+    assert any("data/episodes/llm_gen.jsonl" in line for line in emitted)

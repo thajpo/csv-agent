@@ -67,7 +67,8 @@ notes:
 - open issue #9 (Dataset-Quality Snapshot) should be used in this phase.
 
 ## Specd
-- no active specd items
+- SP-001 Unify Episode Generation Pipeline | status: issued | issue: #31
+- SP-002 CLI-Only Cleanup (Remove GUI + Dead-End Tools) | status: issued | issue: #32
 
 ## Recovery Notes
 - Prior planning content was heavily compressed to reduce noise and keep active work scannable.

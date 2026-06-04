@@ -1,0 +1,60 @@
+{
+  "template": {
+    "id": "tmpl-q-83f1a9",
+    "source": "template",
+    "dataset": "fixtures/smoke/student_performance",
+    "question_text": "What is the average exam score?",
+    "question_mechanical": "Compute df['exam_score'].mean() and return the scalar.",
+    "hint": "Use pandas mean over the exam_score column.",
+    "code": "submit(df['exam_score'].mean())",
+    "code_hash": "hash-template-code",
+    "ground_truth": 82.5,
+    "ground_truth_hash": "hash-template-answer",
+    "ground_truth_hashes": [
+      "hash-template-answer"
+    ],
+    "output_schema": "scalar:float",
+    "n_steps": 1,
+    "difficulty": "EASY",
+    "dataset_description": "Student-level exam and attendance records.",
+    "created_at": "2026-02-16T09:10:11.123456"
+  },
+  "procedural": {
+    "id": "proc-q-914be2",
+    "source": "procedural",
+    "dataset": "fixtures/smoke/student_performance",
+    "question_text": "How many students scored above 90?",
+    "question_mechanical": "Filter exam_score > 90 and count rows.",
+    "hint": "Use a boolean filter and len().",
+    "code": "submit(int((df['exam_score'] > 90).sum()))",
+    "code_hash": "hash-procedural-code",
+    "ground_truth": 12,
+    "ground_truth_hash": "hash-procedural-answer",
+    "ground_truth_hashes": [
+      "hash-procedural-answer"
+    ],
+    "output_schema": "scalar:int",
+    "n_steps": 1,
+    "difficulty": "EASY",
+    "dataset_description": "Student-level exam and attendance records.",
+    "created_at": "2026-02-16T09:11:12.123456"
+  },
+  "llm_gen": {
+    "id": "llm-q-40a7dd",
+    "source": "llm_gen",
+    "dataset": "fixtures/smoke/student_performance",
+    "question_text": "Is there a relationship between study hours and exam score?",
+    "question_mechanical": null,
+    "hint": "Consider a correlation check.",
+    "code": null,
+    "code_hash": null,
+    "ground_truth": null,
+    "ground_truth_hash": null,
+    "ground_truth_hashes": null,
+    "output_schema": null,
+    "n_steps": 2,
+    "difficulty": "MEDIUM",
+    "dataset_description": "Student-level exam and attendance records.",
+    "created_at": "2026-02-16T09:12:13.123456"
+  }
+}
