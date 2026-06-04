@@ -138,6 +138,8 @@ csvagent validate \
 
 | Document | Purpose |
 |----------|---------|
+| [docs/architecture.md](docs/architecture.md) | System boundaries, data flow, and reviewer inspection points |
+| [docs/reviewer-demo.md](docs/reviewer-demo.md) | Low-cost local demo path and heavier commands to skip |
 | [current.md](current.md) | Active planning and spec funnel (`Institutional Knowledge`, `Beliefs`, `Brainstormed`, `Specd`) |
 | [AGENTS.md](AGENTS.md) | Repo collaboration and execution guardrails |
 
@@ -212,6 +214,22 @@ uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --pri
 ---
 
 ## Tests
+
+Non-Docker smoke subset:
+
+```bash
+uv run pytest -q \
+  tests/test_manifest.py \
+  tests/test_golden_artifact_regression_gate.py \
+  tests/test_episode_contract.py \
+  tests/test_artifact_path_resolver.py \
+  tests/test_strict_answer_contract.py \
+  tests/test_robust_matching.py \
+  tests/test_shared_filters.py \
+  tests/test_cli_entrypoint_contract.py
+```
+
+Full suite, including Docker-backed sandbox/container tests:
 
 ```bash
 uv run pytest tests/ -v

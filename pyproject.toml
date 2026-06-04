@@ -1,9 +1,9 @@
 [project]
 name = "csv-agent-qa"
 version = "0.1.0"
-description = "Your environment description here"
+description = "Verified CSV analysis question-answer trace generator for agent training and evaluation"
 readme = "README.md"
-tags = ["placeholder-tag", "train", "eval"]
+keywords = ["csv", "agents", "evaluation", "synthetic-data", "llmops"]
 requires-python = ">=3.13"
 dependencies = [
     "csv-spec",
