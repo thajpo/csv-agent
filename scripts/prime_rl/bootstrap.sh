@@ -21,9 +21,10 @@ echo "Using $("$UV_BIN" --version). Prime-RL requires uv >= 0.11.1."
 
 if [ ! -d "$PRIME_RL_DIR/.git" ]; then
   mkdir -p "$(dirname "$PRIME_RL_DIR")"
-  git clone --recurse-submodules "$PRIME_RL_REPO" "$PRIME_RL_DIR"
+  git clone "$PRIME_RL_REPO" "$PRIME_RL_DIR"
 fi
 
+git -C "$PRIME_RL_DIR" config url."https://github.com/PrimeIntellect-ai/".insteadOf "git@github.com:PrimeIntellect-ai/"
 git -C "$PRIME_RL_DIR" fetch origin "$PRIME_RL_REF" --depth 1
 git -C "$PRIME_RL_DIR" checkout FETCH_HEAD
 git -C "$PRIME_RL_DIR" submodule update --init \
