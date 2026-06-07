@@ -339,13 +339,16 @@ PY
             response_fifo=LocalCSVAnalysisEnv._RESPONSE_FIFO,
             ready_flag=LocalCSVAnalysisEnv._READY_FLAG,
         )
+        pip_install_packages_arg = " ".join(
+            shlex.quote(package) for package in shlex.split(pip_install_packages)
+        )
         start_command = self._START_COMMAND_TEMPLATE.format(
             command_fifo=LocalCSVAnalysisEnv._COMMAND_FIFO,
             response_fifo=LocalCSVAnalysisEnv._RESPONSE_FIFO,
             ready_flag=LocalCSVAnalysisEnv._READY_FLAG,
             worker_path=LocalCSVAnalysisEnv._WORKER_PATH,
             worker_b64=base64.b64encode(worker_code.encode("utf-8")).decode("utf-8"),
-            pip_install_packages=shlex.quote(pip_install_packages),
+            pip_install_packages=pip_install_packages_arg,
         )
 
         self.timeout_per_command_seconds = timeout_per_command_seconds
@@ -423,11 +426,13 @@ except UnicodeDecodeError:
 print(f"Loaded CSV: {df.shape[0]} rows, {df.shape[1]} columns")
 """
             )
-            await self.python(
+            setup_output = await self.python(
                 code=csv_setup,
                 sandbox_id=sandbox_id,
                 python_state=state["python_state"],
             )
+            if "Loaded CSV:" not in setup_output:
+                raise RuntimeError(f"Prime sandbox CSV setup failed: {setup_output[:1000]}")
             return state
         except Exception:
             await self.destroy_sandbox(sandbox_id)
