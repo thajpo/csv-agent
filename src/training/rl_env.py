@@ -1,6 +1,10 @@
 import json
+import asyncio
+import base64
 from functools import lru_cache
 from pathlib import Path
+import shlex
+import textwrap
 from typing import Any
 
 from datasets import Dataset, load_dataset
@@ -14,7 +18,10 @@ from csv_spec import parse_action, parse_step_result, CodeAction
 
 from src.training.rl_rubric import CSVAgentRubric
 from src.core.prompts import generate_data_overview
-from src.envs.csv_env import LocalCSVAnalysisEnv
+from src.envs.csv_env import LocalCSVAnalysisEnv, SETUP_CODE
+
+
+DEFAULT_SANDBOX_PIP_PACKAGES = "pandas numpy scipy scikit-learn statsmodels"
 
 
 def load_episodes(episodes_path: str) -> list[dict]:
@@ -271,6 +278,197 @@ def episodes_to_dataset(
     return Dataset.from_list(rows)
 
 
+class PrimeSandboxCSVAnalysisEnv:
+    """
+    Prime-hosted Python sandbox backend for CSV RL rollouts.
+
+    This avoids requiring Docker on the training host. It preserves the small
+    interface used by CSVAgentRLEnv: setup_state(), python(), destroy_sandbox().
+    """
+
+    _START_COMMAND_TEMPLATE = textwrap.dedent(
+        """
+        bash -lc '
+        set -euo pipefail
+
+        command_fifo="{command_fifo}"
+        response_fifo="{response_fifo}"
+        ready_flag="{ready_flag}"
+        worker_path="{worker_path}"
+
+        rm -f "$command_fifo" "$response_fifo" "$ready_flag"
+        pip install -q {pip_install_packages}
+
+        python - <<'PY'
+import base64
+from pathlib import Path
+
+Path("{worker_path}").write_bytes(base64.b64decode("{worker_b64}"))
+PY
+
+        python -u "$worker_path" &
+        tail -f /dev/null
+        '
+        """
+    )
+
+    def __init__(
+        self,
+        csv_path: str,
+        pip_install_packages: str = DEFAULT_SANDBOX_PIP_PACKAGES,
+        cpu_cores: int = 2,
+        memory_gb: int = 8,
+        disk_size_gb: int = 8,
+        timeout_minutes: int = 60,
+        timeout_per_command_seconds: int = 60,
+    ) -> None:
+        self.csv_path = Path(csv_path).resolve()
+        if not self.csv_path.exists():
+            raise FileNotFoundError(f"CSV file not found: {csv_path}")
+
+        try:
+            from prime_sandboxes import AsyncSandboxClient, CreateSandboxRequest
+        except ImportError as exc:  # pragma: no cover - depends on Prime-RL venv
+            raise ImportError(
+                "prime-sandboxes is required for sandbox_backend='prime'. "
+                "Install Prime-RL/Verifiers dependencies first."
+            ) from exc
+
+        worker_code = LocalCSVAnalysisEnv._WORKER_SCRIPT.format(
+            command_fifo=LocalCSVAnalysisEnv._COMMAND_FIFO,
+            response_fifo=LocalCSVAnalysisEnv._RESPONSE_FIFO,
+            ready_flag=LocalCSVAnalysisEnv._READY_FLAG,
+        )
+        start_command = self._START_COMMAND_TEMPLATE.format(
+            command_fifo=LocalCSVAnalysisEnv._COMMAND_FIFO,
+            response_fifo=LocalCSVAnalysisEnv._RESPONSE_FIFO,
+            ready_flag=LocalCSVAnalysisEnv._READY_FLAG,
+            worker_path=LocalCSVAnalysisEnv._WORKER_PATH,
+            worker_b64=base64.b64encode(worker_code.encode("utf-8")).decode("utf-8"),
+            pip_install_packages=shlex.quote(pip_install_packages),
+        )
+
+        self.timeout_per_command_seconds = timeout_per_command_seconds
+        self.sandbox_client = AsyncSandboxClient()
+        self.sandbox_request = CreateSandboxRequest(
+            name="csv-agent-python",
+            docker_image="python:3.11-slim",
+            start_command=start_command,
+            cpu_cores=cpu_cores,
+            memory_gb=memory_gb,
+            disk_size_gb=disk_size_gb,
+            gpu_count=0,
+            timeout_minutes=timeout_minutes,
+        )
+
+    async def _bash(self, sandbox_id: str, command: str) -> str:
+        await self.sandbox_client.wait_for_creation(sandbox_id)
+        try:
+            result = await asyncio.wait_for(
+                self.sandbox_client.execute_command(sandbox_id, command),
+                timeout=self.timeout_per_command_seconds,
+            )
+        except asyncio.TimeoutError:
+            return f"Error: Command timed out after {self.timeout_per_command_seconds}s"
+
+        stdout = (result.stdout or "").strip()
+        stderr = (result.stderr or "").strip()
+        if stderr:
+            return f"{stdout}\nstderr:\n{stderr}".strip()
+        return stdout or "(no output)"
+
+    async def _wait_for_worker_ready(self, sandbox_id: str) -> None:
+        ready_flag = LocalCSVAnalysisEnv._READY_FLAG
+        command = textwrap.dedent(
+            f"""
+            bash -lc '
+            for i in $(seq 1 400); do
+              if [ -f "{ready_flag}" ]; then
+                exit 0
+              fi
+              sleep 0.1
+            done
+            echo "python worker failed to start" >&2
+            exit 1
+            '
+            """
+        )
+        output = await self._bash(sandbox_id, command)
+        if "python worker failed" in output:
+            raise TimeoutError(output)
+
+    async def setup_state(self, state: dict, **kwargs) -> dict:
+        sandbox = await self.sandbox_client.create(self.sandbox_request)
+        sandbox_id = sandbox.id
+        try:
+            await self.sandbox_client.wait_for_creation(sandbox_id)
+            await self._wait_for_worker_ready(sandbox_id)
+            await self.sandbox_client.upload_file(
+                sandbox_id,
+                "/data.csv",
+                str(self.csv_path),
+                timeout=self.timeout_per_command_seconds,
+            )
+
+            state["sandbox_id"] = sandbox_id
+            state["python_state"] = {"ready": True, "execution_count": 0}
+
+            csv_setup = (
+                SETUP_CODE
+                + """
+try:
+    df = pd.read_csv("/data.csv", na_values=['?', 'NA', 'N/A', 'na', 'n/a'], keep_default_na=True)
+except UnicodeDecodeError:
+    df = pd.read_csv("/data.csv", encoding='latin-1', na_values=['?', 'NA', 'N/A', 'na', 'n/a'], keep_default_na=True)
+print(f"Loaded CSV: {df.shape[0]} rows, {df.shape[1]} columns")
+"""
+            )
+            await self.python(
+                code=csv_setup,
+                sandbox_id=sandbox_id,
+                python_state=state["python_state"],
+            )
+            return state
+        except Exception:
+            await self.destroy_sandbox(sandbox_id)
+            raise
+
+    async def python(
+        self, code: str, sandbox_id: str, python_state: dict | None = None, **kwargs
+    ) -> str:
+        payload = json.dumps({"code": code})
+        payload_b64 = base64.b64encode(payload.encode()).decode()
+        command = textwrap.dedent(
+            f"""
+            python - <<'PY'
+import base64
+import sys
+
+data = base64.b64decode('{payload_b64}').decode()
+with open('{LocalCSVAnalysisEnv._COMMAND_FIFO}', 'w', encoding='utf-8') as command_file:
+    command_file.write(data)
+with open('{LocalCSVAnalysisEnv._RESPONSE_FIFO}', 'r', encoding='utf-8') as response_file:
+    sys.stdout.write(response_file.read())
+PY
+            """
+        )
+        raw_response = await self._bash(sandbox_id, command)
+        try:
+            response = json.loads(raw_response)
+        except json.JSONDecodeError:
+            return f"Error: Failed to parse worker response.\n{raw_response[:500]}"
+
+        if python_state is not None:
+            python_state["execution_count"] = response.get("execution_count", 0)
+        return LocalCSVAnalysisEnv._format_response(self, response)
+
+    async def destroy_sandbox(self, sandbox_id: str) -> None:
+        try:
+            await self.sandbox_client.delete(sandbox_id)
+        except Exception:
+            pass
+
+
 class CSVAgentRLEnv(MultiTurnEnv):
     """
     RL Environment for training CSV analysis agents.
@@ -300,6 +498,8 @@ class CSVAgentRLEnv(MultiTurnEnv):
         max_turns: int = 10,
         include_unverified: bool = False,
         include_data_overview: bool = True,
+        sandbox_backend: str = "docker",
+        sandbox_pip_install_packages: str = DEFAULT_SANDBOX_PIP_PACKAGES,
         hook_reward: float = 0.1,
         final_reward: float = 1.0,
         float_tolerance: float = 0.1,
@@ -323,6 +523,8 @@ class CSVAgentRLEnv(MultiTurnEnv):
             dataset_description: Description of the dataset
             max_turns: Maximum turns per episode
             include_unverified: Include unverified episodes in training
+            sandbox_backend: Code execution backend: "docker" or "prime"
+            sandbox_pip_install_packages: Packages installed in Prime sandboxes
             hook_reward: Reward per matching hook
             final_reward: Reward for correct final answer
             float_tolerance: Tolerance for float comparison
@@ -349,6 +551,10 @@ class CSVAgentRLEnv(MultiTurnEnv):
         self.hf_revision = hf_revision
         self.eval_episodes_path = eval_episodes_path
         self.eval_dataset_split = eval_dataset_split
+        if sandbox_backend not in {"docker", "prime"}:
+            raise ValueError('sandbox_backend must be "docker" or "prime"')
+        self.sandbox_backend = sandbox_backend
+        self.sandbox_pip_install_packages = sandbox_pip_install_packages
 
         episodes = (
             load_episodes(episodes_path)
@@ -429,7 +635,16 @@ class CSVAgentRLEnv(MultiTurnEnv):
         if not csv_source:
             raise ValueError("CSVAgentRLEnv requires csv_source in episode info or csv_path")
 
-        env = LocalCSVAnalysisEnv(csv_path=str(csv_source))
+        if self.sandbox_backend == "prime":
+            env = PrimeSandboxCSVAnalysisEnv(
+                csv_path=str(csv_source),
+                pip_install_packages=self.sandbox_pip_install_packages,
+            )
+        else:
+            env = LocalCSVAnalysisEnv(
+                csv_path=str(csv_source),
+                pip_install_packages=self.sandbox_pip_install_packages,
+            )
         sandbox_state: dict = {}
         sandbox_state = await env.setup_state(sandbox_state)
 

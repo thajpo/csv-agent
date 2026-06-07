@@ -174,11 +174,13 @@ Prime-RL is intentionally isolated from the main csv-agent environment. It
 requires Python 3.12 plus NVIDIA/CUDA Torch/vLLM, so the helper scripts clone it
 into `.prime-rl/prime-rl` and expose csv-agent by `PYTHONPATH` when launching.
 The standard local RL launcher also expects separate GPU allocations for
-inference and training; use at least a 2-GPU NVIDIA box for real RL runs.
+inference and training; use at least a 2-GPU NVIDIA box for real RL runs. The
+HF-backed config uses Prime-hosted sandboxes for Python execution, so it does
+not require Docker on the training pod.
 
 ```bash
-# 2. On the Prime/NVIDIA box, verify GPU + Docker support
-bash scripts/prime_rl/doctor.sh
+# 2. On the Prime/NVIDIA box, verify GPU + sandbox support
+CSV_AGENT_SANDBOX_BACKEND=prime bash scripts/prime_rl/doctor.sh
 
 # 3. Add secrets on the Prime box
 cp configs/prime_rl/secrets.env.example configs/prime_rl/secrets.env

@@ -44,7 +44,7 @@ max_completion_tokens = 2048
 [[orchestrator.train.env]]
 id = "csv-agent"
 name = "csv-agent-train"
-args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", max_turns = 10 }
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", max_turns = 10, sandbox_backend = "prime" }
 
 [orchestrator.eval]
 interval = 10
@@ -54,7 +54,7 @@ group_size = 4
 [[orchestrator.eval.env]]
 id = "csv-agent"
 name = "csv-agent-val"
-args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "val", max_turns = 10 }
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "val", max_turns = 10, sandbox_backend = "prime" }
 
 [inference]
 

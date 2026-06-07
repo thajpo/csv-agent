@@ -2,6 +2,7 @@
 set -u
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SANDBOX_BACKEND="${CSV_AGENT_SANDBOX_BACKEND:-docker}"
 
 failures=0
 
@@ -34,18 +35,23 @@ if command -v nvidia-smi >/dev/null 2>&1; then
   nvidia-smi || failures=$((failures + 1))
 fi
 
-section "Docker"
-check "docker CLI is available" command -v docker
-if command -v docker >/dev/null 2>&1; then
-  check "docker daemon is reachable" docker info
-  check "docker can run a basic container" docker run --rm python:3.11-slim python -c "print('docker-ok')"
+if [ "$SANDBOX_BACKEND" = "docker" ]; then
+  section "Docker"
+  check "docker CLI is available" command -v docker
+  if command -v docker >/dev/null 2>&1; then
+    check "docker daemon is reachable" docker info
+    check "docker can run a basic container" docker run --rm python:3.11-slim python -c "print('docker-ok')"
 
-  section "CSV sandbox image"
-  (
-    cd "$ROOT_DIR" || exit 1
-    check "csv-analysis-env image builds" docker build -t csv-analysis-env -f src/envs/Dockerfile .
-    check "csv-analysis-env runs python" docker run --rm csv-analysis-env python -c "import pandas, scipy, sklearn, statsmodels; print('csv-image-ok')"
-  )
+    section "CSV sandbox image"
+    (
+      cd "$ROOT_DIR" || exit 1
+      check "csv-analysis-env image builds" docker build -t csv-analysis-env -f src/envs/Dockerfile .
+      check "csv-analysis-env runs python" docker run --rm csv-analysis-env python -c "import pandas, scipy, sklearn, statsmodels; print('csv-image-ok')"
+    )
+  fi
+else
+  section "Sandbox"
+  echo "[ok] using Prime-hosted sandboxes; local Docker checks skipped"
 fi
 
 section "Secrets"

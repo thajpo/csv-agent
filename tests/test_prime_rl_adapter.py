@@ -140,6 +140,19 @@ def test_environment_requires_local_or_hf_episode_source():
         CSVAgentRLEnv()
 
 
+def test_environment_rejects_unknown_sandbox_backend(tmp_path):
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("value\n1\n2\n")
+    episodes_path = tmp_path / "episodes.jsonl"
+    episodes_path.write_text(json.dumps(_episode(csv_path)) + "\n")
+
+    with pytest.raises(ValueError, match="sandbox_backend"):
+        CSVAgentRLEnv(
+            episodes_path=str(episodes_path),
+            sandbox_backend="unknown",
+        )
+
+
 def test_adapter_can_rebase_absolute_csv_sources(tmp_path):
     csv_root = tmp_path / "data" / "kaggle"
     rebased_csv = csv_root / "sample-dataset" / "data.csv"
@@ -195,7 +208,7 @@ async def test_setup_state_accepts_json_encoded_info(tmp_path, monkeypatch):
     episodes_path.write_text(json.dumps(_episode(csv_path)) + "\n")
 
     class DummyCSVAnalysisEnv:
-        def __init__(self, csv_path):
+        def __init__(self, csv_path, **kwargs):
             self.csv_path = csv_path
 
         async def setup_state(self, state):
@@ -210,3 +223,34 @@ async def test_setup_state_accepts_json_encoded_info(tmp_path, monkeypatch):
     assert state["info"]["csv_source"] == str(csv_path)
     assert state["csv_env"].csv_path == str(csv_path)
     assert state["sandbox_state"]["sandbox_id"] == "dummy"
+
+
+@pytest.mark.asyncio
+async def test_setup_state_can_select_prime_sandbox_backend(tmp_path, monkeypatch):
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("value\n1\n2\n")
+    episodes_path = tmp_path / "episodes.jsonl"
+    episodes_path.write_text(json.dumps(_episode(csv_path)) + "\n")
+
+    class DummyPrimeSandboxEnv:
+        def __init__(self, csv_path, pip_install_packages):
+            self.csv_path = csv_path
+            self.pip_install_packages = pip_install_packages
+
+        async def setup_state(self, state):
+            return {"sandbox_id": "prime-dummy", "python_state": {}}
+
+    monkeypatch.setattr(rl_env, "PrimeSandboxCSVAnalysisEnv", DummyPrimeSandboxEnv)
+
+    env = CSVAgentRLEnv(
+        episodes_path=str(episodes_path),
+        include_data_overview=False,
+        sandbox_backend="prime",
+        sandbox_pip_install_packages="pandas",
+    )
+    state = {"info": env.get_dataset()[0]["info"]}
+    await env.setup_state(state)
+
+    assert state["csv_env"].csv_path == str(csv_path)
+    assert state["csv_env"].pip_install_packages == "pandas"
+    assert state["sandbox_state"]["sandbox_id"] == "prime-dummy"
