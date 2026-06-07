@@ -6,6 +6,7 @@ PRIME_RL_REPO="${PRIME_RL_REPO:-https://github.com/PrimeIntellect-ai/prime-rl.gi
 PRIME_RL_REF="${PRIME_RL_REF:-main}"
 PRIME_RL_DIR="${PRIME_RL_DIR:-$ROOT_DIR/.prime-rl/prime-rl}"
 UV_BIN="${UV_BIN:-uv}"
+PRIME_RL_UV_EXTRAS="${PRIME_RL_UV_EXTRAS:-flash-attn}"
 
 if ! command -v git >/dev/null 2>&1; then
   echo "git is required" >&2
@@ -36,7 +37,16 @@ git -C "$PRIME_RL_DIR" submodule update --init \
 
 (
   cd "$PRIME_RL_DIR"
-  "$UV_BIN" sync
+  if [ -n "$PRIME_RL_UV_EXTRAS" ]; then
+    IFS=',' read -ra UV_EXTRAS <<< "$PRIME_RL_UV_EXTRAS"
+    UV_SYNC_ARGS=()
+    for extra in "${UV_EXTRAS[@]}"; do
+      UV_SYNC_ARGS+=(--extra "$extra")
+    done
+    "$UV_BIN" sync "${UV_SYNC_ARGS[@]}"
+  else
+    "$UV_BIN" sync
+  fi
 )
 
 echo

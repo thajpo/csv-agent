@@ -173,6 +173,8 @@ uv run python scripts/upload_hf.py \
 Prime-RL is intentionally isolated from the main csv-agent environment. It
 requires Python 3.12 plus NVIDIA/CUDA Torch/vLLM, so the helper scripts clone it
 into `.prime-rl/prime-rl` and expose csv-agent by `PYTHONPATH` when launching.
+The standard local RL launcher also expects separate GPU allocations for
+inference and training; use at least a 2-GPU NVIDIA box for real RL runs.
 
 ```bash
 # 2. On the Prime/NVIDIA box, verify GPU + Docker support
@@ -186,6 +188,9 @@ $EDITOR configs/prime_rl/secrets.env
 bash scripts/prime_rl/bootstrap.sh
 # If needed, point at a newer uv binary:
 # UV_BIN=/path/to/uv bash scripts/prime_rl/bootstrap.sh
+# By default this installs Prime-RL's `flash-attn` extra for NVIDIA training.
+# To skip extras for config-only debugging:
+# PRIME_RL_UV_EXTRAS= bash scripts/prime_rl/bootstrap.sh
 
 # 5. Validate config resolution without launching training
 bash scripts/prime_rl/run.sh configs/prime_rl/csv-agent-hf.toml --dry-run
@@ -193,8 +198,10 @@ bash scripts/prime_rl/run.sh configs/prime_rl/csv-agent-hf.toml --dry-run
 # 6. Launch a short run
 CSV_AGENT_PRIME_RUN_NAME=qwen4b-smoke \
   bash scripts/prime_rl/run.sh configs/prime_rl/csv-agent-hf.toml \
-  --wandb \
-  --max-steps 20
+  --max-steps 5 \
+  --orchestrator.batch-size 8 \
+  --orchestrator.group-size 2 \
+  --orchestrator.eval.num-examples 10
 
 # 7. Convert raw rollout JSONL into small repo artifacts
 uv run python scripts/prime_rl/plot_run.py \
