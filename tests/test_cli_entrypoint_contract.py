@@ -6,6 +6,7 @@ from src.cli import (
     cmd_generate_questions,
     cmd_generate_episodes,
     cmd_run,
+    _show_episode_preflight,
     _fail_fast_on_existing_outputs,
     _fail_fast_on_unwriteable_targets,
     _run_fail_fast_preflight,
@@ -109,6 +110,27 @@ def test_source_scoped_question_preflight_does_not_cross_fail(tmp_path, monkeypa
         is_episode_generation=False,
     )
     assert not should_abort
+
+
+def test_episode_preflight_counts_flat_list_question_files(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    questions = Path("data/questions/template/sample/questions.json")
+    questions.parent.mkdir(parents=True, exist_ok=True)
+    questions.write_text(
+        '[{"id": "q1", "source": "template"}, {"id": "q2", "source": "template"}]'
+    )
+    episodes = Path("data/episodes/template.jsonl")
+    episodes.parent.mkdir(parents=True, exist_ok=True)
+    episodes.write_text(
+        '{"source": "template", "question": {"id": "q1", "source": "template"}}\n'
+    )
+
+    total, existing = _show_episode_preflight(
+        "template", Path("data/questions/template"), episodes
+    )
+
+    assert total == 2
+    assert existing == 1
 
 
 def test_fail_fast_on_legacy_layout_presence(tmp_path, monkeypatch):

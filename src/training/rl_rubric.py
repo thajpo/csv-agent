@@ -95,9 +95,18 @@ class CSVAgentRubric(Rubric):
 
         return matched
 
+    def _completion_text(self, completion: Any) -> str:
+        if isinstance(completion, list):
+            return "\n".join(
+                m.get("content", "") for m in completion
+                if isinstance(m, dict) and m.get("content")
+            )
+        return str(completion or "")
+
     def compute_reward(
         self,
         state: State,
+        info: dict | None = None,
         **kwargs,
     ) -> float:
         """
@@ -112,22 +121,23 @@ class CSVAgentRubric(Rubric):
         Returns:
             Total reward (hook_matches * hook_reward + final_match * final_reward)
         """
-        # Extract expected values from input info
-        info = state.get("input", {}).get("info", {})
+        info = info or state.get("info", {}) or state.get("input", {}).get("info", {})
+        if isinstance(info, str):
+            try:
+                info = json.loads(info)
+            except json.JSONDecodeError:
+                info = {}
         expected_hooks = info.get("expected_hooks", [])
         expected_answer_hash = info.get("expected_answer_hash")
+        expected_answer_hashes = info.get("expected_answer_hashes") or []
         expected_answer = info.get("expected_answer")
 
-        # Extract actual submission from completion
-        completion = state.get("completion", "")
-        if isinstance(completion, list):
-            # If completion is a list of messages, concatenate content
-            completion = "\n".join(
-                m.get("content", "") for m in completion
-                if isinstance(m, dict) and m.get("content")
+        actual_answer = state.get("submitted_answer")
+        actual_hooks = state.get("captured_hooks", [])
+        if actual_answer is None:
+            actual_answer, actual_hooks = self.extract_submission(
+                self._completion_text(state.get("completion", ""))
             )
-
-        actual_answer, actual_hooks = self.extract_submission(completion)
 
         # Compute hook reward (dense)
         hook_matches = self.count_matching_hooks(actual_hooks, expected_hooks)
@@ -136,10 +146,19 @@ class CSVAgentRubric(Rubric):
         # Compute final answer reward (sparse)
         actual_hash = hash_artifact(actual_answer) if actual_answer is not None else None
 
-        final_correct = answers_match(
-            actual_hash, expected_answer_hash,
-            actual_answer, expected_answer,
-            float_tol=self.float_tolerance,
+        valid_hashes = set(expected_answer_hashes)
+        if expected_answer_hash:
+            valid_hashes.add(expected_answer_hash)
+        final_correct = (
+            actual_hash in valid_hashes
+            if actual_hash is not None and valid_hashes
+            else answers_match(
+                actual_hash,
+                expected_answer_hash,
+                actual_answer,
+                expected_answer,
+                float_tol=self.float_tolerance,
+            )
         )
         final_reward_total = self.final_reward if final_correct else 0.0
 

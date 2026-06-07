@@ -1,5 +1,6 @@
-# CSV Agent RL Training Configuration
-# For use with Prime Intellect verifiers: uv run vf-rl @ configs/rl/csv-agent.toml
+# Legacy CSV Agent RL Training Configuration
+# Uses the older verifiers `vf-rl` path. Prefer configs/prime_rl/csv-agent.toml
+# for Prime-RL.
 
 # Model to fine-tune (placeholder - user will specify)
 model = "Qwen/Qwen2.5-3B-Instruct"

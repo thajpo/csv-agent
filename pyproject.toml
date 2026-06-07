@@ -49,7 +49,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["src", "csv_agent"]
 
 [tool.verifiers.eval]
 num_examples = 5

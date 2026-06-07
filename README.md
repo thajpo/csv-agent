@@ -145,6 +145,87 @@ csvagent validate \
 
 ---
 
+## Prime-RL Adapter
+
+csv-agent does not save a Prime-specific episode format. The canonical
+`EpisodeJSONL` records are adapted at training time by the Verifiers environment
+exposed as `csv-agent`.
+
+The adapter accepts `csv_root` so absolute `csv_source` paths stored in episodes
+can be rebased when training on a remote machine.
+
+```bash
+# 1. Split verified episodes
+uv run python -m src.training.split_episodes \
+  --input data/episodes/template.jsonl \
+  --output-dir data/splits/template
+```
+
+For remote jobs, upload the split episodes and raw CSV tree to a private
+Hugging Face dataset repo:
+
+```bash
+uv run python scripts/upload_hf.py \
+  --repo-id ThaJpo/csv-agent-template-episodes \
+  --include-csvs
+```
+
+Prime-RL is intentionally isolated from the main csv-agent environment. It
+requires Python 3.12 plus NVIDIA/CUDA Torch/vLLM, so the helper scripts clone it
+into `.prime-rl/prime-rl` and expose csv-agent by `PYTHONPATH` when launching.
+
+```bash
+# 2. On the Prime/NVIDIA box, verify GPU + Docker support
+bash scripts/prime_rl/doctor.sh
+
+# 3. Add secrets on the Prime box
+cp configs/prime_rl/secrets.env.example configs/prime_rl/secrets.env
+$EDITOR configs/prime_rl/secrets.env
+
+# 4. Create the isolated Prime-RL checkout
+bash scripts/prime_rl/bootstrap.sh
+# If needed, point at a newer uv binary:
+# UV_BIN=/path/to/uv bash scripts/prime_rl/bootstrap.sh
+
+# 5. Validate config resolution without launching training
+bash scripts/prime_rl/run.sh configs/prime_rl/csv-agent-hf.toml --dry-run
+
+# 6. Launch a short run
+CSV_AGENT_PRIME_RUN_NAME=qwen4b-smoke \
+  bash scripts/prime_rl/run.sh configs/prime_rl/csv-agent-hf.toml \
+  --wandb \
+  --max-steps 20
+
+# 7. Convert raw rollout JSONL into small repo artifacts
+uv run python scripts/prime_rl/plot_run.py \
+  --run-dir artifacts/prime_rl/runs/qwen4b-smoke \
+  --artifact-dir artifacts/prime_rl/qwen4b-smoke
+```
+
+Use [configs/prime_rl/csv-agent-hf.toml](configs/prime_rl/csv-agent-hf.toml) for
+remote/NVIDIA training. It loads episodes and CSV files from Hugging Face via
+the adapter's `dataset_name` argument. Raw Prime-RL outputs and checkpoints live
+under `artifacts/prime_rl/runs/` and are gitignored; reward plots and summary
+CSVs under `artifacts/prime_rl/<run-name>/` are intended to be committed and
+linked from this README after a run completes.
+
+Prime-RL currently requires NVIDIA GPUs for actual training. This repo can still
+build the environment, split data, and run adapter tests on CPU.
+
+Required keys for the Prime box:
+
+- `HF_TOKEN`: create at [Hugging Face settings/tokens](https://huggingface.co/settings/tokens). Needs read access to `ThaJpo/csv-agent-template-episodes`.
+- `WANDB_API_KEY`: create or copy from [Weights & Biases authorizations](https://wandb.ai/authorize). Optional, but recommended.
+- Prime auth: run `prime login`, or create/copy an API key from Prime Intellect and set `PRIME_API_KEY`.
+
+Docker note: the CSV REPL uses a CPU-only Docker image. Prime's FAQ says custom
+Docker images are supported, but Docker-in-Docker/system services vary by
+provider. Run `scripts/prime_rl/doctor.sh` immediately after provisioning a box;
+if Docker fails there, choose a provider/template with Docker support before
+starting training.
+
+---
+
 ## Configuration
 
 Settings are in `src/core/config.py` (Pydantic models). Key fields:

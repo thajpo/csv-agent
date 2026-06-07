@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+.prime-rl/
 
 # Downloaded Kaggle datasets
 kaggle/downloaded/
@@ -16,7 +17,9 @@ scripts/kaggle/downloaded/
 # Generated data (large, machine-specific)
 data/episodes/
 data/kaggle/
+data/legacy/
 data/questions/
+data/splits/
 data/questions_llm/
 data/questions_synthetic/
 
@@ -26,6 +29,8 @@ smoke_test/
 # Runtime logs
 logs/
 data/*.log
+artifacts/prime_rl/runs/
+configs/prime_rl/secrets.env
 
 # OS files
 .DS_Store

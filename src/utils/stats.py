@@ -21,6 +21,16 @@ from rich.panel import Panel
 console = Console()
 
 
+def _question_records_from_json(data) -> list[dict]:
+    """Normalize supported question-file shapes to a list of records."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        questions = data.get("questions", [])
+        return questions if isinstance(questions, list) else []
+    return []
+
+
 def collect_questions_stats() -> dict:
     """Collect statistics about generated questions."""
     stats = {
@@ -45,7 +55,7 @@ def collect_questions_stats() -> dict:
             dataset = qf.parent.name
             with open(qf) as f:
                 data = json.load(f)
-            questions = data.get("questions", data if isinstance(data, list) else [])
+            questions = _question_records_from_json(data)
 
             stats["synthetic"]["total"] += len(questions)
             stats["synthetic"]["by_dataset"][dataset] = len(questions)
@@ -63,7 +73,7 @@ def collect_questions_stats() -> dict:
             dataset = qf.parent.name
             with open(qf) as f:
                 data = json.load(f)
-            questions = data.get("questions", data if isinstance(data, list) else [])
+            questions = _question_records_from_json(data)
 
             stats["llm"]["total"] += len(questions)
             stats["llm"]["by_dataset"][dataset] = len(questions)

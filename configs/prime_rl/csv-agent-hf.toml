@@ -1,0 +1,58 @@
+# Prime-RL smoke configuration that downloads csv-agent episodes from Hugging Face.
+#
+# Upload first:
+#   uv run python scripts/upload_hf.py \
+#     --repo-id ThaJpo/csv-agent-template-episodes \
+#     --include-csvs
+#
+# Then in a Prime-RL checkout:
+#   uv pip install -e /home/j/Projects/csv-agent
+#   uv run rl @ /home/j/Projects/csv-agent/configs/prime_rl/csv-agent-hf.toml --dry-run
+
+max_steps = 20
+seq_len = 4096
+
+[model]
+name = "Qwen/Qwen3-4B-Instruct-2507"
+
+[wandb]
+project = "csv-agent"
+name = "csv-agent-hf-smoke"
+
+[trainer.model]
+impl = "auto"
+
+[trainer.model.lora]
+rank = 16
+alpha = 32
+
+[trainer.optim]
+lr = 1e-5
+
+[orchestrator]
+batch_size = 64
+group_size = 4
+
+[orchestrator.train.sampling]
+max_completion_tokens = 2048
+
+[[orchestrator.train.env]]
+id = "csv-agent"
+name = "csv-agent-train"
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", max_turns = 10 }
+
+[orchestrator.eval]
+interval = 10
+num_examples = 50
+group_size = 4
+
+[[orchestrator.eval.env]]
+id = "csv-agent"
+name = "csv-agent-val"
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "val", max_turns = 10 }
+
+[inference]
+
+[orchestrator.renderer]
+name = "qwen3"
+preserve_all_thinking = true

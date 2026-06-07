@@ -29,6 +29,16 @@ from src.core.config import config
 console = Console()
 
 
+def _question_records_from_json(data) -> list[dict]:
+    """Normalize supported question-file shapes to a list of records."""
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        questions = data.get("questions", [])
+        return questions if isinstance(questions, list) else []
+    return []
+
+
 # ============= Status Command =============
 
 
@@ -614,7 +624,7 @@ def _show_episode_preflight(
         try:
             with open(qf) as f:
                 data = json.load(f)
-            questions = data.get("questions", data if isinstance(data, list) else [])
+            questions = _question_records_from_json(data)
             questions = [q for q in questions if _matches_source(q, source)]
             total_questions += len(questions)
         except Exception:
