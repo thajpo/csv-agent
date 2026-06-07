@@ -1,0 +1,86 @@
+[
+  {
+    "step": 0,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.25,
+    "n": 4
+  },
+  {
+    "step": 1,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.25,
+    "n": 4
+  },
+  {
+    "step": 2,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.75,
+    "n": 4
+  },
+  {
+    "step": 3,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.5,
+    "n": 4
+  },
+  {
+    "step": 4,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.75,
+    "n": 4
+  },
+  {
+    "step": 5,
+    "split": "eval",
+    "env": "csv-agent-val",
+    "mean_reward": 0.0,
+    "n": 4
+  },
+  {
+    "step": 5,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.5,
+    "n": 4
+  },
+  {
+    "step": 6,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.25,
+    "n": 4
+  },
+  {
+    "step": 7,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.75,
+    "n": 4
+  },
+  {
+    "step": 8,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.25,
+    "n": 4
+  },
+  {
+    "step": 9,
+    "split": "train",
+    "env": "all",
+    "mean_reward": 0.75,
+    "n": 4
+  },
+  {
+    "step": 10,
+    "split": "eval",
+    "env": "csv-agent-val",
+    "mean_reward": 0.0,
+    "n": 4
+  }
+]

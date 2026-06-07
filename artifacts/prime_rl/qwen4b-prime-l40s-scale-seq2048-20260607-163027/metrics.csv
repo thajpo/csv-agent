@@ -1,0 +1,13 @@
+step,split,env,mean_reward,n
+0,train,all,0.25,4
+1,train,all,0.25,4
+2,train,all,0.75,4
+3,train,all,0.5,4
+4,train,all,0.75,4
+5,eval,csv-agent-val,0.0,4
+5,train,all,0.5,4
+6,train,all,0.25,4
+7,train,all,0.75,4
+8,train,all,0.25,4
+9,train,all,0.75,4
+10,eval,csv-agent-val,0.0,4
