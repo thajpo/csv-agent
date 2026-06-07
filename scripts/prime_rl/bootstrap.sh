@@ -7,6 +7,7 @@ PRIME_RL_REF="${PRIME_RL_REF:-main}"
 PRIME_RL_DIR="${PRIME_RL_DIR:-$ROOT_DIR/.prime-rl/prime-rl}"
 UV_BIN="${UV_BIN:-uv}"
 PRIME_RL_UV_EXTRAS="${PRIME_RL_UV_EXTRAS:-flash-attn}"
+PRIME_RL_UV_PIP_PACKAGES="${PRIME_RL_UV_PIP_PACKAGES:-orjson}"
 
 if ! command -v git >/dev/null 2>&1; then
   echo "git is required" >&2
@@ -46,6 +47,11 @@ git -C "$PRIME_RL_DIR" submodule update --init \
     "$UV_BIN" sync "${UV_SYNC_ARGS[@]}"
   else
     "$UV_BIN" sync
+  fi
+  if [ -n "$PRIME_RL_UV_PIP_PACKAGES" ]; then
+    # Prime-RL main currently imports orjson from the orchestrator without
+    # installing it in the default sync target.
+    "$UV_BIN" pip install $PRIME_RL_UV_PIP_PACKAGES
   fi
 )
 
