@@ -25,7 +25,7 @@ num_train_gpus = 1
 num_infer_gpus = 1
 
 [trainer.model]
-impl = "auto"
+impl = "hf"
 
 [trainer.model.lora]
 rank = 16

@@ -218,6 +218,11 @@ under `artifacts/prime_rl/runs/` and are gitignored; reward plots and summary
 CSVs under `artifacts/prime_rl/<run-name>/` are intended to be committed and
 linked from this README after a run completes.
 
+Latest smoke artifact:
+[qwen4b-prime-hf-smoke-20260607-155611](artifacts/prime_rl/qwen4b-prime-hf-smoke-20260607-155611)
+completed one Prime-RL step on the Hugging Face dataset with Prime-hosted
+Python sandboxes.
+
 Prime-RL currently requires NVIDIA GPUs for actual training. This repo can still
 build the environment, split data, and run adapter tests on CPU.
 
@@ -227,11 +232,9 @@ Required keys for the Prime box:
 - `WANDB_API_KEY`: create or copy from [Weights & Biases authorizations](https://wandb.ai/authorize). Optional, but recommended.
 - Prime auth: run `prime login`, or create/copy an API key from Prime Intellect and set `PRIME_API_KEY`.
 
-Docker note: the CSV REPL uses a CPU-only Docker image. Prime's FAQ says custom
-Docker images are supported, but Docker-in-Docker/system services vary by
-provider. Run `scripts/prime_rl/doctor.sh` immediately after provisioning a box;
-if Docker fails there, choose a provider/template with Docker support before
-starting training.
+Docker note: the local CSV REPL backend uses a CPU-only Docker image, but the
+HF-backed Prime-RL config uses `sandbox_backend = "prime"` and does not require
+Docker on the training pod.
 
 ---
 
