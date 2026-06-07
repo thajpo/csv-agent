@@ -20,6 +20,7 @@ if [ ! -f "$CONFIG_PATH" ]; then
   echo "Prime-RL config not found: $CONFIG_PATH" >&2
   exit 1
 fi
+CONFIG_PATH="$(cd "$(dirname "$CONFIG_PATH")" && pwd)/$(basename "$CONFIG_PATH")"
 
 if ! command -v "$UV_BIN" >/dev/null 2>&1; then
   echo "uv is required. Install it from https://docs.astral.sh/uv/ or set UV_BIN=/path/to/uv" >&2
