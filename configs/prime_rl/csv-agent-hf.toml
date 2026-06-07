@@ -57,6 +57,10 @@ name = "csv-agent-val"
 args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "val", max_turns = 10, sandbox_backend = "prime" }
 
 [inference]
+gpu_memory_utilization = 0.85
+
+[inference.model]
+max_model_len = 8192
 
 [orchestrator.renderer]
 name = "qwen3"
