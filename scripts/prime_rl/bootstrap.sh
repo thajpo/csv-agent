@@ -24,6 +24,7 @@ if [ ! -d "$PRIME_RL_DIR/.git" ]; then
   git clone "$PRIME_RL_REPO" "$PRIME_RL_DIR"
 fi
 
+git config --global url."https://github.com/PrimeIntellect-ai/".insteadOf "git@github.com:PrimeIntellect-ai/"
 git -C "$PRIME_RL_DIR" config url."https://github.com/PrimeIntellect-ai/".insteadOf "git@github.com:PrimeIntellect-ai/"
 git -C "$PRIME_RL_DIR" fetch origin "$PRIME_RL_REF" --depth 1
 git -C "$PRIME_RL_DIR" checkout FETCH_HEAD
