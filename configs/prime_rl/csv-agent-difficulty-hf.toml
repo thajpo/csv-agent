@@ -46,28 +46,28 @@ max_completion_tokens = 2048
 id = "csv-agent"
 name = "csv-agent-easy"
 ratio = 1.0
-state_columns = ["task", "submitted_answer"]
+state_columns = ["submitted_answer"]
 args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", difficulty_filter = "EASY", max_turns = 10, sandbox_backend = "prime" }
 
 [[orchestrator.train.env]]
 id = "csv-agent"
 name = "csv-agent-medium"
 ratio = 1.0
-state_columns = ["task", "submitted_answer"]
+state_columns = ["submitted_answer"]
 args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", difficulty_filter = "MEDIUM", max_turns = 10, sandbox_backend = "prime" }
 
 [[orchestrator.train.env]]
 id = "csv-agent"
 name = "csv-agent-hard"
 ratio = 1.0
-state_columns = ["task", "submitted_answer"]
+state_columns = ["submitted_answer"]
 args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", difficulty_filter = "HARD", max_turns = 10, sandbox_backend = "prime" }
 
 [[orchestrator.train.env]]
 id = "csv-agent"
 name = "csv-agent-very-hard"
 ratio = 1.0
-state_columns = ["task", "submitted_answer"]
+state_columns = ["submitted_answer"]
 args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", difficulty_filter = "VERY_HARD", max_turns = 10, sandbox_backend = "prime" }
 
 [orchestrator.eval]
@@ -78,7 +78,7 @@ group_size = 4
 [[orchestrator.eval.env]]
 id = "csv-agent"
 name = "csv-agent-all"
-state_columns = ["task", "submitted_answer"]
+state_columns = ["submitted_answer"]
 args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "val", max_turns = 10, sandbox_backend = "prime" }
 
 [inference]
