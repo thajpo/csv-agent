@@ -11,17 +11,24 @@ from src.training.rl_env import CSVAgentRLEnv, episodes_to_dataset
 from src.training.rl_rubric import CSVAgentRubric
 
 
-def _episode(csv_path: Path, answer=3) -> dict:
+def _episode(
+    csv_path: Path,
+    answer=3,
+    difficulty: str = "EASY",
+    episode_id: str = "ep_test",
+    question_id: str = "q_test",
+) -> dict:
     answer_hash = hash_artifact(answer)
     return {
-        "episode_id": "ep_test",
+        "episode_id": episode_id,
         "csv_source": str(csv_path),
         "verified": True,
         "question": {
-            "id": "q_test",
+            "id": question_id,
             "question_text": "What is the sum of value?",
-            "difficulty": "EASY",
+            "difficulty": difficulty,
             "n_steps": 1,
+            "template_name": "sum_value",
             "ground_truth": answer,
             "ground_truth_hash": answer_hash,
             "ground_truth_hashes": [answer_hash],
@@ -77,6 +84,42 @@ def test_episodes_to_dataset_uses_canonical_episode_fields(tmp_path):
     assert info["expected_answer_hash"] == hash_artifact(3)
     assert info["expected_answer_hashes"] == [hash_artifact(3)]
     assert info["expected_hooks"][0]["value_hash"] == "hook123"
+    assert info["template_name"] == "sum_value"
+    assert info["n_steps"] == 1
+
+
+def test_episodes_to_dataset_filters_by_difficulty(tmp_path):
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("value\n1\n2\n")
+    episodes = [
+        _episode(csv_path, answer=3, difficulty="EASY", episode_id="ep_easy"),
+        _episode(csv_path, answer=4, difficulty="HARD", episode_id="ep_hard"),
+    ]
+
+    dataset = episodes_to_dataset(
+        episodes,
+        include_data_overview=False,
+        difficulty_filter=["hard"],
+    )
+
+    assert len(dataset) == 1
+    row = dataset[0]
+    assert row["task"] == "HARD"
+    assert json.loads(row["info"])["episode_id"] == "ep_hard"
+
+
+def test_environment_reports_empty_difficulty_filter_result(tmp_path):
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("value\n1\n2\n")
+    episodes_path = tmp_path / "episodes.jsonl"
+    episodes_path.write_text(json.dumps(_episode(csv_path, difficulty="EASY")) + "\n")
+
+    with pytest.raises(ValueError, match="difficulty_filter='HARD'"):
+        CSVAgentRLEnv(
+            episodes_path=str(episodes_path),
+            include_data_overview=False,
+            difficulty_filter="HARD",
+        )
 
 
 def test_verifiers_can_load_csv_agent_environment_by_id(tmp_path):
@@ -186,6 +229,11 @@ def test_rubric_scores_submitted_answer_and_hook_state():
     }
 
     assert rubric.compute_reward(state) == pytest.approx(1.1)
+    assert rubric.final_correct(state) == pytest.approx(1.0)
+    assert rubric.hook_match_count(state) == pytest.approx(1.0)
+    assert rubric.hook_match_rate(state) == pytest.approx(1.0)
+    assert rubric.expected_hook_count(state) == pytest.approx(1.0)
+    assert rubric.submitted_answer_present(state) == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio

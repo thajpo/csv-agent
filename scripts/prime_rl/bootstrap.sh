@@ -8,6 +8,7 @@ PRIME_RL_DIR="${PRIME_RL_DIR:-$ROOT_DIR/.prime-rl/prime-rl}"
 UV_BIN="${UV_BIN:-uv}"
 PRIME_RL_UV_EXTRAS="${PRIME_RL_UV_EXTRAS:-flash-attn}"
 PRIME_RL_UV_PIP_PACKAGES="${PRIME_RL_UV_PIP_PACKAGES:-orjson}"
+CSV_AGENT_PRIME_PIP_PACKAGES="${CSV_AGENT_PRIME_PIP_PACKAGES:-datasets huggingface-hub docker pandas numpy scipy scikit-learn statsmodels}"
 
 if ! command -v git >/dev/null 2>&1; then
   echo "git is required" >&2
@@ -52,6 +53,12 @@ git -C "$PRIME_RL_DIR" submodule update --init \
     # Prime-RL main currently imports orjson from the orchestrator without
     # installing it in the default sync target.
     "$UV_BIN" pip install $PRIME_RL_UV_PIP_PACKAGES
+  fi
+  if [ -n "$CSV_AGENT_PRIME_PIP_PACKAGES" ]; then
+    # csv-agent is exposed through PYTHONPATH by run.sh rather than installed
+    # into Prime-RL's Python 3.12 environment, so install only the runtime deps
+    # needed by the Verifiers environment adapter.
+    "$UV_BIN" pip install $CSV_AGENT_PRIME_PIP_PACKAGES
   fi
 )
 

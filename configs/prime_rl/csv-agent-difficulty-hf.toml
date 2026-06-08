@@ -1,0 +1,92 @@
+# Prime-RL config for difficulty-bucketed csv-agent training from Hugging Face.
+#
+# Each train env loads the same HF split, then filters to one difficulty bucket
+# inside CSVAgentRLEnv. Prime-RL samples train envs by the relative `ratio`
+# fields below. Use sequential runs/resume for a true easy -> medium -> hard
+# curriculum, or adjust ratios for a mixed curriculum run.
+#
+# `csv-agent-all` is intentionally unfiltered eval for final/intermittent
+# aggregate evaluation. Post-process raw rollout JSONL with plot_run.py for
+# difficulty-sliced metrics.
+
+max_steps = 20
+seq_len = 2048
+
+[model]
+name = "Qwen/Qwen3-4B-Instruct-2507"
+
+[wandb]
+project = "csv-agent"
+name = "csv-agent-difficulty-hf"
+
+[deployment]
+gpus_per_node = 2
+num_train_gpus = 1
+num_infer_gpus = 1
+
+[trainer.model]
+impl = "hf"
+
+[trainer.model.lora]
+rank = 16
+alpha = 32
+
+[trainer.optim]
+lr = 1e-5
+
+[orchestrator]
+batch_size = 16
+group_size = 4
+oversampling_factor = 2.0
+
+[orchestrator.train.sampling]
+max_completion_tokens = 2048
+
+[[orchestrator.train.env]]
+id = "csv-agent"
+name = "csv-agent-easy"
+ratio = 1.0
+state_columns = ["task", "submitted_answer"]
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", difficulty_filter = "EASY", max_turns = 10, sandbox_backend = "prime" }
+
+[[orchestrator.train.env]]
+id = "csv-agent"
+name = "csv-agent-medium"
+ratio = 1.0
+state_columns = ["task", "submitted_answer"]
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", difficulty_filter = "MEDIUM", max_turns = 10, sandbox_backend = "prime" }
+
+[[orchestrator.train.env]]
+id = "csv-agent"
+name = "csv-agent-hard"
+ratio = 1.0
+state_columns = ["task", "submitted_answer"]
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", difficulty_filter = "HARD", max_turns = 10, sandbox_backend = "prime" }
+
+[[orchestrator.train.env]]
+id = "csv-agent"
+name = "csv-agent-very-hard"
+ratio = 1.0
+state_columns = ["task", "submitted_answer"]
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", difficulty_filter = "VERY_HARD", max_turns = 10, sandbox_backend = "prime" }
+
+[orchestrator.eval]
+interval = 10
+num_examples = 50
+group_size = 4
+
+[[orchestrator.eval.env]]
+id = "csv-agent"
+name = "csv-agent-all"
+state_columns = ["task", "submitted_answer"]
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "val", max_turns = 10, sandbox_backend = "prime" }
+
+[inference]
+gpu_memory_utilization = 0.85
+
+[inference.model]
+max_model_len = 8192
+
+[orchestrator.renderer]
+name = "qwen3"
+preserve_all_thinking = true

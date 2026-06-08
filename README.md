@@ -213,10 +213,15 @@ uv run python scripts/prime_rl/plot_run.py \
 
 Use [configs/prime_rl/csv-agent-hf.toml](configs/prime_rl/csv-agent-hf.toml) for
 remote/NVIDIA training. It loads episodes and CSV files from Hugging Face via
-the adapter's `dataset_name` argument. Raw Prime-RL outputs and checkpoints live
-under `artifacts/prime_rl/runs/` and are gitignored; reward plots and summary
-CSVs under `artifacts/prime_rl/<run-name>/` are intended to be committed and
-linked from this README after a run completes.
+the adapter's `dataset_name` argument. Use
+[configs/prime_rl/csv-agent-difficulty-hf.toml](configs/prime_rl/csv-agent-difficulty-hf.toml)
+when you want Prime-RL to see `EASY`, `MEDIUM`, `HARD`, and `VERY_HARD` as
+separate train envs while keeping `csv-agent-all` as the unfiltered eval env.
+Raw Prime-RL outputs and checkpoints live under `artifacts/prime_rl/runs/` and
+are gitignored; reward plots and summary CSVs under
+`artifacts/prime_rl/<run-name>/` are intended to be committed and linked from
+this README after a run completes. `plot_run.py` also writes
+`metrics_by_difficulty.csv` from raw rollout metadata for post-training slices.
 
 Latest smoke artifact:
 [qwen4b-prime-hf-smoke-20260607-155611](artifacts/prime_rl/qwen4b-prime-hf-smoke-20260607-155611)

@@ -49,7 +49,17 @@ class CSVAgentRubric(Rubric):
         self.final_reward = final_reward
         self.float_tolerance = float_tolerance
 
-        super().__init__(funcs=[self.compute_reward])
+        super().__init__(
+            funcs=[
+                self.compute_reward,
+                self.final_correct,
+                self.hook_match_count,
+                self.hook_match_rate,
+                self.expected_hook_count,
+                self.submitted_answer_present,
+            ],
+            weights=[1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        )
 
     def extract_submission(self, completion: str) -> tuple[Any, list[dict]]:
         """
@@ -103,6 +113,61 @@ class CSVAgentRubric(Rubric):
             )
         return str(completion or "")
 
+    def _coerce_info(self, state: State, info: dict | str | None = None) -> dict:
+        info = info or state.get("info", {}) or state.get("input", {}).get("info", {})
+        if isinstance(info, str):
+            try:
+                parsed = json.loads(info)
+            except json.JSONDecodeError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return info if isinstance(info, dict) else {}
+
+    def _score_parts(self, state: State, info: dict | str | None = None) -> dict:
+        info = self._coerce_info(state, info)
+        expected_hooks = info.get("expected_hooks", [])
+        expected_answer_hash = info.get("expected_answer_hash")
+        expected_answer_hashes = info.get("expected_answer_hashes") or []
+        expected_answer = info.get("expected_answer")
+
+        actual_answer = state.get("submitted_answer")
+        actual_hooks = state.get("captured_hooks", [])
+        if actual_answer is None:
+            actual_answer, actual_hooks = self.extract_submission(
+                self._completion_text(state.get("completion", ""))
+            )
+
+        hook_matches = self.count_matching_hooks(actual_hooks, expected_hooks)
+        expected_hook_count = len(expected_hooks)
+        hook_match_rate = (
+            hook_matches / expected_hook_count if expected_hook_count else 0.0
+        )
+
+        actual_hash = hash_artifact(actual_answer) if actual_answer is not None else None
+        valid_hashes = set(expected_answer_hashes)
+        if expected_answer_hash:
+            valid_hashes.add(expected_answer_hash)
+        final_correct = (
+            actual_hash in valid_hashes
+            if actual_hash is not None and valid_hashes
+            else answers_match(
+                actual_hash,
+                expected_answer_hash,
+                actual_answer,
+                expected_answer,
+                float_tol=self.float_tolerance,
+            )
+        )
+
+        return {
+            "actual_hash": actual_hash,
+            "expected_hook_count": expected_hook_count,
+            "final_correct": bool(final_correct),
+            "hook_matches": hook_matches,
+            "hook_match_rate": hook_match_rate,
+            "submitted_answer_present": actual_answer is not None,
+        }
+
     def compute_reward(
         self,
         state: State,
@@ -121,48 +186,34 @@ class CSVAgentRubric(Rubric):
         Returns:
             Total reward (hook_matches * hook_reward + final_match * final_reward)
         """
-        info = info or state.get("info", {}) or state.get("input", {}).get("info", {})
-        if isinstance(info, str):
-            try:
-                info = json.loads(info)
-            except json.JSONDecodeError:
-                info = {}
-        expected_hooks = info.get("expected_hooks", [])
-        expected_answer_hash = info.get("expected_answer_hash")
-        expected_answer_hashes = info.get("expected_answer_hashes") or []
-        expected_answer = info.get("expected_answer")
-
-        actual_answer = state.get("submitted_answer")
-        actual_hooks = state.get("captured_hooks", [])
-        if actual_answer is None:
-            actual_answer, actual_hooks = self.extract_submission(
-                self._completion_text(state.get("completion", ""))
-            )
-
-        # Compute hook reward (dense)
-        hook_matches = self.count_matching_hooks(actual_hooks, expected_hooks)
-        hook_reward_total = hook_matches * self.hook_reward
-
-        # Compute final answer reward (sparse)
-        actual_hash = hash_artifact(actual_answer) if actual_answer is not None else None
-
-        valid_hashes = set(expected_answer_hashes)
-        if expected_answer_hash:
-            valid_hashes.add(expected_answer_hash)
-        final_correct = (
-            actual_hash in valid_hashes
-            if actual_hash is not None and valid_hashes
-            else answers_match(
-                actual_hash,
-                expected_answer_hash,
-                actual_answer,
-                expected_answer,
-                float_tol=self.float_tolerance,
-            )
-        )
-        final_reward_total = self.final_reward if final_correct else 0.0
+        parts = self._score_parts(state, info)
+        hook_reward_total = parts["hook_matches"] * self.hook_reward
+        final_reward_total = self.final_reward if parts["final_correct"] else 0.0
 
         return hook_reward_total + final_reward_total
+
+    def final_correct(self, state: State, info: dict | None = None, **kwargs) -> float:
+        return float(self._score_parts(state, info)["final_correct"])
+
+    def hook_match_count(
+        self, state: State, info: dict | None = None, **kwargs
+    ) -> float:
+        return float(self._score_parts(state, info)["hook_matches"])
+
+    def hook_match_rate(
+        self, state: State, info: dict | None = None, **kwargs
+    ) -> float:
+        return float(self._score_parts(state, info)["hook_match_rate"])
+
+    def expected_hook_count(
+        self, state: State, info: dict | None = None, **kwargs
+    ) -> float:
+        return float(self._score_parts(state, info)["expected_hook_count"])
+
+    def submitted_answer_present(
+        self, state: State, info: dict | None = None, **kwargs
+    ) -> float:
+        return float(self._score_parts(state, info)["submitted_answer_present"])
 
 
 def create_rubric(

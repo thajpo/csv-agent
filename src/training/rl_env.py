@@ -76,6 +76,28 @@ def _info_dict(info: Any) -> dict:
     return {}
 
 
+def _episode_difficulty(ep: dict) -> str:
+    question = ep.get("question", {})
+    return str(question.get("difficulty", "UNKNOWN")).upper()
+
+
+def _normalize_difficulty_filter(
+    difficulty_filter: str | list[str] | tuple[str, ...] | None,
+) -> set[str] | None:
+    if difficulty_filter is None:
+        return None
+
+    if isinstance(difficulty_filter, str):
+        raw_values = difficulty_filter.split(",")
+    else:
+        raw_values = list(difficulty_filter)
+
+    values = {str(value).strip().upper() for value in raw_values if str(value).strip()}
+    if not values or values & {"*", "ALL"}:
+        return None
+    return values
+
+
 @lru_cache(maxsize=128)
 def _cached_data_overview(csv_path: str) -> str:
     return generate_data_overview(csv_path)
@@ -218,6 +240,10 @@ def _episode_to_row(
         "question_id": question.get("id"),
         "csv_source": str(csv_source),
         "difficulty": question.get("difficulty", "UNKNOWN"),
+        "template_name": question.get("template_name") or question.get("template"),
+        "n_steps": question.get("n_steps"),
+        "category": question.get("category"),
+        "tags": question.get("tags", []),
         "expected_hooks": _flatten_hooks(gold_trace),
         "expected_answer": expected_answer,
         "expected_answer_hash": expected_answer_hash,
@@ -251,6 +277,7 @@ def episodes_to_dataset(
     csv_root: str | None = None,
     dataset_description: str = "",
     include_data_overview: bool = True,
+    difficulty_filter: str | list[str] | tuple[str, ...] | None = None,
 ) -> Dataset:
     """
     Convert episodes to HuggingFace Dataset for verifiers.
@@ -261,9 +288,12 @@ def episodes_to_dataset(
     - task: Question difficulty
     - info: JSON-encoded reward metadata
     """
+    allowed_difficulties = _normalize_difficulty_filter(difficulty_filter)
     rows = []
     for ep in episodes:
         if not include_unverified and not ep.get("verified", False):
+            continue
+        if allowed_difficulties and _episode_difficulty(ep) not in allowed_difficulties:
             continue
         rows.append(
             _episode_to_row(
@@ -503,6 +533,7 @@ class CSVAgentRLEnv(MultiTurnEnv):
         max_turns: int = 10,
         include_unverified: bool = False,
         include_data_overview: bool = True,
+        difficulty_filter: str | list[str] | tuple[str, ...] | None = None,
         sandbox_backend: str = "docker",
         sandbox_pip_install_packages: str = DEFAULT_SANDBOX_PIP_PACKAGES,
         hook_reward: float = 0.1,
@@ -528,6 +559,7 @@ class CSVAgentRLEnv(MultiTurnEnv):
             dataset_description: Description of the dataset
             max_turns: Maximum turns per episode
             include_unverified: Include unverified episodes in training
+            difficulty_filter: Optional difficulty or comma-separated difficulties to keep
             sandbox_backend: Code execution backend: "docker" or "prime"
             sandbox_pip_install_packages: Packages installed in Prime sandboxes
             hook_reward: Reward per matching hook
@@ -556,6 +588,7 @@ class CSVAgentRLEnv(MultiTurnEnv):
         self.hf_revision = hf_revision
         self.eval_episodes_path = eval_episodes_path
         self.eval_dataset_split = eval_dataset_split
+        self.difficulty_filter = difficulty_filter
         if sandbox_backend not in {"docker", "prime"}:
             raise ValueError('sandbox_backend must be "docker" or "prime"')
         self.sandbox_backend = sandbox_backend
@@ -579,6 +612,7 @@ class CSVAgentRLEnv(MultiTurnEnv):
             csv_root=csv_root,
             dataset_description=dataset_description,
             include_data_overview=include_data_overview,
+            difficulty_filter=difficulty_filter,
         )
         eval_dataset = None
         if eval_episodes_path:
@@ -589,6 +623,7 @@ class CSVAgentRLEnv(MultiTurnEnv):
                 csv_root=csv_root,
                 dataset_description=dataset_description,
                 include_data_overview=include_data_overview,
+                difficulty_filter=difficulty_filter,
             )
         elif dataset_name and eval_dataset_split:
             eval_dataset = episodes_to_dataset(
@@ -604,13 +639,19 @@ class CSVAgentRLEnv(MultiTurnEnv):
                 csv_root=csv_root,
                 dataset_description=dataset_description,
                 include_data_overview=include_data_overview,
+                difficulty_filter=difficulty_filter,
             )
         else:
             eval_dataset = dataset
 
         if len(dataset) == 0:
             source = episodes_path or f"{dataset_name}:{dataset_split}"
-            raise ValueError(f"No valid episodes found in {source}")
+            filter_note = (
+                f" for difficulty_filter={difficulty_filter!r}"
+                if difficulty_filter is not None
+                else ""
+            )
+            raise ValueError(f"No valid episodes found in {source}{filter_note}")
 
         rubric = CSVAgentRubric(
             hook_reward=hook_reward,

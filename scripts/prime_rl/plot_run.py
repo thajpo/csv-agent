@@ -24,6 +24,19 @@ class Point:
     n: int
 
 
+@dataclass(frozen=True)
+class DifficultyPoint:
+    step: int
+    split: str
+    env: str
+    difficulty: str
+    mean_reward: float
+    mean_final_correct: float | None
+    mean_hook_match_rate: float | None
+    mean_submitted_answer_present: float | None
+    n: int
+
+
 def _jsonl_rows(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with path.open() as handle:
@@ -63,6 +76,58 @@ def _find_reward(row: dict[str, Any]) -> float | None:
                 return reward
 
     return None
+
+
+def _coerce_info(info: Any) -> dict[str, Any]:
+    if isinstance(info, dict):
+        return info
+    if isinstance(info, str):
+        try:
+            parsed = json.loads(info)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _find_info(row: dict[str, Any]) -> dict[str, Any]:
+    for candidate in (row.get("info"), row.get("raw", {}).get("info") if isinstance(row.get("raw"), dict) else None):
+        info = _coerce_info(candidate)
+        if info:
+            return info
+    return {}
+
+
+def _find_metric(row: dict[str, Any], name: str) -> float | None:
+    metric_sources = [row.get("metrics")]
+    raw = row.get("raw")
+    if isinstance(raw, dict):
+        metric_sources.append(raw.get("metrics"))
+
+    for metrics in metric_sources:
+        if isinstance(metrics, dict):
+            value = _numeric(metrics.get(name))
+            if value is not None:
+                return value
+    return None
+
+
+def _find_difficulty(row: dict[str, Any], env: str) -> str:
+    info = _find_info(row)
+    difficulty = info.get("difficulty")
+    if not difficulty:
+        difficulty = row.get("task")
+    raw = row.get("raw")
+    if not difficulty and isinstance(raw, dict):
+        difficulty = raw.get("task")
+    if not difficulty and env.startswith("csv-agent-"):
+        difficulty = env.removeprefix("csv-agent-").upper().replace("-", "_")
+    return str(difficulty or "UNKNOWN").upper()
+
+
+def _mean_optional(values: Sequence[float | None]) -> float | None:
+    numeric_values = [value for value in values if value is not None]
+    return mean(numeric_values) if numeric_values else None
 
 
 def _step_from_path(path: Path) -> int:
@@ -106,6 +171,49 @@ def collect_points(run_dir: Path) -> list[Point]:
     return sorted(points, key=lambda point: (point.step, point.split, point.env))
 
 
+def collect_difficulty_points(run_dir: Path) -> list[DifficultyPoint]:
+    grouped: dict[tuple[int, str, str, str], list[dict[str, Any]]] = {}
+    for path in sorted(run_dir.rglob("*rollouts*.jsonl")):
+        split, env = _split_env_from_path(path)
+        step = _step_from_path(path)
+        for row in _jsonl_rows(path):
+            if _find_reward(row) is None:
+                continue
+            difficulty = _find_difficulty(row, env)
+            grouped.setdefault((step, split, env, difficulty), []).append(row)
+
+    points = []
+    for (step, split, env, difficulty), rows in grouped.items():
+        rewards = [_find_reward(row) for row in rows]
+        rewards = [reward for reward in rewards if reward is not None]
+        if not rewards:
+            continue
+        points.append(
+            DifficultyPoint(
+                step=step,
+                split=split,
+                env=env,
+                difficulty=difficulty,
+                mean_reward=mean(rewards),
+                mean_final_correct=_mean_optional(
+                    [_find_metric(row, "final_correct") for row in rows]
+                ),
+                mean_hook_match_rate=_mean_optional(
+                    [_find_metric(row, "hook_match_rate") for row in rows]
+                ),
+                mean_submitted_answer_present=_mean_optional(
+                    [_find_metric(row, "submitted_answer_present") for row in rows]
+                ),
+                n=len(rewards),
+            )
+        )
+
+    return sorted(
+        points,
+        key=lambda point: (point.step, point.split, point.env, point.difficulty),
+    )
+
+
 def write_json(points: list[Point], output_path: Path) -> None:
     output_path.write_text(
         json.dumps([point.__dict__ for point in points], indent=2) + "\n",
@@ -118,6 +226,34 @@ def write_csv(points: list[Point], output_path: Path) -> None:
         writer = csv.DictWriter(
             handle,
             fieldnames=["step", "split", "env", "mean_reward", "n"],
+        )
+        writer.writeheader()
+        for point in points:
+            writer.writerow(point.__dict__)
+
+
+def write_difficulty_json(points: list[DifficultyPoint], output_path: Path) -> None:
+    output_path.write_text(
+        json.dumps([point.__dict__ for point in points], indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_difficulty_csv(points: list[DifficultyPoint], output_path: Path) -> None:
+    with output_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "step",
+                "split",
+                "env",
+                "difficulty",
+                "mean_reward",
+                "mean_final_correct",
+                "mean_hook_match_rate",
+                "mean_submitted_answer_present",
+                "n",
+            ],
         )
         writer.writeheader()
         for point in points:
@@ -234,12 +370,22 @@ def write_svg(points: list[Point], output_path: Path, title: str) -> None:
     output_path.write_text(svg, encoding="utf-8")
 
 
-def write_readme(points: list[Point], output_path: Path, title: str) -> None:
+def write_readme(
+    points: list[Point],
+    difficulty_points: list[DifficultyPoint],
+    output_path: Path,
+    title: str,
+) -> None:
     best = max(points, key=lambda point: point.mean_reward) if points else None
     best_line = (
         f"- Best mean reward: `{best.mean_reward:.4f}` at step `{best.step}` ({best.split}/{best.env})"
         if best
         else "- Best mean reward: unavailable"
+    )
+    difficulty_line = (
+        "- Difficulty metrics: `metrics_by_difficulty.csv`"
+        if difficulty_points
+        else "- Difficulty metrics: unavailable"
     )
     output_path.write_text(
         f"""# {title}
@@ -248,6 +394,7 @@ def write_readme(points: list[Point], output_path: Path, title: str) -> None:
 
 {best_line}
 - Points summarized: `{len(points)}`
+{difficulty_line}
 
 Generated from Prime-RL rollout JSONL files.
 """,
@@ -276,12 +423,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     title = args.title or f"Prime-RL Run: {run_dir.name}"
 
     points = collect_points(run_dir)
+    difficulty_points = collect_difficulty_points(run_dir)
     write_json(points, artifact_dir / "metrics.json")
     write_csv(points, artifact_dir / "metrics.csv")
+    write_difficulty_json(difficulty_points, artifact_dir / "metrics_by_difficulty.json")
+    write_difficulty_csv(difficulty_points, artifact_dir / "metrics_by_difficulty.csv")
     write_svg(points, artifact_dir / "reward_curve.svg", title)
-    write_readme(points, artifact_dir / "README.md", title)
+    write_readme(points, difficulty_points, artifact_dir / "README.md", title)
 
-    print(f"Wrote {len(points)} points to {artifact_dir}")
+    print(
+        f"Wrote {len(points)} points and {len(difficulty_points)} difficulty points to {artifact_dir}"
+    )
     return 0
 
 
