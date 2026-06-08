@@ -1,0 +1,73 @@
+# Prime-RL easy-only curriculum probe for csv-agent.
+#
+# This is the first quality run to try before generating more episodes. It
+# trains only on EASY episodes, evaluates on EASY val, and also runs a cheap
+# unfiltered csv-agent-all eval to check whether gains stay local to EASY.
+# Data overview is disabled to keep prompts well below the 2048 train seq_len.
+
+max_steps = 30
+seq_len = 2048
+
+[model]
+name = "Qwen/Qwen3-4B-Instruct-2507"
+
+[wandb]
+project = "csv-agent"
+name = "csv-agent-easy-hf"
+
+[deployment]
+gpus_per_node = 2
+num_train_gpus = 1
+num_infer_gpus = 1
+
+[trainer.model]
+impl = "hf"
+
+[trainer.model.lora]
+rank = 16
+alpha = 32
+
+[trainer.optim]
+lr = 1e-5
+
+[orchestrator]
+batch_size = 16
+group_size = 4
+oversampling_factor = 2.0
+
+[orchestrator.train.sampling]
+max_completion_tokens = 2048
+
+[[orchestrator.train.env]]
+id = "csv-agent"
+name = "csv-agent-easy"
+state_columns = ["task", "submitted_answer"]
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "train", difficulty_filter = "EASY", max_turns = 10, include_data_overview = false, sandbox_backend = "prime" }
+
+[orchestrator.eval]
+interval = 10
+num_examples = -1
+group_size = 1
+
+[[orchestrator.eval.env]]
+id = "csv-agent"
+name = "csv-agent-easy-val"
+state_columns = ["task", "submitted_answer"]
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "val", difficulty_filter = "EASY", max_turns = 10, include_data_overview = false, sandbox_backend = "prime" }
+
+[[orchestrator.eval.env]]
+id = "csv-agent"
+name = "csv-agent-all"
+interval = 30
+state_columns = ["task", "submitted_answer"]
+args = { dataset_name = "ThaJpo/csv-agent-template-episodes", dataset_split = "val", max_turns = 10, include_data_overview = false, sandbox_backend = "prime" }
+
+[inference]
+gpu_memory_utilization = 0.85
+
+[inference.model]
+max_model_len = 8192
+
+[orchestrator.renderer]
+name = "qwen3"
+preserve_all_thinking = true
