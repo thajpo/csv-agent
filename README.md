@@ -230,6 +230,11 @@ Latest smoke artifact:
 completed one Prime-RL step on the Hugging Face dataset with Prime-hosted
 Python sandboxes.
 
+Latest easy-only probe artifact:
+[csv-agent-easy-probe-fixed-20260608-225734](artifacts/prime_rl/csv-agent-easy-probe-fixed-20260608-225734)
+completed 30 Prime-RL steps on EASY train episodes. Easy-val stayed flat at
+`0.7143`; all-val improved from `0.4878` to `0.5610`.
+
 Prime-RL currently requires NVIDIA GPUs for actual training. This repo can still
 build the environment, split data, and run adapter tests on CPU.
 
