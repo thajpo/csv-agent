@@ -113,10 +113,7 @@ async def validate_question(
             dataset_description=dataset_description,
             data_overview=data_overview,
             max_turns=config.max_turns,
-            sampling_args={
-                "temperature": config.sampling_args.temperature,
-                "max_tokens": config.sampling_args.max_tokens,
-            },
+            sampling_args=config.teacher_sampling_args_dict(),
             ui=ui,
         )
 

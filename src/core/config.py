@@ -107,8 +107,12 @@ class Config(BaseModel):
     max_turns: int = 10
 
     # Models
-    teacher_model: str = Field(default="openai/gpt-oss-120b")
-    question_gen_model: str = Field(default="openai/gpt-oss-120b")
+    teacher_model: str = Field(default="openai/gpt-5.5")
+    question_gen_model: str = Field(default="qwen/qwen3.7-max")
+    teacher_reasoning_effort: Literal[
+        "xhigh", "high", "medium", "low", "minimal", "none"
+    ] | None = "xhigh"
+    teacher_max_tokens: int = 16000
     sampling_args: SamplingArgs = Field(default_factory=SamplingArgs)
 
     # Context / Memory
@@ -161,6 +165,16 @@ class Config(BaseModel):
     val_ratio: float = 0.1
     test_ratio: float = 0.1
 
+    def teacher_sampling_args_dict(self) -> dict:
+        """Sampling args for teacher traces, including provider reasoning controls."""
+        args = self.sampling_args.model_dump()
+        args["max_tokens"] = self.teacher_max_tokens
+        if self.teacher_reasoning_effort:
+            args["reasoning"] = {"effort": self.teacher_reasoning_effort}
+            if self.teacher_reasoning_effort != "none":
+                args["reasoning"]["exclude"] = True
+        return args
+
 
 # =============================================================================
 # 3. Environment Sub-configs (Internal use for src.core.environment)
@@ -178,13 +192,17 @@ class ModelConfig(BaseModel):
     temperature: float = 0.7
     max_tokens: int = 6000  # Must match SamplingArgs.max_tokens
     top_p: float = 1.0
+    reasoning: dict | None = None
 
     def sampling_args_dict(self) -> dict:
-        return {
+        args = {
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "top_p": self.top_p,
         }
+        if self.reasoning is not None:
+            args["reasoning"] = self.reasoning
+        return args
 
 
 class ExecutionConfig(BaseModel):

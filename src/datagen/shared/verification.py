@@ -73,11 +73,15 @@ async def verify_synthetic(
     from src.datagen.teacher import execute_teacher_trace, answers_match
 
     try:
+        from src.core.config import config
+
+        kwargs = dict(kwargs)
+        float_tol = kwargs.pop("float_tol", config.float_tolerance)
         # Use mechanical question or question_text if available
         question_text = (
             question.get("question_mechanical") or question.get("question_text") or ""
         )
-        hint = question.get("hint")
+        hint = kwargs.pop("hint", question.get("hint"))
 
         trace, _conversation, _system, elapsed = await execute_teacher_trace(
             csv_path=csv_path,
@@ -133,10 +137,6 @@ async def verify_synthetic(
                 expected_answers = [gt]
         expected_answers = [a for a in expected_answers if a is not None]
         actual_answer = trace.get("final_answer")
-
-        from src.core.config import config
-
-        float_tol = kwargs.get("float_tol", config.float_tolerance)
 
         for exp_hash, exp_answer in zip(expected_hashes, expected_answers):
             if answers_match(

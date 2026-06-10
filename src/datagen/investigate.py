@@ -225,6 +225,7 @@ async def run_diagnostic_batch(
         dataset_description="",
         data_overview=data_overview,
         max_turns=10,
+        sampling_args=config.teacher_sampling_args_dict(),
         ui=ui,
         include_diagnostics=True,
     )

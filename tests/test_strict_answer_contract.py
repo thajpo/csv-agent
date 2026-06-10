@@ -96,3 +96,37 @@ async def test_verify_synthetic_uses_unified_ground_truth_key(monkeypatch):
 
     assert result.success is True
     assert result.match is True
+
+
+@pytest.mark.asyncio
+async def test_verify_synthetic_accepts_explicit_hint_override(monkeypatch):
+    import src.datagen.teacher as teacher
+
+    seen = {}
+
+    async def fake_execute_teacher_trace(**kwargs):
+        seen.update(kwargs)
+        return (
+            {
+                "success": True,
+                "final_answer_hash": "expected-hash",
+                "final_answer": 1,
+            },
+            [],
+            "",
+            0.01,
+        )
+
+    monkeypatch.setattr(teacher, "execute_teacher_trace", fake_execute_teacher_trace)
+
+    question = _synthetic_question(hint="question hint")
+    result = await verify_synthetic(
+        question=question,
+        csv_path="fake.csv",
+        hint="caller hint",
+        float_tol=0.25,
+    )
+
+    assert result.success is True
+    assert seen["hint"] == "caller hint"
+    assert "float_tol" not in seen

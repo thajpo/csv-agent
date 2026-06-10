@@ -82,20 +82,38 @@ class APILLM:
         max_retries = API_MAX_RETRIES
         for attempt in range(max_retries):
             try:
+                payload = {
+                    "model": self.model,
+                    "messages": messages,
+                    "max_tokens": self.sampling_args.get("max_tokens", 8192),
+                    "temperature": self.sampling_args.get("temperature", 0.7),
+                    "top_p": self.sampling_args.get("top_p", 1.0),
+                    # Only include optional params if explicitly set and non-default
+                    **(
+                        {"stop": self.sampling_args["stop"]}
+                        if self.sampling_args.get("stop")
+                        else {}
+                    ),
+                    **(
+                        {"presence_penalty": self.sampling_args["presence_penalty"]}
+                        if self.sampling_args.get("presence_penalty", 0) != 0
+                        else {}
+                    ),
+                    **(
+                        {"frequency_penalty": self.sampling_args["frequency_penalty"]}
+                        if self.sampling_args.get("frequency_penalty", 0) != 0
+                        else {}
+                    ),
+                    **(
+                        {"reasoning": self.sampling_args["reasoning"]}
+                        if self.sampling_args.get("reasoning") is not None
+                        else {}
+                    ),
+                }
                 response = await self.client.post(
                     f"{self.base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "max_tokens": self.sampling_args.get("max_tokens", 8192),
-                        "temperature": self.sampling_args.get("temperature", 0.7),
-                        "top_p": self.sampling_args.get("top_p", 1.0),
-                        # Only include optional params if explicitly set and non-default
-                        **({"stop": self.sampling_args["stop"]} if self.sampling_args.get("stop") else {}),
-                        **({"presence_penalty": self.sampling_args["presence_penalty"]} if self.sampling_args.get("presence_penalty", 0) != 0 else {}),
-                        **({"frequency_penalty": self.sampling_args["frequency_penalty"]} if self.sampling_args.get("frequency_penalty", 0) != 0 else {}),
-                    },
+                    json=payload,
                 )
                 response.raise_for_status()
                 json_response = response.json()
@@ -113,7 +131,18 @@ class APILLM:
                 if "choices" not in json_response:
                     raise ValueError(f"Unexpected API response format. Got: {json_response}")
 
-                return json_response["choices"][0]["message"]["content"]
+                choice = json_response["choices"][0]
+                message = choice["message"]
+                content = message.get("content")
+                if content is None:
+                    raise ValueError(
+                        "API returned no message content. "
+                        "For reasoning models, increase max_tokens or reduce reasoning effort. "
+                        f"finish_reason={choice.get('finish_reason')}, "
+                        f"message_keys={sorted(message.keys())}"
+                    )
+
+                return content
 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code >= 500 and attempt < max_retries - 1:

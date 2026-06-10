@@ -346,8 +346,6 @@ async def main(
     max_turns = config.max_turns
     float_tol = config.float_tolerance
     verified_only = config.verified_only
-    temperature = config.sampling_args.temperature
-    max_tokens = config.sampling_args.max_tokens
 
     # Handle single csv or list of csvs
     csv_sources = config.csv_sources
@@ -381,10 +379,7 @@ async def main(
     base_questions_dir = Path(questions_dir)
 
     # Sampling args
-    sampling_args = {
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
+    sampling_args = config.teacher_sampling_args_dict()
 
     # Gather all valid CSV tasks
     tasks = gather_csv_tasks(

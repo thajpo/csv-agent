@@ -362,10 +362,7 @@ async def main(
 
     teacher_model = config.teacher_model
     max_turns = config.max_turns
-    sampling_args = {
-        "temperature": config.sampling_args.temperature,
-        "max_tokens": config.sampling_args.max_tokens,
-    }
+    sampling_args = config.teacher_sampling_args_dict()
 
     # Find all question files
     questions_dir_path = Path(questions_dir)

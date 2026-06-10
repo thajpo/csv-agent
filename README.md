@@ -256,8 +256,10 @@ Settings are in `src/core/config.py` (Pydantic models). Key fields:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `teacher_model` | `openai/gpt-oss-120b` | Model for episode generation |
-| `question_gen_model` | `openai/gpt-oss-120b` | Model for question generation |
+| `teacher_model` | `openai/gpt-5.5` | Model for episode generation |
+| `teacher_reasoning_effort` | `xhigh` | OpenRouter reasoning effort for teacher traces |
+| `teacher_max_tokens` | `16000` | Per-turn output budget for teacher traces, including reasoning tokens |
+| `question_gen_model` | `qwen/qwen3.7-max` | Model for question generation |
 | `max_turns` | `10` | Max conversation turns per episode |
 | `n_consistency` | `7` | Number of consistency traces for triangulation |
 | `n_question_slots` | `4` | Parallel questions per container |
