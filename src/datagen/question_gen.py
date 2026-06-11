@@ -579,7 +579,7 @@ def main(max_datasets: int | None = None, regenerate: bool = False):
     elif failure_count > 0:
         return 1
     else:
-    return 0
+        return 0
 
 
 def _set_even_difficulty_distribution() -> None:
