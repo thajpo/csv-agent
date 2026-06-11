@@ -43,6 +43,21 @@ class QuestionRecord(TypedDict, total=False):
     dataset_description: str | None
 
 
+def question_prompt_text(question: dict, *, prefer_mechanical: bool = False) -> str:
+    """Return the user-facing question text from a unified question record."""
+    fields = (
+        ("question_mechanical", "question_text", "question")
+        if prefer_mechanical
+        else ("question_text", "question_mechanical", "question")
+    )
+    for field in fields:
+        value = question.get(field)
+        if isinstance(value, str) and value.strip():
+            return value
+    question_id = question.get("id", "<no id>")
+    raise ValueError(f"Question {question_id} has no usable question text")
+
+
 def load_questions(path: str) -> list[QuestionRecord]:
     """Load questions from JSON file in the unified schema.
 

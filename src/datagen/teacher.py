@@ -36,6 +36,7 @@ from csv_spec import (
 )
 from csv_spec import hash_artifact
 from csv_spec import normalize_value
+from src.datagen.shared.questions_io import question_prompt_text
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +283,7 @@ def build_trace_dict(
         turns=turns,
         final_answer=final_state.submitted_answer,
         final_answer_hash=hash_artifact(final_state.submitted_answer)
-        if final_state.submitted_answer
+        if final_state.submitted_answer is not None
         else None,
         success=final_state.submitted_answer is not None,
     )
@@ -1147,7 +1148,7 @@ async def batch_triangulate(
 
             result = await triangulate_teacher(
                 csv_path=csv_path,
-                question=q_dict["question"],
+                question=question_prompt_text(q_dict),
                 hint=q_dict.get("hint", ""),
                 n_steps=q_dict.get("n_steps"),
                 difficulty=q_dict.get("difficulty"),

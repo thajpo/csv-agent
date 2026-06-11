@@ -9,6 +9,8 @@ from typing import Literal
 from csv_spec import TraceDict
 import logging
 
+from src.datagen.shared.questions_io import question_prompt_text
+
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +23,7 @@ class VerificationResult:
     traces: list[TraceDict]
     majority_answer_hash: str | None
     error: str | None
+    majority_count: int | None = None
 
 
 async def verify_question(
@@ -77,10 +80,7 @@ async def verify_synthetic(
 
         kwargs = dict(kwargs)
         float_tol = kwargs.pop("float_tol", config.float_tolerance)
-        # Use mechanical question or question_text if available
-        question_text = (
-            question.get("question_mechanical") or question.get("question_text") or ""
-        )
+        question_text = question_prompt_text(question, prefer_mechanical=True)
         hint = kwargs.pop("hint", question.get("hint"))
 
         trace, _conversation, _system, elapsed = await execute_teacher_trace(
@@ -196,7 +196,7 @@ async def verify_llm(
     try:
         result = await triangulate_teacher(
             csv_path=csv_path,
-            question=question.get("question_text", ""),
+            question=question_prompt_text(question),
             hint=question.get("hint") or "",
             n_consistency=n_traces,
             **kwargs,
@@ -211,6 +211,7 @@ async def verify_llm(
             traces=consistency_traces,
             majority_answer_hash=result.majority_answer_hash,
             error=None,
+            majority_count=result.majority_count,
         )
     except Exception as e:
         logger.error(f"verify_llm error: {e}")

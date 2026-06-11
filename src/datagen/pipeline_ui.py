@@ -15,6 +15,7 @@ from typing import Any
 from rich.panel import Panel
 from rich.syntax import Syntax
 
+from src.datagen.shared.questions_io import question_prompt_text
 from src.utils.console_ui import ConsoleUI, truncate_value
 
 
@@ -62,9 +63,10 @@ class QuestionGenUI(ConsoleUI):
 
     def print_question_panel(self, question_num: int, question: dict) -> None:
         """Print a question in a formatted panel."""
+        q_text = question_prompt_text(question)
         self.console.print(
             Panel(
-                f"[bold]{question['question']}[/bold]\n\n"
+                f"[bold]{q_text}[/bold]\n\n"
                 f"[dim]Steps:[/dim] {question['n_steps']}\n"
                 f"[dim]Hint:[/dim] {question['hint']}",
                 title=f"[bold cyan]Question {question_num} - {question['difficulty']}[/bold cyan]",
@@ -180,7 +182,7 @@ class EpisodeGenUI:
 
         difficulty = question["difficulty"]
         n_steps = question["n_steps"]
-        q_text = question["question"]
+        q_text = question_prompt_text(question)
         hint = question.get("hint", "")
 
         self.console.print("\n[bold magenta]" + "┌" + "─" * 58 + "┐[/bold magenta]")

@@ -342,6 +342,7 @@ async def main(
     difficulties: list[str] | None = None,
     retry_failed: bool = False,
     source: str | None = None,
+    fresh: bool = False,
 ):
     ui = EpisodeGenUI()
 
@@ -400,9 +401,20 @@ async def main(
     output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
-    # Fresh start unless append_output is explicitly requested
-    if not append_output and output_jsonl.exists():
+    if fresh and append_output:
+        ui.base.print_error("ERROR: --fresh and --append-output are mutually exclusive")
+        return 2
+
+    if output_jsonl.exists() and append_output:
+        ui.base.print_status(f"Append mode: keeping existing output {output_jsonl}")
+    elif output_jsonl.exists() and fresh:
         output_jsonl.unlink()
+    elif output_jsonl.exists():
+        ui.base.print_error(
+            f"ERROR: output already exists: {output_jsonl}\n"
+            "Use --fresh to overwrite it or --append-output to append new episodes."
+        )
+        return 2
 
     # Load manifest for caching
     manifest = DatagenManifest()
@@ -413,6 +425,8 @@ async def main(
             f"Manifest loaded: {stats['synthetic_success']} success, "
             f"{stats['synthetic_failure']} failures"
         )
+    if fresh:
+        ui.base.print_status("Fresh mode: bypassing manifest cache")
 
     # Cache dataset hashes to avoid recomputing
     dataset_hashes: dict[str, str] = {}
@@ -435,30 +449,35 @@ async def main(
             }
             questions = [q for q in questions if source_filters[source](q)]
 
-        # Filter out already-processed questions using manifest
         # Compute dataset hash (cached per dataset)
         if csv_path not in dataset_hashes:
             dataset_hashes[csv_path] = compute_dataset_hash(csv_path)
         dataset_hash = dataset_hashes[csv_path]
 
-        original_count = len(questions)
-        filtered_questions = []
-        for q in questions:
-            fingerprint = compute_synthetic_fingerprint_from_question(q, dataset_hash)
-            if fingerprint is None:
-                # Can't compute fingerprint (no template_name), include it
+        if not fresh:
+            # Filter out already-processed questions using manifest
+            original_count = len(questions)
+            filtered_questions = []
+            for q in questions:
+                fingerprint = compute_synthetic_fingerprint_from_question(
+                    q, dataset_hash
+                )
+                if fingerprint is None:
+                    # Can't compute fingerprint (no template_name), include it
+                    filtered_questions.append(q)
+                    continue
+                # include_failures=True means skip failures too (unless retry_failed)
+                if manifest.has_synthetic(
+                    fingerprint, include_failures=not retry_failed
+                ):
+                    continue  # Skip - already processed
                 filtered_questions.append(q)
-                continue
-            # Check manifest - include_failures=True means skip failures too (unless retry_failed)
-            if manifest.has_synthetic(fingerprint, include_failures=not retry_failed):
-                continue  # Skip - already processed
-            filtered_questions.append(q)
-        questions = filtered_questions
-        skipped = original_count - len(questions)
-        if skipped > 0:
-            ui.base.console.print(
-                f"  [dim]{dataset_name}: skipping {skipped} cached[/dim]"
-            )
+            questions = filtered_questions
+            skipped = original_count - len(questions)
+            if skipped > 0:
+                ui.base.console.print(
+                    f"  [dim]{dataset_name}: skipping {skipped} cached[/dim]"
+                )
 
         # Filter by difficulty if specified
         if difficulties:
@@ -653,6 +672,16 @@ if __name__ == "__main__":
         default=None,
         help="Only process questions for this source",
     )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Overwrite output and bypass manifest cache",
+    )
+    parser.add_argument(
+        "--append-output",
+        action="store_true",
+        help="Append generated episodes to an existing output file",
+    )
     args = parser.parse_args()
 
     try:
@@ -668,6 +697,8 @@ if __name__ == "__main__":
                     difficulties=args.difficulties,
                     retry_failed=args.retry_failed,
                     source=args.source,
+                    append_output=args.append_output,
+                    fresh=args.fresh,
                 )
             )
         )

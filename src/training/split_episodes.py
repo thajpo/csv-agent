@@ -26,6 +26,24 @@ from src.core.config import config
 logger = logging.getLogger(__name__)
 
 
+def _field_value(episode: EpisodeJSONL, field: str) -> str:
+    if field == "difficulty":
+        return str(episode.question.get("difficulty", "UNKNOWN"))
+    if field == "source":
+        return str(episode.source or episode.question.get("source") or "UNKNOWN")
+    if field.startswith("question."):
+        question_field = field.split(".", 1)[1]
+        return str(episode.question.get(question_field) or "UNKNOWN")
+    return str(getattr(episode, field, "UNKNOWN") or "UNKNOWN")
+
+
+def _stratification_key(episode: EpisodeJSONL, stratify_by: str) -> str:
+    fields = [field.strip() for field in stratify_by.split(",") if field.strip()]
+    if not fields:
+        raise ValueError("stratify_by must name at least one field")
+    return "|".join(_field_value(episode, field) for field in fields)
+
+
 def load_episodes(path: str, verified_only: bool = True) -> List[EpisodeJSONL]:
     """
     Load episodes from JSONL file.
@@ -128,22 +146,22 @@ def split_episodes(
     # Set random seed for reproducibility
     random.seed(seed)
 
-    # Group episodes by difficulty
-    difficulty_groups = defaultdict(list)
+    # Group episodes by the requested stratification key
+    stratified_groups = defaultdict(list)
     for episode in episodes:
-        difficulty = episode.question.get("difficulty", "UNKNOWN")
-        difficulty_groups[difficulty].append(episode)
+        key = _stratification_key(episode, stratify_by)
+        stratified_groups[key].append(episode)
 
     # Log distribution
-    difficulty_counts = {k: len(v) for k, v in difficulty_groups.items()}
-    logger.info(f"Episode distribution by difficulty: {difficulty_counts}")
+    stratified_counts = {k: len(v) for k, v in stratified_groups.items()}
+    logger.info(f"Episode distribution by {stratify_by}: {stratified_counts}")
 
     # Split each difficulty group proportionally
     train_episodes = []
     val_episodes = []
     test_episodes = []
 
-    for difficulty, group_episodes in difficulty_groups.items():
+    for group_key, group_episodes in stratified_groups.items():
         # Shuffle episodes in this difficulty group
         shuffled = list(group_episodes)
         random.shuffle(shuffled)
@@ -156,7 +174,7 @@ def split_episodes(
         if n_total <= 2:
             train_episodes.extend(shuffled)
             logger.warning(
-                f"Difficulty '{difficulty}' has only {n_total} episode(s), "
+                f"Stratum '{group_key}' has only {n_total} episode(s), "
                 f"placing all in training set"
             )
             continue
@@ -171,7 +189,7 @@ def split_episodes(
         test_episodes.extend(test_split)
 
         logger.debug(
-            f"Difficulty '{difficulty}': {n_total} total -> "
+            f"Stratum '{group_key}': {n_total} total -> "
             f"train={len(train_split)}, val={len(val_split)}, test={len(test_split)}"
         )
 
@@ -257,6 +275,15 @@ def main():
         help=f"Random seed for reproducibility (default: {config.split_seed})",
     )
     parser.add_argument(
+        "--stratify-by",
+        type=str,
+        default="difficulty",
+        help=(
+            "Comma-separated episode fields for stratification "
+            "(default: difficulty; e.g. difficulty,source,question.dataset)"
+        ),
+    )
+    parser.add_argument(
         "--include-unverified",
         action="store_true",
         help="Include unverified episodes (default: verified only)",
@@ -286,6 +313,7 @@ def main():
         train_ratio=args.train_ratio,
         val_ratio=args.val_ratio,
         test_ratio=args.test_ratio,
+        stratify_by=args.stratify_by,
         seed=args.seed,
     )
 

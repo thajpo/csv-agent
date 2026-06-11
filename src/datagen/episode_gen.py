@@ -40,7 +40,7 @@ from src.datagen.manifest import (
     compute_dataset_hash,
     compute_llm_fingerprint,
 )
-from src.datagen.shared.questions_io import load_questions
+from src.datagen.shared.questions_io import load_questions, question_prompt_text
 from src.datagen.shared.dataset_meta import (
     load_dataset_meta,
     generate_description_from_overview,
@@ -188,6 +188,7 @@ async def process_csv_task(
     task: CSVTask,
     teacher_model: str,
     n_consistency: int,
+    dynamic_triangulation: bool,
     max_turns: int,
     sampling_args: dict,
     float_tol: float,
@@ -218,7 +219,7 @@ async def process_csv_task(
         model=teacher_model,
         n_consistency=n_consistency,
         n_question_slots=config.n_question_slots,
-        dynamic_triangulation=config.dynamic_triangulation,
+        dynamic_triangulation=dynamic_triangulation,
         consistency_by_difficulty=config.triangulation_by_difficulty,
         dataset_description=task.dataset_description,
         data_overview=data_overview,
@@ -284,6 +285,7 @@ async def process_csv_task(
             traces=consistency_traces,
             majority_answer_hash=r.majority_answer_hash,
             error=None,
+            majority_count=r.majority_count,
         )
 
         # Use episode factory to create episode
@@ -328,6 +330,8 @@ async def main(
     skip_difficulty_filter: bool = False,
     difficulties: list[str] | None = None,
     retry_failed: bool = False,
+    fresh: bool = False,
+    append_output: bool = False,
 ):
     # Create global UI instance
     ui = EpisodeGenUI()
@@ -343,7 +347,9 @@ async def main(
 
     # config is already imported from src.core.config
     teacher_model = config.teacher_model
+    explicit_n_consistency = n_consistency is not None
     n_consistency = n_consistency if n_consistency is not None else config.n_consistency
+    dynamic_triangulation = config.dynamic_triangulation and not explicit_n_consistency
     max_turns = config.max_turns
     float_tol = config.float_tolerance
     verified_only = config.verified_only
@@ -365,8 +371,20 @@ async def main(
     output_jsonl = Path(output_path)
     output_jsonl.parent.mkdir(parents=True, exist_ok=True)
 
-    if output_jsonl.exists():
+    if fresh and append_output:
+        ui.base.print_error("ERROR: --fresh and --append-output are mutually exclusive")
+        return 2
+
+    if output_jsonl.exists() and append_output:
+        ui.base.print_status(f"Append mode: keeping existing output {output_jsonl}")
+    elif output_jsonl.exists() and fresh:
         output_jsonl.unlink()
+    elif output_jsonl.exists():
+        ui.base.print_error(
+            f"ERROR: output already exists: {output_jsonl}\n"
+            "Use --fresh to overwrite it or --append-output to append new episodes."
+        )
+        return 2
 
     # Get parent directory of questions (must be specified explicitly)
     if questions_dir is None:
@@ -407,30 +425,37 @@ async def main(
             f"Manifest loaded: {stats['llm_success']} success, "
             f"{stats['llm_failure']} failures"
         )
+    if fresh:
+        ui.base.print_status("Fresh mode: bypassing manifest cache")
 
     # Filter questions using manifest
     original_total = sum(len(t.questions) for t in tasks)
-    for task in tasks:
-        # Compute dataset hash (cached)
-        if task.csv_path not in dataset_hashes:
-            dataset_hashes[task.csv_path] = compute_dataset_hash(task.csv_path)
-        dataset_hash = dataset_hashes[task.csv_path]
+    if not fresh:
+        for task in tasks:
+            # Compute dataset hash (cached)
+            if task.csv_path not in dataset_hashes:
+                dataset_hashes[task.csv_path] = compute_dataset_hash(task.csv_path)
+            dataset_hash = dataset_hashes[task.csv_path]
 
-        filtered_questions = []
-        for q in task.questions:
-            question_text = q.get("question_text") or q.get("question_mechanical") or ""
-            fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
-            # include_failures=True means skip failures too (unless retry_failed)
-            if manifest.has_llm(fingerprint, include_failures=not retry_failed):
-                continue  # Skip - already processed
-            filtered_questions.append(q)
-        task.questions = filtered_questions
+            filtered_questions = []
+            for q in task.questions:
+                question_text = question_prompt_text(q)
+                fingerprint = compute_llm_fingerprint(question_text, dataset_hash)
+                # include_failures=True means skip failures too (unless retry_failed)
+                if manifest.has_llm(fingerprint, include_failures=not retry_failed):
+                    continue  # Skip - already processed
+                filtered_questions.append(q)
+            task.questions = filtered_questions
 
-    # Remove tasks with no questions after filtering
-    tasks = [t for t in tasks if t.questions]
-    new_total = sum(len(t.questions) for t in tasks)
-    if original_total > new_total:
-        ui.base.print_status(f"Skipping {original_total - new_total} cached questions")
+        # Remove tasks with no questions after filtering
+        tasks = [t for t in tasks if t.questions]
+        new_total = sum(len(t.questions) for t in tasks)
+        if original_total > new_total:
+            ui.base.print_status(f"Skipping {original_total - new_total} cached questions")
+    else:
+        for task in tasks:
+            if task.csv_path not in dataset_hashes:
+                dataset_hashes[task.csv_path] = compute_dataset_hash(task.csv_path)
 
     # Limit questions per dataset if specified
     if max_questions is not None:
@@ -458,7 +483,7 @@ async def main(
 
     # Always use container pool for efficiency
     max_concurrent = config.max_concurrent_containers
-    if config.dynamic_triangulation and config.triangulation_by_difficulty:
+    if dynamic_triangulation and config.triangulation_by_difficulty:
         from src.datagen.teacher import resolve_n_consistency
 
         max_consistency = n_consistency
@@ -526,6 +551,7 @@ async def main(
                 task=task,
                 teacher_model=teacher_model,
                 n_consistency=n_consistency,
+                dynamic_triangulation=dynamic_triangulation,
                 max_turns=max_turns,
                 sampling_args=sampling_args,
                 float_tol=float_tol,
@@ -581,7 +607,8 @@ async def main(
     # Write all episodes to output file
     total_verified = sum(1 for ep in all_episodes if ep.verified)
 
-    with open(output_jsonl, "w") as f:
+    write_mode = "a" if append_output else "w"
+    with open(output_jsonl, write_mode) as f:
         for episode in all_episodes:
             f.write(json.dumps(episode.model_dump(), default=str) + "\n")
 
@@ -649,6 +676,16 @@ if __name__ == "__main__":
         action="store_true",
         help="Retry questions that previously failed validation",
     )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Overwrite output and bypass manifest cache",
+    )
+    parser.add_argument(
+        "--append-output",
+        action="store_true",
+        help="Append generated episodes to an existing output file",
+    )
     args = parser.parse_args()
 
     try:
@@ -662,6 +699,8 @@ if __name__ == "__main__":
                     skip_difficulty_filter=args.skip_difficulty_filter,
                     difficulties=args.difficulties,
                     retry_failed=args.retry_failed,
+                    fresh=args.fresh,
+                    append_output=args.append_output,
                 )
             )
         )

@@ -105,7 +105,9 @@ async def create_episode(
         n_consistency_runs=len(consistency_traces),
         n_consistency_succeeded=n_succeeded,
         majority_answer_hash=verification_result.majority_answer_hash,
-        majority_count=_calculate_majority_count(
+        majority_count=verification_result.majority_count
+        if verification_result.majority_count is not None
+        else _calculate_majority_count(
             consistency_traces, verification_result.majority_answer_hash
         ),
         gold_matches_majority=verification_result.success

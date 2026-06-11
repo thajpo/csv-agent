@@ -743,6 +743,8 @@ def cmd_generate_episodes(
                     questions_dir=str(questions_dir),
                     output_path=str(episodes_file),
                     max_questions=max_questions,
+                    append_output=False,
+                    fresh=fresh,
                     source="template",
                 )
             )
@@ -775,6 +777,8 @@ def cmd_generate_episodes(
                     questions_dir=str(questions_dir),
                     output_path=str(episodes_file),
                     max_questions=max_questions,
+                    append_output=False,
+                    fresh=fresh,
                     source="procedural",
                 )
             )
@@ -816,6 +820,7 @@ def cmd_generate_episodes(
                     output_path=str(episodes_file),
                     max_questions=max_questions,
                     n_consistency=n_consistency,
+                    fresh=fresh,
                 )
             )
             if result != 0:
@@ -1417,7 +1422,10 @@ Examples:
     e_parser.add_argument(
         "--n-consistency",
         type=int,
-        help="No-hint consistency traces for LLM episodes; total traces are 1 teacher + this value",
+        help=(
+            "No-hint consistency traces for LLM episodes; total traces are "
+            "1 teacher + this value. Explicit values disable dynamic triangulation."
+        ),
     )
     e_parser.add_argument("--dry-run", action="store_true", help="Preview only")
     e_parser.add_argument(
