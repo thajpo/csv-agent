@@ -127,7 +127,7 @@ class Config(BaseModel):
     num_questions_to_generate: int = 15
     min_exploration_turns: int = 3  # Minimum turns before allowing question generation
     question_difficulty_distribution: Dict[str, float] = Field(
-        default={"EASY": 0.30, "MEDIUM": 0.30, "HARD": 0.20, "VERY_HARD": 0.20}
+        default={"EASY": 0.25, "MEDIUM": 0.25, "HARD": 0.25, "VERY_HARD": 0.25}
     )
     synthetic_verbalization_candidates: int = 5
     synthetic_skip_verbalization: bool = (

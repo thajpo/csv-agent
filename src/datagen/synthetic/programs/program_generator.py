@@ -99,6 +99,17 @@ def _generate_mechanical_description(ops: list[str]) -> str:
     return f"Execute program: {' → '.join(ops)}"
 
 
+def _difficulty_from_steps(n_steps: int) -> str:
+    """Map program chain length to the dataset difficulty buckets."""
+    if n_steps <= 3:
+        return "EASY"
+    if n_steps <= 6:
+        return "MEDIUM"
+    if n_steps <= 8:
+        return "HARD"
+    return "VERY_HARD"
+
+
 async def run_pipeline(
     csv_path: str,
     max_programs: int | None = None,
@@ -275,7 +286,7 @@ async def run_pipeline(
             "ground_truth_hashes": [answer_hash],
             "output_schema": _output_schema_for_op(ops[-1]),
             "n_steps": len(ops),
-            "difficulty": None,
+            "difficulty": _difficulty_from_steps(len(ops)),
             "dataset_description": dataset_description,
             "program_name": program["name"],
             "program_ops": ops,

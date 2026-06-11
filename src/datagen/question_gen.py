@@ -21,7 +21,11 @@ from datetime import datetime
 from src.core.model import APILLM
 from src.core.conversation import ConversationHistory, CodeCellResult
 from csv_spec import ExplorationTurn, ExplorationTrace
-from src.core.prompts import EXPLORATION_SYSTEM_PROMPT, get_exploration_continue_msg
+from src.core.prompts import (
+    EXPLORATION_SYSTEM_PROMPT,
+    format_difficulty_distribution,
+    get_exploration_continue_msg,
+)
 from src.utils.parsing import parse_execution_result, extract_python_cells
 
 from src.datagen.pipeline_ui import QuestionGenUI
@@ -231,11 +235,15 @@ async def explore_and_generate_questions(
     # Get pipeline parameters from config
     num_questions = config.num_questions_to_generate
     min_exploration_turns = config.min_exploration_turns
+    difficulty_distribution = format_difficulty_distribution(
+        num_questions, config.question_difficulty_distribution
+    )
 
     conversation = ConversationHistory(
         system_prompt=EXPLORATION_SYSTEM_PROMPT.format(
             dataset_description=dataset_description,
             num_questions=num_questions,
+            difficulty_distribution=difficulty_distribution,
         ),
         max_messages=100,
         max_context_tokens=config.max_context_tokens,
@@ -571,7 +579,27 @@ def main(max_datasets: int | None = None, regenerate: bool = False):
     elif failure_count > 0:
         return 1
     else:
-        return 0
+    return 0
+
+
+def _set_even_difficulty_distribution() -> None:
+    config.question_difficulty_distribution = {
+        "EASY": 0.25,
+        "MEDIUM": 0.25,
+        "HARD": 0.25,
+        "VERY_HARD": 0.25,
+    }
+
+
+def configure_generation_targets(
+    num_questions: int | None = None,
+    even_difficulty: bool = False,
+) -> None:
+    """Apply one-run generation target overrides to the global config."""
+    if num_questions is not None:
+        config.num_questions_to_generate = num_questions
+    if even_difficulty:
+        _set_even_difficulty_distribution()
 
 
 if __name__ == "__main__":
@@ -589,9 +617,24 @@ if __name__ == "__main__":
         action="store_true",
         help="Regenerate questions even if episodes already exist for the dataset",
     )
+    parser.add_argument(
+        "--num-questions",
+        type=int,
+        default=None,
+        help=f"Questions per dataset (default: {config.num_questions_to_generate})",
+    )
+    parser.add_argument(
+        "--even-difficulty",
+        action="store_true",
+        help="Use an even EASY/MEDIUM/HARD/VERY_HARD target distribution",
+    )
     args = parser.parse_args()
 
     try:
+        configure_generation_targets(
+            num_questions=args.num_questions,
+            even_difficulty=args.even_difficulty,
+        )
         sys.exit(main(max_datasets=args.max_datasets, regenerate=args.regenerate))
     except KeyboardInterrupt:
         print("\n\n🛑 Interrupted by user")

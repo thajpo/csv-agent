@@ -534,6 +534,8 @@ def cmd_generate_questions(
     max_datasets: int | None,
     dry_run: bool,
     regenerate: bool = False,
+    num_questions: int | None = None,
+    even_difficulty: bool = False,
 ):
     """Generate questions by mode."""
     template, procedural, llm_gen = _modes_from_flag(mode)
@@ -562,6 +564,11 @@ def cmd_generate_questions(
             console.print("  [blue]llm_gen[/blue]: Will run LLM exploration")
             console.print(f"    Max datasets: {max_datasets or 'all'}")
             console.print(f"    Output: {config.questions_llm_gen_dir}/")
+            console.print(
+                f"    Questions per dataset: {num_questions or config.num_questions_to_generate}"
+            )
+            if even_difficulty:
+                console.print("    Difficulty: even split")
             if regenerate:
                 console.print("    [yellow]Mode: Regenerate (will overwrite)[/yellow]")
         console.print("\n[dim]No changes made (dry run)[/dim]")
@@ -588,8 +595,15 @@ def cmd_generate_questions(
 
     if llm_gen:
         console.print("[bold]Generating LLM questions...[/bold]")
-        from src.datagen.question_gen import main as llm_gen_main
+        from src.datagen.question_gen import (
+            configure_generation_targets,
+            main as llm_gen_main,
+        )
 
+        configure_generation_targets(
+            num_questions=num_questions,
+            even_difficulty=even_difficulty,
+        )
         result = llm_gen_main(max_datasets=max_datasets, regenerate=regenerate)
         if result != 0:
             exit_code = result
@@ -680,6 +694,7 @@ def cmd_generate_episodes(
     max_questions: int | None,
     dry_run: bool,
     fresh: bool = False,
+    n_consistency: int | None = None,
 ):
     """Generate verified episodes via teacher triangulation."""
     template, procedural, llm_gen = _modes_from_flag(mode)
@@ -800,6 +815,7 @@ def cmd_generate_episodes(
                     questions_dir=str(questions_dir),
                     output_path=str(episodes_file),
                     max_questions=max_questions,
+                    n_consistency=n_consistency,
                 )
             )
             if result != 0:
@@ -1376,6 +1392,16 @@ Examples:
         action="store_true",
         help="Explicit overwrite mode for question outputs",
     )
+    q_parser.add_argument(
+        "--num-questions",
+        type=int,
+        help="Questions per dataset for LLM question generation",
+    )
+    q_parser.add_argument(
+        "--even-difficulty",
+        action="store_true",
+        help="Use an even EASY/MEDIUM/HARD/VERY_HARD target distribution for LLM questions",
+    )
 
     e_parser = gen_sub.add_parser("episodes", help="Generate episodes")
     e_mode = e_parser.add_mutually_exclusive_group(required=True)
@@ -1388,6 +1414,11 @@ Examples:
     e_mode.add_argument("--llm-gen", action="store_const", dest="mode", const="llm_gen")
     e_mode.add_argument("--all", action="store_const", dest="mode", const="all")
     e_parser.add_argument("--max-questions", type=int, help="Max per dataset")
+    e_parser.add_argument(
+        "--n-consistency",
+        type=int,
+        help="No-hint consistency traces for LLM episodes; total traces are 1 teacher + this value",
+    )
     e_parser.add_argument("--dry-run", action="store_true", help="Preview only")
     e_parser.add_argument(
         "--fresh", action="store_true", help="Start fresh (overwrite existing)"
@@ -1530,6 +1561,8 @@ def main():
                 max_datasets=args.max_datasets,
                 dry_run=args.dry_run,
                 regenerate=args.regenerate,
+                num_questions=args.num_questions,
+                even_difficulty=args.even_difficulty,
             )
         elif args.gen_type == "episodes":
             return cmd_generate_episodes(
@@ -1537,6 +1570,7 @@ def main():
                 max_questions=args.max_questions,
                 dry_run=args.dry_run,
                 fresh=args.fresh,
+                n_consistency=args.n_consistency,
             )
 
     elif args.command == "run":

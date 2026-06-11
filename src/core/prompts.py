@@ -9,6 +9,39 @@ import pandas as pd
 from csv_spec import Question
 
 
+DIFFICULTY_STEP_LABELS = {
+    "EASY": "1-3 steps",
+    "MEDIUM": "4-6 steps",
+    "HARD": "7-8 steps",
+    "VERY_HARD": "9+ steps",
+}
+
+
+def format_difficulty_distribution(
+    num_questions: int, distribution: dict[str, float]
+) -> str:
+    """Format target difficulty counts for the question-generation prompt."""
+    allocations = []
+    base_total = 0
+    for idx, (difficulty, fraction) in enumerate(distribution.items()):
+        exact = num_questions * fraction
+        base = int(exact)
+        allocations.append([idx, difficulty, base, exact - base])
+        base_total += base
+
+    remainder = num_questions - base_total
+    if remainder > 0:
+        allocations.sort(key=lambda row: (-row[3], row[0]))
+        for i in range(remainder):
+            allocations[i][2] += 1
+
+    allocations.sort(key=lambda row: row[0])
+    return "\n".join(
+        f"- {count} {difficulty} ({DIFFICULTY_STEP_LABELS.get(difficulty, 'steps vary')})"
+        for _, difficulty, count, _ in allocations
+    )
+
+
 # ============= Teacher Prompts =============
 
 TEACHER_TUTOR_PROMPT = """=== HOOKS REQUIRED ===
@@ -235,10 +268,7 @@ Your Task Flow:
 4. GENERATE: Only when fully ready, output the {num_questions} questions in the specified JSON format.
 
 Questions Distribution:
-- 10 EASY (1-3 steps)
-- 10 MEDIUM (4-6 steps)
-- 7 HARD (7-8 steps)
-- 3 VERY_HARD (9+ steps)
+{difficulty_distribution}
 
 Please generate at least {num_questions} questions in total.
 
@@ -439,7 +469,14 @@ def build_system_prompt(
             question_text=question.question_text,
         )
     elif mode == "question-gen":
-        return EXPLORATION_SYSTEM_PROMPT.format(**base_args)
+        return EXPLORATION_SYSTEM_PROMPT.format(
+            **base_args,
+            num_questions=30,
+            difficulty_distribution=format_difficulty_distribution(
+                30,
+                {"EASY": 0.25, "MEDIUM": 0.25, "HARD": 0.25, "VERY_HARD": 0.25},
+            ),
+        )
     else:
         raise ValueError(
             f"Unknown mode '{mode}' (expected: teacher-tutor, teacher-consistency, student, question-gen)"

@@ -54,6 +54,26 @@ def test_canonical_modes_parse(argv, expected_mode):
     assert args.mode == expected_mode
 
 
+def test_generation_target_flags_parse():
+    q_args = _parse(
+        [
+            "generate",
+            "questions",
+            "--llm-gen",
+            "--num-questions",
+            "40",
+            "--even-difficulty",
+        ]
+    )
+    assert q_args.num_questions == 40
+    assert q_args.even_difficulty is True
+
+    e_args = _parse(
+        ["generate", "episodes", "--llm-gen", "--n-consistency", "2"]
+    )
+    assert e_args.n_consistency == 2
+
+
 def test_generate_questions_fail_fast_on_existing_outputs(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     existing = Path("data/questions/template/sample/questions.json")

@@ -12,6 +12,7 @@ Usage (via CLI):
 """
 
 import asyncio
+import argparse
 import json
 import sys
 import signal
@@ -603,3 +604,66 @@ async def main(
     ui.base.print_empty_line()
 
     return 0
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Generate LLM episodes")
+    parser.add_argument(
+        "--questions-dir",
+        type=str,
+        required=True,
+        help="Directory containing question files",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        required=True,
+        help="Output JSONL file path",
+    )
+    parser.add_argument(
+        "--n-consistency",
+        type=int,
+        default=None,
+        help="No-hint consistency traces; total traces are 1 teacher + this value",
+    )
+    parser.add_argument(
+        "--max-questions",
+        type=int,
+        default=None,
+        help="Max questions per dataset",
+    )
+    parser.add_argument(
+        "--skip-difficulty-filter",
+        action="store_true",
+        help="Use all questions instead of applying target difficulty distribution per dataset",
+    )
+    parser.add_argument(
+        "--difficulties",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Filter to specific difficulties (e.g. HARD VERY_HARD)",
+    )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="Retry questions that previously failed validation",
+    )
+    args = parser.parse_args()
+
+    try:
+        sys.exit(
+            asyncio.run(
+                main(
+                    questions_dir=args.questions_dir,
+                    output_path=args.output,
+                    n_consistency=args.n_consistency,
+                    max_questions=args.max_questions,
+                    skip_difficulty_filter=args.skip_difficulty_filter,
+                    difficulties=args.difficulties,
+                    retry_failed=args.retry_failed,
+                )
+            )
+        )
+    except KeyboardInterrupt:
+        sys.exit(0)
