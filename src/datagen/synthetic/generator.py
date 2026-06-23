@@ -43,6 +43,7 @@ from csv_spec import (
     TimingMetadataDict,
 )
 from src.gui.progress_writer import ProgressWriter, NoOpProgressWriter
+from src.datagen.process_report import build_process_report
 from src.datagen.shared.dataset_meta import (
     load_dataset_meta,
     generate_description_from_overview,
@@ -553,6 +554,13 @@ class CompositionalQuestionGenerator:
                     validation = accepted.get("validation", {})
                     elapsed = validation.get("elapsed", 0.0)
 
+                    triangulation = TriangulationMetadataDict(
+                        n_consistency_runs=0,
+                        n_consistency_succeeded=0,
+                        majority_answer_hash=accepted.get("ground_truth_hash"),
+                        majority_count=1,
+                        gold_matches_majority=True,
+                    )
                     episode = EpisodeJSONL(
                         episode_id=str(uuid.uuid4()),
                         timestamp=datetime.now(),
@@ -579,18 +587,19 @@ class CompositionalQuestionGenerator:
                         gold_trace=accepted["_trace"],
                         consistency_traces=[],  # No triangulation needed - we have deterministic ground truth
                         verified=True,  # Verified by ground truth match
-                        triangulation=TriangulationMetadataDict(
-                            n_consistency_runs=0,
-                            n_consistency_succeeded=0,
-                            majority_answer_hash=accepted.get("ground_truth_hash"),
-                            majority_count=1,
-                            gold_matches_majority=True,
-                        ),
+                        triangulation=triangulation,
                         timing=TimingMetadataDict(
                             gold_elapsed=elapsed,
                             consistency_elapsed=[],
                             total_elapsed=elapsed,
                             avg_elapsed=elapsed,
+                        ),
+                        process_report=build_process_report(
+                            source=accepted.get("source") or "template",
+                            gold_trace=accepted["_trace"],
+                            consistency_traces=[],
+                            verified=True,
+                            majority_count=triangulation["majority_count"],
                         ),
                         source=accepted.get("source"),
                     )

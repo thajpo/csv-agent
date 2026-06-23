@@ -12,6 +12,7 @@ from csv_spec import (
     TimingMetadataDict,
 )
 from src.datagen.shared.verification import VerificationResult, resolve_question_prompt
+from src.datagen.process_report import build_process_report
 
 
 ALLOWED_SOURCES = ("llm_gen", "template", "procedural")
@@ -90,6 +91,14 @@ async def create_episode(
         gold_matches_majority=verification_result.success
         and verification_result.match is True,
     )
+    verified = verification_result.success and verification_result.match is True
+    process_report = build_process_report(
+        source=source,
+        gold_trace=gold_trace,
+        consistency_traces=consistency_traces,
+        verified=verified,
+        majority_count=triangulation["majority_count"],
+    )
 
     # Build timing metadata (defaults if not available)
     timing = TimingMetadataDict(
@@ -107,9 +116,10 @@ async def create_episode(
         question=qa_dict,
         gold_trace=gold_trace,
         consistency_traces=consistency_traces,
-        verified=verification_result.success and verification_result.match is True,
+        verified=verified,
         triangulation=triangulation,
         timing=timing,
+        process_report=process_report,
         source=source,
     )
 

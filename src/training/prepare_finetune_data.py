@@ -196,19 +196,25 @@ def to_sft_interleaved(episode: dict[str, Any]) -> dict[str, Any] | None:
     return {"messages": messages}
 
 
-def to_prm_samples(episode: dict[str, Any]) -> list[dict[str, Any]]:
+DEFAULT_PRM_CONFIDENCES = ("gold", "strong")
+
+
+def to_prm_samples(
+    episode: dict[str, Any],
+    allowed_confidences: tuple[str, ...] = DEFAULT_PRM_CONFIDENCES,
+) -> list[dict[str, Any]]:
     """
     Convert episode to PRM (Process Reward Model) samples.
 
-    Format: Each hook/step becomes a scored sample.
-    Verified episodes get positive labels, unverified get negative.
+    Format: Each labeled process-report step becomes a scored sample.
     """
     question = episode.get("question", {})
     gold_trace = episode.get("gold_trace") or episode.get("teacher_gold_trace", {})
     turns = gold_trace.get("turns", [])
-    verified = episode.get("verified", False)
+    process_report = episode.get("process_report") or {}
+    process_steps = process_report.get("steps", [])
 
-    if not turns:
+    if not turns or not process_steps:
         return []
 
     question_text = question.get("question_text", "")
@@ -224,39 +230,35 @@ def to_prm_samples(episode: dict[str, Any]) -> list[dict[str, Any]]:
         user_content += f"\n\nHint: {hint}"
     prefix_messages.append({"role": "user", "content": user_content})
 
+    steps_by_turn: dict[int, list[dict[str, Any]]] = {}
+    for step in process_steps:
+        if step.get("label") is None:
+            continue
+        if step.get("confidence") not in allowed_confidences:
+            continue
+        steps_by_turn.setdefault(int(step.get("turn_index", 0)), []).append(step)
+
     for turn_idx, turn in enumerate(turns):
         code = turn.get("code", "")
         execution = turn.get("execution", {})
-        hooks = execution.get("hooks", [])
-        submitted = execution.get("submitted_answer")
         stdout = execution.get("stdout", "")
 
-        for hook in hooks:
+        for step in steps_by_turn.get(turn_idx, []):
             samples.append(
                 {
                     "prefix": json.dumps(prefix_messages),
                     "turn_index": turn_idx,
-                    "step_type": "hook",
-                    "code_line": hook.get("code_line", ""),
-                    "variable_name": hook.get("variable_name"),
-                    "value": hook.get("value"),
-                    "value_hash": hook.get("value_hash"),
-                    "label": 1.0 if verified else 0.0,
-                    "episode_id": episode.get("episode_id"),
-                }
-            )
-
-        if submitted is not None:
-            samples.append(
-                {
-                    "prefix": json.dumps(prefix_messages),
-                    "turn_index": turn_idx,
-                    "step_type": "submit",
-                    "code_line": "submit(...)",
-                    "variable_name": "answer",
-                    "value": submitted,
-                    "value_hash": gold_trace.get("final_answer_hash"),
-                    "label": 1.0 if verified else 0.0,
+                    "step_index": step.get("step_index"),
+                    "step_type": step.get("step_type"),
+                    "code_line": step.get("code_line", ""),
+                    "variable_name": step.get("variable_name"),
+                    "semantic_role": step.get("semantic_role"),
+                    "value": step.get("value"),
+                    "value_hash": step.get("value_hash"),
+                    "label": step.get("label"),
+                    "confidence": step.get("confidence"),
+                    "label_source": step.get("label_source"),
+                    "evidence": step.get("evidence", {}),
                     "episode_id": episode.get("episode_id"),
                 }
             )
@@ -273,6 +275,7 @@ def to_prm_samples(episode: dict[str, Any]) -> list[dict[str, Any]]:
 def convert_episodes(
     episodes: list[dict[str, Any]],
     format_type: str,
+    prm_confidences: tuple[str, ...] = DEFAULT_PRM_CONFIDENCES,
 ) -> list[dict[str, Any]]:
     """Convert episodes to specified training format."""
     results = []
@@ -289,7 +292,7 @@ def convert_episodes(
                 results.append(result)
 
         elif format_type == "prm":
-            samples = to_prm_samples(episode)
+            samples = to_prm_samples(episode, allowed_confidences=prm_confidences)
             results.extend(samples)
 
         else:
@@ -329,6 +332,13 @@ def main():
     parser.add_argument(
         "--include-unverified", action="store_true", help="Include unverified episodes"
     )
+    parser.add_argument(
+        "--prm-confidence",
+        nargs="+",
+        default=list(DEFAULT_PRM_CONFIDENCES),
+        choices=["gold", "strong", "weak", "unlabeled"],
+        help="Process-report confidence levels to export for PRM format",
+    )
 
     args = parser.parse_args()
 
@@ -344,7 +354,11 @@ def main():
         return
 
     print(f"Converting to {args.format} format...")
-    results = convert_episodes(episodes, args.format)
+    results = convert_episodes(
+        episodes,
+        args.format,
+        prm_confidences=tuple(args.prm_confidence),
+    )
     print(f"Generated {len(results)} training samples")
 
     save_jsonl(results, args.output)

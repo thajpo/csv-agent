@@ -51,6 +51,48 @@
     "majority_count": 0,
     "gold_matches_majority": true
   },
+  "process_report": {
+    "version": "prm_process_report_v1",
+    "source": "template",
+    "summary": {
+      "total_steps": 1,
+      "labeled_steps": 1,
+      "gold_steps": 1,
+      "strong_steps": 0,
+      "weak_steps": 0,
+      "unlabeled_steps": 0,
+      "positive_steps": 1,
+      "negative_steps": 0
+    },
+    "steps": [
+      {
+        "step_index": 0,
+        "turn_index": 0,
+        "hook_index": null,
+        "step_type": "submit",
+        "code_line": "submit(...)",
+        "variable_name": "answer",
+        "value": 42.5,
+        "value_hash": "answerhash-001",
+        "description": "Final submitted answer",
+        "depends_on": [],
+        "semantic_role": "final_answer",
+        "label": 1.0,
+        "confidence": "gold",
+        "label_source": "deterministic_process",
+        "evidence": {
+          "final_verified": true,
+          "trace_success": true,
+          "code_line_grounded": true,
+          "dependency_valid": true,
+          "duplicate": false,
+          "consensus_matches": 0,
+          "consensus_total": 0,
+          "reasons": []
+        }
+      }
+    ]
+  },
   "timing": {
     "gold_elapsed": 0.0,
     "consistency_elapsed": [],
