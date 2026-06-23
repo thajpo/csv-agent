@@ -25,6 +25,10 @@ from csv_spec.types import (
     CodeDiffDict,
     TriangulationMetadataDict,
     TimingMetadataDict,
+    ProcessStepEvidenceDict,
+    ProcessStepReportDict,
+    ProcessReportSummaryDict,
+    ProcessReportDict,
     # Diagnostic types
     FailureCategory,
     AnswerClusterDict,
@@ -65,6 +69,10 @@ __all__ = [
     "CodeDiffDict",
     "TriangulationMetadataDict",
     "TimingMetadataDict",
+    "ProcessStepEvidenceDict",
+    "ProcessStepReportDict",
+    "ProcessReportSummaryDict",
+    "ProcessReportDict",
     # Diagnostic types
     "FailureCategory",
     "AnswerClusterDict",

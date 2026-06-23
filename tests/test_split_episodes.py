@@ -32,6 +32,21 @@ def _episode(episode_id: str, source: str) -> EpisodeJSONL:
             "majority_count": 0,
             "gold_matches_majority": True,
         },
+        process_report={
+            "version": "prm_process_report_v1",
+            "source": source,
+            "summary": {
+                "total_steps": 0,
+                "labeled_steps": 0,
+                "gold_steps": 0,
+                "strong_steps": 0,
+                "weak_steps": 0,
+                "unlabeled_steps": 0,
+                "positive_steps": 0,
+                "negative_steps": 0,
+            },
+            "steps": [],
+        },
         timing={
             "gold_elapsed": 0.0,
             "consistency_elapsed": [],

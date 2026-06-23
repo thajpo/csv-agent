@@ -1,7 +1,7 @@
 # current.md
 
 Lean Flow canonical planning file.
-Last updated: 2026-02-17
+Last updated: 2026-06-23
 
 ## Institutional Knowledge
 - [2026-02-08] Repo default: fail-fast contracts over backward-compat shims.
@@ -69,6 +69,7 @@ notes:
 ## Specd
 - SP-001 Unify Episode Generation Pipeline | status: issued | issue: #31
 - SP-002 CLI-Only Cleanup (Remove GUI + Dead-End Tools) | status: issued | issue: #32
+- First-class PRM process reports | status: issued | issue: #34
 
 ## Recovery Notes
 - Prior planning content was heavily compressed to reduce noise and keep active work scannable.

@@ -146,6 +146,64 @@ class TimingMetadataDict(TypedDict):
     avg_elapsed: float
 
 
+# ============= Process Report Types =============
+
+
+class ProcessStepEvidenceDict(TypedDict, total=False):
+    """Evidence used to assign a process-step label."""
+
+    final_verified: bool
+    trace_success: bool
+    code_line_grounded: bool
+    dependency_valid: bool
+    duplicate: bool
+    consensus_matches: int
+    consensus_total: int
+    reasons: list[str]
+
+
+class ProcessStepReportDict(TypedDict, total=False):
+    """One labeled or unlabeled process step derived from trace evidence."""
+
+    step_index: int
+    turn_index: int
+    hook_index: int | None
+    step_type: Literal["hook", "submit"]
+    code_line: str
+    variable_name: str | None
+    value: Any
+    value_hash: str | None
+    description: str | None
+    depends_on: list[str]
+    semantic_role: str | None
+    label: float | None
+    confidence: Literal["gold", "strong", "weak", "unlabeled"]
+    label_source: str
+    evidence: ProcessStepEvidenceDict
+
+
+class ProcessReportSummaryDict(TypedDict):
+    """Aggregate process-label counts for one episode."""
+
+    total_steps: int
+    labeled_steps: int
+    gold_steps: int
+    strong_steps: int
+    weak_steps: int
+    unlabeled_steps: int
+    positive_steps: int
+    negative_steps: int
+
+
+class ProcessReportDict(TypedDict):
+    """Canonical PRM process report stored on each episode."""
+
+    version: str
+    source: Literal["llm_gen", "template", "procedural"]
+    summary: ProcessReportSummaryDict
+    steps: list[ProcessStepReportDict]
+
+
 # ============= Diagnostic Types =============
 
 
@@ -339,6 +397,7 @@ class EpisodeJSONL(BaseModel):
     verified: bool
     triangulation: TriangulationMetadataDict
     timing: TimingMetadataDict
+    process_report: ProcessReportDict
 
     # Provenance (optional)
     source: str | None = None  # "synthetic" or "llm" - tracks question origin

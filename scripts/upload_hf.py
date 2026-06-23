@@ -34,6 +34,7 @@ def episode_to_hf_row(episode: dict) -> dict:
     """Convert a canonical episode to a stable HF row."""
     question = episode.get("question") or {}
     triangulation = episode.get("triangulation") or {}
+    process_summary = (episode.get("process_report") or {}).get("summary") or {}
     return {
         "episode_id": episode.get("episode_id", ""),
         "source": episode.get("source") or "",
@@ -45,6 +46,12 @@ def episode_to_hf_row(episode: dict) -> dict:
         "template_name": question.get("template_name") or "",
         "n_steps": int(question.get("n_steps") or 0),
         "majority_count": int(triangulation.get("majority_count") or 0),
+        "process_total_steps": int(process_summary.get("total_steps") or 0),
+        "process_labeled_steps": int(process_summary.get("labeled_steps") or 0),
+        "process_gold_steps": int(process_summary.get("gold_steps") or 0),
+        "process_strong_steps": int(process_summary.get("strong_steps") or 0),
+        "process_weak_steps": int(process_summary.get("weak_steps") or 0),
+        "process_unlabeled_steps": int(process_summary.get("unlabeled_steps") or 0),
         "episode_json": json.dumps(episode, default=str),
     }
 
@@ -117,6 +124,14 @@ def dataset_stats(dataset: DatasetDict) -> dict:
         "difficulties": {},
         "sources": {},
         "question_datasets": {},
+        "process": {
+            "total_steps": 0,
+            "labeled_steps": 0,
+            "gold_steps": 0,
+            "strong_steps": 0,
+            "weak_steps": 0,
+            "unlabeled_steps": 0,
+        },
         "csv_sources": set(),
     }
     for split_name, split_dataset in dataset.items():
@@ -133,6 +148,18 @@ def dataset_stats(dataset: DatasetDict) -> dict:
             question_dataset = row.get("question_dataset") or "UNKNOWN"
             stats["question_datasets"][question_dataset] = (
                 stats["question_datasets"].get(question_dataset, 0) + 1
+            )
+            stats["process"]["total_steps"] += int(row.get("process_total_steps") or 0)
+            stats["process"]["labeled_steps"] += int(
+                row.get("process_labeled_steps") or 0
+            )
+            stats["process"]["gold_steps"] += int(row.get("process_gold_steps") or 0)
+            stats["process"]["strong_steps"] += int(
+                row.get("process_strong_steps") or 0
+            )
+            stats["process"]["weak_steps"] += int(row.get("process_weak_steps") or 0)
+            stats["process"]["unlabeled_steps"] += int(
+                row.get("process_unlabeled_steps") or 0
             )
             if row.get("csv_source"):
                 stats["csv_sources"].add(row["csv_source"])
@@ -211,6 +238,10 @@ Difficulty distribution:
 Source distribution:
 
 {json.dumps(stats.get("sources", {}), indent=2)}
+
+Process report totals:
+
+{json.dumps(stats.get("process", {}), indent=2)}
 
 Distinct CSV sources: `{stats["csv_sources"]}`
 
