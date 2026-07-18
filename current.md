@@ -67,7 +67,8 @@ notes:
 - open issue #9 (Dataset-Quality Snapshot) should be used in this phase.
 
 ## Specd
-- no active specd items
+
+- HF snapshot authority and Git data cleanup | status: issued | issue: #36
 
 ## Recovery Notes
 - Prior planning content was heavily compressed to reduce noise and keep active work scannable.

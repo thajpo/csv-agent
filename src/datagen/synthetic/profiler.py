@@ -256,7 +256,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", default="data/csv/data.csv")
+    parser.add_argument("--csv", default="data/fixtures/base/data.csv")
     args = parser.parse_args()
 
     profiler = DataProfiler()

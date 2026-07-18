@@ -59,7 +59,7 @@ async def test_question(q, csv_path, condition):
 
 async def main():
     """Test with 2 questions."""
-    csv_path = "data/csv/data.csv"
+    csv_path = "data/fixtures/base/data.csv"
     print("Procedural Questions: Verbalization Impact Test")
     print("=" * 70)
 

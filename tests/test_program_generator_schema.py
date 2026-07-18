@@ -40,7 +40,7 @@ async def temp_output_dir():
 async def test_program_generator_outputs_unified_schema(temp_output_dir):
     """Test that program generator outputs unified schema questions."""
     # Use a test CSV
-    csv_path = "data/csv/data.csv"
+    csv_path = "data/fixtures/base/data.csv"
 
     # Skip if test data doesn't exist
     if not Path(csv_path).exists():
@@ -80,7 +80,7 @@ async def test_program_generator_outputs_unified_schema(temp_output_dir):
 @pytest.mark.asyncio
 async def test_program_questions_pass_validation(temp_output_dir):
     """Test that generated questions pass schema validation."""
-    csv_path = "data/csv/data.csv"
+    csv_path = "data/fixtures/base/data.csv"
 
     if not Path(csv_path).exists():
         pytest.skip(f"Test CSV not found: {csv_path}")
@@ -111,7 +111,7 @@ async def test_program_questions_pass_validation(temp_output_dir):
 @pytest.mark.asyncio
 async def test_program_questions_saved_to_correct_location(temp_output_dir):
     """Test that questions are saved to data/questions_synthetic/{dataset}/questions.json"""
-    csv_path = "data/csv/data.csv"
+    csv_path = "data/fixtures/base/data.csv"
 
     if not Path(csv_path).exists():
         pytest.skip(f"Test CSV not found: {csv_path}")

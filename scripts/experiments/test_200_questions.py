@@ -75,7 +75,7 @@ async def quick_verify(question, csv_path):
 
 async def main():
     """Generate and test 200 procedural questions."""
-    csv_path = "data/csv/data.csv"
+    csv_path = "data/fixtures/base/data.csv"
     n_questions = 200
 
     print("=" * 70)

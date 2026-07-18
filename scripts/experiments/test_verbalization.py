@@ -98,7 +98,7 @@ async def test_dataset(csv_path: str, dataset_name: str, max_questions: int = 20
 async def main():
     """Test verbalization on 3 datasets."""
     datasets = [
-        ("data/csv/data.csv", "Base Dataset"),
+        ("data/fixtures/base/data.csv", "Base Dataset"),
         ("data/kaggle/fedesoriano_heart-failure-prediction/data.csv", "Heart Failure"),
         ("data/kaggle/gregorut_videogamesales/data.csv", "Video Game Sales"),
     ]

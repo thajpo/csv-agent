@@ -11,7 +11,7 @@ Usage:
     uv run python -m scripts.evaluate_model \\
         --model <your-model> \\
         --episodes data/fixtures/mock_episodes.jsonl \\
-        --csv data/mock/data.csv \\
+        --csv data/fixtures/mock/data.csv \\
         --format json \\
         --output eval_results/report.json
 """

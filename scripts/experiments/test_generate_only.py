@@ -7,7 +7,7 @@ from src.datagen.synthetic.programs.program_generator import run_pipeline
 
 async def main():
     """Generate and inspect procedural questions."""
-    csv_path = "data/csv/data.csv"
+    csv_path = "data/fixtures/base/data.csv"
     print("Generating procedural questions...")
     print("=" * 60)
 

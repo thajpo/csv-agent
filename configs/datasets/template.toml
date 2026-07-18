@@ -1,0 +1,5 @@
+repo = "ThaJpo/csv-agent-template-episodes"
+revision = "e19fadf8d713c5afb7fe1476e2160b9bece1233a"
+train_split = "train"
+validation_split = "val"
+test_split = "test"

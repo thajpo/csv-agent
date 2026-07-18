@@ -19,7 +19,7 @@ from src.envs.container_pool import MultiTenantContainer, WorkerAdapter
 async def container():
     """Create a multi-tenant container for testing (module-scoped for speed)."""
     c = MultiTenantContainer(
-        csv_path="data/csv/data.csv",
+        csv_path="data/fixtures/base/data.csv",
         n_workers=3,
     )
     await c.start()
@@ -224,7 +224,7 @@ class TestSwitchCSV:
         original_shape = result1.strip()
 
         # Switch to same CSV (just to test the mechanism)
-        await container.switch_csv("data/csv/data.csv")
+        await container.switch_csv("data/fixtures/base/data.csv")
 
         # Should still work and have the data
         result2 = await container.run_on_worker(0, "df.shape")
@@ -239,7 +239,7 @@ class TestSwitchCSV:
         assert "42" in result1
 
         # Switch CSV
-        await container.switch_csv("data/csv/data.csv")
+        await container.switch_csv("data/fixtures/base/data.csv")
 
         # Variable should be gone
         result2 = await container.run_on_worker(0, "switch_test_var")
@@ -260,7 +260,7 @@ class TestContainerPool:
             n_consistency=2,
         )
         try:
-            await pool.start(initial_csv_path="data/csv/data.csv")
+            await pool.start(initial_csv_path="data/fixtures/base/data.csv")
 
             stats = pool.get_stats()
             assert stats["total"] == 2
@@ -281,10 +281,10 @@ class TestContainerPool:
             n_consistency=2,
         )
         try:
-            await pool.start(initial_csv_path="data/csv/data.csv")
+            await pool.start(initial_csv_path="data/fixtures/base/data.csv")
 
             # Acquire one container
-            container = await pool.acquire("data/csv/data.csv")
+            container = await pool.acquire("data/fixtures/base/data.csv")
             assert pool.available_count == 1
 
             # Should work
@@ -304,16 +304,16 @@ class TestContainerPool:
         from pathlib import Path
 
         # Skip if second CSV doesn't exist
-        csv2 = Path("data/mock/data.csv")
+        csv2 = Path("data/fixtures/mock/data.csv")
         if not csv2.exists():
             pytest.skip("Second test CSV not available")
 
         pool = ContainerPool(max_containers=1, n_question_slots=1, n_consistency=2)
         try:
-            await pool.start(initial_csv_path="data/csv/data.csv")
+            await pool.start(initial_csv_path="data/fixtures/base/data.csv")
 
             # Acquire with first CSV
-            container = await pool.acquire("data/csv/data.csv")
+            container = await pool.acquire("data/fixtures/base/data.csv")
             await container.run_on_worker(0, "df.shape")
             await pool.release(container)
 

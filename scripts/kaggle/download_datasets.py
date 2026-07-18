@@ -21,20 +21,14 @@ Usage:
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 
 # Workaround for bug in kaggle 1.8.2 - it tries to delete KAGGLE_API_TOKEN
 # even when reading from file (where the env var doesn't exist)
 _orig_delitem = os.environ.__class__.__delitem__
-os.environ.__class__.__delitem__ = lambda self, key: _orig_delitem(self, key) if key in self else None
-
-try:
-    from kaggle.api.kaggle_api_extended import KaggleApi
-except ImportError:
-    print("Error: kaggle package not installed.")
-    print("Install with: uv sync --extra kaggle")
-    sys.exit(1)
+os.environ.__class__.__delitem__ = lambda self, key: (
+    _orig_delitem(self, key) if key in self else None
+)
 
 
 def get_api():
@@ -42,6 +36,13 @@ def get_api():
 
     Supports KAGGLE_API_TOKEN env var (KGAT_* format).
     """
+    try:
+        from kaggle.api.kaggle_api_extended import KaggleApi
+    except ImportError as exc:
+        raise RuntimeError(
+            "Kaggle support is not installed. Run: uv sync --extra kaggle"
+        ) from exc
+
     api = KaggleApi()
     api.authenticate()
     return api
@@ -72,7 +73,9 @@ def get_dataset_metadata(api, dataset_ref: str) -> dict:
         if dataset_info:
             # Extract tag names from tag objects
             tags = getattr(dataset_info, "tags", [])
-            keywords = [t.get("name", t) if isinstance(t, dict) else str(t) for t in tags]
+            keywords = [
+                t.get("name", t) if isinstance(t, dict) else str(t) for t in tags
+            ]
 
             return {
                 "ref": dataset_ref,
@@ -82,7 +85,11 @@ def get_dataset_metadata(api, dataset_ref: str) -> dict:
                 "subtitle": getattr(dataset_info, "subtitle", ""),
                 "description": getattr(dataset_info, "description", ""),
                 "keywords": keywords,
-                "url": getattr(dataset_info, "url", f"https://www.kaggle.com/datasets/{dataset_ref}"),
+                "url": getattr(
+                    dataset_info,
+                    "url",
+                    f"https://www.kaggle.com/datasets/{dataset_ref}",
+                ),
                 "totalBytes": getattr(dataset_info, "total_bytes", None),
                 "downloadCount": getattr(dataset_info, "download_count", None),
             }
@@ -104,6 +111,7 @@ def get_dataset_metadata(api, dataset_ref: str) -> dict:
 
 class DownloadTimeout(Exception):
     """Raised when download takes too long."""
+
     pass
 
 
@@ -194,12 +202,14 @@ def iter_popular_datasets(api, max_size_mb: float = 50.0):
 
     while True:
         try:
-            datasets = list(api.dataset_list(
-                file_type="csv",
-                sort_by="votes",
-                max_size=50 * 1024 * 1024,  # 50MB max (pre-filter, unreliable)
-                page=page,
-            ))
+            datasets = list(
+                api.dataset_list(
+                    file_type="csv",
+                    sort_by="votes",
+                    max_size=50 * 1024 * 1024,  # 50MB max (pre-filter, unreliable)
+                    page=page,
+                )
+            )
 
             if not datasets:
                 break  # No more results
@@ -226,40 +236,48 @@ def load_curated_list(path: Path) -> list[str]:
     """Load dataset refs from a JSON file."""
     with open(path) as f:
         data = json.load(f)
-    
-    # Support both flat list and object with "datasets" key
-    if isinstance(data, list):
-        return data
-    elif isinstance(data, dict) and "datasets" in data:
-        return data["datasets"]
-    else:
-        raise ValueError(f"Invalid format in {path}. Expected list or {{datasets: [...]}}.")
+
+    if isinstance(data, dict) and "datasets" in data:
+        data = data["datasets"]
+    if not isinstance(data, list):
+        raise ValueError(
+            f"Invalid format in {path}. Expected list or {{datasets: [...]}}."
+        )
+
+    refs: list[str] = []
+    for entry in data:
+        ref = entry.get("ref") if isinstance(entry, dict) else entry
+        if not isinstance(ref, str) or ref.count("/") != 1:
+            raise ValueError(
+                f"Invalid format in {path}. Expected owner/dataset refs or ref objects."
+            )
+        refs.append(ref)
+    return refs
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Download Kaggle datasets with metadata")
+    parser = argparse.ArgumentParser(
+        description="Download Kaggle datasets with metadata"
+    )
     parser.add_argument(
         "--from-list",
         type=Path,
-        help="JSON file with curated dataset refs (default: fetch liked datasets)"
+        help="JSON file with curated dataset refs (default: fetch liked datasets)",
     )
     parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Maximum number of datasets to download"
+        "--limit", type=int, default=None, help="Maximum number of datasets to download"
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=Path(__file__).parent.parent.parent / "data" / "kaggle",
-        help="Output directory (default: data/kaggle/)"
+        help="Output directory (default: data/kaggle/)",
     )
     parser.add_argument(
         "--max-size",
         type=float,
         default=5.0,
-        help="Maximum CSV size in MB (default: 5.0)"
+        help="Maximum CSV size in MB (default: 5.0)",
     )
     args = parser.parse_args()
 
@@ -267,7 +285,10 @@ def main():
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    api = get_api()
+    try:
+        api = get_api()
+    except RuntimeError as exc:
+        parser.error(str(exc))
     print("✓ Kaggle API ready")
     print(f"  Output: {output_dir}")
     print(f"  Max size: {args.max_size} MB")
@@ -306,7 +327,9 @@ def main():
 
         # Download (filters applied inside)
         try:
-            dataset_dir = download_dataset(api, ref, output_dir, max_size_mb=args.max_size)
+            dataset_dir = download_dataset(
+                api, ref, output_dir, max_size_mb=args.max_size
+            )
         except DownloadTimeout:
             print("  ⚠ Download timed out (>60s), skipping")
             skipped_filter += 1

@@ -178,7 +178,7 @@ async def test_dataset(csv_path: str, dataset_name: str, n_questions: int = 10):
 async def main():
     """Run pass rate tests on multiple datasets."""
     datasets = [
-        ("data/csv/data.csv", "Base Dataset"),
+        ("data/fixtures/base/data.csv", "Base Dataset"),
         ("data/kaggle/fedesoriano_heart-failure-prediction/data.csv", "Heart Failure"),
         ("data/kaggle/gregorut_videogamesales/data.csv", "Video Game Sales"),
     ]

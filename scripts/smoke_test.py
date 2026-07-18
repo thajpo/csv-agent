@@ -23,7 +23,7 @@ from rich.table import Table
 
 
 DEFAULT_CSVS = [
-    "data/mock/data.csv",
+    "data/fixtures/mock/data.csv",
     "data/fixtures/smoke/breast_cancer/data.csv",
     "data/fixtures/smoke/student_performance/data.csv",
 ]
