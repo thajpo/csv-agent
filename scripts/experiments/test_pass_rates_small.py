@@ -54,7 +54,7 @@ async def test_question(q, csv_path, condition):
 
 async def main():
     """Quick test on one dataset with 3 questions."""
-    csv_path = "data/csv/data.csv"
+    csv_path = "data/fixtures/base/data.csv"
     print("Testing procedural question pass rates (3 questions)")
     print("=" * 60)
 

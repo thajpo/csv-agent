@@ -26,7 +26,7 @@ class TestTemplateUnifiedSchema:
         from src.datagen.synthetic.generator import CompositionalQuestionGenerator
         from src.core.config import config
 
-        csv_path = "data/csv/data.csv"
+        csv_path = "data/fixtures/base/data.csv"
         if not Path(csv_path).exists():
             pytest.skip(f"Test CSV not found: {csv_path}")
 
@@ -75,7 +75,7 @@ class TestProgramUnifiedSchema:
     @pytest.mark.asyncio
     async def test_program_question_schema(self):
         """Generate a program question and verify unified schema compliance."""
-        csv_path = "data/csv/data.csv"
+        csv_path = "data/fixtures/base/data.csv"
         if not Path(csv_path).exists():
             pytest.skip(f"Test CSV not found: {csv_path}")
 
@@ -108,7 +108,7 @@ class TestSyntheticVerification:
     @pytest.mark.asyncio
     async def test_verify_synthetic_returns_result(self):
         """Run verify_synthetic and check result structure."""
-        csv_path = "data/csv/data.csv"
+        csv_path = "data/fixtures/base/data.csv"
         if not Path(csv_path).exists():
             pytest.skip(f"Test CSV not found: {csv_path}")
 

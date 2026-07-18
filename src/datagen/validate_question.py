@@ -7,19 +7,19 @@ the full pipeline.
 Usage:
     # From a questions file:
     uv run python -m src.datagen.validate_question \
-        --csv data/csv/data.csv \
+        --csv data/fixtures/base/data.csv \
         --questions-file data/questions/template/marketing-data/questions.json \
         --index 0
 
     # Custom question:
     uv run python -m src.datagen.validate_question \
-        --csv data/csv/data.csv \
+        --csv data/fixtures/base/data.csv \
         --question "What is the mean of Age?" \
         --hint "Use df['Age'].mean()"
 
     # Show full trace details:
     uv run python -m src.datagen.validate_question \
-        --csv data/csv/data.csv \
+        --csv data/fixtures/base/data.csv \
         --questions-file ... \
         --show-trace --show-code
 """

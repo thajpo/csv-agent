@@ -131,6 +131,7 @@ class TestPipelineContract:
 
         with open(expected_episode_path) as f:
             data = json.load(f)
+        data["csv_source"] = "data/fixtures/smoke/student_performance/data.csv"
 
         episode = EpisodeJSONL(**data)
 
@@ -154,8 +155,8 @@ class TestSyntheticQuestionGen:
 
     @pytest.fixture
     def test_csv(self):
-        """Use insurance dataset - small and has good numeric columns."""
-        return "data/kaggle/mirichoi0218_insurance/data.csv"
+        """Use a small fixture with numeric and categorical columns."""
+        return "data/fixtures/smoke/student_performance/data.csv"
 
     def test_profiler_analyzes_dataset(self, test_csv):
         """Test that DataProfiler works."""
@@ -287,7 +288,7 @@ class TestTriangulationLogic:
 
     @pytest.fixture
     def test_csv(self):
-        return "data/csv/data.csv"
+        return "data/fixtures/base/data.csv"
 
     @pytest.mark.skip(
         reason="FakeLLM integration with full triangulation is complex - use live test"

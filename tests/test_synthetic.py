@@ -27,7 +27,7 @@ class TestDataProfiler:
     def test_profile_basic_csv(self):
         """Profiler should analyze a CSV and return structured profile."""
         profiler = DataProfiler()
-        profile = profiler.analyze("data/csv/data.csv")
+        profile = profiler.analyze("data/fixtures/base/data.csv")
 
         assert "shape" in profile
         assert profile["shape"]["rows"] > 0
@@ -38,7 +38,7 @@ class TestDataProfiler:
     def test_profile_identifies_numeric_columns(self):
         """Profiler should identify numeric columns."""
         profiler = DataProfiler()
-        profile = profiler.analyze("data/csv/data.csv")
+        profile = profiler.analyze("data/fixtures/base/data.csv")
 
         numeric_cols = [
             name
@@ -47,13 +47,12 @@ class TestDataProfiler:
         ]
         assert len(numeric_cols) > 0
 
-    def test_profile_kaggle_dataset(self):
-        """Profiler should work on Kaggle datasets."""
+    def test_profile_tabular_fixture(self):
+        """Profiler should work on a mixed numeric/categorical fixture."""
         profiler = DataProfiler()
-        profile = profiler.analyze("data/kaggle/mirichoi0218_insurance/data.csv")
+        profile = profiler.analyze("data/fixtures/smoke/student_performance/data.csv")
 
         assert profile["shape"]["rows"] > 0
-        # Insurance dataset should have numeric columns like age, bmi, charges
         numeric_cols = [
             name
             for name, info in profile["columns"].items()
@@ -66,52 +65,49 @@ class TestTemplateApplicability:
     """Test template applicability checks."""
 
     @pytest.fixture
-    def insurance_profile(self):
-        """Profile for insurance dataset (has numeric + categorical)."""
+    def rich_profile(self):
+        """Profile with several numeric and categorical columns."""
         profiler = DataProfiler()
-        return profiler.analyze("data/kaggle/mirichoi0218_insurance/data.csv")
+        return profiler.analyze("data/fixtures/smoke/student_performance/data.csv")
 
     @pytest.fixture
-    def netflix_profile(self):
-        """Profile for Netflix dataset (mostly categorical)."""
+    def limited_profile(self):
+        """Small profile with relatively few applicable templates."""
         profiler = DataProfiler()
-        return profiler.analyze("data/kaggle/shivamb_netflix-shows/data.csv")
+        return profiler.analyze("data/fixtures/mock/data.csv")
 
-    def test_max_variance_mean_applicable(self, insurance_profile):
+    def test_max_variance_mean_applicable(self, rich_profile):
         """MAX_VARIANCE_MEAN needs 2+ numeric columns."""
-        assert MAX_VARIANCE_MEAN.is_applicable(insurance_profile)
+        assert MAX_VARIANCE_MEAN.is_applicable(rich_profile)
 
-    def test_strongest_correlation_applicable(self, insurance_profile):
+    def test_strongest_correlation_applicable(self, rich_profile):
         """STRONGEST_CORRELATION needs 3+ numeric columns."""
-        assert STRONGEST_CORRELATION.is_applicable(insurance_profile)
+        assert STRONGEST_CORRELATION.is_applicable(rich_profile)
 
-    def test_count_high_missing_always_applicable(
-        self, insurance_profile, netflix_profile
-    ):
+    def test_count_high_missing_always_applicable(self, rich_profile, limited_profile):
         """COUNT_HIGH_MISSING_COLUMNS should always be applicable."""
-        assert COUNT_HIGH_MISSING_COLUMNS.is_applicable(insurance_profile)
-        assert COUNT_HIGH_MISSING_COLUMNS.is_applicable(netflix_profile)
+        assert COUNT_HIGH_MISSING_COLUMNS.is_applicable(rich_profile)
+        assert COUNT_HIGH_MISSING_COLUMNS.is_applicable(limited_profile)
 
-    def test_get_applicable_templates_returns_sorted(self, insurance_profile):
+    def test_get_applicable_templates_returns_sorted(self, rich_profile):
         """get_applicable_templates should return templates sorted by n_steps desc."""
-        templates = get_applicable_templates(insurance_profile)
+        templates = get_applicable_templates(rich_profile)
         assert len(templates) > 0
 
         # Should be sorted by n_steps descending (hardest first)
         n_steps = [t.n_steps for t in templates]
         assert n_steps == sorted(n_steps, reverse=True)
 
-    def test_fewer_templates_for_limited_dataset(self, netflix_profile):
-        """Netflix has few numeric columns, so fewer templates apply."""
-        insurance_profile = DataProfiler().analyze(
-            "data/kaggle/mirichoi0218_insurance/data.csv"
+    def test_fewer_templates_for_limited_dataset(self, limited_profile):
+        """A limited fixture should yield fewer templates than a rich fixture."""
+        rich_profile = DataProfiler().analyze(
+            "data/fixtures/smoke/student_performance/data.csv"
         )
 
-        netflix_templates = get_applicable_templates(netflix_profile)
-        insurance_templates = get_applicable_templates(insurance_profile)
+        limited_templates = get_applicable_templates(limited_profile)
+        rich_templates = get_applicable_templates(rich_profile)
 
-        # Netflix should have fewer applicable templates
-        assert len(netflix_templates) < len(insurance_templates)
+        assert len(limited_templates) < len(rich_templates)
 
 
 class TestTemplateInstantiation:
@@ -120,7 +116,7 @@ class TestTemplateInstantiation:
     @pytest.fixture
     def profile(self):
         profiler = DataProfiler()
-        return profiler.analyze("data/kaggle/mirichoi0218_insurance/data.csv")
+        return profiler.analyze("data/fixtures/smoke/student_performance/data.csv")
 
     def test_instantiate_produces_valid_code(self, profile):
         """Instantiated template should be valid Python."""
@@ -152,7 +148,9 @@ class TestTemplateInstantiation:
 
 @pytest_asyncio.fixture(scope="module")
 async def sandbox():
-    env = LocalCSVAnalysisEnv(csv_path="data/kaggle/mirichoi0218_insurance/data.csv")
+    env = LocalCSVAnalysisEnv(
+        csv_path="data/fixtures/smoke/student_performance/data.csv"
+    )
     state = await env.setup_state({})
     yield env, state
     await env.destroy_sandbox(state["sandbox_id"])
@@ -172,7 +170,7 @@ class TestTemplateExecution:
         """MAX_VARIANCE_MEAN should execute and produce a result."""
         env, state = sandbox
         profiler = DataProfiler()
-        profile = profiler.analyze("data/kaggle/mirichoi0218_insurance/data.csv")
+        profile = profiler.analyze("data/fixtures/smoke/student_performance/data.csv")
 
         code = MAX_VARIANCE_MEAN.instantiate(profile)
         output = await env.python(
@@ -200,7 +198,7 @@ class TestTemplateExecution:
         """STRONGEST_CORRELATION should return dict with columns and correlation."""
         env, state = sandbox
         profiler = DataProfiler()
-        profile = profiler.analyze("data/kaggle/mirichoi0218_insurance/data.csv")
+        profile = profiler.analyze("data/fixtures/smoke/student_performance/data.csv")
 
         code = STRONGEST_CORRELATION.instantiate(profile)
 
@@ -233,7 +231,7 @@ class TestTemplateExecution:
         """COUNT_HIGH_MISSING_COLUMNS should return dict with count and columns."""
         env, state = sandbox
         profiler = DataProfiler()
-        profile = profiler.analyze("data/kaggle/mirichoi0218_insurance/data.csv")
+        profile = profiler.analyze("data/fixtures/smoke/student_performance/data.csv")
 
         code = COUNT_HIGH_MISSING_COLUMNS.instantiate(
             profile, params={"missing_threshold": 5.0}
@@ -266,7 +264,7 @@ class TestTemplateExecution:
         """Canary test: sample of templates execute correctly (catches new broken templates)."""
         env, state = sandbox
         profiler = DataProfiler()
-        profile = profiler.analyze("data/kaggle/mirichoi0218_insurance/data.csv")
+        profile = profiler.analyze("data/fixtures/smoke/student_performance/data.csv")
 
         templates = get_applicable_templates(profile)
 

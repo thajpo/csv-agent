@@ -126,7 +126,7 @@ csvagent inspect trace abc123                 # Deep-dive single episode
 
 # Debug single question
 csvagent validate \
-    --csv data/csv/data.csv \
+    --csv data/fixtures/base/data.csv \
     --questions-file data/questions_synthetic/dataset/questions.json \
     --index 0 \
     --show-code
@@ -199,6 +199,29 @@ uv sync --extra kaggle
 # Download datasets
 uv run python scripts/kaggle/download_datasets.py --limit 10
 ```
+
+---
+
+## Reproducible Dataset Snapshot
+
+Generated training episodes live in the private Hugging Face dataset configured
+in `configs/datasets/template.toml`. Training and evaluation runs should load
+the recorded commit revision rather than the mutable `main` revision:
+
+```python
+from datasets import load_dataset
+
+dataset = load_dataset(
+    "ThaJpo/csv-agent-template-episodes",
+    revision="e19fadf8d713c5afb7fe1476e2160b9bece1233a",
+    token=True,
+)
+```
+
+Raw Kaggle CSVs are not duplicated in Git or Hugging Face. The pinned HF
+snapshot contains `data/kaggle/manifest.json` with the source dataset refs;
+download those inputs through the Kaggle API when a run needs them. Git tracks
+only deterministic files under `data/fixtures/**`.
 
 ---
 

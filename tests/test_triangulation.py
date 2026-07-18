@@ -15,7 +15,7 @@ async def main():
     hint = "Filter the data to the control group first, then calculate the mean."
 
     # Generate data overview
-    data_overview = generate_data_overview("data/csv/data.csv")
+    data_overview = generate_data_overview("data/fixtures/base/data.csv")
 
     # Create UI for triangulation
     ui = EpisodeGenUI()
@@ -26,7 +26,7 @@ async def main():
     print(f"Hint: {hint}\n")
 
     result = await triangulate_teacher(
-        csv_path="data/csv/data.csv",
+        csv_path="data/fixtures/base/data.csv",
         question=question,
         hint=hint,
         model="openai/gpt-4o-mini",
