@@ -1061,7 +1061,9 @@ def test_process_report_rejects_turns_appended_after_accepted_submission():
         }
     )
 
-    with pytest.raises(ValueError, match="accepted submission is not in the final turn"):
+    with pytest.raises(
+        ValueError, match="accepted submission is not in the final turn"
+    ):
         build_process_report(
             source="template",
             gold_trace=trace,
