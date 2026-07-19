@@ -1,5 +1,7 @@
 """Tests for OpenAI-compatible sampling request construction."""
 
+import json
+
 import httpx
 import pytest
 
@@ -11,7 +13,7 @@ async def test_api_llm_passes_optional_seed_to_provider() -> None:
     captured: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        captured.update(__import__("json").loads(request.content))
+        captured.update(json.loads(request.content))
         return httpx.Response(
             200,
             json={"choices": [{"message": {"content": "response"}}]},

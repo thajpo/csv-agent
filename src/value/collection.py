@@ -79,6 +79,36 @@ def verify_terminal_trace(
     return evidence.verdict
 
 
+async def run_initial_model_trace(
+    *,
+    csv_source: str,
+    question_text: str,
+    policy: ContinuationPolicy,
+    max_turns: int,
+    seed: int | None,
+) -> tuple[TraceDict, str]:
+    """Sample the actor once and retain its exact system prompt."""
+    sampling_args = dict(policy.sampling_args)
+    if seed is not None:
+        sampling_args["seed"] = seed
+    llm = APILLM(model=policy.model, sampling_args=sampling_args)
+    try:
+        environment = await Environment.from_params(
+            csv_path=csv_source,
+            model=policy.model,
+            question=question_text,
+            mode="student",
+            max_turns=max_turns,
+            sampling_args=policy.sampling_args,
+            llm=llm,
+            session_id="value-source",
+        )
+        final_state = await environment.rollout()
+        return build_trace_dict(final_state), final_state.conversation.system_prompt
+    finally:
+        await llm.aclose()
+
+
 async def run_model_continuation(
     prefix: TrajectoryPrefix,
     policy: ContinuationPolicy,
