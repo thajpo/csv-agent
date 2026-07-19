@@ -137,12 +137,12 @@ def test_value_record_requires_aggregate_to_match_verdicts() -> None:
         attempted_continuations=3,
         labeled_continuations=2,
         successful_continuations=1,
-        value=1 / 3,
+        value=None,
         code_commit="abc123",
         dataset_revision="hf-revision",
     )
 
-    assert record.value == pytest.approx(1 / 3)
+    assert record.value is None
     assert record.model_validate_json(record.model_dump_json()) == record
 
     with pytest.raises(ValidationError, match="successful_continuations"):
@@ -153,7 +153,7 @@ def test_value_record_requires_aggregate_to_match_verdicts() -> None:
             attempted_continuations=3,
             labeled_continuations=2,
             successful_continuations=2,
-            value=2 / 3,
+            value=None,
             code_commit="abc123",
         )
 

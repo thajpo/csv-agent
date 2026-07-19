@@ -187,8 +187,9 @@ async def collect_prefix_value(
     """Estimate success over all independently attempted continuations.
 
     Terminal submissions are labeled only by the ground-truth verifier.
-    Replay, rollout, and verifier errors are retained without verdicts and
-    contribute zero to the value's attempted-continuation denominator.
+    Replay, rollout, and verifier errors are retained without verdicts. If any
+    attempt is unlabeled, the value is unavailable rather than biased by an
+    infrastructure failure.
     """
     if not seeds:
         raise ValueError("at least one continuation seed is required")
@@ -240,7 +241,9 @@ async def collect_prefix_value(
         attempted_continuations=len(continuations),
         labeled_continuations=labeled,
         successful_continuations=successes,
-        value=successes / len(continuations),
+        value=(
+            successes / len(continuations) if labeled == len(continuations) else None
+        ),
         code_commit=code_commit,
         dataset_revision=dataset_revision,
     )

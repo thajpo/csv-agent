@@ -23,9 +23,9 @@ experiment:
   could not produce a label.
 - `PrefixValueRecord`: the prefix, policy, continuation evidence, provenance,
   and validated aggregate counts. `value` is successful continuations divided
-  by all attempted continuations, or `None` when there are no attempts; failed
-  or unlabeled attempts remain in the denominator and are exposed by
-  `labeled_continuations`.
+  by attempted continuations only when every attempt received a verifier label.
+  Otherwise it is `None`, and `labeled_continuations` exposes the missing
+  coverage without treating infrastructure failure as policy failure.
 
 All four models reject unknown fields. `PrefixValueRecord` also rejects counts
 or values that do not exactly match its continuation records, making serialized

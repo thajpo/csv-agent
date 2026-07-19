@@ -78,7 +78,7 @@ def test_build_prefix_is_deterministic_and_excludes_terminal_turn() -> None:
 
 
 @pytest.mark.asyncio
-async def test_collection_uses_terminal_verdicts_and_excludes_runner_errors() -> None:
+async def test_collection_with_runner_error_has_no_value_estimate() -> None:
     expected_answer = 3
     question = {
         "question_text": "How many rows are present?",
@@ -125,7 +125,7 @@ async def test_collection_uses_terminal_verdicts_and_excludes_runner_errors() ->
     assert record.attempted_continuations == 4
     assert record.labeled_continuations == 3
     assert record.successful_continuations == 1
-    assert record.value == pytest.approx(1 / 4)
+    assert record.value is None
     assert [item.verifier_verdict for item in record.continuations] == [
         True,
         False,
@@ -164,7 +164,7 @@ async def test_verifier_failure_is_recorded_without_a_value_label() -> None:
         runner=runner,
     )
 
-    assert record.value == 0
+    assert record.value is None
     assert record.labeled_continuations == 0
     assert record.continuations[0].trace == _trace(3)
     assert "ground-truth hash provenance is unavailable" in (

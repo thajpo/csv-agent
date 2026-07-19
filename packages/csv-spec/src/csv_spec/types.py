@@ -218,11 +218,10 @@ class PrefixContinuation(BaseModel):
 
 
 class PrefixValueRecord(BaseModel):
-    """Auditable future-success estimate over all attempted continuations.
+    """Auditable future-success estimate over completed continuations.
 
-    Errors remain in the attempted-continuation denominator with no verifier
-    verdict; ``labeled_continuations`` exposes how many attempts were actually
-    judged by the terminal verifier.
+    Infrastructure or verifier errors make the estimate unavailable instead of
+    silently inflating it or treating system failure as policy failure.
     """
 
     prefix: TrajectoryPrefix
@@ -246,7 +245,9 @@ class PrefixValueRecord(BaseModel):
         successes = sum(
             outcome.verifier_verdict is True for outcome in self.continuations
         )
-        expected_value = successes / attempted if attempted else None
+        expected_value = (
+            successes / attempted if attempted and labeled == attempted else None
+        )
 
         if self.attempted_continuations != attempted:
             raise ValueError("attempted_continuations does not match outcomes")
