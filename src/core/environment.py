@@ -375,7 +375,7 @@ class Environment:
         self.submitted_answer = None  # Reset for new episode
         self.submission_metadata = {}  # Metadata (key_lines, etc.)
         self.code_cells = []  # Track all executed code cells
-        self.execution_results_per_turn = []  # Track execution results per turn
+        self.execution_turns = []
         self.format_reprompt_count = 0  # Track format re-prompts (force-accept after 3)
         self.hook_reprompt_count = 0  # Track hook re-prompts (force-accept after 3)
 
@@ -691,7 +691,13 @@ class Environment:
                 self.submission_metadata = {}
 
         # Update state
-        self.execution_results_per_turn.append(results)
+        self.execution_turns.append(
+            {
+                "response": response,
+                "code_cells": list(code_cells),
+                "execution_results": results,
+            }
+        )
         self.conversation.add_assistant_response(response)
         self.conversation.add_user_feedback(feedback)
 

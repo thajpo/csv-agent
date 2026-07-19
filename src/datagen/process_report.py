@@ -35,9 +35,7 @@ def build_process_report(
     """Build a step-level process report from gold and consistency traces."""
     validate_trace_submissions(gold_trace, path="gold_trace")
     for trace_index, trace in enumerate(consistency_traces):
-        validate_trace_submissions(
-            trace, path=f"consistency_traces[{trace_index}]"
-        )
+        validate_trace_submissions(trace, path=f"consistency_traces[{trace_index}]")
     steps: list[ProcessStepReportDict] = []
     code_cells = [turn.get("code", "") for turn in gold_trace.get("turns", [])]
     consensus = _consensus_counts(consistency_traces)
@@ -110,13 +108,7 @@ def build_process_report(
         submitted = execution.get("submitted_answer")
         if submitted is not None:
             accepted = turn_index == accepted_submit_turn
-            answer_hash = (
-                trace_answer_hash(gold_trace)
-                if accepted
-                else hash_artifact(submitted)
-            )
-            if answer_hash is None:
-                raise ValueError("accepted submission hash is unavailable")
+            answer_hash = hash_artifact(submitted)
             evidence = ProcessStepEvidenceDict(
                 final_verified=verifier_verdict if accepted else None,
                 trace_success=gold_trace.get("success", False),
@@ -251,10 +243,12 @@ def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None
 
     canonical_answer_hash = trace_answer_hash(trace)
     if trace.get("success"):
-        if not submissions or submissions[-1] != trace.get("final_answer"):
+        if (
+            not submissions
+            or canonical_answer_hash is None
+            or hash_artifact(submissions[-1]) != canonical_answer_hash
+        ):
             raise ValueError(f"{path} final answer is not the accepted submission")
-        if canonical_answer_hash is None:
-            raise ValueError(f"{path} final answer hash is unavailable")
     elif trace.get("final_answer") is not None:
         raise ValueError(f"unsuccessful {path} has a final answer")
 

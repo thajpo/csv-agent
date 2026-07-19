@@ -1,6 +1,7 @@
 """Tests for training-format conversion."""
 
 import copy
+import json
 
 import pytest
 
@@ -523,3 +524,39 @@ def test_prm_export_rejects_missing_ground_truth_provenance():
 
     with pytest.raises(ValueError, match="ground-truth hash provenance"):
         to_prm_samples(episode)
+
+
+@pytest.mark.parametrize(
+    ("source_value", "report_value"),
+    [(False, 0), (0, False), (1, 1.0), (1.0, 1)],
+)
+def test_prm_export_rejects_type_distinct_report_values(source_value, report_value):
+    episode = _episode()
+    episode["gold_trace"]["turns"][0]["execution"]["hooks"][0]["value"] = source_value
+    episode["process_report"] = build_process_report(
+        source="llm_gen",
+        gold_trace=episode["gold_trace"],
+        consistency_traces=episode["consistency_traces"],
+        verifier_verdict=True,
+    )
+    episode["process_report"]["steps"][0]["value"] = report_value
+
+    with pytest.raises(ValueError, match="does not match the canonical report"):
+        to_prm_samples(episode)
+
+
+def test_prm_export_accepts_json_round_tripped_nan_hook_value():
+    episode = _episode()
+    episode["gold_trace"]["turns"][0]["execution"]["hooks"][0]["value"] = float("nan")
+    episode["process_report"] = build_process_report(
+        source="llm_gen",
+        gold_trace=episode["gold_trace"],
+        consistency_traces=episode["consistency_traces"],
+        verifier_verdict=True,
+    )
+    episode = json.loads(
+        json.dumps(episode),
+        parse_constant=lambda _value: float("nan"),
+    )
+
+    assert [sample["label"] for sample in to_prm_samples(episode)] == [1.0]

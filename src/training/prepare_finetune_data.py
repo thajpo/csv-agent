@@ -326,11 +326,21 @@ def _validate_process_report_semantics(
         consistency_traces=consistency_traces,
         verifier_verdict=verifier_verdict,
     )
-    if process_report != expected_report:
+    if not _canonical_json_equal(process_report, expected_report):
         raise ValueError(
             f"{prefix}: report does not match the canonical report derived from "
             "episode provenance; regenerate episodes before PRM conversion"
         )
+
+
+def _canonical_json_equal(left: Any, right: Any) -> bool:
+    options = {
+        "allow_nan": True,
+        "ensure_ascii": False,
+        "separators": (",", ":"),
+        "sort_keys": True,
+    }
+    return json.dumps(left, **options) == json.dumps(right, **options)
 
 
 def _canonical_report_inputs(
@@ -463,7 +473,6 @@ def _validate_trace(*, trace: Any, path: str, prefix: str) -> TraceDict:
     if not isinstance(trace["turns"], list):
         raise ValueError(f"{prefix}: {path}.turns must be a list")
 
-    submissions: list[Any] = []
     for turn_index, turn in enumerate(trace["turns"]):
         turn_path = f"{path}.turns[{turn_index}]"
         if not isinstance(turn, dict) or turn.get("turn_index") != turn_index:
@@ -500,10 +509,6 @@ def _validate_trace(*, trace: Any, path: str, prefix: str) -> TraceDict:
                 raise ValueError(f"{prefix}: {hook_path} provenance is incomplete")
             if not isinstance(hook["depends_on"], list):
                 raise ValueError(f"{prefix}: {hook_path}.depends_on must be a list")
-        submitted_answer = execution["submitted_answer"]
-        if submitted_answer is not None:
-            submissions.append(submitted_answer)
-
     try:
         canonical_answer_hash = trace_answer_hash(cast(TraceDict, trace))
         validate_trace_submissions(cast(TraceDict, trace), path=path)
@@ -511,10 +516,6 @@ def _validate_trace(*, trace: Any, path: str, prefix: str) -> TraceDict:
         raise ValueError(f"{prefix}: {exc}") from exc
 
     if trace["success"]:
-        if not submissions or submissions[-1] != trace["final_answer"]:
-            raise ValueError(
-                f"{prefix}: {path} final answer is not the accepted submission"
-            )
         if canonical_answer_hash is None:
             raise ValueError(f"{prefix}: {path} final answer hash is unavailable")
     elif trace["final_answer"] is not None:

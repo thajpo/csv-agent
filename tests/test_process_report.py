@@ -6,8 +6,11 @@ from types import SimpleNamespace
 import pytest
 
 from csv_spec import hash_artifact
+from src.core.conversation import ConversationHistory
+from src.core.environment import Environment
 from src.datagen.process_report import build_process_report
 from src.datagen.teacher import build_trace_dict
+from src.utils.parsing import extract_python_cells
 
 
 def _trace(*, hooks: list[dict], answer=7, success=True) -> dict:
@@ -372,32 +375,140 @@ def test_unknown_verifier_verdict_leaves_terminal_observation_unlabeled():
 
 @pytest.mark.parametrize("answer", [0, False, ""])
 def test_trace_builder_hashes_falsy_answers(answer):
+    response = f"Solve\n```python\nsubmit({answer!r})\n```"
+    code = extract_python_cells(response)[0]
     result = SimpleNamespace(
+        code=code,
         success=True,
-        stdout=(
-            "✓ Submitted: "
-            + json.dumps({"__csv_agent_answer__": answer})
-        ),
+        stdout="✓ Submitted: " + json.dumps({"__csv_agent_answer__": answer}),
         stderr="",
         submitted_answer=answer,
     )
     state = SimpleNamespace(
         submitted_answer=answer,
-        execution_results_per_turn=[[result]],
-    )
-
-    trace = build_trace_dict(
-        state,
-        [
+        execution_turns=[
             {
-                "role": "assistant",
-                "content": f"Solve\n```python\nsubmit({answer!r})\n```",
+                "response": response,
+                "code_cells": [code],
+                "execution_results": [result],
             }
         ],
     )
 
+    trace = build_trace_dict(state)
+
     assert trace["success"] is True
     assert trace["final_answer_hash"] == hash_artifact(answer)
+
+
+@pytest.mark.asyncio
+async def test_trace_builder_preserves_turns_pruned_from_conversation_history():
+    environment = object.__new__(Environment)
+    environment.conversation = ConversationHistory(
+        system_prompt="system", max_messages=10
+    )
+    environment.execution_turns = []
+    environment.submitted_answer = None
+    environment.submission_metadata = {}
+    environment.is_completed = False
+
+    async def execute_cells(code_cells):
+        turn_index = len(environment.execution_turns)
+        terminal = turn_index == 5
+        answer = 6 if terminal else None
+        if terminal:
+            environment.submitted_answer = answer
+        result = SimpleNamespace(
+            code=code_cells[0],
+            success=True,
+            stdout=(
+                "✓ Submitted: " + json.dumps({"__csv_agent_answer__": answer})
+                if terminal
+                else ""
+            ),
+            stderr="",
+            submitted_answer=answer,
+        )
+        return [result], answer
+
+    environment._execute_cells = execute_cells
+    environment._build_execution_feedback = lambda _cells, _results: "feedback"
+    environment._validate_format = lambda _answer: (True, None)
+    environment._validate_hooks = lambda: (True, None)
+
+    for turn_index in range(6):
+        code = "submit(6)" if turn_index == 5 else f"value_{turn_index} = {turn_index}"
+        response = f"Reasoning for turn {turn_index}\n```python\n{code}\n```"
+        await environment.process_turn(response)
+
+    retained_assistant_messages = [
+        message
+        for message in environment.conversation.to_openai_messages()
+        if message["role"] == "assistant"
+    ]
+    assert len(retained_assistant_messages) == 5
+
+    trace = build_trace_dict(environment)
+
+    assert len(trace["turns"]) == 6
+    assert trace["turns"][0]["code"] == "value_0 = 0"
+    assert trace["turns"][-1]["execution"]["submitted_answer"] == 6
+
+
+@pytest.mark.parametrize("fence", ["py", "Python"])
+def test_trace_builder_reuses_canonical_code_fence_extraction(fence: str):
+    response = f"Explain it clearly\n```{fence}\nsubmit(7)\n```"
+    code = extract_python_cells(response)[0]
+    result = SimpleNamespace(
+        code=code,
+        success=True,
+        stdout='✓ Submitted: {"__csv_agent_answer__": 7}',
+        stderr="",
+        submitted_answer=7,
+    )
+    state = SimpleNamespace(
+        submitted_answer=7,
+        execution_turns=[
+            {
+                "response": response,
+                "code_cells": [code],
+                "execution_results": [result],
+            }
+        ],
+    )
+
+    trace = build_trace_dict(state)
+
+    assert trace["turns"][0]["code"] == "submit(7)"
+    assert trace["turns"][0]["reasoning"] == "Explain it clearly"
+
+
+@pytest.mark.parametrize("mismatch", ["recorded", "executed"])
+def test_trace_builder_rejects_mismatched_turn_provenance(mismatch: str):
+    response = "Explain it clearly\n```python\nsubmit(7)\n```"
+    code = extract_python_cells(response)[0]
+    recorded_code = "submit(8)" if mismatch == "recorded" else code
+    executed_code = "submit(8)" if mismatch == "executed" else code
+    result = SimpleNamespace(
+        code=executed_code,
+        success=True,
+        stdout='✓ Submitted: {"__csv_agent_answer__": 7}',
+        stderr="",
+        submitted_answer=7,
+    )
+    state = SimpleNamespace(
+        submitted_answer=7,
+        execution_turns=[
+            {
+                "response": response,
+                "code_cells": [recorded_code],
+                "execution_results": [result],
+            }
+        ],
+    )
+
+    with pytest.raises(ValueError, match="match response"):
+        build_trace_dict(state)
 
 
 @pytest.mark.parametrize("answer", [0, False, ""])
@@ -433,6 +544,25 @@ def test_process_report_rejects_nonterminal_or_multiple_submissions(code: str):
     trace["turns"][0]["code"] = code
 
     with pytest.raises(ValueError, match="submission|submitted operation"):
+        build_process_report(
+            source="template",
+            gold_trace=trace,
+            consistency_traces=[],
+            verifier_verdict=True,
+        )
+
+
+@pytest.mark.parametrize(
+    ("submitted", "final_answer"),
+    [(False, 0), (0, False), (1, 1.0), (1.0, 1)],
+)
+def test_process_report_rejects_type_distinct_accepted_submission(
+    submitted, final_answer
+):
+    trace = _trace(hooks=[], answer=final_answer)
+    trace["turns"][0]["execution"]["submitted_answer"] = submitted
+
+    with pytest.raises(ValueError, match="final answer is not the accepted submission"):
         build_process_report(
             source="template",
             gold_trace=trace,
