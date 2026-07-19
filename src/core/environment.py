@@ -10,9 +10,15 @@ Refactored to use a sandboxed Python environment for code execution.
 
 import json
 import logging
+from pathlib import Path
 
 import pandas as pd
-from csv_spec import parse_hook_record, validate_hook_event_line
+from csv_spec import (
+    TrajectoryPrefix,
+    TurnDict,
+    parse_hook_record,
+    validate_hook_event_line,
+)
 
 from src.core.model import APILLM
 from src.utils.parsing import (
@@ -35,6 +41,10 @@ logger = logging.getLogger(__name__)
 
 # Max output chars before truncation (~12.5K tokens at 4 chars/token)
 MAX_OUTPUT_CHARS = 50_000
+
+
+class PrefixReplayError(RuntimeError):
+    """Raised when a recorded prefix cannot be reproduced faithfully."""
 
 
 def _hook_record_identity(hook: dict) -> str:
@@ -775,6 +785,113 @@ class Environment:
         if done:
             self.is_completed = True
 
+    @staticmethod
+    def _response_from_recorded_turn(turn: dict) -> str:
+        """Reconstruct the assistant response retained by the trace contract."""
+        reasoning = turn.get("reasoning", "").strip()
+        code = turn.get("code", "")
+        return f"{reasoning}\n```python\n{code}\n```"
+
+    @staticmethod
+    def _execution_for_comparison(result: CodeCellResult) -> dict:
+        return {
+            "success": result.success,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "hooks": result.hooks,
+            "submitted_answer": result.submitted_answer,
+        }
+
+    async def replay_turns(self, turns: list[TurnDict]) -> None:
+        """Re-execute recorded turns and fail if any result changes."""
+        if not hasattr(self, "conversation"):
+            raise RuntimeError("init_state() must be called before replay_turns()")
+
+        for expected_index, turn in enumerate(turns):
+            if turn.get("turn_index") != expected_index:
+                raise PrefixReplayError(
+                    f"turn {expected_index} is not contiguous in recorded prefix"
+                )
+
+            response = self._response_from_recorded_turn(turn)
+            code_cells = self.extract_python_cells(response)
+            validation_error = get_turn_validation_feedback(response, code_cells)
+            if validation_error:
+                raise PrefixReplayError(
+                    f"turn {expected_index} cannot be replayed: {validation_error}"
+                )
+
+            await self.process_turn(response)
+            execution_results = self.execution_turns[-1]["execution_results"]
+            if len(execution_results) != 1:
+                raise PrefixReplayError(
+                    f"turn {expected_index} replayed {len(execution_results)} cells; expected 1"
+                )
+
+            actual = self._execution_for_comparison(execution_results[0])
+            expected = turn.get("execution")
+            if actual != expected:
+                differing_fields = [
+                    field
+                    for field in actual
+                    if actual.get(field) != (expected or {}).get(field)
+                ]
+                raise PrefixReplayError(
+                    f"turn {expected_index} replay diverged in: "
+                    f"{', '.join(differing_fields) or 'execution record'}"
+                )
+
+            if self.is_completed:
+                raise PrefixReplayError(
+                    f"turn {expected_index} submitted an answer and is not a prefix"
+                )
+            self.current_turn += 1
+
+    async def _continue_rollout(self) -> None:
+        """Continue from the currently initialized conversation and sandbox."""
+        while not self.is_completed:
+            if self.current_turn >= self.execution.max_turns:
+                await self.handle_max_turns_reached()
+                break
+
+            response = await self.get_model_response()
+            code_cells = self.extract_python_cells(response)
+            if not self.response_is_valid(response, code_cells):
+                continue
+
+            await self.process_turn(response)
+            self.current_turn += 1
+
+    async def _cleanup_sandbox(self) -> None:
+        if self.state and "sandbox_id" in self.state:
+            if self.reuse_env:
+                await self.env.reset(
+                    self.state["sandbox_id"], self.state.get("python_state")
+                )
+            else:
+                await self.env.destroy_sandbox(self.state["sandbox_id"])
+
+    async def rollout_from_prefix(self, prefix: TrajectoryPrefix) -> "Environment":
+        """Replay a prefix in a fresh sandbox, then sample one continuation."""
+        configured_question = (
+            self.task.question.question_text if self.task.question else ""
+        )
+        if configured_question != prefix.question_text:
+            raise ValueError("environment question does not match prefix")
+        if self.execution.max_turns != prefix.max_turns:
+            raise ValueError("environment max_turns does not match prefix")
+        if Path(self.csv_path).resolve() != Path(prefix.csv_source).resolve():
+            raise ValueError("environment CSV does not match prefix")
+
+        self.init_state()
+        try:
+            self.conversation.system_prompt = prefix.system_prompt
+            await self.replay_turns(prefix.turns)
+            await self._continue_rollout()
+        finally:
+            await self._cleanup_sandbox()
+        return self
+
     async def rollout(self):
         """Execute a multi-turn rollout episode.
 
@@ -784,36 +901,8 @@ class Environment:
         self.init_state()
 
         try:
-            while not self.is_completed:
-                # Check if we've reached max turns BEFORE processing
-                if self.current_turn >= self.execution.max_turns:
-                    await self.handle_max_turns_reached()
-                    break
-
-                # Get model response
-                response = await self.get_model_response()
-
-                # Extract code cells and validate
-                code_cells = self.extract_python_cells(response)
-                if not self.response_is_valid(response, code_cells):
-                    # Don't increment turn counter - let model retry
-                    continue
-
-                # Process this turn (adds to conversation, executes code cells)
-                await self.process_turn(response)
-
-                # Increment turn counter
-                self.current_turn += 1
-
+            await self._continue_rollout()
         finally:
-            # Cleanup or reset sandbox
-            if self.state and "sandbox_id" in self.state:
-                if self.reuse_env:
-                    # Reset for reuse instead of destroying
-                    await self.env.reset(
-                        self.state["sandbox_id"], self.state.get("python_state")
-                    )
-                else:
-                    await self.env.destroy_sandbox(self.state["sandbox_id"])
+            await self._cleanup_sandbox()
 
         return self
