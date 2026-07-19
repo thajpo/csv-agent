@@ -171,30 +171,6 @@ def validate_hooks_grounded(
     return grounded, ungrounded
 
 
-HOOK_REPROMPT_MSG = """
-⚠️ YOUR SOLUTION WAS REJECTED - HOOKS ARE MISSING OR INVALID
-
-Your submission must include hook() calls that document each computational step.
-Each hook's code_line MUST be the EXACT code that was executed.
-
-REQUIRED PATTERN:
-```python
-# Step 1: Filter data
-filtered = df[df['col'] == 'value']
-hook(filtered, "filtered = df[df['col'] == 'value']", name='filtered')
-
-# Step 2: Compute result
-result = filtered['amount'].mean()
-hook(result, "result = filtered['amount'].mean()", name='result', depends_on=['filtered'])
-
-submit(result)
-```
-
-Please re-do your solution with proper hook() calls after EVERY computational step.
-The code_line argument must EXACTLY match the code you wrote.
-"""
-
-
 # Keywords that suggest a statistical/hypothesis answer needing structured format
 _STATISTICAL_KEYWORDS = {
     "yes",
@@ -451,7 +427,6 @@ class Environment:
         self.code_cells = []  # Track all executed code cells
         self.execution_turns = []
         self.format_reprompt_count = 0  # Track format re-prompts (force-accept after 3)
-        self.hook_reprompt_count = 0  # Track hook re-prompts (force-accept after 3)
 
     def extract_python_cells(self, response: str) -> list[str]:
         """Extract ```python...``` code blocks from response."""
@@ -695,52 +670,6 @@ class Environment:
         # Force-accept after 3 retries
         return True, None
 
-    def _validate_hooks(self) -> tuple[bool, str | None]:
-        """Check if hooks are grounded and sufficient. Returns (valid, error_feedback).
-
-        Force-accepts after 3 failed validation attempts to prevent infinite loops.
-        """
-        if self.hook_reprompt_count >= 3:
-            return True, None  # Already at max retries, force-accept
-
-        hooks = self.submission_metadata.get("hooks", [])
-        # Ensure hooks is a list (could be string if truncated in edge cases)
-        if not isinstance(hooks, list):
-            hooks = []
-        grounded, ungrounded = validate_hooks_grounded(hooks, self.code_cells)
-
-        # Get expected hook count from question
-        expected = 2  # Default minimum
-        if self.task and self.task.question and self.task.question.n_steps:
-            expected = self.task.question.n_steps
-
-        has_ungrounded = len(ungrounded) > 0
-        insufficient = len(grounded) < expected
-
-        if not has_ungrounded and not insufficient:
-            return True, None
-
-        self.hook_reprompt_count += 1
-        if self.hook_reprompt_count >= 3:
-            return True, None  # Just hit max retries, force-accept
-
-        # Build error feedback
-        parts = [HOOK_REPROMPT_MSG]
-        if has_ungrounded:
-            parts.append(
-                f"\n❌ Found {len(ungrounded)} ungrounded hook(s) - "
-                f"code_line does not match any executed code."
-            )
-        if insufficient:
-            parts.append(
-                f"\n❌ Expected ~{expected} hooks but found only {len(grounded)} valid hook(s)."
-            )
-
-        # Clear state for retry
-        self.code_cells = []
-
-        return False, "".join(parts)
-
     # ============= Main Process Turn =============
 
     async def process_turn(self, response: str) -> None:
@@ -762,14 +691,6 @@ class Environment:
                 done = False
                 self.submitted_answer = None
                 self.submission_metadata = {}  # Symmetric cleanup
-
-        if done:
-            valid, error = self._validate_hooks()
-            if not valid:
-                feedback = error
-                done = False
-                self.submitted_answer = None
-                self.submission_metadata = {}
 
         # Update state
         self.execution_turns.append(

@@ -99,33 +99,8 @@ async def test_replay_rejects_divergent_execution() -> None:
 
 @pytest.mark.asyncio
 async def test_rollout_can_continue_after_replay_and_cleans_up() -> None:
-    hook_rows = {
-        "variable_name": "rows",
-        "value_hash": "rows-hash",
-        "value": 3,
-        "description": "row count",
-        "code_line": "rows = len(df)",
-        "depends_on": [],
-    }
-    hook_answer = {
-        "variable_name": "answer",
-        "value_hash": "answer-hash",
-        "value": 3,
-        "description": "final count",
-        "code_line": "answer = rows",
-        "depends_on": ["rows"],
-    }
-    continuation_code = (
-        "rows = len(df)\n"
-        "hook(rows, 'rows = len(df)', name='rows')\n"
-        "answer = rows\n"
-        "hook(answer, 'answer = rows', name='answer', depends_on=['rows'])\n"
-        "submit(answer)"
-    )
-    submission = {
-        "__csv_agent_answer__": 3,
-        "hooks": [hook_rows, hook_answer],
-    }
+    continuation_code = "answer = len(df)\nsubmit(answer)"
+    submission = {"__csv_agent_answer__": 3}
     sandbox = FakeSandbox(
         {
             "print(len(df))": "3",
