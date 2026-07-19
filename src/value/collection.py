@@ -34,6 +34,7 @@ class InitialModelTrace:
     turn_responses: list[str]
     turn_completed: list[bool]
     boundary_messages: list[list[dict[str, str]]]
+    boundary_consumed_turns: list[int]
 
 
 def build_trajectory_prefix(
@@ -47,6 +48,7 @@ def build_trajectory_prefix(
     turn_completed: Sequence[bool],
     conversation_messages: Sequence[Mapping[str, str]],
     turn_count: int,
+    consumed_turns: int,
     max_turns: int,
 ) -> TrajectoryPrefix:
     """Create a deterministic, oracle-free prefix from a recorded boundary."""
@@ -71,6 +73,7 @@ def build_trajectory_prefix(
             "turn_responses": selected_responses,
             "turn_completed": selected_completion,
             "conversation_messages": selected_messages,
+            "consumed_turns": consumed_turns,
             "max_turns": max_turns,
         }
     )
@@ -84,6 +87,7 @@ def build_trajectory_prefix(
         turn_responses=selected_responses,
         turn_completed=selected_completion,
         conversation_messages=selected_messages,
+        consumed_turns=consumed_turns,
         max_turns=max_turns,
     )
 
@@ -92,14 +96,13 @@ def verify_terminal_trace(
     question: Mapping[str, Any], trace: TraceDict, *, float_tolerance: float
 ) -> bool:
     """Label a model continuation using only the existing terminal verifier."""
-    if not trace.get("success") or trace.get("final_answer") is None:
-        return False
-
     evidence = derive_ground_truth_verification(
         question=question,
         gold_trace=trace,
         float_tolerance=float_tolerance,
     )
+    if not trace.get("success") or trace.get("final_answer") is None:
+        return False
     if evidence.verdict is None:
         raise ValueError("terminal verifier could not label a submitted answer")
     return evidence.verdict
@@ -139,6 +142,9 @@ async def run_initial_model_trace(
             turn_completed=[record["completed"] for record in execution_turns],
             boundary_messages=[
                 deepcopy(record["conversation_messages"]) for record in execution_turns
+            ],
+            boundary_consumed_turns=[
+                record["consumed_turns"] for record in execution_turns
             ],
         )
     finally:

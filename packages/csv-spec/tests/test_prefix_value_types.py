@@ -57,6 +57,7 @@ def test_prefix_excludes_private_verifier_fields() -> None:
         turn_responses=[_response()],
         turn_completed=[False],
         conversation_messages=_messages(),
+        consumed_turns=1,
         max_turns=3,
     )
 
@@ -78,6 +79,7 @@ def test_prefix_rejects_terminal_or_noncontiguous_turns() -> None:
             turn_responses=[_response()],
             turn_completed=[True],
             conversation_messages=_messages(),
+            consumed_turns=1,
             max_turns=3,
         )
 
@@ -92,6 +94,7 @@ def test_prefix_rejects_terminal_or_noncontiguous_turns() -> None:
             turn_responses=[_response()],
             turn_completed=[False],
             conversation_messages=_messages(),
+            consumed_turns=1,
             max_turns=3,
         )
 
@@ -107,6 +110,7 @@ def test_value_record_requires_aggregate_to_match_verdicts() -> None:
         turn_responses=[],
         turn_completed=[],
         conversation_messages=[],
+        consumed_turns=0,
         max_turns=3,
     )
     policy = ContinuationPolicy(model="test-model", sampling_args={"temperature": 0.7})
@@ -170,6 +174,7 @@ def test_prefix_requires_exact_turn_responses_and_boundary_messages() -> None:
             turn_responses=[],
             turn_completed=[False],
             conversation_messages=_messages(),
+            consumed_turns=1,
             max_turns=3,
         )
 
@@ -187,6 +192,7 @@ def test_prefix_requires_exact_turn_responses_and_boundary_messages() -> None:
                 {"role": "assistant", "content": "canonicalized response"},
                 {"role": "user", "content": "Execution completed."},
             ],
+            consumed_turns=1,
             max_turns=3,
         )
 
@@ -202,7 +208,32 @@ def test_prefix_allows_rejected_nonterminal_submission() -> None:
         turn_responses=[_response()],
         turn_completed=[False],
         conversation_messages=_messages(),
+        consumed_turns=1,
         max_turns=3,
     )
 
     assert prefix.turns[0]["execution"]["submitted_answer"] == {"rows": 10}
+
+
+def test_prefix_tracks_consumed_turns_separately_from_executions() -> None:
+    messages = [
+        {"role": "assistant", "content": "Missing code block."},
+        {"role": "user", "content": "Use one Python code block exactly."},
+        *_messages(),
+    ]
+    prefix = TrajectoryPrefix(
+        prefix_id="retried-prefix",
+        episode_id="episode-1",
+        csv_source="dataset/data.csv",
+        system_prompt="Solve the CSV task using Python.",
+        question_text="How many rows are present?",
+        turns=[_turn(0)],
+        turn_responses=[_response()],
+        turn_completed=[False],
+        conversation_messages=messages,
+        consumed_turns=2,
+        max_turns=3,
+    )
+
+    assert len(prefix.turns) == 1
+    assert prefix.consumed_turns == 2

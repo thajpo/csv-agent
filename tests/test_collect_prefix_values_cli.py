@@ -3,14 +3,17 @@
 from argparse import Namespace
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from scripts.experiments.collect_prefix_values import (
     MAX_CONTINUATIONS,
     MAX_PROVIDER_REQUESTS,
+    current_commit,
     load_episodes,
     maximum_provider_requests,
+    select_boundary,
     validate_args,
 )
 
@@ -63,3 +66,51 @@ def test_combined_request_budget_rejects_large_run(episodes_jsonl: Path) -> None
                 max_turns=10,
             )
         )
+
+
+def test_boundary_selection_does_not_require_a_later_execution() -> None:
+    messages = [
+        {"role": "assistant", "content": "Executed one turn."},
+        {"role": "user", "content": "Execution completed."},
+    ]
+    source = SimpleNamespace(
+        trace={"turns": [{"turn_index": 0}]},
+        turn_completed=[False],
+        boundary_messages=[messages],
+        boundary_consumed_turns=[1],
+    )
+
+    selected_messages, consumed_turns = select_boundary(source, 1, 3)
+
+    assert selected_messages == messages
+    assert consumed_turns == 1
+
+
+@pytest.mark.parametrize(
+    ("completed", "consumed_turns", "error"),
+    [(True, 1, "terminal"), (False, 3, "remaining turn budget")],
+)
+def test_boundary_selection_requires_nonterminal_budget(
+    completed: bool, consumed_turns: int, error: str
+) -> None:
+    source = SimpleNamespace(
+        trace={"turns": [{"turn_index": 0}]},
+        turn_completed=[completed],
+        boundary_messages=[[{"role": "assistant", "content": "response"}]],
+        boundary_consumed_turns=[consumed_turns],
+    )
+
+    with pytest.raises(ValueError, match=error):
+        select_boundary(source, 1, 3)
+
+
+def test_current_commit_rejects_dirty_worktree(monkeypatch) -> None:
+    def fake_run(*_args, **_kwargs):
+        return SimpleNamespace(stdout=" M src/value/collection.py\n")
+
+    monkeypatch.setattr(
+        "scripts.experiments.collect_prefix_values.subprocess.run", fake_run
+    )
+
+    with pytest.raises(RuntimeError, match="uncommitted code changes"):
+        current_commit()

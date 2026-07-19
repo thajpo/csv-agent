@@ -73,6 +73,7 @@ def _prefix(stdout: str = "3") -> TrajectoryPrefix:
         turn_responses=[_recorded_response()],
         turn_completed=[False],
         conversation_messages=_recorded_messages(),
+        consumed_turns=2,
         max_turns=3,
     )
 
@@ -103,9 +104,10 @@ async def test_replay_restores_conversation_and_turn_count() -> None:
         prefix.turns,
         prefix.turn_responses,
         prefix.conversation_messages,
+        prefix.consumed_turns,
     )
 
-    assert environment.current_turn == 1
+    assert environment.current_turn == 2
     assert environment.code_cells == ["print(len(df))"]
     assert environment.conversation.messages == _recorded_messages()
     assert environment.conversation.system_prompt != _prefix().system_prompt
@@ -122,6 +124,7 @@ async def test_replay_rejects_divergent_execution() -> None:
             prefix.turns,
             prefix.turn_responses,
             prefix.conversation_messages,
+            prefix.consumed_turns,
         )
 
 
@@ -173,7 +176,7 @@ async def test_rollout_can_continue_after_replay_and_cleans_up() -> None:
     result = await environment.rollout_from_prefix(_prefix())
 
     assert result.submitted_answer == 3
-    assert result.current_turn == 2
+    assert result.current_turn == 3
     assert result.conversation.system_prompt == _prefix().system_prompt
     assert llm.calls[0] == [
         {"role": "system", "content": _prefix().system_prompt},

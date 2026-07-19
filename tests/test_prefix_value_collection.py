@@ -56,6 +56,7 @@ def test_build_prefix_is_deterministic_and_excludes_terminal_turn() -> None:
         turn_completed=[False],
         conversation_messages=_boundary_messages("print(df.columns)"),
         turn_count=1,
+        consumed_turns=1,
         max_turns=3,
     )
     second = build_trajectory_prefix(
@@ -68,6 +69,7 @@ def test_build_prefix_is_deterministic_and_excludes_terminal_turn() -> None:
         turn_completed=[False],
         conversation_messages=_boundary_messages("print(df.columns)"),
         turn_count=1,
+        consumed_turns=1,
         max_turns=3,
     )
 
@@ -95,6 +97,7 @@ async def test_collection_with_runner_error_has_no_value_estimate() -> None:
         turn_completed=[False],
         conversation_messages=_boundary_messages("print(df.columns)"),
         turn_count=1,
+        consumed_turns=1,
         max_turns=3,
     )
     policy = ContinuationPolicy(
@@ -148,6 +151,7 @@ async def test_verifier_failure_is_recorded_without_a_value_label() -> None:
         turn_completed=[],
         conversation_messages=[],
         turn_count=0,
+        consumed_turns=0,
         max_turns=3,
     )
 
@@ -167,6 +171,42 @@ async def test_verifier_failure_is_recorded_without_a_value_label() -> None:
     assert record.value is None
     assert record.labeled_continuations == 0
     assert record.continuations[0].trace == _trace(3)
+    assert "ground-truth hash provenance is unavailable" in (
+        record.continuations[0].error or ""
+    )
+
+
+@pytest.mark.asyncio
+async def test_no_submission_still_requires_verifier_provenance() -> None:
+    prefix = build_trajectory_prefix(
+        episode_id="episode-1",
+        csv_source="dataset/data.csv",
+        system_prompt="Solve the task.",
+        question_text="How many rows are present?",
+        trace=_trace(),
+        turn_responses=[],
+        turn_completed=[],
+        conversation_messages=[],
+        turn_count=0,
+        consumed_turns=0,
+        max_turns=3,
+    )
+
+    async def runner(_prefix, _policy, _rollout_index, _seed):
+        return _trace()
+
+    record = await collect_prefix_value(
+        prefix=prefix,
+        question={"question_text": "How many rows are present?"},
+        policy=ContinuationPolicy(model="test-model", sampling_args={}),
+        seeds=[1],
+        float_tolerance=0.1,
+        code_commit="abc123",
+        runner=runner,
+    )
+
+    assert record.value is None
+    assert record.continuations[0].verifier_verdict is None
     assert "ground-truth hash provenance is unavailable" in (
         record.continuations[0].error or ""
     )

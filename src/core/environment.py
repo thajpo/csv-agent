@@ -694,6 +694,7 @@ class Environment:
                 "execution_results": results,
                 "completed": done,
                 "conversation_messages": deepcopy(self.conversation.messages),
+                "consumed_turns": self.current_turn + 1,
             }
         )
 
@@ -730,6 +731,7 @@ class Environment:
         turns: list[TurnDict],
         turn_responses: list[str],
         conversation_messages: list[dict[str, str]],
+        consumed_turns: int,
     ) -> None:
         """Restore a public turn boundary after exact execution replay.
 
@@ -786,6 +788,7 @@ class Environment:
                 )
             self.current_turn += 1
 
+        self.current_turn = consumed_turns
         self.conversation.messages = deepcopy(conversation_messages)
         self.conversation._cached_message_tokens = sum(
             self.conversation._tokens_for_content(message["content"])
@@ -840,6 +843,7 @@ class Environment:
                 prefix.turns,
                 prefix.turn_responses,
                 prefix.conversation_messages,
+                prefix.consumed_turns,
             )
             await self._continue_rollout()
         finally:

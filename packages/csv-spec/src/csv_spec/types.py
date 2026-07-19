@@ -146,14 +146,17 @@ class TrajectoryPrefix(BaseModel):
     turn_responses: list[str]
     turn_completed: list[bool]
     conversation_messages: list[dict[str, str]]
+    consumed_turns: int = Field(ge=0)
     max_turns: int = Field(gt=0)
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     @model_validator(mode="after")
     def validate_nonterminal_boundary(self) -> "TrajectoryPrefix":
-        if len(self.turns) >= self.max_turns:
+        if self.consumed_turns >= self.max_turns:
             raise ValueError("prefix must leave at least one continuation turn")
+        if self.consumed_turns < len(self.turns):
+            raise ValueError("consumed_turns cannot be less than executed turns")
         if len(self.turn_responses) != len(self.turns):
             raise ValueError("turn_responses must align with prefix turns")
         if len(self.turn_completed) != len(self.turns):
@@ -168,6 +171,11 @@ class TrajectoryPrefix(BaseModel):
                 raise ValueError("conversation messages must contain role and content")
             if message["role"] not in {"assistant", "user"}:
                 raise ValueError("prefix conversation cannot contain system messages")
+        expected_roles = ["assistant", "user"] * self.consumed_turns
+        if [
+            message["role"] for message in self.conversation_messages
+        ] != expected_roles:
+            raise ValueError("conversation messages must align with consumed_turns")
         if not self.turns and self.conversation_messages:
             raise ValueError("an empty prefix cannot contain conversation messages")
         if self.turns:

@@ -95,6 +95,14 @@ def load_episodes(path: Path, limit: int) -> list[EpisodeJSONL]:
 
 
 def current_commit() -> str:
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    if status.stdout.strip():
+        raise RuntimeError("refusing to collect with uncommitted code changes")
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         check=True,
@@ -102,6 +110,24 @@ def current_commit() -> str:
         text=True,
     )
     return result.stdout.strip()
+
+
+def select_boundary(source, turn_count: int, max_turns: int) -> tuple[list[dict], int]:
+    if turn_count > len(source.trace["turns"]):
+        raise ValueError(
+            f"source produced only {len(source.trace['turns'])} executed turn(s); "
+            f"cannot select boundary after executed turn {turn_count}"
+        )
+    if turn_count == 0:
+        return [], 0
+
+    boundary_index = turn_count - 1
+    if source.turn_completed[boundary_index]:
+        raise ValueError("selected boundary is terminal")
+    consumed_turns = source.boundary_consumed_turns[boundary_index]
+    if consumed_turns >= max_turns:
+        raise ValueError("selected boundary has no remaining turn budget")
+    return source.boundary_messages[boundary_index], consumed_turns
 
 
 async def collect(args: argparse.Namespace) -> list[dict]:
@@ -136,12 +162,9 @@ async def collect(args: argparse.Namespace) -> list[dict]:
             max_turns=args.max_turns,
             seed=source_seed,
         )
-        if len(source.trace["turns"]) <= args.turn_count:
-            raise ValueError(
-                f"episode {episode.episode_id} produced only "
-                f"{len(source.trace['turns'])} turn(s); cannot select boundary "
-                f"after turn {args.turn_count}"
-            )
+        boundary_messages, consumed_turns = select_boundary(
+            source, args.turn_count, args.max_turns
+        )
 
         prefix = build_trajectory_prefix(
             episode_id=episode.episode_id,
@@ -151,10 +174,9 @@ async def collect(args: argparse.Namespace) -> list[dict]:
             trace=source.trace,
             turn_responses=source.turn_responses,
             turn_completed=source.turn_completed,
-            conversation_messages=(
-                source.boundary_messages[args.turn_count - 1] if args.turn_count else []
-            ),
+            conversation_messages=boundary_messages,
             turn_count=args.turn_count,
+            consumed_turns=consumed_turns,
             max_turns=args.max_turns,
         )
         continuation_seeds = [
