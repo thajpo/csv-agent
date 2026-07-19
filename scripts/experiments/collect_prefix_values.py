@@ -132,9 +132,7 @@ async def collect(args: argparse.Namespace) -> list[dict]:
             turn_responses=source.turn_responses,
             turn_completed=source.turn_completed,
             conversation_messages=(
-                source.boundary_messages[args.turn_count - 1]
-                if args.turn_count
-                else []
+                source.boundary_messages[args.turn_count - 1] if args.turn_count else []
             ),
             turn_count=args.turn_count,
             max_turns=args.max_turns,

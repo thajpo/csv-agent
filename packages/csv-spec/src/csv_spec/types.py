@@ -174,11 +174,17 @@ class TrajectoryPrefix(BaseModel):
             if len(self.conversation_messages) < 2:
                 raise ValueError("prefix conversation is missing the completed turn")
             assistant, feedback = self.conversation_messages[-2:]
-            if assistant != {
-                "role": "assistant",
-                "content": self.turn_responses[-1],
-            } or feedback["role"] != "user":
-                raise ValueError("prefix conversation does not end at its turn boundary")
+            if (
+                assistant
+                != {
+                    "role": "assistant",
+                    "content": self.turn_responses[-1],
+                }
+                or feedback["role"] != "user"
+            ):
+                raise ValueError(
+                    "prefix conversation does not end at its turn boundary"
+                )
         return self
 
 

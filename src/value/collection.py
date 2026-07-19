@@ -138,8 +138,7 @@ async def run_initial_model_trace(
             turn_responses=[record["response"] for record in execution_turns],
             turn_completed=[record["completed"] for record in execution_turns],
             boundary_messages=[
-                deepcopy(record["conversation_messages"])
-                for record in execution_turns
+                deepcopy(record["conversation_messages"]) for record in execution_turns
             ],
         )
     finally:

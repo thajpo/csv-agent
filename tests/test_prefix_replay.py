@@ -47,7 +47,9 @@ def _turn(stdout: str = "3") -> dict:
 
 
 def _recorded_response() -> str:
-    return "Count the available rows first.\n```py\nprint(len(df))\n```\nRows inspected.  "
+    return (
+        "Count the available rows first.\n```py\nprint(len(df))\n```\nRows inspected.  "
+    )
 
 
 def _recorded_messages() -> list[dict[str, str]]:
@@ -125,13 +127,17 @@ async def test_replay_rejects_divergent_execution() -> None:
 @pytest.mark.asyncio
 async def test_rejected_submission_records_a_nonterminal_boundary() -> None:
     code = 'submit("The result is statistically significant with p value 0.01")'
-    answer = {"__csv_agent_answer__": "The result is statistically significant with p value 0.01"}
+    answer = {
+        "__csv_agent_answer__": "The result is statistically significant with p value 0.01"
+    }
     environment = _environment(
         FakeSandbox({code: f"✓ Submitted: {json.dumps(answer)}"})
     )
     environment.init_state()
 
-    response = f"Check whether the requested structure is accepted.\n```python\n{code}\n```"
+    response = (
+        f"Check whether the requested structure is accepted.\n```python\n{code}\n```"
+    )
     await environment.process_turn(response)
 
     boundary = environment.execution_turns[0]
