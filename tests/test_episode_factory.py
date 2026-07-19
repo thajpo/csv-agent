@@ -6,8 +6,8 @@ Test-first development for the episode factory module.
 import pytest
 from datetime import datetime
 
-from csv_spec import EpisodeJSONL, TraceDict
-from src.datagen.shared.verification import VerificationResult
+from csv_spec import EpisodeJSONL, TraceDict, TriangulationResult
+from src.datagen.shared.verification import VerificationResult, verify_llm
 
 
 @pytest.fixture
@@ -222,6 +222,53 @@ class TestCreateEpisode:
         assert len(episode.consistency_traces) == 2
         assert episode.triangulation["n_consistency_runs"] == 2
         assert episode.process_report["summary"]["verified_steps"] == 1
+
+    @pytest.mark.asyncio
+    async def test_create_episode_preserves_no_majority_llm_verdict(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        sample_question: dict,
+        sample_trace: TraceDict,
+    ):
+        from src.datagen.shared.episode_factory import create_episode
+
+        triangulation = TriangulationResult(
+            gold_trace=sample_trace,
+            gold_conversation=[],
+            system_prompt="",
+            consistency_results=[],
+            verified=False,
+            timing_metadata={},
+            majority_answer_hash=None,
+            majority_count=0,
+        )
+
+        async def fake_triangulate_teacher(**_kwargs):
+            return triangulation
+
+        monkeypatch.setattr(
+            "src.datagen.teacher.triangulate_teacher",
+            fake_triangulate_teacher,
+        )
+        verification_result = await verify_llm(
+            question=sample_question,
+            csv_path="/path/to/data.csv",
+        )
+        sample_question["source"] = "llm_gen"
+
+        episode = await create_episode(
+            question=sample_question,
+            verification_result=verification_result,
+            source="llm_gen",
+            csv_path="/path/to/data.csv",
+        )
+
+        terminal = episode.process_report["steps"][0]
+        assert verification_result.match is None
+        assert episode.verified is False
+        assert terminal["label"] is None
+        assert terminal["label_kind"] == "unlabeled"
+        assert terminal["evidence"]["final_verified"] is None
 
     @pytest.mark.asyncio
     async def test_create_episode_procedural(

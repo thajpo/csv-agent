@@ -24,6 +24,14 @@ class VerificationResult:
     error: str | None
 
 
+def triangulation_verdict(
+    *, verified: bool, majority_answer_hash: str | None
+) -> bool | None:
+    if majority_answer_hash is None:
+        return None
+    return verified
+
+
 def resolve_question_prompt(question: Mapping[str, Any]) -> str:
     """Resolve canonical runtime prompt text from a question record.
 
@@ -243,7 +251,10 @@ async def verify_llm(
 
         return VerificationResult(
             success=result.verified,
-            match=result.verified,
+            match=triangulation_verdict(
+                verified=result.verified,
+                majority_answer_hash=result.majority_answer_hash,
+            ),
             trace=result.gold_trace,
             traces=consistency_traces,
             majority_answer_hash=result.majority_answer_hash,

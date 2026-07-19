@@ -104,9 +104,7 @@ def build_process_report(
         if submitted is not None:
             accepted = turn_index == accepted_submit_turn
             if accepted:
-                answer_hash = gold_trace.get("final_answer_hash") or hash_artifact(
-                    submitted
-                )
+                answer_hash = trace_answer_hash(gold_trace) or hash_artifact(submitted)
             else:
                 answer_hash = hash_artifact(submitted)
             evidence = ProcessStepEvidenceDict(
@@ -177,8 +175,18 @@ def _submission_consensus_matches(
     return sum(
         1
         for trace in consistency_traces
-        if trace.get("success") and trace.get("final_answer_hash") == answer_hash
+        if trace.get("success") and trace_answer_hash(trace) == answer_hash
     )
+
+
+def trace_answer_hash(trace: TraceDict) -> str | None:
+    stored_hash = trace.get("final_answer_hash")
+    if stored_hash:
+        return stored_hash
+    answer = trace.get("final_answer")
+    if answer is None:
+        return None
+    return hash_artifact(answer)
 
 
 def _hook_evidence(

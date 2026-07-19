@@ -12,7 +12,7 @@ from csv_spec import (
     TimingMetadataDict,
 )
 from src.datagen.shared.verification import VerificationResult, resolve_question_prompt
-from src.datagen.process_report import build_process_report
+from src.datagen.process_report import build_process_report, trace_answer_hash
 
 
 ALLOWED_SOURCES = ("llm_gen", "template", "procedural")
@@ -131,4 +131,8 @@ def _calculate_majority_count(
     """Count how many traces match the majority answer hash."""
     if majority_hash is None:
         return 0
-    return sum(1 for t in traces if t.get("final_answer_hash") == majority_hash)
+    return sum(
+        1
+        for trace in traces
+        if trace.get("success") and trace_answer_hash(trace) == majority_hash
+    )

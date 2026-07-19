@@ -9,121 +9,92 @@ from src.training.prepare_finetune_data import convert_episodes, to_prm_samples
 
 
 def _episode() -> dict:
-    return {
+    gold_trace = {
+        "turns": [
+            {
+                "turn_index": 0,
+                "reasoning": "Filter and aggregate",
+                "code": "filtered = df[df['x'] > 1]\nsubmit(7)",
+                "execution": {
+                    "success": True,
+                    "stdout": "ok",
+                    "stderr": "",
+                    "hooks": [
+                        {
+                            "variable_name": "filtered",
+                            "code_line": "filtered = df[df['x'] > 1]",
+                            "value": {"rows": 3},
+                            "value_hash": "hash-filtered",
+                            "description": None,
+                            "depends_on": [],
+                        },
+                        {
+                            "variable_name": "unused",
+                            "code_line": "unused = 1",
+                            "value": 1,
+                            "value_hash": "hash-unused",
+                            "description": None,
+                            "depends_on": [],
+                        },
+                    ],
+                    "submitted_answer": 7,
+                },
+            }
+        ],
+        "final_answer": 7,
+        "final_answer_hash": "answer-7",
+        "success": True,
+    }
+    consistency_trace = {
+        "turns": [
+            {
+                "turn_index": 0,
+                "reasoning": "Check independently",
+                "code": "filtered = df[df['x'] > 1]\nsubmit(7)",
+                "execution": {
+                    "success": True,
+                    "stdout": "ok",
+                    "stderr": "",
+                    "hooks": [
+                        copy.deepcopy(gold_trace["turns"][0]["execution"]["hooks"][0])
+                    ],
+                    "submitted_answer": 7,
+                },
+            }
+        ],
+        "final_answer": 7,
+        "final_answer_hash": "answer-7",
+        "success": True,
+    }
+    episode = {
         "episode_id": "ep-prm-001",
         "csv_source": "data.csv",
-        "verified": False,
+        "source": "llm_gen",
+        "verified": True,
         "question": {
+            "source": "llm_gen",
             "question_text": "Compute the answer",
             "hint": "Use the filtered rows",
+            "ground_truth_hash": "answer-7",
+            "ground_truth_hashes": ["answer-7"],
         },
-        "gold_trace": {
-            "turns": [
-                {
-                    "turn_index": 0,
-                    "reasoning": "Filter and aggregate",
-                    "code": "filtered = df[df['x'] > 1]\nsubmit(7)",
-                    "execution": {
-                        "success": True,
-                        "stdout": "ok",
-                        "stderr": "",
-                        "hooks": [
-                            {
-                                "variable_name": "filtered",
-                                "code_line": "filtered = df[df['x'] > 1]",
-                                "value": {"rows": 3},
-                                "value_hash": "hash-filtered",
-                                "description": None,
-                                "depends_on": [],
-                            },
-                            {
-                                "variable_name": "unused",
-                                "code_line": "unused = 1",
-                                "value": 1,
-                                "value_hash": "hash-unused",
-                                "description": None,
-                                "depends_on": [],
-                            },
-                        ],
-                        "submitted_answer": 7,
-                    },
-                }
-            ],
-            "final_answer": 7,
-            "final_answer_hash": "answer-7",
-            "success": True,
-        },
-        "consistency_traces": [],
-        "process_report": {
-            "summary": {
-                "total_steps": 3,
-                "labeled_steps": 2,
-                "verified_steps": 1,
-                "heuristic_steps": 1,
-                "unlabeled_steps": 1,
-                "positive_steps": 2,
-                "negative_steps": 0,
-            },
-            "steps": [
-                {
-                    "step_index": 0,
-                    "turn_index": 0,
-                    "hook_index": 0,
-                    "step_type": "hook",
-                    "code_line": "filtered = df[df['x'] > 1]",
-                    "variable_name": "filtered",
-                    "semantic_role": "filter",
-                    "value": {"rows": 3},
-                    "value_hash": "hash-filtered",
-                    "description": None,
-                    "depends_on": [],
-                    "label": 1.0,
-                    "label_kind": "heuristic",
-                    "label_source": "trace_consensus_heuristic",
-                    "evidence": {"consensus_matches": 2},
-                },
-                {
-                    "step_index": 1,
-                    "turn_index": 0,
-                    "hook_index": 1,
-                    "step_type": "hook",
-                    "code_line": "unused = 1",
-                    "variable_name": "unused",
-                    "semantic_role": None,
-                    "value": 1,
-                    "value_hash": "hash-unused",
-                    "description": None,
-                    "depends_on": [],
-                    "label": None,
-                    "label_kind": "unlabeled",
-                    "label_source": "insufficient_evidence",
-                    "evidence": {},
-                },
-                {
-                    "step_index": 2,
-                    "turn_index": 0,
-                    "hook_index": None,
-                    "step_type": "submit",
-                    "code_line": "submit(...)",
-                    "variable_name": "answer",
-                    "semantic_role": "final_answer",
-                    "value": 7,
-                    "value_hash": "answer-7",
-                    "description": "Final submitted answer",
-                    "depends_on": [],
-                    "label": 1.0,
-                    "label_kind": "verified",
-                    "label_source": "terminal_verifier",
-                    "evidence": {
-                        "final_verified": True,
-                        "trace_success": True,
-                        "consensus_matches": 0,
-                        "consensus_total": 0,
-                    },
-                },
-            ],
+        "gold_trace": gold_trace,
+        "consistency_traces": [consistency_trace],
+        "triangulation": {
+            "n_consistency_runs": 1,
+            "n_consistency_succeeded": 1,
+            "majority_answer_hash": "answer-7",
+            "majority_count": 1,
+            "gold_matches_majority": True,
         },
     }
+    episode["process_report"] = build_process_report(
+        source="llm_gen",
+        gold_trace=gold_trace,
+        consistency_traces=[consistency_trace],
+        verifier_verdict=True,
+    )
+    return episode
 
 
 def test_prm_export_defaults_to_externally_verified_steps():
@@ -137,8 +108,8 @@ def test_prm_export_defaults_to_externally_verified_steps():
     assert sample["label"] == 1.0
     assert sample["label_kind"] == "verified"
     assert sample["evidence"]["final_verified"] is True
-    assert sample["evidence"]["consensus_matches"] == 0
-    assert sample["evidence"]["consensus_total"] == 0
+    assert sample["evidence"]["consensus_matches"] == 1
+    assert sample["evidence"]["consensus_total"] == 1
 
 
 def test_prm_export_includes_hook_heuristics_only_when_requested():
@@ -148,8 +119,9 @@ def test_prm_export_includes_hook_heuristics_only_when_requested():
         include_heuristic_hooks=True,
     )
 
-    assert [sample["step_index"] for sample in samples] == [0, 2]
+    assert [sample["step_index"] for sample in samples] == [0, 1, 2]
     assert [sample["label_kind"] for sample in samples] == [
+        "heuristic",
         "heuristic",
         "verified",
     ]
@@ -175,7 +147,7 @@ def test_prm_export_rejects_verified_hook():
     episode = _episode()
     episode["process_report"]["steps"][0]["label_kind"] = "verified"
 
-    with pytest.raises(ValueError, match="verified labels are only valid on submit"):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
@@ -188,24 +160,23 @@ def test_prm_export_rejects_nonnumeric_label():
 
 
 @pytest.mark.parametrize(
-    ("step_index", "label", "label_kind", "message"),
+    ("step_index", "label", "label_kind"),
     [
-        (1, 0.0, "unlabeled", "unlabeled steps must not have a numeric label"),
-        (0, None, "heuristic", "labeled steps require a numeric label"),
+        (1, 0.0, "unlabeled"),
+        (0, None, "heuristic"),
     ],
 )
 def test_prm_export_rejects_label_kind_mismatches(
     step_index: int,
     label: float | None,
     label_kind: str,
-    message: str,
 ):
     episode = _episode()
     step = episode["process_report"]["steps"][step_index]
     step["label"] = label
     step["label_kind"] = label_kind
 
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
@@ -220,7 +191,7 @@ def test_prm_export_rejects_out_of_range_indices(field: str, value: int):
     episode = _episode()
     episode["process_report"]["steps"][0][field] = value
 
-    with pytest.raises(ValueError, match=field):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
@@ -228,7 +199,7 @@ def test_prm_export_rejects_out_of_range_hook_index():
     episode = _episode()
     episode["process_report"]["steps"][0]["hook_index"] = 99
 
-    with pytest.raises(ValueError, match="hook_index"):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
@@ -242,9 +213,7 @@ def test_prm_export_rejects_noncanonical_trace_coverage(mutation: str):
             1, copy.deepcopy(episode["process_report"]["steps"][0])
         )
 
-    with pytest.raises(
-        ValueError, match="cover trace hooks and submissions one-to-one"
-    ):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
@@ -255,29 +224,28 @@ def test_prm_export_rejects_observations_out_of_canonical_order():
     for step_index, step in enumerate(steps):
         step["step_index"] = step_index
 
-    with pytest.raises(ValueError, match="step_type must be 'hook'"):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
 @pytest.mark.parametrize(
-    ("step_index", "field", "value", "message"),
+    ("step_index", "field", "value"),
     [
-        (0, "variable_name", "fabricated", "source hook"),
-        (0, "value_hash", "fabricated", "source hook"),
-        (2, "value", 99, "source submission"),
-        (2, "value_hash", "fabricated", "source submission"),
+        (0, "variable_name", "fabricated"),
+        (0, "value_hash", "fabricated"),
+        (2, "value", 99),
+        (2, "value_hash", "fabricated"),
     ],
 )
 def test_prm_export_rejects_observations_not_bound_to_trace(
     step_index: int,
     field: str,
     value: object,
-    message: str,
 ):
     episode = _episode()
     episode["process_report"]["steps"][step_index][field] = value
 
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
@@ -310,7 +278,7 @@ def test_prm_export_rejects_verified_label_on_rejected_submission():
     rejected["label_source"] = "terminal_verifier"
     rejected["evidence"]["final_verified"] = True
 
-    with pytest.raises(ValueError, match="rejected submission"):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
@@ -319,7 +287,7 @@ def test_prm_export_rejects_terminal_label_that_disagrees_with_verdict():
     terminal = episode["process_report"]["steps"][2]
     terminal["evidence"]["final_verified"] = False
 
-    with pytest.raises(ValueError, match="accepted submission"):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
@@ -327,9 +295,9 @@ def test_prm_export_rejects_terminal_label_that_disagrees_with_verdict():
 def test_prm_export_rejects_submit_consensus_not_derived_from_traces(field: str):
     episode = _episode()
     terminal = episode["process_report"]["steps"][2]
-    terminal["evidence"][field] = 1
+    terminal["evidence"][field] = 99
 
-    with pytest.raises(ValueError, match=field):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
         to_prm_samples(episode)
 
 
@@ -337,27 +305,60 @@ def test_prm_export_rejects_summary_not_derived_from_steps():
     episode = _episode()
     episode["process_report"]["summary"]["total_steps"] = 99
 
-    with pytest.raises(ValueError, match="summary does not match"):
+    with pytest.raises(ValueError, match="does not match the canonical report"):
+        to_prm_samples(episode)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "value"),
+    [
+        ("step", "semantic_role", "fabricated"),
+        ("step", "label_source", "fabricated"),
+        ("evidence", "code_line_grounded", False),
+        ("evidence", "dependency_valid", False),
+        ("evidence", "duplicate", True),
+        ("evidence", "consensus_matches", 0),
+        ("evidence", "consensus_total", 0),
+        ("evidence", "reasons", ["fabricated"]),
+    ],
+)
+def test_prm_export_rejects_mutated_hook_metadata(
+    section: str, field: str, value: object
+):
+    episode = _episode()
+    hook = episode["process_report"]["steps"][0]
+    target = hook if section == "step" else hook["evidence"]
+    target[field] = value
+
+    with pytest.raises(ValueError, match="does not match the canonical report"):
+        to_prm_samples(episode, include_heuristic_hooks=True)
+
+
+def test_prm_export_requires_verifier_provenance():
+    episode = _episode()
+    del episode["triangulation"]
+
+    with pytest.raises(ValueError, match="triangulation must be an object"):
         to_prm_samples(episode)
 
 
 def test_prm_export_allows_valid_report_without_eligible_labels():
     episode = _episode()
-    for step in episode["process_report"]["steps"]:
-        step["label"] = None
-        step["label_kind"] = "unlabeled"
-        step["label_source"] = "insufficient_evidence"
-    terminal = episode["process_report"]["steps"][2]
-    terminal["label_source"] = "verifier_unavailable"
-    terminal["evidence"]["final_verified"] = None
-    episode["process_report"]["summary"] = {
-        "total_steps": 3,
-        "labeled_steps": 0,
-        "verified_steps": 0,
-        "heuristic_steps": 0,
-        "unlabeled_steps": 3,
-        "positive_steps": 0,
-        "negative_steps": 0,
+    episode["verified"] = False
+    episode["gold_trace"]["turns"][0]["execution"]["hooks"] = []
+    episode["consistency_traces"] = []
+    episode["triangulation"] = {
+        "n_consistency_runs": 0,
+        "n_consistency_succeeded": 0,
+        "majority_answer_hash": None,
+        "majority_count": 0,
+        "gold_matches_majority": False,
     }
+    episode["process_report"] = build_process_report(
+        source="llm_gen",
+        gold_trace=episode["gold_trace"],
+        consistency_traces=[],
+        verifier_verdict=None,
+    )
 
     assert to_prm_samples(episode) == []

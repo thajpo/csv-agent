@@ -282,7 +282,7 @@ def build_trace_dict(
         turns=turns,
         final_answer=final_state.submitted_answer,
         final_answer_hash=hash_artifact(final_state.submitted_answer)
-        if final_state.submitted_answer
+        if final_state.submitted_answer is not None
         else None,
         success=final_state.submitted_answer is not None,
     )

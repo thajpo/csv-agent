@@ -1,7 +1,12 @@
 """Tests for diagnostic process reports."""
 
+from types import SimpleNamespace
+
+import pytest
+
 from csv_spec import hash_artifact
 from src.datagen.process_report import build_process_report
+from src.datagen.teacher import build_trace_dict
 
 
 def _trace(*, hooks: list[dict], answer=7, success=True) -> dict:
@@ -359,3 +364,36 @@ def test_unknown_verifier_verdict_leaves_terminal_observation_unlabeled():
     assert terminal["evidence"]["final_verified"] is None
     assert report["summary"]["verified_steps"] == 0
     assert report["summary"]["unlabeled_steps"] == 1
+
+
+@pytest.mark.parametrize("answer", [0, False, ""])
+def test_trace_builder_hashes_falsy_answers(answer):
+    state = SimpleNamespace(
+        submitted_answer=answer,
+        execution_results_per_turn=[],
+    )
+
+    trace = build_trace_dict(state, [])
+
+    assert trace["success"] is True
+    assert trace["final_answer_hash"] == hash_artifact(answer)
+
+
+@pytest.mark.parametrize("answer", [0, False, ""])
+def test_submit_consensus_falls_back_to_hashing_falsy_answers(answer):
+    gold_trace = _trace(hooks=[], answer=answer)
+    gold_trace["final_answer_hash"] = None
+    consistency_trace = _trace(hooks=[], answer=answer)
+    consistency_trace["final_answer_hash"] = None
+
+    report = build_process_report(
+        source="llm_gen",
+        gold_trace=gold_trace,
+        consistency_traces=[consistency_trace],
+        verifier_verdict=True,
+    )
+
+    terminal = report["steps"][0]
+    assert terminal["value_hash"] == hash_artifact(answer)
+    assert terminal["evidence"]["consensus_matches"] == 1
+    assert terminal["evidence"]["consensus_total"] == 1
