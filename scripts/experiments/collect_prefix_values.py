@@ -1,7 +1,8 @@
 """Collect a small verifier-grounded value estimate for one turn boundary.
 
-This command intentionally defaults to one episode and caps branch count. It
-performs real model calls and prints the bounded call count before starting.
+This command intentionally defaults to one episode and caps continuation
+branches. It reports the planned rollout count before starting; each rollout
+can require multiple turn-level model requests.
 """
 
 from __future__ import annotations

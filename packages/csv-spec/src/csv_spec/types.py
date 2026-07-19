@@ -5,6 +5,7 @@ This is the CONTRACT between environment and trainer. All shared types in one pl
 - Core types (Question, Hook)
 - Turn-based types (ExecutionResult, Turn, Trace)
 - Episode types (EpisodeJSONL)
+- Prefix-value research types (TrajectoryPrefix, PrefixValueRecord)
 - Action/Step contract types (ActionSpec, StepResult) - NEW
 - Exploration types (ExplorationTurn, ExplorationTrace)
 - TypedDicts for JSONL serialization
@@ -211,7 +212,12 @@ class PrefixContinuation(BaseModel):
 
 
 class PrefixValueRecord(BaseModel):
-    """Auditable Monte Carlo estimate of future success from one prefix."""
+    """Auditable future-success estimate over all attempted continuations.
+
+    Errors remain in the attempted-continuation denominator with no verifier
+    verdict; ``labeled_continuations`` exposes how many attempts were actually
+    judged by the terminal verifier.
+    """
 
     prefix: TrajectoryPrefix
     policy: ContinuationPolicy

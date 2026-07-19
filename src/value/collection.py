@@ -49,7 +49,7 @@ def build_trajectory_prefix(
     turn_count: int,
     max_turns: int,
 ) -> TrajectoryPrefix:
-    """Create a deterministic, nonterminal prefix from a recorded trace."""
+    """Create a deterministic, oracle-free prefix from a recorded boundary."""
     turns = trace.get("turns", [])
     if turn_count < 0 or turn_count > len(turns):
         raise ValueError("turn_count is outside the recorded trace")
@@ -185,7 +185,12 @@ async def collect_prefix_value(
     dataset_revision: str | None = None,
     runner: ContinuationRunner = run_model_continuation,
 ) -> PrefixValueRecord:
-    """Estimate one prefix value from independently verified continuations."""
+    """Estimate success over all independently attempted continuations.
+
+    Terminal submissions are labeled only by the ground-truth verifier.
+    Replay, rollout, and verifier errors are retained without verdicts and
+    contribute zero to the value's attempted-continuation denominator.
+    """
     if not seeds:
         raise ValueError("at least one continuation seed is required")
 

@@ -226,7 +226,9 @@ class Environment:
     an LLM explores a CSV dataset using tools. It's designed to be
     pure RL logic with no presentation dependencies (uses stdlib logging).
 
-    Uses a sandboxed Python environment for code execution.
+    Uses a sandboxed Python environment for code execution. Recorded
+    nonterminal prefixes can be replayed in a fresh sandbox before continuing;
+    replay raises ``PrefixReplayError`` if execution differs from the record.
     """
 
     def __init__(
@@ -725,7 +727,13 @@ class Environment:
         turn_responses: list[str],
         conversation_messages: list[dict[str, str]],
     ) -> None:
-        """Re-execute recorded turns and fail if any result changes."""
+        """Restore a public turn boundary after exact execution replay.
+
+        Each recorded response must contain one valid code cell. Success,
+        stdout, stderr, hooks, and submitted answer are compared exactly; any
+        divergence or terminal replay raises ``PrefixReplayError``. After the
+        checks pass, the exact recorded conversation feedback is restored.
+        """
         if not hasattr(self, "conversation"):
             raise RuntimeError("init_state() must be called before replay_turns()")
         if len(turns) != len(turn_responses):
@@ -803,7 +811,11 @@ class Environment:
                 await self.env.destroy_sandbox(self.state["sandbox_id"])
 
     async def rollout_from_prefix(self, prefix: TrajectoryPrefix) -> "Environment":
-        """Replay a prefix in a fresh sandbox, then sample one continuation."""
+        """Replay a matching prefix in a fresh sandbox, then finish its rollout.
+
+        The configured question, CSV path, and maximum turn budget must match
+        the prefix. Sandbox cleanup follows the same rules as ``rollout``.
+        """
         configured_question = (
             self.task.question.question_text if self.task.question else ""
         )

@@ -48,6 +48,10 @@ class APILLM:
 
     IMPORTANT: model parameter has no default. It MUST be provided explicitly
     from src.core.config. Do not add a default model here.
+
+    ``sampling_args`` supports ``max_tokens``, ``temperature``, ``top_p``,
+    ``seed``, ``stop``, ``presence_penalty``, and ``frequency_penalty``. A
+    non-None seed is forwarded to the OpenAI-compatible provider.
     """
 
     def __init__(
