@@ -20,8 +20,12 @@ from src.value import (
     collect_prefix_value,
     run_initial_model_trace,
 )
+from src.core.model import API_MAX_RETRIES
 
 MAX_CONTINUATIONS = 16
+MAX_EPISODES = 8
+MAX_TURNS = 20
+MAX_PROVIDER_REQUESTS = 300
 
 
 def parse_args() -> argparse.Namespace:
@@ -54,12 +58,26 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError(f"episodes file does not exist: {args.episodes}")
     if args.csv is not None and not args.csv.is_file():
         raise ValueError(f"CSV override does not exist: {args.csv}")
-    if args.max_episodes <= 0:
-        raise ValueError("max-episodes must be positive")
+    if not 1 <= args.max_episodes <= MAX_EPISODES:
+        raise ValueError(f"max-episodes must be between 1 and {MAX_EPISODES}")
+    if not 1 <= args.max_turns <= MAX_TURNS:
+        raise ValueError(f"max-turns must be between 1 and {MAX_TURNS}")
     if args.turn_count < 0 or args.turn_count >= args.max_turns:
         raise ValueError("turn-count must be between zero and max-turns - 1")
     if not 1 <= args.continuations <= MAX_CONTINUATIONS:
         raise ValueError(f"continuations must be between 1 and {MAX_CONTINUATIONS}")
+    request_limit = maximum_provider_requests(args)
+    if request_limit > MAX_PROVIDER_REQUESTS:
+        raise ValueError(
+            f"configuration permits up to {request_limit} provider requests; "
+            f"the canary limit is {MAX_PROVIDER_REQUESTS}"
+        )
+
+
+def maximum_provider_requests(args: argparse.Namespace) -> int:
+    """Worst-case HTTP requests including API retries."""
+    rollouts = args.max_episodes * (1 + args.continuations)
+    return rollouts * args.max_turns * API_MAX_RETRIES
 
 
 def load_episodes(path: Path, limit: int) -> list[EpisodeJSONL]:
@@ -100,9 +118,11 @@ async def collect(args: argparse.Namespace) -> list[dict]:
     commit = current_commit()
     records: list[dict] = []
 
-    total_calls = len(episodes) * (1 + args.continuations)
+    total_rollouts = len(episodes) * (1 + args.continuations)
+    request_limit = total_rollouts * args.max_turns * API_MAX_RETRIES
     print(
-        f"Collecting {len(episodes)} prefix value(s): {total_calls} model calls "
+        f"Collecting {len(episodes)} prefix value(s): {total_rollouts} rollouts, "
+        f"at most {request_limit} provider requests "
         f"({args.continuations} continuations each)."
     )
 

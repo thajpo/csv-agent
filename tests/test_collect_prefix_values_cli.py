@@ -8,7 +8,9 @@ import pytest
 
 from scripts.experiments.collect_prefix_values import (
     MAX_CONTINUATIONS,
+    MAX_PROVIDER_REQUESTS,
     load_episodes,
+    maximum_provider_requests,
     validate_args,
 )
 
@@ -41,6 +43,7 @@ def test_defaults_are_bounded_and_fixture_loads(episodes_jsonl: Path) -> None:
     episodes = load_episodes(args.episodes, args.max_episodes)
 
     assert len(episodes) == 1
+    assert maximum_provider_requests(args) <= MAX_PROVIDER_REQUESTS
 
 
 def test_continuation_cap_rejects_accidental_large_run(
@@ -48,3 +51,15 @@ def test_continuation_cap_rejects_accidental_large_run(
 ) -> None:
     with pytest.raises(ValueError, match="continuations"):
         validate_args(_args(episodes_jsonl, continuations=MAX_CONTINUATIONS + 1))
+
+
+def test_combined_request_budget_rejects_large_run(episodes_jsonl: Path) -> None:
+    with pytest.raises(ValueError, match="provider requests"):
+        validate_args(
+            _args(
+                episodes_jsonl,
+                max_episodes=2,
+                continuations=MAX_CONTINUATIONS,
+                max_turns=10,
+            )
+        )

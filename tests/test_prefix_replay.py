@@ -1,6 +1,7 @@
 """Tests for replaying a recorded turn boundary before continuation."""
 
 import json
+import math
 
 import pytest
 from csv_spec import Question, TrajectoryPrefix
@@ -124,6 +125,13 @@ async def test_replay_rejects_divergent_execution() -> None:
         )
 
 
+def test_replay_comparison_handles_nan_diagnostics() -> None:
+    first = {"hooks": [{"value": math.nan}], "stdout": "same"}
+    second = {"hooks": [{"value": math.nan}], "stdout": "same"}
+
+    assert Environment._replay_values_equal(first, second)
+
+
 @pytest.mark.asyncio
 async def test_rejected_submission_records_a_nonterminal_boundary() -> None:
     code = 'submit("The result is statistically significant with p value 0.01")'
@@ -171,4 +179,20 @@ async def test_rollout_can_continue_after_replay_and_cleans_up() -> None:
         {"role": "system", "content": _prefix().system_prompt},
         *_recorded_messages(),
     ]
+    assert sandbox.destroyed is True
+
+
+@pytest.mark.asyncio
+async def test_invalid_responses_consume_turn_budget_without_extra_final_call() -> None:
+    invalid = "No executable cell is present."
+    llm = FakeLLM([invalid, invalid])
+    sandbox = FakeSandbox({})
+    environment = _environment(sandbox, llm=llm)
+    environment.execution.max_turns = 2
+
+    result = await environment.rollout()
+
+    assert result.current_turn == 2
+    assert len(llm.calls) == 2
+    assert result.submitted_answer is None
     assert sandbox.destroyed is True

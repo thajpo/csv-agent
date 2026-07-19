@@ -24,20 +24,19 @@ uv run python scripts/experiments/collect_prefix_values.py \
 ```
 
 Before starting, the command reports one source rollout plus the requested
-continuation rollouts per episode as its planned call count. Each rollout can
-make multiple turn-level provider requests. The defaults select the boundary
-after one completed turn, sample four continuations, and process one episode.
-`--turn-count 0` selects the initial state; every selected boundary must leave
-at least one of `--max-turns` available. Continuations are capped at 16;
-`--max-episodes` has no hard cap, so keep its default of one for the intended
-canary. The base seed is offset for the source rollout and each continuation.
-The provider receives the seed when its OpenAI-compatible API supports that
-field.
+continuation rollouts and their worst-case provider-request count, including
+retries. The defaults select the boundary after one completed turn, sample four
+continuations, and process one episode. `--turn-count 0` selects the initial
+state; every selected boundary must leave at least one of `--max-turns`
+available. Continuations, episodes, turns, and their combined provider-request
+budget are all capped. The base seed is offset for the source rollout and each
+continuation. The provider receives the seed when its OpenAI-compatible API
+supports that field.
 
 Each output line is a validated `PrefixValueRecord`. It includes the exact
 public prefix, actor policy, seeds, continuation traces or errors, terminal
 verdicts, current Git commit, and supplied dataset revision. The value is
-successful continuations divided by all attempts, so replay, rollout, and
-verifier errors count as unsuccessful attempts while remaining visibly
-unlabeled. Hooks may appear in traces as diagnostics, but they neither reject a
-submission nor define a value label.
+successful continuations divided by all attempts only when every attempt is
+labeled. Replay, rollout, or verifier errors make the estimate unavailable
+while remaining auditable. Hooks may appear in traces as diagnostics, but they
+neither reject a submission nor define a value label.

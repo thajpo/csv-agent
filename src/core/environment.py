@@ -31,7 +31,6 @@ from src.core.prompts import (
     generate_data_overview,
     build_system_prompt,
     CONTINUE_MSG,
-    FINAL_MSG,
 )
 from src.datagen.shared.submission import parse_submission
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
@@ -566,16 +565,6 @@ class Environment:
 
         return result
 
-    async def handle_max_turns_reached(self) -> None:
-        """Handle reaching max turns: prompt for final output and get response."""
-
-        self.conversation.add_user_feedback(FINAL_MSG)
-
-        response = await self.get_model_response()
-
-        self.conversation.add_assistant_response(response)
-        self.is_completed = True
-
     async def get_model_response(self) -> str:
         """Call model and log the interaction."""
         messages = self.conversation.to_openai_messages()
@@ -721,6 +710,21 @@ class Environment:
             "submitted_answer": result.submitted_answer,
         }
 
+    @staticmethod
+    def _replay_values_equal(left: object, right: object) -> bool:
+        """Compare JSON-like execution values with stable NaN handling."""
+        return json.dumps(
+            left,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ) == json.dumps(
+            right,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+
     async def replay_turns(
         self,
         turns: list[TurnDict],
@@ -763,11 +767,13 @@ class Environment:
 
             actual = self._execution_for_comparison(execution_results[0])
             expected = turn.get("execution")
-            if actual != expected:
+            if not self._replay_values_equal(actual, expected):
                 differing_fields = [
                     field
                     for field in actual
-                    if actual.get(field) != (expected or {}).get(field)
+                    if not self._replay_values_equal(
+                        actual.get(field), (expected or {}).get(field)
+                    )
                 ]
                 raise PrefixReplayError(
                     f"turn {expected_index} replay diverged in: "
@@ -790,12 +796,13 @@ class Environment:
         """Continue from the currently initialized conversation and sandbox."""
         while not self.is_completed:
             if self.current_turn >= self.execution.max_turns:
-                await self.handle_max_turns_reached()
+                self.is_completed = True
                 break
 
             response = await self.get_model_response()
             code_cells = self.extract_python_cells(response)
             if not self.response_is_valid(response, code_cells):
+                self.current_turn += 1
                 continue
 
             await self.process_turn(response)
