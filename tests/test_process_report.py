@@ -1,5 +1,6 @@
 """Tests for diagnostic process reports."""
 
+from csv_spec import hash_artifact
 from src.datagen.process_report import build_process_report
 
 
@@ -134,6 +135,76 @@ def test_llm_hook_without_consensus_remains_unlabeled():
     assert hook_step["label_kind"] == "unlabeled"
     assert submit_step["label"] == 1.0
     assert submit_step["label_kind"] == "verified"
+
+
+def test_one_consensus_match_is_enough_for_hook_heuristic():
+    report = build_process_report(
+        source="llm_gen",
+        gold_trace=_trace(hooks=[_hook("filtered", "hash-filtered")]),
+        consistency_traces=[
+            _trace(hooks=[_hook("same_value", "hash-filtered")]),
+            _trace(hooks=[_hook("other_value", "hash-other")]),
+        ],
+        verified=True,
+    )
+
+    hook_step = report["steps"][0]
+    assert hook_step["evidence"]["consensus_matches"] == 1
+    assert hook_step["label"] == 1.0
+    assert hook_step["label_kind"] == "heuristic"
+
+
+def test_only_accepted_submission_receives_verifier_label():
+    trace = {
+        "turns": [
+            {
+                "turn_index": 0,
+                "reasoning": "Rejected submission",
+                "code": "submit(1)",
+                "execution": {
+                    "success": True,
+                    "stdout": "",
+                    "stderr": "",
+                    "hooks": [],
+                    "submitted_answer": 1,
+                },
+            },
+            {
+                "turn_index": 1,
+                "reasoning": "Accepted submission",
+                "code": "submit(2)",
+                "execution": {
+                    "success": True,
+                    "stdout": "",
+                    "stderr": "",
+                    "hooks": [],
+                    "submitted_answer": 2,
+                },
+            },
+        ],
+        "final_answer": 2,
+        "final_answer_hash": "accepted-answer-hash",
+        "success": True,
+    }
+
+    report = build_process_report(
+        source="llm_gen",
+        gold_trace=trace,
+        consistency_traces=[],
+        verified=True,
+    )
+
+    rejected, accepted = report["steps"]
+    assert rejected["value"] == 1
+    assert rejected["value_hash"] == hash_artifact(1)
+    assert rejected["label"] is None
+    assert rejected["label_kind"] == "unlabeled"
+    assert rejected["label_source"] == "rejected_submission"
+    assert rejected["evidence"]["final_verified"] is False
+    assert accepted["value"] == 2
+    assert accepted["value_hash"] == "accepted-answer-hash"
+    assert accepted["label"] == 1.0
+    assert accepted["label_kind"] == "verified"
 
 
 def test_future_code_cannot_ground_an_earlier_hook():

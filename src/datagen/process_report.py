@@ -38,6 +38,16 @@ def build_process_report(
     consensus_total = sum(1 for trace in consistency_traces if trace.get("success"))
     seen_names: set[str] = set()
     seen_hashes: set[str] = set()
+    submitted_turns = [
+        turn_index
+        for turn_index, turn in enumerate(gold_trace.get("turns", []))
+        if turn.get("execution", {}).get("submitted_answer") is not None
+    ]
+    accepted_submit_turn = (
+        submitted_turns[-1]
+        if gold_trace.get("success", False) and submitted_turns
+        else None
+    )
 
     for turn_index, turn in enumerate(gold_trace.get("turns", [])):
         execution = turn.get("execution", {})
@@ -93,20 +103,31 @@ def build_process_report(
 
         submitted = execution.get("submitted_answer")
         if submitted is not None:
-            answer_hash = gold_trace.get("final_answer_hash") or hash_artifact(
-                submitted
-            )
+            accepted = turn_index == accepted_submit_turn
+            if accepted:
+                answer_hash = gold_trace.get("final_answer_hash") or hash_artifact(
+                    submitted
+                )
+            else:
+                answer_hash = hash_artifact(submitted)
             evidence = ProcessStepEvidenceDict(
-                final_verified=verified,
+                final_verified=verified if accepted else False,
                 trace_success=gold_trace.get("success", False),
                 code_line_grounded=True,
                 dependency_valid=True,
                 duplicate=False,
                 consensus_matches=majority_count,
                 consensus_total=max(consensus_total, majority_count),
-                reasons=[],
+                reasons=[] if accepted else ["submission_not_accepted"],
             )
-            label, label_kind, label_source = _label_submit(evidence=evidence)
+            if accepted:
+                label, label_kind, label_source = _label_submit(evidence=evidence)
+            else:
+                label, label_kind, label_source = (
+                    None,
+                    "unlabeled",
+                    "rejected_submission",
+                )
             steps.append(
                 ProcessStepReportDict(
                     step_index=len(steps),
@@ -200,12 +221,7 @@ def _label_hook(
     if source in {"template", "procedural"}:
         return 1.0, "heuristic", "successful_trace_heuristic"
 
-    matches = int(evidence.get("consensus_matches", 0))
-    total = int(evidence.get("consensus_total", 0))
-    ratio = matches / total if total else 0.0
-    if matches >= 2 or ratio >= 0.67:
-        return 1.0, "heuristic", "trace_consensus_heuristic"
-    if matches >= 1:
+    if int(evidence.get("consensus_matches", 0)) >= 1:
         return 1.0, "heuristic", "trace_consensus_heuristic"
     return None, "unlabeled", "insufficient_evidence"
 

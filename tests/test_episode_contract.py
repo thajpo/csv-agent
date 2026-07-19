@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from csv_spec import EpisodeJSONL
+from pydantic import ValidationError
 
 
 FIXTURE_PATH = Path("data/fixtures/sample_episode.json")
@@ -196,6 +198,13 @@ class TestPRMDerivability:
             if step["label_kind"] == "verified":
                 assert step["step_type"] == "submit"
             assert "evidence" in step, "Process step missing evidence"
+
+    def test_process_report_requires_canonical_step_fields(self, episode):
+        episode["consistency_traces"] = []
+        del episode["process_report"]["steps"][0]["step_type"]
+
+        with pytest.raises(ValidationError, match="step_type"):
+            EpisodeJSONL.model_validate(episode)
 
     def test_hooks_structure_when_present(self, episode):
         """If hooks are present, they must have required fields."""

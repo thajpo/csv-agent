@@ -18,6 +18,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from csv_spec import ProcessReportDict
+from pydantic import TypeAdapter, ValidationError
+
+
+_PROCESS_REPORT_ADAPTER = TypeAdapter(ProcessReportDict)
+
 
 def load_episodes(input_path: str, verified_only: bool = True) -> list[dict[str, Any]]:
     """Load episodes from JSONL file."""
@@ -209,8 +215,22 @@ def to_prm_samples(
     question = episode.get("question", {})
     gold_trace = episode.get("gold_trace") or episode.get("teacher_gold_trace", {})
     turns = gold_trace.get("turns", [])
-    process_report = episode.get("process_report") or {}
-    process_steps = process_report.get("steps", [])
+    episode_id = episode.get("episode_id", "<unknown>")
+    if "process_report" not in episode:
+        raise ValueError(
+            f"Episode {episode_id!r} is missing required process_report; "
+            "regenerate episodes before PRM conversion"
+        )
+    try:
+        process_report = _PROCESS_REPORT_ADAPTER.validate_python(
+            episode["process_report"]
+        )
+    except ValidationError as exc:
+        raise ValueError(
+            f"Episode {episode_id!r} has malformed process_report; "
+            "regenerate episodes before PRM conversion"
+        ) from exc
+    process_steps = process_report["steps"]
 
     if not turns or not process_steps:
         return []

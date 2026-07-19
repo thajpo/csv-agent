@@ -166,7 +166,7 @@ class ProcessStepEvidenceDict(TypedDict, total=False):
     reasons: list[str]
 
 
-class ProcessStepReportDict(TypedDict, total=False):
+class ProcessStepReportDict(TypedDict):
     """One observed process step with verified or heuristic judgment."""
 
     step_index: int
