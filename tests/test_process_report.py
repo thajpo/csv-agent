@@ -16,6 +16,10 @@ from src.envs.csv_env import get_setup_code
 from src.utils.parsing import extract_python_cells
 
 
+def _submission_stdout(answer) -> str:
+    return "✓ Submitted: " + json.dumps({"__csv_agent_answer__": answer})
+
+
 def _trace(*, hooks: list[dict], answer=7, success=True) -> dict:
     final_answer = answer if success else None
     return {
@@ -31,7 +35,7 @@ def _trace(*, hooks: list[dict], answer=7, success=True) -> dict:
                 ),
                 "execution": {
                     "success": success,
-                    "stdout": "",
+                    "stdout": _submission_stdout(final_answer) if success else "",
                     "stderr": "",
                     "hooks": hooks,
                     "submitted_answer": final_answer,
@@ -55,6 +59,7 @@ def _hook(name: str, value_hash: str, **overrides) -> dict:
         "description": None,
         "depends_on": [],
         "event_line": 2,
+        "event_provenance_reason": None,
     }
     hook.update(overrides)
     return hook
@@ -177,7 +182,7 @@ def test_only_accepted_submission_receives_verifier_label():
                 "code": "submit(1)",
                 "execution": {
                     "success": True,
-                    "stdout": "",
+                    "stdout": _submission_stdout(1),
                     "stderr": "",
                     "hooks": [],
                     "submitted_answer": 1,
@@ -189,7 +194,7 @@ def test_only_accepted_submission_receives_verifier_label():
                 "code": "submit(2)",
                 "execution": {
                     "success": True,
-                    "stdout": "",
+                    "stdout": _submission_stdout(2),
                     "stderr": "",
                     "hooks": [],
                     "submitted_answer": 2,
@@ -230,7 +235,7 @@ def test_submit_consensus_is_counted_per_submission_hash():
                 "code": "submit(1)",
                 "execution": {
                     "success": True,
-                    "stdout": "",
+                    "stdout": _submission_stdout(1),
                     "stderr": "",
                     "hooks": [],
                     "submitted_answer": 1,
@@ -242,7 +247,7 @@ def test_submit_consensus_is_counted_per_submission_hash():
                 "code": "submit(7)",
                 "execution": {
                     "success": True,
-                    "stdout": "",
+                    "stdout": _submission_stdout(7),
                     "stderr": "",
                     "hooks": [],
                     "submitted_answer": 7,
@@ -300,7 +305,7 @@ def test_future_code_cannot_ground_an_earlier_hook():
                 "code": "later = 2\nsubmit(later)",
                 "execution": {
                     "success": True,
-                    "stdout": "",
+                    "stdout": _submission_stdout(2),
                     "stderr": "",
                     "hooks": [],
                     "submitted_answer": 2,
@@ -340,6 +345,7 @@ def test_later_statement_in_same_cell_cannot_ground_hook():
         "early = 1\nhook(early, 'later = 2', name='later')\nlater = 2\nsubmit(later)"
     )
     trace["turns"][0]["execution"]["submitted_answer"] = 2
+    trace["turns"][0]["execution"]["stdout"] = _submission_stdout(2)
     trace["final_answer"] = 2
     trace["final_answer_hash"] = hash_artifact(2)
 
@@ -389,6 +395,23 @@ def test_missing_hook_event_provenance_is_unlabeled_diagnostic():
     assert hook_step["label_source"] == "event_provenance_unavailable"
     assert hook_step["evidence"]["code_line_grounded"] is False
     assert hook_step["evidence"]["reasons"] == ["missing_or_ambiguous_event_provenance"]
+
+
+def test_missing_hook_provenance_state_is_unlabeled_diagnostic():
+    hook = _hook("filtered", "hash-filtered")
+    del hook["event_provenance_reason"]
+
+    report = build_process_report(
+        source="template",
+        gold_trace=_trace(hooks=[hook]),
+        consistency_traces=[],
+        verifier_verdict=True,
+    )
+
+    hook_step = report["steps"][0]
+    assert hook_step["label"] is None
+    assert hook_step["label_kind"] == "unlabeled"
+    assert hook_step["evidence"]["reasons"] == ["missing_event_provenance_state"]
 
 
 @pytest.mark.asyncio
@@ -511,6 +534,47 @@ async def test_execution_keeps_extra_stdout_hook_unlabeled():
         result.hooks[1]["event_provenance_reason"]
         == "unauthenticated_stdout_provenance"
     )
+
+
+def test_malformed_stdout_hook_remains_normalized_unlabeled_diagnostic():
+    payload = {
+        "__csv_agent_hook__": True,
+        "variable_name": {"invalid": "name"},
+        "code_line": ["value = 1"],
+        "value": 1,
+        "value_hash": {"invalid": "hash"},
+        "depends_on": ["valid", ["unhashable"]],
+        "description": 7,
+        "event_line": 2,
+    }
+
+    records = _parse_hook_records(
+        "📍 Hook: " + json.dumps(payload),
+        code="value = 1\nhook(value, 'value = 1')",
+    )
+
+    assert records == [
+        {
+            "variable_name": None,
+            "code_line": "",
+            "value": 1,
+            "value_hash": "",
+            "depends_on": ["valid"],
+            "description": None,
+            "event_line": None,
+            "event_provenance_reason": "invalid_hook_record_provenance",
+        }
+    ]
+    report = build_process_report(
+        source="template",
+        gold_trace=_trace(hooks=records),
+        consistency_traces=[],
+        verifier_verdict=True,
+    )
+    hook_step = report["steps"][0]
+    assert hook_step["label"] is None
+    assert hook_step["label_kind"] == "unlabeled"
+    assert hook_step["evidence"]["reasons"][0] == ("invalid_hook_record_provenance")
 
 
 def test_report_does_not_ground_event_line_without_hook_call():
@@ -918,6 +982,7 @@ def test_process_report_rejects_type_distinct_accepted_submission(
 ):
     trace = _trace(hooks=[], answer=final_answer)
     trace["turns"][0]["execution"]["submitted_answer"] = submitted
+    trace["turns"][0]["execution"]["stdout"] = _submission_stdout(submitted)
 
     with pytest.raises(ValueError, match="final answer is not the accepted submission"):
         build_process_report(
@@ -931,6 +996,7 @@ def test_process_report_rejects_type_distinct_accepted_submission(
 def test_process_report_rejects_distinct_values_with_same_rounded_hash():
     trace = _trace(hooks=[], answer=1.004)
     trace["turns"][0]["execution"]["submitted_answer"] = 1.001
+    trace["turns"][0]["execution"]["stdout"] = _submission_stdout(1.001)
     assert hash_artifact(1.001) == hash_artifact(1.004)
 
     with pytest.raises(ValueError, match="final answer is not the accepted submission"):
@@ -955,6 +1021,19 @@ def test_process_report_rejects_submission_record_mismatch(
     )
 
     with pytest.raises(ValueError, match="does not match captured answer"):
+        build_process_report(
+            source="template",
+            gold_trace=trace,
+            consistency_traces=[],
+            verifier_verdict=True,
+        )
+
+
+def test_process_report_rejects_captured_submission_without_logged_record():
+    trace = _trace(hooks=[], answer=7)
+    trace["turns"][0]["execution"]["stdout"] = ""
+
+    with pytest.raises(ValueError, match="submission record is missing"):
         build_process_report(
             source="template",
             gold_trace=trace,

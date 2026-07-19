@@ -505,11 +505,26 @@ def _validate_trace(*, trace: Any, path: str, prefix: str) -> TraceDict:
                 "description",
                 "depends_on",
                 "event_line",
+                "event_provenance_reason",
             }
             if not hook_fields.issubset(hook):
                 raise ValueError(f"{prefix}: {hook_path} provenance is incomplete")
-            if not isinstance(hook["depends_on"], list):
+            if not isinstance(hook["code_line"], str):
+                raise ValueError(f"{prefix}: {hook_path}.code_line must be a string")
+            if hook["variable_name"] is not None and not isinstance(
+                hook["variable_name"], str
+            ):
+                raise ValueError(f"{prefix}: {hook_path}.variable_name is invalid")
+            if not isinstance(hook["value_hash"], str):
+                raise ValueError(f"{prefix}: {hook_path}.value_hash must be a string")
+            if not isinstance(hook["depends_on"], list) or not all(
+                isinstance(dep, str) for dep in hook["depends_on"]
+            ):
                 raise ValueError(f"{prefix}: {hook_path}.depends_on must be a list")
+            if hook["description"] is not None and not isinstance(
+                hook["description"], str
+            ):
+                raise ValueError(f"{prefix}: {hook_path}.description is invalid")
             event_line = hook["event_line"]
             if event_line is not None and (
                 type(event_line) is not int
@@ -517,6 +532,17 @@ def _validate_trace(*, trace: Any, path: str, prefix: str) -> TraceDict:
                 or event_line > len(turn["code"].splitlines())
             ):
                 raise ValueError(f"{prefix}: {hook_path}.event_line is invalid")
+            provenance_reason = hook["event_provenance_reason"]
+            if provenance_reason is not None and (
+                not isinstance(provenance_reason, str) or not provenance_reason
+            ):
+                raise ValueError(
+                    f"{prefix}: {hook_path}.event_provenance_reason is invalid"
+                )
+            if provenance_reason is None and event_line is None:
+                raise ValueError(
+                    f"{prefix}: {hook_path} authenticated provenance is incomplete"
+                )
     try:
         canonical_answer_hash = trace_answer_hash(cast(TraceDict, trace))
         validate_trace_submissions(cast(TraceDict, trace), path=path)

@@ -42,7 +42,7 @@ def sample_trace() -> TraceDict:
                 "code": "result = df['age'].mean()\nsubmit(result)",
                 "execution": {
                     "success": True,
-                    "stdout": "",
+                    "stdout": '✓ Submitted: {"__csv_agent_answer__": 42.5}',
                     "stderr": "",
                     "hooks": [],
                     "submitted_answer": 42.5,
@@ -75,6 +75,9 @@ def sample_verification_result_failure(sample_trace: TraceDict) -> VerificationR
     mismatch_trace = copy.deepcopy(sample_trace)
     mismatch_trace["turns"][0]["code"] = "submit(99)"
     mismatch_trace["turns"][0]["execution"]["submitted_answer"] = 99
+    mismatch_trace["turns"][0]["execution"]["stdout"] = (
+        '✓ Submitted: {"__csv_agent_answer__": 99}'
+    )
     mismatch_trace["final_answer"] = 99
     mismatch_trace["final_answer_hash"] = hash_artifact(99)
     return VerificationResult(
@@ -101,7 +104,7 @@ def sample_verification_result_consistency(
                 "code": "result = df['age'].mean()\nsubmit(result)",
                 "execution": {
                     "success": True,
-                    "stdout": "",
+                    "stdout": '✓ Submitted: {"__csv_agent_answer__": 42.5}',
                     "stderr": "",
                     "hooks": [],
                     "submitted_answer": 42.5,

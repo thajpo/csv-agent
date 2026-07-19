@@ -102,10 +102,10 @@ def build_process_report(
 
             if event_provenance_reason is None:
                 name = hook.get("variable_name")
-                if name:
+                if isinstance(name, str) and name:
                     seen_names.add(name)
                 value_hash = hook.get("value_hash")
-                if value_hash:
+                if isinstance(value_hash, str) and value_hash:
                     seen_hashes.add(value_hash)
 
         submitted = execution.get("submitted_answer")
@@ -173,7 +173,11 @@ def _consensus_counts(consistency_traces: list[TraceDict]) -> Counter[str]:
                     current_code=code_cells[turn_index],
                 )
                 value_hash = hook.get("value_hash")
-                if provenance_reason is None and value_hash:
+                if (
+                    provenance_reason is None
+                    and isinstance(value_hash, str)
+                    and value_hash
+                ):
                     hashes_in_trace.add(value_hash)
         for value_hash in hashes_in_trace:
             counts[value_hash] += 1
@@ -207,6 +211,8 @@ def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None
         turn_path = f"{path}.turns[{turn_index}]"
         if len(submission_line_indexes) > 1:
             raise ValueError(f"{turn_path} contains multiple submissions")
+        if submitted_answer is not None and not submission_line_indexes:
+            raise ValueError(f"{turn_path} submission record is missing")
         if submission_line_indexes and submitted_answer is None:
             raise ValueError(f"{turn_path} submission was not captured")
         if submission_line_indexes:
@@ -286,9 +292,30 @@ def _hook_grounding(
     *, hook: dict[str, Any], earlier_code_cells: list[str], current_code: str
 ) -> tuple[bool, str | None]:
     """Check grounding only against code that preceded the runtime hook event."""
-    provenance_reason = hook.get("event_provenance_reason")
+    if "event_provenance_reason" not in hook:
+        return False, "missing_event_provenance_state"
+    provenance_reason = hook["event_provenance_reason"]
+    if provenance_reason is not None and (
+        not isinstance(provenance_reason, str) or not provenance_reason
+    ):
+        return False, "invalid_hook_record_provenance"
     if provenance_reason is not None:
         return False, provenance_reason
+    if (
+        not isinstance(hook.get("code_line"), str)
+        or (
+            hook.get("variable_name") is not None
+            and not isinstance(hook.get("variable_name"), str)
+        )
+        or not isinstance(hook.get("value_hash"), str)
+        or not isinstance(hook.get("depends_on"), list)
+        or not all(isinstance(dep, str) for dep in hook.get("depends_on", []))
+        or (
+            hook.get("description") is not None
+            and not isinstance(hook.get("description"), str)
+        )
+    ):
+        return False, "invalid_hook_record_provenance"
     event_line = hook.get("event_line")
     current_lines = current_code.splitlines()
     if event_line is None:
@@ -347,8 +374,14 @@ def _hook_evidence(
 ) -> ProcessStepEvidenceDict:
     reasons: list[str] = []
     depends_on = hook.get("depends_on", [])
+    if not isinstance(depends_on, list) or not all(
+        isinstance(dep, str) for dep in depends_on
+    ):
+        depends_on = []
     dependency_valid = all(dep in seen_names for dep in depends_on)
     value_hash = hook.get("value_hash")
+    if not isinstance(value_hash, str):
+        value_hash = ""
     duplicate = bool(value_hash and value_hash in seen_hashes)
 
     if event_provenance_reason is not None:
@@ -366,7 +399,7 @@ def _hook_evidence(
         code_line_grounded=grounded,
         dependency_valid=dependency_valid,
         duplicate=duplicate,
-        consensus_matches=consensus.get(hook.get("value_hash", ""), 0),
+        consensus_matches=consensus.get(value_hash, 0),
         consensus_total=consensus_total,
         reasons=reasons,
     )

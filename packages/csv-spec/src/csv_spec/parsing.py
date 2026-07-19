@@ -32,11 +32,46 @@ def parse_hook_record(
     ):
         return None
 
-    event_line = hook_data.get("event_line") if trusted_event_provenance else None
+    invalid_record = False
+
+    variable_name = hook_data.get("variable_name")
+    if variable_name is not None and not isinstance(variable_name, str):
+        variable_name = None
+        invalid_record = True
+
+    code_line = hook_data.get("code_line", "")
+    if not isinstance(code_line, str):
+        code_line = ""
+        invalid_record = True
+
+    value_hash = hook_data.get("value_hash", "")
+    if not isinstance(value_hash, str):
+        value_hash = ""
+        invalid_record = True
+
+    raw_depends_on = hook_data.get("depends_on", [])
+    if isinstance(raw_depends_on, list):
+        depends_on = [dep for dep in raw_depends_on if isinstance(dep, str)]
+        invalid_record = invalid_record or len(depends_on) != len(raw_depends_on)
+    else:
+        depends_on = []
+        invalid_record = True
+
+    description = hook_data.get("description")
+    if description is not None and not isinstance(description, str):
+        description = None
+        invalid_record = True
+
+    raw_event_line = hook_data.get("event_line")
+    event_line = raw_event_line if trusted_event_provenance else None
     if event_line is not None and (type(event_line) is not int or event_line < 1):
         event_line = None
+        invalid_record = True
+
     event_provenance_reason = hook_data.get("event_provenance_reason")
-    if not trusted_event_provenance:
+    if invalid_record:
+        event_provenance_reason = "invalid_hook_record_provenance"
+    elif not trusted_event_provenance:
         event_provenance_reason = "unauthenticated_stdout_provenance"
     elif event_provenance_reason is not None and not isinstance(
         event_provenance_reason, str
@@ -44,12 +79,12 @@ def parse_hook_record(
         event_provenance_reason = "invalid_event_provenance"
 
     return HookDict(
-        variable_name=hook_data.get("variable_name"),
-        code_line=hook_data.get("code_line", ""),
+        variable_name=variable_name,
+        code_line=code_line,
         value=hook_data.get("value"),
-        value_hash=hook_data.get("value_hash", ""),
-        depends_on=hook_data.get("depends_on", []),
-        description=hook_data.get("description"),
+        value_hash=value_hash,
+        depends_on=depends_on,
+        description=description,
         event_line=event_line,
         event_provenance_reason=event_provenance_reason,
     )

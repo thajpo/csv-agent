@@ -34,7 +34,8 @@
               "value_hash": "hash123",
               "depends_on": [],
               "description": null,
-              "event_line": 7
+              "event_line": 7,
+              "event_provenance_reason": null
             }
           ],
           "submitted_answer": 13270.42

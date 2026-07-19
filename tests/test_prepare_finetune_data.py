@@ -10,6 +10,10 @@ from src.datagen.process_report import build_process_report
 from src.training.prepare_finetune_data import convert_episodes, to_prm_samples
 
 
+def _submission_stdout(answer) -> str:
+    return "✓ Submitted: " + json.dumps({"__csv_agent_answer__": answer})
+
+
 def _episode() -> dict:
     answer_hash = hash_artifact(7)
     gold_trace = {
@@ -25,7 +29,7 @@ def _episode() -> dict:
                 ),
                 "execution": {
                     "success": True,
-                    "stdout": "ok",
+                    "stdout": '✓ Submitted: {"__csv_agent_answer__": 7}',
                     "stderr": "",
                     "hooks": [
                         {
@@ -36,6 +40,7 @@ def _episode() -> dict:
                             "description": None,
                             "depends_on": [],
                             "event_line": 2,
+                            "event_provenance_reason": None,
                         },
                         {
                             "variable_name": "unused",
@@ -45,6 +50,7 @@ def _episode() -> dict:
                             "description": None,
                             "depends_on": [],
                             "event_line": 3,
+                            "event_provenance_reason": None,
                         },
                     ],
                     "submitted_answer": 7,
@@ -67,7 +73,7 @@ def _episode() -> dict:
                 ),
                 "execution": {
                     "success": True,
-                    "stdout": "ok",
+                    "stdout": '✓ Submitted: {"__csv_agent_answer__": 7}',
                     "stderr": "",
                     "hooks": [
                         copy.deepcopy(gold_trace["turns"][0]["execution"]["hooks"][0])
@@ -177,7 +183,9 @@ def test_prm_export_rejects_invalid_hook_event_line():
 
 def test_prm_export_preserves_unlabeled_hook_without_event_provenance():
     episode = _episode()
-    episode["gold_trace"]["turns"][0]["execution"]["hooks"][0]["event_line"] = None
+    hook = episode["gold_trace"]["turns"][0]["execution"]["hooks"][0]
+    hook["event_line"] = None
+    hook["event_provenance_reason"] = "missing_or_ambiguous_event_provenance"
     episode["process_report"] = build_process_report(
         source="llm_gen",
         gold_trace=episode["gold_trace"],
@@ -193,6 +201,16 @@ def test_prm_export_preserves_unlabeled_hook_without_event_provenance():
     assert missing_provenance_step["evidence"]["reasons"] == [
         "missing_or_ambiguous_event_provenance"
     ]
+
+
+def test_prm_export_rejects_missing_hook_provenance_state():
+    episode = _episode()
+    del episode["gold_trace"]["turns"][0]["execution"]["hooks"][0][
+        "event_provenance_reason"
+    ]
+
+    with pytest.raises(ValueError, match="provenance is incomplete"):
+        to_prm_samples(episode)
 
 
 def test_prm_export_rejects_verified_hook():
@@ -311,7 +329,7 @@ def test_prm_export_rejects_verified_label_on_rejected_submission():
         "code": "submit(3)",
         "execution": {
             "success": True,
-            "stdout": "",
+            "stdout": '✓ Submitted: {"__csv_agent_answer__": 3}',
             "stderr": "",
             "hooks": [],
             "submitted_answer": 3,
@@ -421,10 +439,12 @@ def test_prm_export_recomputes_llm_verdict_from_tolerant_majority():
     episode = _episode()
     near_trace = copy.deepcopy(episode["consistency_traces"][0])
     near_trace["turns"][0]["execution"]["submitted_answer"] = 7.05
+    near_trace["turns"][0]["execution"]["stdout"] = _submission_stdout(7.05)
     near_trace["final_answer"] = 7.05
     near_trace["final_answer_hash"] = hash_artifact(7.05)
     far_trace = copy.deepcopy(near_trace)
     far_trace["turns"][0]["execution"]["submitted_answer"] = 9
+    far_trace["turns"][0]["execution"]["stdout"] = _submission_stdout(9)
     far_trace["final_answer"] = 9
     far_trace["final_answer_hash"] = hash_artifact(9)
     episode["consistency_traces"] = [
@@ -469,6 +489,7 @@ def test_prm_export_rejects_forged_llm_majority():
     second_match = copy.deepcopy(episode["consistency_traces"][0])
     minority = copy.deepcopy(second_match)
     minority["turns"][0]["execution"]["submitted_answer"] = 9
+    minority["turns"][0]["execution"]["stdout"] = _submission_stdout(9)
     minority["final_answer"] = 9
     minority["final_answer_hash"] = hash_artifact(9)
     episode["consistency_traces"] = [
@@ -532,6 +553,7 @@ def test_prm_export_rejects_ambiguous_imported_submissions(code: str):
     episode["gold_trace"]["turns"][0]["code"] = code
     for hook in episode["gold_trace"]["turns"][0]["execution"]["hooks"]:
         hook["event_line"] = None
+        hook["event_provenance_reason"] = "missing_or_ambiguous_event_provenance"
 
     with pytest.raises(ValueError, match="submission|submitted operation"):
         to_prm_samples(episode)
