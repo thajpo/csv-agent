@@ -142,6 +142,9 @@ class TrajectoryPrefix(BaseModel):
     system_prompt: str
     question_text: str
     turns: list[TurnDict]
+    turn_responses: list[str]
+    turn_completed: list[bool]
+    conversation_messages: list[dict[str, str]]
     max_turns: int = Field(gt=0)
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
@@ -150,12 +153,31 @@ class TrajectoryPrefix(BaseModel):
     def validate_nonterminal_boundary(self) -> "TrajectoryPrefix":
         if len(self.turns) >= self.max_turns:
             raise ValueError("prefix must leave at least one continuation turn")
+        if len(self.turn_responses) != len(self.turns):
+            raise ValueError("turn_responses must align with prefix turns")
+        if len(self.turn_completed) != len(self.turns):
+            raise ValueError("turn_completed must align with prefix turns")
+        if any(self.turn_completed):
+            raise ValueError("prefix must not contain a terminal turn")
         for expected_index, turn in enumerate(self.turns):
             if turn.get("turn_index") != expected_index:
                 raise ValueError("prefix turns must be contiguous and zero-indexed")
-            execution = turn.get("execution", {})
-            if execution.get("submitted_answer") is not None:
-                raise ValueError("prefix must not contain a terminal submission")
+        for message in self.conversation_messages:
+            if set(message) != {"role", "content"}:
+                raise ValueError("conversation messages must contain role and content")
+            if message["role"] not in {"assistant", "user"}:
+                raise ValueError("prefix conversation cannot contain system messages")
+        if not self.turns and self.conversation_messages:
+            raise ValueError("an empty prefix cannot contain conversation messages")
+        if self.turns:
+            if len(self.conversation_messages) < 2:
+                raise ValueError("prefix conversation is missing the completed turn")
+            assistant, feedback = self.conversation_messages[-2:]
+            if assistant != {
+                "role": "assistant",
+                "content": self.turn_responses[-1],
+            } or feedback["role"] != "user":
+                raise ValueError("prefix conversation does not end at its turn boundary")
         return self
 
 
@@ -212,7 +234,7 @@ class PrefixValueRecord(BaseModel):
         successes = sum(
             outcome.verifier_verdict is True for outcome in self.continuations
         )
-        expected_value = successes / labeled if labeled else None
+        expected_value = successes / attempted if attempted else None
 
         if self.attempted_continuations != attempted:
             raise ValueError("attempted_continuations does not match outcomes")
@@ -224,7 +246,7 @@ class PrefixValueRecord(BaseModel):
             )
         if self.value != expected_value:
             raise ValueError(
-                "value must equal successful divided by labeled continuations"
+                "value must equal successful divided by attempted continuations"
             )
         return self
 

@@ -35,6 +35,17 @@ def _trace(success: bool) -> dict:
     }
 
 
+def _response() -> str:
+    return "Inspect the data.\n```python\nprint(df.shape)\n```"
+
+
+def _messages() -> list[dict[str, str]]:
+    return [
+        {"role": "assistant", "content": _response()},
+        {"role": "user", "content": "Execution completed."},
+    ]
+
+
 def test_prefix_excludes_private_verifier_fields() -> None:
     prefix = TrajectoryPrefix(
         prefix_id="episode-1:1",
@@ -43,6 +54,9 @@ def test_prefix_excludes_private_verifier_fields() -> None:
         system_prompt="Solve the CSV task using Python.",
         question_text="How many rows are present?",
         turns=[_turn(0)],
+        turn_responses=[_response()],
+        turn_completed=[False],
+        conversation_messages=_messages(),
         max_turns=3,
     )
 
@@ -53,7 +67,7 @@ def test_prefix_excludes_private_verifier_fields() -> None:
 
 
 def test_prefix_rejects_terminal_or_noncontiguous_turns() -> None:
-    with pytest.raises(ValidationError, match="terminal submission"):
+    with pytest.raises(ValidationError, match="terminal turn"):
         TrajectoryPrefix(
             prefix_id="terminal",
             episode_id="episode-1",
@@ -61,6 +75,9 @@ def test_prefix_rejects_terminal_or_noncontiguous_turns() -> None:
             system_prompt="Solve the CSV task using Python.",
             question_text="How many rows are present?",
             turns=[_turn(0, submitted_answer=10)],
+            turn_responses=[_response()],
+            turn_completed=[True],
+            conversation_messages=_messages(),
             max_turns=3,
         )
 
@@ -72,6 +89,9 @@ def test_prefix_rejects_terminal_or_noncontiguous_turns() -> None:
             system_prompt="Solve the CSV task using Python.",
             question_text="How many rows are present?",
             turns=[_turn(1)],
+            turn_responses=[_response()],
+            turn_completed=[False],
+            conversation_messages=_messages(),
             max_turns=3,
         )
 
@@ -84,6 +104,9 @@ def test_value_record_requires_aggregate_to_match_verdicts() -> None:
         system_prompt="Solve the CSV task using Python.",
         question_text="How many rows are present?",
         turns=[],
+        turn_responses=[],
+        turn_completed=[],
+        conversation_messages=[],
         max_turns=3,
     )
     policy = ContinuationPolicy(model="test-model", sampling_args={"temperature": 0.7})
@@ -114,12 +137,12 @@ def test_value_record_requires_aggregate_to_match_verdicts() -> None:
         attempted_continuations=3,
         labeled_continuations=2,
         successful_continuations=1,
-        value=0.5,
+        value=1 / 3,
         code_commit="abc123",
         dataset_revision="hf-revision",
     )
 
-    assert record.value == 0.5
+    assert record.value == pytest.approx(1 / 3)
     assert record.model_validate_json(record.model_dump_json()) == record
 
     with pytest.raises(ValidationError, match="successful_continuations"):
@@ -130,6 +153,56 @@ def test_value_record_requires_aggregate_to_match_verdicts() -> None:
             attempted_continuations=3,
             labeled_continuations=2,
             successful_continuations=2,
-            value=1.0,
+            value=2 / 3,
             code_commit="abc123",
         )
+
+
+def test_prefix_requires_exact_turn_responses_and_boundary_messages() -> None:
+    with pytest.raises(ValidationError, match="turn_responses"):
+        TrajectoryPrefix(
+            prefix_id="missing-response",
+            episode_id="episode-1",
+            csv_source="dataset/data.csv",
+            system_prompt="Solve the CSV task using Python.",
+            question_text="How many rows are present?",
+            turns=[_turn(0)],
+            turn_responses=[],
+            turn_completed=[False],
+            conversation_messages=_messages(),
+            max_turns=3,
+        )
+
+    with pytest.raises(ValidationError, match="turn boundary"):
+        TrajectoryPrefix(
+            prefix_id="wrong-boundary",
+            episode_id="episode-1",
+            csv_source="dataset/data.csv",
+            system_prompt="Solve the CSV task using Python.",
+            question_text="How many rows are present?",
+            turns=[_turn(0)],
+            turn_responses=[_response()],
+            turn_completed=[False],
+            conversation_messages=[
+                {"role": "assistant", "content": "canonicalized response"},
+                {"role": "user", "content": "Execution completed."},
+            ],
+            max_turns=3,
+        )
+
+
+def test_prefix_allows_rejected_nonterminal_submission() -> None:
+    prefix = TrajectoryPrefix(
+        prefix_id="rejected-submission",
+        episode_id="episode-1",
+        csv_source="dataset/data.csv",
+        system_prompt="Solve the CSV task using Python.",
+        question_text="How many rows are present?",
+        turns=[_turn(0, submitted_answer={"rows": 10})],
+        turn_responses=[_response()],
+        turn_completed=[False],
+        conversation_messages=_messages(),
+        max_turns=3,
+    )
+
+    assert prefix.turns[0]["execution"]["submitted_answer"] == {"rows": 10}

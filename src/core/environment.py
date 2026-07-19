@@ -10,6 +10,7 @@ Refactored to use a sandboxed Python environment for code execution.
 
 import json
 import logging
+from copy import deepcopy
 from pathlib import Path
 
 import pandas as pd
@@ -693,25 +694,20 @@ class Environment:
                 self.submission_metadata = {}  # Symmetric cleanup
 
         # Update state
+        self.conversation.add_assistant_response(response)
+        self.conversation.add_user_feedback(feedback)
         self.execution_turns.append(
             {
                 "response": response,
                 "code_cells": list(code_cells),
                 "execution_results": results,
+                "completed": done,
+                "conversation_messages": deepcopy(self.conversation.messages),
             }
         )
-        self.conversation.add_assistant_response(response)
-        self.conversation.add_user_feedback(feedback)
 
         if done:
             self.is_completed = True
-
-    @staticmethod
-    def _response_from_recorded_turn(turn: dict) -> str:
-        """Reconstruct the assistant response retained by the trace contract."""
-        reasoning = turn.get("reasoning", "").strip()
-        code = turn.get("code", "")
-        return f"{reasoning}\n```python\n{code}\n```"
 
     @staticmethod
     def _execution_for_comparison(result: CodeCellResult) -> dict:
@@ -723,18 +719,26 @@ class Environment:
             "submitted_answer": result.submitted_answer,
         }
 
-    async def replay_turns(self, turns: list[TurnDict]) -> None:
+    async def replay_turns(
+        self,
+        turns: list[TurnDict],
+        turn_responses: list[str],
+        conversation_messages: list[dict[str, str]],
+    ) -> None:
         """Re-execute recorded turns and fail if any result changes."""
         if not hasattr(self, "conversation"):
             raise RuntimeError("init_state() must be called before replay_turns()")
+        if len(turns) != len(turn_responses):
+            raise PrefixReplayError("recorded turn responses do not align with turns")
 
-        for expected_index, turn in enumerate(turns):
+        for expected_index, (turn, response) in enumerate(
+            zip(turns, turn_responses, strict=True)
+        ):
             if turn.get("turn_index") != expected_index:
                 raise PrefixReplayError(
                     f"turn {expected_index} is not contiguous in recorded prefix"
                 )
 
-            response = self._response_from_recorded_turn(turn)
             code_cells = self.extract_python_cells(response)
             validation_error = get_turn_validation_feedback(response, code_cells)
             if validation_error:
@@ -767,6 +771,12 @@ class Environment:
                     f"turn {expected_index} submitted an answer and is not a prefix"
                 )
             self.current_turn += 1
+
+        self.conversation.messages = deepcopy(conversation_messages)
+        self.conversation._cached_message_tokens = sum(
+            self.conversation._tokens_for_content(message["content"])
+            for message in conversation_messages
+        )
 
     async def _continue_rollout(self) -> None:
         """Continue from the currently initialized conversation and sandbox."""
@@ -807,7 +817,11 @@ class Environment:
         self.init_state()
         try:
             self.conversation.system_prompt = prefix.system_prompt
-            await self.replay_turns(prefix.turns)
+            await self.replay_turns(
+                prefix.turns,
+                prefix.turn_responses,
+                prefix.conversation_messages,
+            )
             await self._continue_rollout()
         finally:
             await self._cleanup_sandbox()

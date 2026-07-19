@@ -24,8 +24,10 @@ class FakeSandbox:
 class FakeLLM:
     def __init__(self, responses: list[str]) -> None:
         self.responses = iter(responses)
+        self.calls: list[list[dict]] = []
 
-    async def __call__(self, _messages: list[dict]) -> str:
+    async def __call__(self, messages: list[dict]) -> str:
+        self.calls.append(messages)
         return next(self.responses)
 
 
@@ -44,6 +46,19 @@ def _turn(stdout: str = "3") -> dict:
     }
 
 
+def _recorded_response() -> str:
+    return "Count the available rows first.\n```py\nprint(len(df))\n```\nRows inspected.  "
+
+
+def _recorded_messages() -> list[dict[str, str]]:
+    return [
+        {"role": "assistant", "content": "I forgot the required code block."},
+        {"role": "user", "content": "Use one Python code block exactly."},
+        {"role": "assistant", "content": _recorded_response()},
+        {"role": "user", "content": "Exact recorded execution feedback."},
+    ]
+
+
 def _prefix(stdout: str = "3") -> TrajectoryPrefix:
     return TrajectoryPrefix(
         prefix_id="episode-1:1",
@@ -52,6 +67,9 @@ def _prefix(stdout: str = "3") -> TrajectoryPrefix:
         system_prompt="Solve the CSV task using Python.",
         question_text="How many rows are present?",
         turns=[_turn(stdout)],
+        turn_responses=[_recorded_response()],
+        turn_completed=[False],
+        conversation_messages=_recorded_messages(),
         max_turns=3,
     )
 
@@ -77,14 +95,16 @@ async def test_replay_restores_conversation_and_turn_count() -> None:
     environment = _environment(sandbox)
     environment.init_state()
 
-    await environment.replay_turns(_prefix().turns)
+    prefix = _prefix()
+    await environment.replay_turns(
+        prefix.turns,
+        prefix.turn_responses,
+        prefix.conversation_messages,
+    )
 
     assert environment.current_turn == 1
     assert environment.code_cells == ["print(len(df))"]
-    assert [message["role"] for message in environment.conversation.messages] == [
-        "assistant",
-        "user",
-    ]
+    assert environment.conversation.messages == _recorded_messages()
     assert environment.conversation.system_prompt != _prefix().system_prompt
 
 
@@ -94,7 +114,31 @@ async def test_replay_rejects_divergent_execution() -> None:
     environment.init_state()
 
     with pytest.raises(PrefixReplayError, match="stdout"):
-        await environment.replay_turns(_prefix(stdout="4").turns)
+        prefix = _prefix(stdout="4")
+        await environment.replay_turns(
+            prefix.turns,
+            prefix.turn_responses,
+            prefix.conversation_messages,
+        )
+
+
+@pytest.mark.asyncio
+async def test_rejected_submission_records_a_nonterminal_boundary() -> None:
+    code = 'submit("The result is statistically significant with p value 0.01")'
+    answer = {"__csv_agent_answer__": "The result is statistically significant with p value 0.01"}
+    environment = _environment(
+        FakeSandbox({code: f"✓ Submitted: {json.dumps(answer)}"})
+    )
+    environment.init_state()
+
+    response = f"Check whether the requested structure is accepted.\n```python\n{code}\n```"
+    await environment.process_turn(response)
+
+    boundary = environment.execution_turns[0]
+    assert boundary["completed"] is False
+    assert boundary["response"] == response
+    assert boundary["conversation_messages"] == environment.conversation.messages
+    assert "structured format" in boundary["conversation_messages"][-1]["content"]
 
 
 @pytest.mark.asyncio
@@ -117,4 +161,8 @@ async def test_rollout_can_continue_after_replay_and_cleans_up() -> None:
     assert result.submitted_answer == 3
     assert result.current_turn == 2
     assert result.conversation.system_prompt == _prefix().system_prompt
+    assert llm.calls[0] == [
+        {"role": "system", "content": _prefix().system_prompt},
+        *_recorded_messages(),
+    ]
     assert sandbox.destroyed is True

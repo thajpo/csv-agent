@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any
 
 from csv_spec import (
@@ -26,6 +27,15 @@ ContinuationRunner = Callable[
 ]
 
 
+@dataclass(frozen=True)
+class InitialModelTrace:
+    trace: TraceDict
+    system_prompt: str
+    turn_responses: list[str]
+    turn_completed: list[bool]
+    boundary_messages: list[list[dict[str, str]]]
+
+
 def build_trajectory_prefix(
     *,
     episode_id: str,
@@ -33,6 +43,9 @@ def build_trajectory_prefix(
     system_prompt: str,
     question_text: str,
     trace: TraceDict,
+    turn_responses: Sequence[str],
+    turn_completed: Sequence[bool],
+    conversation_messages: Sequence[Mapping[str, str]],
     turn_count: int,
     max_turns: int,
 ) -> TrajectoryPrefix:
@@ -40,7 +53,14 @@ def build_trajectory_prefix(
     turns = trace.get("turns", [])
     if turn_count < 0 or turn_count > len(turns):
         raise ValueError("turn_count is outside the recorded trace")
+    if len(turn_responses) < turn_count:
+        raise ValueError("turn responses are unavailable at the selected boundary")
+    if len(turn_completed) < turn_count:
+        raise ValueError("turn completion states are unavailable at the boundary")
     selected_turns = deepcopy(turns[:turn_count])
+    selected_responses = list(turn_responses[:turn_count])
+    selected_completion = list(turn_completed[:turn_count])
+    selected_messages = [dict(message) for message in conversation_messages]
     identity = hash_artifact(
         {
             "episode_id": episode_id,
@@ -48,6 +68,9 @@ def build_trajectory_prefix(
             "system_prompt": system_prompt,
             "question_text": question_text,
             "turns": selected_turns,
+            "turn_responses": selected_responses,
+            "turn_completed": selected_completion,
+            "conversation_messages": selected_messages,
             "max_turns": max_turns,
         }
     )
@@ -58,6 +81,9 @@ def build_trajectory_prefix(
         system_prompt=system_prompt,
         question_text=question_text,
         turns=selected_turns,
+        turn_responses=selected_responses,
+        turn_completed=selected_completion,
+        conversation_messages=selected_messages,
         max_turns=max_turns,
     )
 
@@ -86,8 +112,8 @@ async def run_initial_model_trace(
     policy: ContinuationPolicy,
     max_turns: int,
     seed: int | None,
-) -> tuple[TraceDict, str]:
-    """Sample the actor once and retain its exact system prompt."""
+) -> InitialModelTrace:
+    """Sample the actor once and retain each exact public turn boundary."""
     sampling_args = dict(policy.sampling_args)
     if seed is not None:
         sampling_args["seed"] = seed
@@ -104,7 +130,18 @@ async def run_initial_model_trace(
             session_id="value-source",
         )
         final_state = await environment.rollout()
-        return build_trace_dict(final_state), final_state.conversation.system_prompt
+        trace = build_trace_dict(final_state)
+        execution_turns = final_state.execution_turns
+        return InitialModelTrace(
+            trace=trace,
+            system_prompt=final_state.conversation.system_prompt,
+            turn_responses=[record["response"] for record in execution_turns],
+            turn_completed=[record["completed"] for record in execution_turns],
+            boundary_messages=[
+                deepcopy(record["conversation_messages"])
+                for record in execution_turns
+            ],
+        )
     finally:
         await llm.aclose()
 
@@ -156,6 +193,17 @@ async def collect_prefix_value(
     for rollout_index, seed in enumerate(seeds):
         try:
             trace = await runner(prefix, policy, rollout_index, seed)
+        except Exception as error:
+            continuations.append(
+                PrefixContinuation(
+                    rollout_index=rollout_index,
+                    seed=seed,
+                    error=f"{type(error).__name__}: {error}",
+                )
+            )
+            continue
+
+        try:
             verdict = verify_terminal_trace(
                 question,
                 trace,
@@ -174,6 +222,7 @@ async def collect_prefix_value(
                 PrefixContinuation(
                     rollout_index=rollout_index,
                     seed=seed,
+                    trace=trace,
                     error=f"{type(error).__name__}: {error}",
                 )
             )
@@ -187,7 +236,7 @@ async def collect_prefix_value(
         attempted_continuations=len(continuations),
         labeled_continuations=labeled,
         successful_continuations=successes,
-        value=successes / labeled if labeled else None,
+        value=successes / len(continuations),
         code_commit=code_commit,
         dataset_revision=dataset_revision,
     )

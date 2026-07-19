@@ -108,26 +108,33 @@ async def collect(args: argparse.Namespace) -> list[dict]:
     for episode_index, episode in enumerate(episodes):
         csv_source = str(args.csv or Path(episode.csv_source))
         source_seed = args.seed + episode_index * (args.continuations + 1)
-        source_trace, system_prompt = await run_initial_model_trace(
+        source = await run_initial_model_trace(
             csv_source=csv_source,
             question_text=episode.question["question_text"],
             policy=policy,
             max_turns=args.max_turns,
             seed=source_seed,
         )
-        if len(source_trace["turns"]) <= args.turn_count:
+        if len(source.trace["turns"]) <= args.turn_count:
             raise ValueError(
                 f"episode {episode.episode_id} produced only "
-                f"{len(source_trace['turns'])} turn(s); cannot select boundary "
+                f"{len(source.trace['turns'])} turn(s); cannot select boundary "
                 f"after turn {args.turn_count}"
             )
 
         prefix = build_trajectory_prefix(
             episode_id=episode.episode_id,
             csv_source=csv_source,
-            system_prompt=system_prompt,
+            system_prompt=source.system_prompt,
             question_text=episode.question["question_text"],
-            trace=source_trace,
+            trace=source.trace,
+            turn_responses=source.turn_responses,
+            turn_completed=source.turn_completed,
+            conversation_messages=(
+                source.boundary_messages[args.turn_count - 1]
+                if args.turn_count
+                else []
+            ),
             turn_count=args.turn_count,
             max_turns=args.max_turns,
         )

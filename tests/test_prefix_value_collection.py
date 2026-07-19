@@ -33,6 +33,18 @@ def _trace(answer=None) -> dict:
     }
 
 
+def _response(code: str) -> str:
+    return f"Perform the next required computation.\n```python\n{code}\n```"
+
+
+def _boundary_messages(code: str) -> list[dict[str, str]]:
+    response = _response(code)
+    return [
+        {"role": "assistant", "content": response},
+        {"role": "user", "content": "Execution completed."},
+    ]
+
+
 def test_build_prefix_is_deterministic_and_excludes_terminal_turn() -> None:
     first = build_trajectory_prefix(
         episode_id="episode-1",
@@ -40,6 +52,9 @@ def test_build_prefix_is_deterministic_and_excludes_terminal_turn() -> None:
         system_prompt="Solve the task.",
         question_text="How many rows are present?",
         trace=_trace(3),
+        turn_responses=[_response("print(df.columns)")],
+        turn_completed=[False],
+        conversation_messages=_boundary_messages("print(df.columns)"),
         turn_count=1,
         max_turns=3,
     )
@@ -49,6 +64,9 @@ def test_build_prefix_is_deterministic_and_excludes_terminal_turn() -> None:
         system_prompt="Solve the task.",
         question_text="How many rows are present?",
         trace=_trace(3),
+        turn_responses=[_response("print(df.columns)")],
+        turn_completed=[False],
+        conversation_messages=_boundary_messages("print(df.columns)"),
         turn_count=1,
         max_turns=3,
     )
@@ -73,6 +91,9 @@ async def test_collection_uses_terminal_verdicts_and_excludes_runner_errors() ->
         system_prompt="Solve the task.",
         question_text=question["question_text"],
         trace=_trace(expected_answer),
+        turn_responses=[_response("print(df.columns)")],
+        turn_completed=[False],
+        conversation_messages=_boundary_messages("print(df.columns)"),
         turn_count=1,
         max_turns=3,
     )
@@ -104,7 +125,7 @@ async def test_collection_uses_terminal_verdicts_and_excludes_runner_errors() ->
     assert record.attempted_continuations == 4
     assert record.labeled_continuations == 3
     assert record.successful_continuations == 1
-    assert record.value == pytest.approx(1 / 3)
+    assert record.value == pytest.approx(1 / 4)
     assert [item.verifier_verdict for item in record.continuations] == [
         True,
         False,
@@ -123,6 +144,9 @@ async def test_verifier_failure_is_recorded_without_a_value_label() -> None:
         system_prompt="Solve the task.",
         question_text="How many rows are present?",
         trace=_trace(3),
+        turn_responses=[],
+        turn_completed=[],
+        conversation_messages=[],
         turn_count=0,
         max_turns=3,
     )
@@ -140,8 +164,9 @@ async def test_verifier_failure_is_recorded_without_a_value_label() -> None:
         runner=runner,
     )
 
-    assert record.value is None
+    assert record.value == 0
     assert record.labeled_continuations == 0
+    assert record.continuations[0].trace == _trace(3)
     assert "ground-truth hash provenance is unavailable" in (
         record.continuations[0].error or ""
     )
