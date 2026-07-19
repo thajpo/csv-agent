@@ -184,17 +184,17 @@ class TestPRMDerivability:
     """Ensure episodes can derive PRM (Process Reward Model) training data."""
 
     def test_process_report_structure(self, episode):
-        """Process report must expose step-level labels and confidence metadata."""
+        """Process report must separate verified and heuristic judgments."""
         report = episode["process_report"]
-        assert report["version"], "process_report missing version"
-        assert report["source"] in {"template", "procedural", "llm_gen"}
         assert "summary" in report, "process_report missing summary"
         assert "steps" in report, "process_report missing steps"
 
         for step in report["steps"]:
             assert "step_index" in step, "Process step missing step_index"
             assert step["step_type"] in {"hook", "submit"}
-            assert step["confidence"] in {"gold", "strong", "weak", "unlabeled"}
+            assert step["label_kind"] in {"verified", "heuristic", "unlabeled"}
+            if step["label_kind"] == "verified":
+                assert step["step_type"] == "submit"
             assert "evidence" in step, "Process step missing evidence"
 
     def test_hooks_structure_when_present(self, episode):

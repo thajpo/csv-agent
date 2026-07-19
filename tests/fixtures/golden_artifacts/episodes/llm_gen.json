@@ -89,14 +89,11 @@
     "gold_matches_majority": true
   },
   "process_report": {
-    "version": "prm_process_report_v1",
-    "source": "llm_gen",
     "summary": {
       "total_steps": 1,
       "labeled_steps": 1,
-      "gold_steps": 0,
-      "strong_steps": 1,
-      "weak_steps": 0,
+      "verified_steps": 1,
+      "heuristic_steps": 0,
       "unlabeled_steps": 0,
       "positive_steps": 1,
       "negative_steps": 0
@@ -115,8 +112,8 @@
         "depends_on": [],
         "semantic_role": "final_answer",
         "label": 1.0,
-        "confidence": "strong",
-        "label_source": "trace_consensus",
+        "label_kind": "verified",
+        "label_source": "terminal_verifier",
         "evidence": {
           "final_verified": true,
           "trace_success": true,

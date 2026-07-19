@@ -139,10 +139,11 @@ class TestCreateEpisode:
         assert episode.question["question_text"] == "What is the average age?"
         assert episode.gold_trace["final_answer"] == 42.5
         assert episode.triangulation["gold_matches_majority"] is True
-        assert episode.process_report["source"] == "template"
-        assert episode.process_report["summary"]["gold_steps"] == 1
+        assert episode.process_report["summary"]["verified_steps"] == 1
+        assert episode.process_report["summary"]["heuristic_steps"] == 0
         assert episode.process_report["steps"][0]["step_type"] == "submit"
         assert episode.process_report["steps"][0]["label"] == 1.0
+        assert episode.process_report["steps"][0]["label_kind"] == "verified"
 
     @pytest.mark.asyncio
     async def test_create_episode_failure_synthetic(
@@ -165,7 +166,7 @@ class TestCreateEpisode:
         assert episode.source == "template"
         assert episode.triangulation["gold_matches_majority"] is False
         assert episode.process_report["steps"][0]["label"] == 0.0
-        assert episode.process_report["steps"][0]["confidence"] == "strong"
+        assert episode.process_report["steps"][0]["label_kind"] == "verified"
 
     @pytest.mark.asyncio
     async def test_create_episode_llm_consistency(
@@ -190,7 +191,7 @@ class TestCreateEpisode:
         assert episode.source == "llm_gen"
         assert len(episode.consistency_traces) == 2
         assert episode.triangulation["n_consistency_runs"] == 2
-        assert episode.process_report["summary"]["strong_steps"] == 1
+        assert episode.process_report["summary"]["verified_steps"] == 1
 
     @pytest.mark.asyncio
     async def test_create_episode_procedural(

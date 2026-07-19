@@ -150,7 +150,11 @@ class TimingMetadataDict(TypedDict):
 
 
 class ProcessStepEvidenceDict(TypedDict, total=False):
-    """Evidence used to assign a process-step label."""
+    """Observed evidence about a process step.
+
+    Evidence fields are diagnostic inputs. Except for terminal verification,
+    they do not establish that an action made useful computational progress.
+    """
 
     final_verified: bool
     trace_success: bool
@@ -163,7 +167,7 @@ class ProcessStepEvidenceDict(TypedDict, total=False):
 
 
 class ProcessStepReportDict(TypedDict, total=False):
-    """One labeled or unlabeled process step derived from trace evidence."""
+    """One observed process step with verified or heuristic judgment."""
 
     step_index: int
     turn_index: int
@@ -177,29 +181,26 @@ class ProcessStepReportDict(TypedDict, total=False):
     depends_on: list[str]
     semantic_role: str | None
     label: float | None
-    confidence: Literal["gold", "strong", "weak", "unlabeled"]
+    label_kind: Literal["verified", "heuristic", "unlabeled"]
     label_source: str
     evidence: ProcessStepEvidenceDict
 
 
 class ProcessReportSummaryDict(TypedDict):
-    """Aggregate process-label counts for one episode."""
+    """Aggregate process-step judgment counts for one episode."""
 
     total_steps: int
     labeled_steps: int
-    gold_steps: int
-    strong_steps: int
-    weak_steps: int
+    verified_steps: int
+    heuristic_steps: int
     unlabeled_steps: int
     positive_steps: int
     negative_steps: int
 
 
 class ProcessReportDict(TypedDict):
-    """Canonical PRM process report stored on each episode."""
+    """Ordered diagnostic process observations stored on each episode."""
 
-    version: str
-    source: Literal["llm_gen", "template", "procedural"]
     summary: ProcessReportSummaryDict
     steps: list[ProcessStepReportDict]
 

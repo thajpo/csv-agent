@@ -32,8 +32,6 @@ def _episode() -> dict:
             "success": True,
         },
         "process_report": {
-            "version": "prm_process_report_v1",
-            "source": "llm_gen",
             "summary": {},
             "steps": [
                 {
@@ -47,8 +45,8 @@ def _episode() -> dict:
                     "value": {"rows": 3},
                     "value_hash": "hash-filtered",
                     "label": 1.0,
-                    "confidence": "strong",
-                    "label_source": "trace_consensus",
+                    "label_kind": "heuristic",
+                    "label_source": "trace_consensus_heuristic",
                     "evidence": {"consensus_matches": 2},
                 },
                 {
@@ -62,9 +60,9 @@ def _episode() -> dict:
                     "value": 7,
                     "value_hash": "answer-7",
                     "label": 1.0,
-                    "confidence": "weak",
-                    "label_source": "final_answer",
-                    "evidence": {"consensus_matches": 1},
+                    "label_kind": "verified",
+                    "label_source": "terminal_verifier",
+                    "evidence": {"final_verified": True},
                 },
                 {
                     "step_index": 2,
@@ -77,7 +75,7 @@ def _episode() -> dict:
                     "value": 1,
                     "value_hash": "hash-unused",
                     "label": None,
-                    "confidence": "unlabeled",
+                    "label_kind": "unlabeled",
                     "label_source": "insufficient_evidence",
                     "evidence": {},
                 },
@@ -86,23 +84,28 @@ def _episode() -> dict:
     }
 
 
-def test_prm_export_uses_process_report_labels_not_episode_verified():
+def test_prm_export_defaults_to_externally_verified_steps():
     samples = to_prm_samples(_episode())
 
     assert len(samples) == 1
     sample = samples[0]
     assert sample["episode_id"] == "ep-prm-001"
-    assert sample["step_index"] == 0
+    assert sample["step_index"] == 1
+    assert sample["step_type"] == "submit"
     assert sample["label"] == 1.0
-    assert sample["confidence"] == "strong"
-    assert sample["evidence"] == {"consensus_matches": 2}
+    assert sample["label_kind"] == "verified"
+    assert sample["evidence"] == {"final_verified": True}
 
 
-def test_prm_export_can_include_weak_when_requested():
+def test_prm_export_includes_hook_heuristics_only_when_requested():
     samples = convert_episodes(
         [_episode()],
         "prm",
-        prm_confidences=("gold", "strong", "weak"),
+        include_heuristic_hooks=True,
     )
 
     assert [sample["step_index"] for sample in samples] == [0, 1]
+    assert [sample["label_kind"] for sample in samples] == [
+        "heuristic",
+        "verified",
+    ]

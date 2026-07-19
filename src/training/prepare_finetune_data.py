@@ -196,17 +196,15 @@ def to_sft_interleaved(episode: dict[str, Any]) -> dict[str, Any] | None:
     return {"messages": messages}
 
 
-DEFAULT_PRM_CONFIDENCES = ("gold", "strong")
-
-
 def to_prm_samples(
     episode: dict[str, Any],
-    allowed_confidences: tuple[str, ...] = DEFAULT_PRM_CONFIDENCES,
+    include_heuristic_hooks: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Convert episode to PRM (Process Reward Model) samples.
 
-    Format: Each labeled process-report step becomes a scored sample.
+    Terminal verifier labels are exported by default. Hook heuristics are
+    diagnostic candidates and require explicit opt-in.
     """
     question = episode.get("question", {})
     gold_trace = episode.get("gold_trace") or episode.get("teacher_gold_trace", {})
@@ -234,7 +232,10 @@ def to_prm_samples(
     for step in process_steps:
         if step.get("label") is None:
             continue
-        if step.get("confidence") not in allowed_confidences:
+        label_kind = step.get("label_kind")
+        if label_kind == "heuristic" and not include_heuristic_hooks:
+            continue
+        if label_kind not in {"verified", "heuristic"}:
             continue
         steps_by_turn.setdefault(int(step.get("turn_index", 0)), []).append(step)
 
@@ -256,7 +257,7 @@ def to_prm_samples(
                     "value": step.get("value"),
                     "value_hash": step.get("value_hash"),
                     "label": step.get("label"),
-                    "confidence": step.get("confidence"),
+                    "label_kind": step.get("label_kind"),
                     "label_source": step.get("label_source"),
                     "evidence": step.get("evidence", {}),
                     "episode_id": episode.get("episode_id"),
@@ -275,7 +276,7 @@ def to_prm_samples(
 def convert_episodes(
     episodes: list[dict[str, Any]],
     format_type: str,
-    prm_confidences: tuple[str, ...] = DEFAULT_PRM_CONFIDENCES,
+    include_heuristic_hooks: bool = False,
 ) -> list[dict[str, Any]]:
     """Convert episodes to specified training format."""
     results = []
@@ -292,7 +293,10 @@ def convert_episodes(
                 results.append(result)
 
         elif format_type == "prm":
-            samples = to_prm_samples(episode, allowed_confidences=prm_confidences)
+            samples = to_prm_samples(
+                episode,
+                include_heuristic_hooks=include_heuristic_hooks,
+            )
             results.extend(samples)
 
         else:
@@ -333,11 +337,12 @@ def main():
         "--include-unverified", action="store_true", help="Include unverified episodes"
     )
     parser.add_argument(
-        "--prm-confidence",
-        nargs="+",
-        default=list(DEFAULT_PRM_CONFIDENCES),
-        choices=["gold", "strong", "weak", "unlabeled"],
-        help="Process-report confidence levels to export for PRM format",
+        "--include-heuristic-hooks",
+        action="store_true",
+        help=(
+            "Include non-verified hook heuristics in PRM output. "
+            "Disabled by default because these are experimental baselines."
+        ),
     )
 
     args = parser.parse_args()
@@ -357,7 +362,7 @@ def main():
     results = convert_episodes(
         episodes,
         args.format,
-        prm_confidences=tuple(args.prm_confidence),
+        include_heuristic_hooks=args.include_heuristic_hooks,
     )
     print(f"Generated {len(results)} training samples")
 

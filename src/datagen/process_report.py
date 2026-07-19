@@ -1,4 +1,9 @@
-"""Build canonical PRM process reports from episode traces."""
+"""Build diagnostic process reports from episode traces.
+
+Terminal submissions can carry externally verified labels. Hook judgments are
+explicitly heuristic: grounding, dependency, duplicate, and consensus evidence
+does not prove that a hook made useful computational progress.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +20,6 @@ from csv_spec import (
 )
 from src.core.environment import validate_hooks_grounded
 
-PROCESS_REPORT_VERSION = "prm_process_report_v1"
 EpisodeSource = Literal["llm_gen", "template", "procedural"]
 
 
@@ -29,22 +33,20 @@ def build_process_report(
 ) -> ProcessReportDict:
     """Build a step-level process report from gold and consistency traces."""
     steps: list[ProcessStepReportDict] = []
-    code_cells = [
-        turn.get("code", "")
-        for turn in gold_trace.get("turns", [])
-        if turn.get("code")
-    ]
+    code_cells = [turn.get("code", "") for turn in gold_trace.get("turns", [])]
     consensus = _consensus_counts(consistency_traces)
     consensus_total = sum(1 for trace in consistency_traces if trace.get("success"))
     seen_names: set[str] = set()
-    seen_keys: Counter[tuple[str, str | None, str | None]] = Counter()
+    seen_hashes: set[str] = set()
 
     for turn_index, turn in enumerate(gold_trace.get("turns", [])):
         execution = turn.get("execution", {})
         hooks = execution.get("hooks", [])
         hook_copies = [dict(hook) for hook in hooks]
+        # A hook can only be grounded by code that has executed at or before
+        # its turn. Later cells must not retroactively validate an earlier hook.
         grounded_hooks, _ungrounded_hooks = validate_hooks_grounded(
-            hook_copies, code_cells
+            hook_copies, code_cells[: turn_index + 1]
         )
         grounded_ids = {id(hook) for hook in grounded_hooks}
 
@@ -55,11 +57,11 @@ def build_process_report(
                 final_verified=verified,
                 grounded=id(hook_copies[hook_index]) in grounded_ids,
                 seen_names=seen_names,
-                seen_keys=seen_keys,
+                seen_hashes=seen_hashes,
                 consensus=consensus,
                 consensus_total=consensus_total,
             )
-            label, confidence, label_source = _label_hook(
+            label, label_kind, label_source = _label_hook(
                 source=source,
                 evidence=evidence,
             )
@@ -76,7 +78,7 @@ def build_process_report(
                 depends_on=hook.get("depends_on", []),
                 semantic_role=_semantic_role(hook),
                 label=label,
-                confidence=confidence,
+                label_kind=label_kind,
                 label_source=label_source,
                 evidence=evidence,
             )
@@ -85,11 +87,15 @@ def build_process_report(
             name = hook.get("variable_name")
             if name:
                 seen_names.add(name)
-            seen_keys[_step_key(step)] += 1
+            value_hash = hook.get("value_hash")
+            if value_hash:
+                seen_hashes.add(value_hash)
 
         submitted = execution.get("submitted_answer")
         if submitted is not None:
-            answer_hash = gold_trace.get("final_answer_hash") or hash_artifact(submitted)
+            answer_hash = gold_trace.get("final_answer_hash") or hash_artifact(
+                submitted
+            )
             evidence = ProcessStepEvidenceDict(
                 final_verified=verified,
                 trace_success=gold_trace.get("success", False),
@@ -100,10 +106,7 @@ def build_process_report(
                 consensus_total=max(consensus_total, majority_count),
                 reasons=[],
             )
-            label, confidence, label_source = _label_submit(
-                source=source,
-                evidence=evidence,
-            )
+            label, label_kind, label_source = _label_submit(evidence=evidence)
             steps.append(
                 ProcessStepReportDict(
                     step_index=len(steps),
@@ -118,15 +121,13 @@ def build_process_report(
                     depends_on=[],
                     semantic_role="final_answer",
                     label=label,
-                    confidence=confidence,
+                    label_kind=label_kind,
                     label_source=label_source,
                     evidence=evidence,
                 )
             )
 
     return ProcessReportDict(
-        version=PROCESS_REPORT_VERSION,
-        source=source,
         summary=_summary(steps),
         steps=steps,
     )
@@ -155,16 +156,15 @@ def _hook_evidence(
     final_verified: bool,
     grounded: bool,
     seen_names: set[str],
-    seen_keys: Counter[tuple[str, str | None, str | None]],
+    seen_hashes: set[str],
     consensus: Counter[str],
     consensus_total: int,
 ) -> ProcessStepEvidenceDict:
     reasons: list[str] = []
-    name = hook.get("variable_name")
     depends_on = hook.get("depends_on", [])
     dependency_valid = all(dep in seen_names for dep in depends_on)
-    key = ("hook", name, hook.get("value_hash"))
-    duplicate = seen_keys[key] > 0
+    value_hash = hook.get("value_hash")
+    duplicate = bool(value_hash and value_hash in seen_hashes)
 
     if not grounded:
         reasons.append("ungrounded_code_line")
@@ -189,42 +189,33 @@ def _label_hook(
     *,
     source: EpisodeSource,
     evidence: ProcessStepEvidenceDict,
-) -> tuple[float | None, Literal["gold", "strong", "weak", "unlabeled"], str]:
+) -> tuple[float | None, Literal["heuristic", "unlabeled"], str]:
+    """Assign an optional hook heuristic without claiming process truth."""
     if _is_bad_step(evidence):
-        return 0.0, "gold" if source in {"template", "procedural"} else "strong", (
-            "deterministic_process" if source in {"template", "procedural"} else "trace_evidence"
-        )
-
-    if source in {"template", "procedural"}:
-        if evidence["final_verified"] and evidence["trace_success"]:
-            return 1.0, "gold", "deterministic_process"
-        return None, "unlabeled", "insufficient_evidence"
+        return 0.0, "heuristic", "structural_hook_heuristic"
 
     if not evidence["final_verified"] or not evidence["trace_success"]:
         return None, "unlabeled", "insufficient_evidence"
+
+    if source in {"template", "procedural"}:
+        return 1.0, "heuristic", "successful_trace_heuristic"
 
     matches = int(evidence.get("consensus_matches", 0))
     total = int(evidence.get("consensus_total", 0))
     ratio = matches / total if total else 0.0
     if matches >= 2 or ratio >= 0.67:
-        return 1.0, "strong", "trace_consensus"
+        return 1.0, "heuristic", "trace_consensus_heuristic"
     if matches >= 1:
-        return 1.0, "weak", "trace_consensus"
+        return 1.0, "heuristic", "trace_consensus_heuristic"
     return None, "unlabeled", "insufficient_evidence"
 
 
 def _label_submit(
     *,
-    source: EpisodeSource,
     evidence: ProcessStepEvidenceDict,
-) -> tuple[float | None, Literal["gold", "strong", "weak", "unlabeled"], str]:
-    if not evidence["final_verified"]:
-        return 0.0, "strong", "final_answer"
-    if source in {"template", "procedural"}:
-        return 1.0, "gold", "deterministic_process"
-    if int(evidence.get("consensus_matches", 0)) >= 2:
-        return 1.0, "strong", "trace_consensus"
-    return 1.0, "weak", "final_answer"
+) -> tuple[float, Literal["verified"], str]:
+    """Label only the terminal answer from the task's external verifier."""
+    return (1.0 if evidence["final_verified"] else 0.0), "verified", "terminal_verifier"
 
 
 def _is_bad_step(evidence: ProcessStepEvidenceDict) -> bool:
@@ -255,19 +246,16 @@ def _semantic_role(hook: dict[str, Any]) -> str | None:
     return None
 
 
-def _step_key(step: ProcessStepReportDict) -> tuple[str, str | None, str | None]:
-    return (step["step_type"], step.get("variable_name"), step.get("value_hash"))
-
-
 def _summary(steps: list[ProcessStepReportDict]) -> ProcessReportSummaryDict:
     return ProcessReportSummaryDict(
         total_steps=len(steps),
         labeled_steps=sum(1 for step in steps if step.get("label") is not None),
-        gold_steps=sum(1 for step in steps if step.get("confidence") == "gold"),
-        strong_steps=sum(1 for step in steps if step.get("confidence") == "strong"),
-        weak_steps=sum(1 for step in steps if step.get("confidence") == "weak"),
+        verified_steps=sum(1 for step in steps if step.get("label_kind") == "verified"),
+        heuristic_steps=sum(
+            1 for step in steps if step.get("label_kind") == "heuristic"
+        ),
         unlabeled_steps=sum(
-            1 for step in steps if step.get("confidence") == "unlabeled"
+            1 for step in steps if step.get("label_kind") == "unlabeled"
         ),
         positive_steps=sum(1 for step in steps if step.get("label") == 1.0),
         negative_steps=sum(1 for step in steps if step.get("label") == 0.0),

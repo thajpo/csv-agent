@@ -1,7 +1,7 @@
 # current.md
 
 Lean Flow canonical planning file.
-Last updated: 2026-06-23
+Last updated: 2026-02-17
 
 ## Institutional Knowledge
 - [2026-02-08] Repo default: fail-fast contracts over backward-compat shims.
@@ -68,7 +68,6 @@ notes:
 
 ## Specd
 - HF snapshot authority and Git data cleanup | status: issued | issue: #36
-- First-class PRM process reports | status: issued | issue: #34
 
 ## Recovery Notes
 - Prior planning content was heavily compressed to reduce noise and keep active work scannable.
