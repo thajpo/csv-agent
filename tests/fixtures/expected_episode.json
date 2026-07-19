@@ -2,6 +2,7 @@
   "episode_id": "test-episode-001",
   "timestamp": "2025-01-01T00:00:00",
   "csv_source": "data/kaggle/mirichoi0218_insurance/data.csv",
+  "source": "llm_gen",
   "question": {
     "id": "abc123",
     "question_text": "What is the mean of the column with highest variance?",
@@ -96,11 +97,11 @@
   "process_report": {
     "summary": {
       "total_steps": 2,
-      "labeled_steps": 2,
+      "labeled_steps": 1,
       "verified_steps": 1,
-      "heuristic_steps": 1,
-      "unlabeled_steps": 0,
-      "positive_steps": 2,
+      "heuristic_steps": 0,
+      "unlabeled_steps": 1,
+      "positive_steps": 1,
       "negative_steps": 0
     },
     "steps": [
@@ -116,9 +117,9 @@
         "description": null,
         "depends_on": [],
         "semantic_role": null,
-        "label": 1.0,
-        "label_kind": "heuristic",
-        "label_source": "successful_trace_heuristic",
+        "label": null,
+        "label_kind": "unlabeled",
+        "label_source": "insufficient_evidence",
         "evidence": {
           "final_verified": true,
           "trace_success": true,

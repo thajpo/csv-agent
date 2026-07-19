@@ -64,6 +64,7 @@ class HookDict(TypedDict, total=False):
     depends_on: list[str]  # DAG edges to prior hooks
     description: str | None
     event_line: int | None  # 1-based source line where hook() executed
+    event_provenance_reason: str | None
 
 
 # ============= Turn-Based TypedDicts =============
@@ -372,6 +373,7 @@ class Hook(BaseModel):
         default_factory=list
     )  # Names of hooks this depends on (DAG edges)
     event_line: int | None = None  # 1-based source line where hook() executed
+    event_provenance_reason: str | None = None
 
 
 # ============= Episode JSONL Schema =============

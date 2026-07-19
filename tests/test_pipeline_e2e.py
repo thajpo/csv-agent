@@ -102,18 +102,21 @@ class TestPipelineContract:
     def test_fixture_process_report_is_canonical(self, expected_episode_path):
         """Test that fixture diagnostics match their trace provenance."""
         from src.datagen.process_report import build_process_report
+        from src.training.prepare_finetune_data import to_prm_samples
 
         with open(expected_episode_path) as f:
             data = json.load(f)
 
         expected_report = build_process_report(
-            source="template",
+            source=data["source"],
             gold_trace=data["gold_trace"],
             consistency_traces=data["consistency_traces"],
             verifier_verdict=True,
         )
 
         assert data["process_report"] == expected_report
+        samples = to_prm_samples(data)
+        assert [sample["label_kind"] for sample in samples] == ["verified"]
 
     def test_episode_jsonl_format(self, expected_episode_path):
         """Test that episodes work in JSONL format (one per line)."""

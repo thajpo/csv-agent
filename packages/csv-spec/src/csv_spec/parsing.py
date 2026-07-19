@@ -22,17 +22,26 @@ from csv_spec.types import (
 )
 
 
-def parse_hook_record(hook_data: Any) -> HookDict | None:
-    """Parse one hook protocol record without trusting its source location."""
+def parse_hook_record(
+    hook_data: Any, *, trusted_event_provenance: bool = False
+) -> HookDict | None:
+    """Parse one hook protocol record with explicit event provenance trust."""
     if (
         not isinstance(hook_data, dict)
         or hook_data.get("__csv_agent_hook__") is not True
     ):
         return None
 
-    event_line = hook_data.get("event_line")
+    event_line = hook_data.get("event_line") if trusted_event_provenance else None
     if event_line is not None and (type(event_line) is not int or event_line < 1):
         event_line = None
+    event_provenance_reason = hook_data.get("event_provenance_reason")
+    if not trusted_event_provenance:
+        event_provenance_reason = "unauthenticated_stdout_provenance"
+    elif event_provenance_reason is not None and not isinstance(
+        event_provenance_reason, str
+    ):
+        event_provenance_reason = "invalid_event_provenance"
 
     return HookDict(
         variable_name=hook_data.get("variable_name"),
@@ -42,6 +51,7 @@ def parse_hook_record(hook_data: Any) -> HookDict | None:
         depends_on=hook_data.get("depends_on", []),
         description=hook_data.get("description"),
         event_line=event_line,
+        event_provenance_reason=event_provenance_reason,
     )
 
 

@@ -279,6 +279,9 @@ def _hook_grounding(
     *, hook: dict[str, Any], earlier_code_cells: list[str], current_code: str
 ) -> tuple[bool, str | None]:
     """Check grounding only against code that preceded the runtime hook event."""
+    provenance_reason = hook.get("event_provenance_reason")
+    if provenance_reason is not None:
+        return False, provenance_reason
     event_line = hook.get("event_line")
     current_lines = current_code.splitlines()
     if event_line is None:
@@ -368,7 +371,7 @@ def _label_hook(
     evidence: ProcessStepEvidenceDict,
 ) -> tuple[float | None, Literal["heuristic", "unlabeled"], str]:
     """Assign an optional hook heuristic without claiming process truth."""
-    if any(reason.endswith("event_provenance") for reason in evidence["reasons"]):
+    if any("provenance" in reason for reason in evidence["reasons"]):
         return None, "unlabeled", "event_provenance_unavailable"
     if _is_bad_step(evidence):
         return 0.0, "heuristic", "structural_hook_heuristic"

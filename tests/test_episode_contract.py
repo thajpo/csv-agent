@@ -200,6 +200,13 @@ class TestPRMDerivability:
                 assert step["step_type"] == "submit"
             assert "evidence" in step, "Process step missing evidence"
 
+    def test_fixture_exports_through_canonical_prm_path(self, episode):
+        from src.training.prepare_finetune_data import to_prm_samples
+
+        samples = to_prm_samples(episode)
+
+        assert [sample["label_kind"] for sample in samples] == ["verified"]
+
     def test_process_report_requires_canonical_step_fields(self, episode):
         episode["consistency_traces"] = []
         del episode["process_report"]["steps"][0]["step_type"]

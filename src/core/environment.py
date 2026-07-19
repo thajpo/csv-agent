@@ -37,9 +37,29 @@ logger = logging.getLogger(__name__)
 MAX_OUTPUT_CHARS = 50_000
 
 
-def _parse_hook_records(output: str, *, code: str) -> list[dict]:
-    """Capture structured hook records before presentation output is truncated."""
-    hooks: list[dict] = []
+def _hook_record_identity(hook: dict) -> str:
+    fields = (
+        "variable_name",
+        "code_line",
+        "value",
+        "value_hash",
+        "depends_on",
+        "description",
+        "event_line",
+    )
+    return json.dumps(
+        {field: hook.get(field) for field in fields},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _parse_hook_records(
+    output: str, *, code: str, trusted_records: list[dict] | None = None
+) -> list[dict]:
+    """Capture hooks while distinguishing runtime events from stdout records."""
+    stdout_hooks: list[tuple[dict, str]] = []
     for line in output.splitlines():
         if "📍 Hook:" not in line:
             continue
@@ -53,9 +73,30 @@ def _parse_hook_records(output: str, *, code: str) -> list[dict]:
         hook = parse_hook_record(payload)
         if hook is None:
             continue
-        hook["event_line"] = validate_hook_event_line(code, hook.get("event_line"))
-        hooks.append(hook)
-    return hooks
+        stdout_hooks.append((hook, _hook_record_identity(payload)))
+
+    unmatched_trusted: list[dict] = []
+    matched_stdout_indexes: set[int] = set()
+    for payload in trusted_records or []:
+        hook = parse_hook_record(payload, trusted_event_provenance=True)
+        if hook is None:
+            continue
+        event_line = validate_hook_event_line(code, hook.get("event_line"))
+        hook["event_line"] = event_line
+        if event_line is None:
+            hook["event_provenance_reason"] = (
+                "missing_or_ambiguous_event_provenance"
+            )
+        identity = _hook_record_identity(payload)
+        for index, (_stdout_hook, stdout_identity) in enumerate(stdout_hooks):
+            if index not in matched_stdout_indexes and stdout_identity == identity:
+                stdout_hooks[index] = (hook, identity)
+                matched_stdout_indexes.add(index)
+                break
+        else:
+            unmatched_trusted.append(hook)
+
+    return [hook for hook, _identity in stdout_hooks] + unmatched_trusted
 
 
 def validate_hooks_grounded(
@@ -415,7 +456,12 @@ class Environment:
             sandbox_id=self.state["sandbox_id"],
             python_state=self.state["python_state"],
         )
-        hooks = _parse_hook_records(output, code=code)
+        trusted_records = self.state["python_state"].pop("hooks", None)
+        hooks = _parse_hook_records(
+            output,
+            code=code,
+            trusted_records=trusted_records,
+        )
 
         # Truncate massive outputs to prevent context overflow
         # Preserve the ✓ Submitted: line intact (it contains the answer JSON)

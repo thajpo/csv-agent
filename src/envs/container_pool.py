@@ -216,6 +216,7 @@ def run_worker(worker_id: int):
 
     # Run setup code (defines submit, hook, normalize_value)
     exec(SETUP_INJECT, namespace, namespace)
+    trusted_hook_code = getattr(namespace.get("hook"), "__code__", None)
 
     execution_count = 0
     crash_count = 0
@@ -249,6 +250,7 @@ def run_worker(worker_id: int):
                 namespace["statsmodels"] = statsmodels
                 namespace["sm"] = sm
                 exec(SETUP_INJECT, namespace, namespace)
+                trusted_hook_code = getattr(namespace.get("hook"), "__code__", None)
                 execution_count = 0
                 with open(res_fifo, "w") as f:
                     f.write(json.dumps({{"status": "ok", "reset": True}}))
@@ -270,6 +272,7 @@ def run_worker(worker_id: int):
                 namespace["statsmodels"] = statsmodels
                 namespace["sm"] = sm
                 exec(SETUP_INJECT, namespace, namespace)
+                trusted_hook_code = getattr(namespace.get("hook"), "__code__", None)
                 execution_count = 0
                 with open(res_fifo, "w") as f:
                     f.write(json.dumps({{"status": "ok", "reload_csv": True, "shape": list(df.shape)}}))
@@ -288,26 +291,50 @@ def run_worker(worker_id: int):
 
             stdout_buf = io.StringIO()
             stderr_buf = io.StringIO()
+            trusted_hook_frames = {{}}
+            trusted_hooks = []
+
+            def capture_hook_event(frame, event, _arg):
+                if trusted_hook_code is None or frame.f_code is not trusted_hook_code:
+                    return capture_hook_event
+                frame_id = id(frame)
+                if event == "call":
+                    caller = frame.f_back
+                    if caller is not None and caller.f_code.co_filename == "<cell>":
+                        trusted_hook_frames[frame_id] = caller.f_lineno
+                elif event == "return":
+                    event_line = trusted_hook_frames.pop(frame_id, None)
+                    hook_data = frame.f_locals.get("hook_data")
+                    if event_line is not None and isinstance(hook_data, dict):
+                        captured = dict(hook_data)
+                        captured["event_line"] = event_line
+                        trusted_hooks.append(captured)
+                return capture_hook_event
 
             try:
-                with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
-                    module_ast = ast.parse(code, mode="exec")
-                    body = list(module_ast.body)
-                    trailing_expr = None
-                    if body and isinstance(body[-1], ast.Expr):
-                        trailing_expr = body.pop()
-                    if body:
-                        exec(compile(ast.Module(body=body, type_ignores=[]), "<cell>", "exec"), namespace, namespace)
-                    if trailing_expr is not None:
-                        value = eval(compile(ast.Expression(trailing_expr.value), "<cell>", "eval"), namespace, namespace)
-                        if value is not None:
-                            result["result"] = repr(value)
+                sys.settrace(capture_hook_event)
+                try:
+                    with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
+                        module_ast = ast.parse(code, mode="exec")
+                        body = list(module_ast.body)
+                        trailing_expr = None
+                        if body and isinstance(body[-1], ast.Expr):
+                            trailing_expr = body.pop()
+                        if body:
+                            exec(compile(ast.Module(body=body, type_ignores=[]), "<cell>", "exec"), namespace, namespace)
+                        if trailing_expr is not None:
+                            value = eval(compile(ast.Expression(trailing_expr.value), "<cell>", "eval"), namespace, namespace)
+                            if value is not None:
+                                result["result"] = repr(value)
+                finally:
+                    sys.settrace(None)
             except Exception:
                 result["status"] = "error"
                 result["result"] = traceback.format_exc()
 
             result["stdout"] = stdout_buf.getvalue()
             result["stderr"] = stderr_buf.getvalue()
+            result["hooks"] = trusted_hooks
 
             with open(res_fifo, "w") as f:
                 f.write(json.dumps(result))
@@ -329,6 +356,7 @@ def run_worker(worker_id: int):
             namespace["statsmodels"] = statsmodels
             namespace["sm"] = sm
             exec(SETUP_INJECT, namespace, namespace)
+            trusted_hook_code = getattr(namespace.get("hook"), "__code__", None)
             execution_count = 0
 
 # ============================================================================
@@ -427,6 +455,7 @@ for pid in children:
 
         self.container_id: str | None = None
         self.workers: list[Slot] = []
+        self._trusted_hooks: dict[int, list[dict]] = {}
         self._lock = asyncio.Lock()
         self._started = False
 
@@ -678,7 +707,9 @@ with open('{slot.res_fifo}', 'r') as f:
         try:
             response = json.loads(stdout.strip())
         except json.JSONDecodeError:
+            self._trusted_hooks[slot.worker_id] = []
             return f"Error: Failed to parse response: {stdout}"
+        self._trusted_hooks[slot.worker_id] = response.get("hooks", [])
 
         # Format output
         parts = []
@@ -694,6 +725,9 @@ with open('{slot.res_fifo}', 'r') as f:
             )
 
         return "\n".join(parts) if parts else ""
+
+    def take_trusted_hooks(self, worker_id: int) -> list[dict]:
+        return self._trusted_hooks.pop(worker_id, [])
 
     async def reset_worker(self, worker_id: int):
         """Reset a worker's namespace for reuse."""
@@ -861,6 +895,7 @@ class WorkerAdapter:
         # Update execution count if state provided
         if python_state:
             python_state["execution_count"] = python_state.get("execution_count", 0) + 1
+            python_state["hooks"] = self.container.take_trusted_hooks(self.worker_id)
 
         return result
 

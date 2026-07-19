@@ -2,6 +2,7 @@
     "episode_id": "fixture-sample-001",
     "timestamp": "2025-01-01T00:00:00.000000",
     "csv_source": "data/csv/test_data.csv",
+    "source": "llm_gen",
     "verified": true,
 
     "question": {

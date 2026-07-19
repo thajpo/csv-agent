@@ -115,7 +115,11 @@ KeyError: 'nonexistent_column'"""
         assert result.terminal is True
         assert len(result.hooks) == 2
         assert result.hooks[0]["variable_name"] == "mean_age"
-        assert result.hooks[0]["event_line"] == 2
+        assert result.hooks[0]["event_line"] is None
+        assert (
+            result.hooks[0]["event_provenance_reason"]
+            == "unauthenticated_stdout_provenance"
+        )
         assert result.hooks[1]["variable_name"] == "filtered"
 
     def test_parse_hooks_in_submission(self):
@@ -127,7 +131,11 @@ KeyError: 'nonexistent_column'"""
         assert result.terminal is True
         assert len(result.hooks) == 1
         assert result.hooks[0]["variable_name"] == "result"
-        assert result.hooks[0]["event_line"] == 2
+        assert result.hooks[0]["event_line"] is None
+        assert (
+            result.hooks[0]["event_provenance_reason"]
+            == "unauthenticated_stdout_provenance"
+        )
 
     def test_hook_model_preserves_event_line(self):
         hook = Hook(code_line="value = 1", value_hash="hash", event_line=2)

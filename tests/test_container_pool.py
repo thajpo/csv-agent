@@ -156,6 +156,28 @@ class TestWorkerAdapter:
         assert state["python_state"]["execution_count"] == 2
 
     @pytest.mark.asyncio
+    async def test_adapter_captures_only_trusted_runtime_hooks(self, container):
+        adapter = WorkerAdapter(container, worker_id=2)
+        state = WorkerAdapter.create_state(2)
+        await adapter.reset_state(state)
+
+        await adapter.python(
+            "value = 1\nhook(value, 'value = 1', name='value')",
+            python_state=state["python_state"],
+        )
+
+        assert len(state["python_state"]["hooks"]) == 1
+        assert state["python_state"]["hooks"][0]["event_line"] == 2
+
+        await adapter.python(
+            "def hook(*args, **kwargs):\n    return None\nhook(1, 'value = 1')",
+            python_state=state["python_state"],
+        )
+
+        assert state["python_state"]["hooks"] == []
+        await adapter.reset_state(state)
+
+    @pytest.mark.asyncio
     async def test_adapter_reset_state(self, container):
         """WorkerAdapter.reset_state() should reset worker namespace."""
         adapter = WorkerAdapter(container, worker_id=1)

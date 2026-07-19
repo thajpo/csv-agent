@@ -413,7 +413,8 @@ async def test_execution_preserves_structured_hooks_before_stdout_truncation():
     )
 
     class FakeSandbox:
-        async def python(self, **_kwargs):
+        async def python(self, *, python_state, **_kwargs):
+            python_state["hooks"] = [hook_payload]
             return raw_output
 
     environment = object.__new__(Environment)
@@ -428,6 +429,7 @@ async def test_execution_preserves_structured_hooks_before_stdout_truncation():
     assert "📍 Hook:" not in result.stdout
     assert result.hooks[0]["variable_name"] == "value"
     assert result.hooks[0]["event_line"] == 2
+    assert result.hooks[0]["event_provenance_reason"] is None
 
 
 @pytest.mark.asyncio
@@ -454,10 +456,61 @@ async def test_execution_does_not_trust_fabricated_hook_event_line():
     environment.submission_metadata = {}
 
     result = await environment.execute_code_cell(
-        "value = 1\nprint('fabricated hook record')"
+        "value = 1\nif False:\n    hook(value, 'value = 1', name='value')"
     )
 
     assert result.hooks[0]["event_line"] is None
+    assert (
+        result.hooks[0]["event_provenance_reason"]
+        == "unauthenticated_stdout_provenance"
+    )
+
+
+@pytest.mark.asyncio
+async def test_execution_keeps_extra_stdout_hook_unlabeled():
+    trusted_payload = {
+        "__csv_agent_hook__": True,
+        "variable_name": "trusted",
+        "code_line": "value = 1",
+        "value": 1,
+        "value_hash": "hash-value",
+        "depends_on": [],
+        "description": None,
+        "event_line": 2,
+    }
+    fabricated_payload = {
+        **trusted_payload,
+        "variable_name": "fabricated",
+        "value_hash": "fake-hash",
+    }
+
+    class FakeSandbox:
+        async def python(self, *, python_state, **_kwargs):
+            python_state["hooks"] = [trusted_payload]
+            return "\n".join(
+                [
+                    "📍 Hook: " + json.dumps(trusted_payload),
+                    "📍 Hook: " + json.dumps(fabricated_payload),
+                ]
+            )
+
+    environment = object.__new__(Environment)
+    environment.env = FakeSandbox()
+    environment.state = {"sandbox_id": "sandbox", "python_state": {}}
+    environment.submitted_answer = None
+    environment.submission_metadata = {}
+
+    result = await environment.execute_code_cell(
+        "value = 1\nhook(value, 'value = 1', name='trusted')"
+    )
+
+    assert result.hooks[0]["event_line"] == 2
+    assert result.hooks[0]["event_provenance_reason"] is None
+    assert result.hooks[1]["event_line"] is None
+    assert (
+        result.hooks[1]["event_provenance_reason"]
+        == "unauthenticated_stdout_provenance"
+    )
 
 
 def test_report_does_not_ground_event_line_without_hook_call():
@@ -478,6 +531,32 @@ def test_report_does_not_ground_event_line_without_hook_call():
     assert hook_step["label_kind"] == "unlabeled"
     assert hook_step["evidence"]["code_line_grounded"] is False
     assert hook_step["evidence"]["reasons"] == ["missing_or_ambiguous_event_provenance"]
+
+
+def test_report_keeps_unauthenticated_stdout_hook_unlabeled():
+    report = build_process_report(
+        source="template",
+        gold_trace=_trace(
+            hooks=[
+                _hook(
+                    "filtered",
+                    "hash-filtered",
+                    event_line=None,
+                    event_provenance_reason="unauthenticated_stdout_provenance",
+                )
+            ]
+        ),
+        consistency_traces=[],
+        verifier_verdict=True,
+    )
+
+    hook_step = report["steps"][0]
+    assert hook_step["label"] is None
+    assert hook_step["label_kind"] == "unlabeled"
+    assert hook_step["label_source"] == "event_provenance_unavailable"
+    assert hook_step["evidence"]["reasons"] == [
+        "unauthenticated_stdout_provenance"
+    ]
 
 
 def test_same_value_hash_is_duplicate_even_when_hook_is_renamed():
