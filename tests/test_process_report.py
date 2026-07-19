@@ -7,7 +7,7 @@ import pytest
 
 from csv_spec import hash_artifact
 from src.core.conversation import ConversationHistory
-from src.core.environment import Environment
+from src.core.environment import Environment, _bind_hook_event_lines
 from src.datagen.process_report import build_process_report
 from src.datagen.teacher import build_trace_dict
 from src.utils.parsing import extract_python_cells
@@ -50,6 +50,7 @@ def _hook(name: str, value_hash: str, **overrides) -> dict:
         "value_hash": value_hash,
         "description": None,
         "depends_on": [],
+        "event_line": 2,
     }
     hook.update(overrides)
     return hook
@@ -320,6 +321,89 @@ def test_future_code_cannot_ground_an_earlier_hook():
     assert hook_step["label_kind"] == "heuristic"
 
 
+def test_later_statement_in_same_cell_cannot_ground_hook():
+    trace = _trace(
+        hooks=[
+            _hook(
+                "later",
+                "hash-later",
+                code_line="later = 2",
+                event_line=2,
+            )
+        ]
+    )
+    trace["turns"][0]["code"] = (
+        "early = 1\nhook(early, 'later = 2', name='later')\nlater = 2\nsubmit(later)"
+    )
+    trace["turns"][0]["execution"]["submitted_answer"] = 2
+    trace["final_answer"] = 2
+    trace["final_answer_hash"] = hash_artifact(2)
+
+    report = build_process_report(
+        source="template",
+        gold_trace=trace,
+        consistency_traces=[],
+        verifier_verdict=True,
+    )
+
+    assert report["steps"][0]["evidence"]["code_line_grounded"] is False
+
+
+def test_hook_event_lines_are_derived_host_side_from_ordered_calls():
+    hooks = [
+        _hook("first", "hash-first", code_line="first = 1", event_line=None),
+        _hook("second", "hash-second", code_line="second = 2", event_line=None),
+    ]
+    code = (
+        "first = 1\n"
+        "hook(first, 'first = 1', name='first')\n"
+        "second = 2\n"
+        "hook(second, 'second = 2', name='second')"
+    )
+
+    bound = _bind_hook_event_lines(code, hooks)
+
+    assert [hook["event_line"] for hook in bound] == [2, 4]
+
+
+@pytest.mark.asyncio
+async def test_execution_preserves_structured_hooks_before_stdout_truncation():
+    hook_payload = {
+        "__csv_agent_hook__": True,
+        "variable_name": "value",
+        "code_line": "value = 1",
+        "value": 1,
+        "value_hash": "hash-value",
+        "depends_on": [],
+        "description": None,
+    }
+    raw_output = (
+        "x" * 60_000
+        + "\n📍 Hook: "
+        + json.dumps(hook_payload)
+        + "\n"
+        + "y" * 60_000
+        + '\n✓ Submitted: {"__csv_agent_answer__": 1}'
+    )
+
+    class FakeSandbox:
+        async def python(self, **_kwargs):
+            return raw_output
+
+    environment = object.__new__(Environment)
+    environment.env = FakeSandbox()
+    environment.state = {"sandbox_id": "sandbox", "python_state": {}}
+    environment.submitted_answer = None
+    environment.submission_metadata = {}
+    code = "value = 1\nhook(value, 'value = 1', name='value')\nsubmit(value)"
+
+    result = await environment.execute_code_cell(code)
+
+    assert "📍 Hook:" not in result.stdout
+    assert result.hooks[0]["variable_name"] == "value"
+    assert result.hooks[0]["event_line"] == 2
+
+
 def test_same_value_hash_is_duplicate_even_when_hook_is_renamed():
     report = build_process_report(
         source="template",
@@ -382,6 +466,7 @@ def test_trace_builder_hashes_falsy_answers(answer):
         success=True,
         stdout="✓ Submitted: " + json.dumps({"__csv_agent_answer__": answer}),
         stderr="",
+        hooks=[],
         submitted_answer=answer,
     )
     state = SimpleNamespace(
@@ -427,6 +512,7 @@ async def test_trace_builder_preserves_turns_pruned_from_conversation_history():
                 else ""
             ),
             stderr="",
+            hooks=[],
             submitted_answer=answer,
         )
         return [result], answer
@@ -464,6 +550,7 @@ def test_trace_builder_reuses_canonical_code_fence_extraction(fence: str):
         success=True,
         stdout='✓ Submitted: {"__csv_agent_answer__": 7}',
         stderr="",
+        hooks=[],
         submitted_answer=7,
     )
     state = SimpleNamespace(
@@ -494,6 +581,7 @@ def test_trace_builder_rejects_mismatched_turn_provenance(mismatch: str):
         success=True,
         stdout='✓ Submitted: {"__csv_agent_answer__": 7}',
         stderr="",
+        hooks=[],
         submitted_answer=7,
     )
     state = SimpleNamespace(
@@ -561,6 +649,20 @@ def test_process_report_rejects_type_distinct_accepted_submission(
 ):
     trace = _trace(hooks=[], answer=final_answer)
     trace["turns"][0]["execution"]["submitted_answer"] = submitted
+
+    with pytest.raises(ValueError, match="final answer is not the accepted submission"):
+        build_process_report(
+            source="template",
+            gold_trace=trace,
+            consistency_traces=[],
+            verifier_verdict=True,
+        )
+
+
+def test_process_report_rejects_distinct_values_with_same_rounded_hash():
+    trace = _trace(hooks=[], answer=1.004)
+    trace["turns"][0]["execution"]["submitted_answer"] = 1.001
+    assert hash_artifact(1.001) == hash_artifact(1.004)
 
     with pytest.raises(ValueError, match="final answer is not the accepted submission"):
         build_process_report(

@@ -2,8 +2,10 @@
   "episode_id": "fixture-multi-outcome-001",
   "timestamp": "2025-01-01T00:00:00.000000",
   "csv_source": "data/mock/data.csv",
+  "source": "template",
   "verified": true,
   "question": {
+    "source": "template",
     "id": "q-multi-outcome-001",
     "question_text": "What is the representative answer for this controlled ambiguity fixture?",
     "hint": "Either canonical form is accepted",
@@ -16,10 +18,10 @@
     "ground_truth": {
       "answer": 42
     },
-    "ground_truth_hash": "multihash-aaa111",
+    "ground_truth_hash": "f85ee2859e7757b5",
     "ground_truth_hashes": [
-      "multihash-aaa111",
-      "multihash-bbb222"
+      "f85ee2859e7757b5",
+      "73475cb40a568e8d"
     ]
   },
   "gold_trace": {
@@ -43,49 +45,63 @@
     "final_answer": {
       "answer": 42
     },
-    "final_answer_hash": "multihash-aaa111",
+    "final_answer_hash": "f85ee2859e7757b5",
     "success": true
   },
-  "consistency_traces": [
-    {
-      "turns": [
-        {
-          "turn_index": 0,
-          "reasoning": null,
-          "code": "submit({'answer': 42})",
-          "execution": {
-            "success": true,
-            "stdout": "✓ Submitted: {\"__csv_agent_answer__\": {\"answer\": 42}, \"hooks\": []}",
-            "stderr": "",
-            "hooks": [],
-            "submitted_answer": {
-              "answer": 42
-            }
-          },
-          "correction": null
-        }
-      ],
-      "final_answer": {
-        "answer": 42
-      },
-      "final_answer_hash": "multihash-bbb222",
-      "success": true
-    }
-  ],
+  "consistency_traces": [],
   "triangulation": {
-    "n_consistency_runs": 1,
-    "n_consistency_succeeded": 1,
-    "majority_answer_hash": "multihash-aaa111",
+    "n_consistency_runs": 0,
+    "n_consistency_succeeded": 0,
+    "majority_answer_hash": "f85ee2859e7757b5",
     "majority_count": 1,
     "gold_matches_majority": true,
     "float_tolerance": 0.1
   },
   "timing": {
     "gold_elapsed": 1.0,
-    "consistency_elapsed": [
-      0.9
-    ],
-    "total_elapsed": 1.9,
-    "avg_elapsed": 0.95
+    "consistency_elapsed": [],
+    "total_elapsed": 1.0,
+    "avg_elapsed": 1.0
+  },
+  "process_report": {
+    "summary": {
+      "total_steps": 1,
+      "labeled_steps": 1,
+      "verified_steps": 1,
+      "heuristic_steps": 0,
+      "unlabeled_steps": 0,
+      "positive_steps": 1,
+      "negative_steps": 0
+    },
+    "steps": [
+      {
+        "step_index": 0,
+        "turn_index": 0,
+        "hook_index": null,
+        "step_type": "submit",
+        "code_line": "submit(...)",
+        "variable_name": "answer",
+        "value": {
+          "answer": 42
+        },
+        "value_hash": "f85ee2859e7757b5",
+        "description": "Final submitted answer",
+        "depends_on": [],
+        "semantic_role": "final_answer",
+        "label": 1.0,
+        "label_kind": "verified",
+        "label_source": "terminal_verifier",
+        "evidence": {
+          "final_verified": true,
+          "trace_success": true,
+          "code_line_grounded": true,
+          "dependency_valid": true,
+          "duplicate": false,
+          "consensus_matches": 0,
+          "consensus_total": 0,
+          "reasons": []
+        }
+      }
+    ]
   }
 }

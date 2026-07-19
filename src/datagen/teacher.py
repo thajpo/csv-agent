@@ -222,7 +222,14 @@ def build_trace_dict(final_state) -> TraceDict:
                 f"execution_turns[{turn_idx}] execution code does not match response"
             )
         reasoning = extract_reasoning_from_response(response)
-        hooks, _skipped = parse_hooks_from_stdout(result.stdout)
+        raw_hooks = getattr(result, "hooks", None)
+        if not isinstance(raw_hooks, list) or any(
+            not isinstance(hook, dict) for hook in raw_hooks
+        ):
+            raise ValueError(
+                f"execution_turns[{turn_idx}] structured hook provenance is invalid"
+            )
+        hooks = [HookDict(**hook) for hook in raw_hooks]
         execution = ExecutionResultDict(
             success=result.success,
             stdout=result.stdout,

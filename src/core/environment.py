@@ -8,6 +8,7 @@ module for output, keeping the environment logic separate from presentation.
 Refactored to use a sandboxed Python environment for code execution.
 """
 
+import ast
 import json
 import logging
 
@@ -34,6 +35,87 @@ logger = logging.getLogger(__name__)
 
 # Max output chars before truncation (~12.5K tokens at 4 chars/token)
 MAX_OUTPUT_CHARS = 50_000
+
+
+def _parse_hook_records(output: str) -> list[dict]:
+    """Capture structured hook records before presentation output is truncated."""
+    hooks: list[dict] = []
+    for line in output.splitlines():
+        if "📍 Hook:" not in line:
+            continue
+        json_start = line.find("{")
+        if json_start == -1:
+            continue
+        try:
+            payload = json.loads(line[json_start:])
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict) or not payload.get("__csv_agent_hook__"):
+            continue
+        hooks.append(
+            {
+                "variable_name": payload.get("variable_name"),
+                "code_line": payload.get("code_line", ""),
+                "value": payload.get("value"),
+                "value_hash": payload.get("value_hash", ""),
+                "depends_on": payload.get("depends_on", []),
+                "description": payload.get("description"),
+                "event_line": None,
+            }
+        )
+    return hooks
+
+
+def _hook_call_code_line(call: ast.Call) -> str | None:
+    if len(call.args) >= 2 and isinstance(call.args[1], ast.Constant):
+        value = call.args[1].value
+        return value if isinstance(value, str) else None
+    for keyword in call.keywords:
+        if keyword.arg == "code_line" and isinstance(keyword.value, ast.Constant):
+            value = keyword.value.value
+            return value if isinstance(value, str) else None
+    return None
+
+
+def _bind_hook_event_lines(code: str, hooks: list[dict]) -> list[dict]:
+    """Bind ordered runtime hooks to the source locations of their hook() calls.
+
+    Static source cannot always recover dynamic control flow. Ambiguous events retain
+    ``None`` and therefore cannot be treated as grounded process evidence.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return hooks
+
+    calls = sorted(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "hook"
+        ),
+        key=lambda node: (node.lineno, node.col_offset),
+    )
+    cursor = 0
+    for hook_index, hook in enumerate(hooks):
+        claimed_code = hook.get("code_line")
+        match_index = next(
+            (
+                index
+                for index in range(cursor, len(calls))
+                if _hook_call_code_line(calls[index]) == claimed_code
+            ),
+            None,
+        )
+        if match_index is None and len(calls) - cursor == len(hooks) - hook_index:
+            match_index = cursor
+        if match_index is None:
+            continue
+        hook["event_line"] = calls[match_index].lineno
+        cursor = match_index + 1
+    return hooks
 
 
 def validate_hooks_grounded(
@@ -393,6 +475,7 @@ class Environment:
             sandbox_id=self.state["sandbox_id"],
             python_state=self.state["python_state"],
         )
+        hooks = _bind_hook_event_lines(code, _parse_hook_records(output))
 
         # Truncate massive outputs to prevent context overflow
         # Preserve the ✓ Submitted: line intact (it contains the answer JSON)
@@ -483,6 +566,7 @@ class Environment:
         # Parse the string output into success/stdout/stderr
         result = parse_execution_result(output)
         result.code = code
+        result.hooks = hooks
 
         # Check for submitted answer in output
         submission, success = parse_submission(output)

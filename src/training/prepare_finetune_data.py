@@ -504,11 +504,19 @@ def _validate_trace(*, trace: Any, path: str, prefix: str) -> TraceDict:
                 "value_hash",
                 "description",
                 "depends_on",
+                "event_line",
             }
             if not hook_fields.issubset(hook):
                 raise ValueError(f"{prefix}: {hook_path} provenance is incomplete")
             if not isinstance(hook["depends_on"], list):
                 raise ValueError(f"{prefix}: {hook_path}.depends_on must be a list")
+            event_line = hook["event_line"]
+            if (
+                type(event_line) is not int
+                or event_line < 1
+                or event_line > len(turn["code"].splitlines())
+            ):
+                raise ValueError(f"{prefix}: {hook_path}.event_line is invalid")
     try:
         canonical_answer_hash = trace_answer_hash(cast(TraceDict, trace))
         validate_trace_submissions(cast(TraceDict, trace), path=path)

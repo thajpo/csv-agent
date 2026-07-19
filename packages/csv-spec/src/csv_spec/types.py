@@ -63,6 +63,7 @@ class HookDict(TypedDict, total=False):
     value_hash: str  # Hash of full normalized value for verification
     depends_on: list[str]  # DAG edges to prior hooks
     description: str | None
+    event_line: int | None  # 1-based source line where hook() executed
 
 
 # ============= Turn-Based TypedDicts =============
@@ -150,7 +151,7 @@ class TimingMetadataDict(TypedDict):
 # ============= Process Report Types =============
 
 
-class ProcessStepEvidenceDict(TypedDict, total=False):
+class ProcessStepEvidenceDict(TypedDict):
     """Observed evidence about a process step.
 
     Evidence fields are diagnostic inputs. Except for terminal verification,

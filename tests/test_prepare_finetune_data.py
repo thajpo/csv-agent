@@ -30,6 +30,7 @@ def _episode() -> dict:
                             "value_hash": "hash-filtered",
                             "description": None,
                             "depends_on": [],
+                            "event_line": 2,
                         },
                         {
                             "variable_name": "unused",
@@ -38,6 +39,7 @@ def _episode() -> dict:
                             "value_hash": "hash-unused",
                             "description": None,
                             "depends_on": [],
+                            "event_line": 2,
                         },
                     ],
                     "submitted_answer": 7,
@@ -145,6 +147,22 @@ def test_prm_export_rejects_malformed_process_report():
     del episode["process_report"]["steps"][0]["step_type"]
 
     with pytest.raises(ValueError, match="malformed process_report"):
+        to_prm_samples(episode)
+
+
+def test_prm_export_rejects_incomplete_step_evidence():
+    episode = _episode()
+    del episode["process_report"]["steps"][0]["evidence"]["reasons"]
+
+    with pytest.raises(ValueError, match="malformed process_report"):
+        to_prm_samples(episode)
+
+
+def test_prm_export_rejects_invalid_hook_event_line():
+    episode = _episode()
+    episode["gold_trace"]["turns"][0]["execution"]["hooks"][0]["event_line"] = 99
+
+    with pytest.raises(ValueError, match="event_line is invalid"):
         to_prm_samples(episode)
 
 

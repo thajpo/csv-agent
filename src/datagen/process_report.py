@@ -8,6 +8,7 @@ does not prove that a hook made useful computational progress.
 from __future__ import annotations
 
 import ast
+import math
 from collections import Counter
 from typing import Any, Literal
 
@@ -18,6 +19,7 @@ from csv_spec import (
     ProcessStepReportDict,
     TraceDict,
     hash_artifact,
+    normalize_value,
 )
 from src.core.environment import validate_hooks_grounded
 from src.datagen.shared.verification import trace_answer_hash
@@ -56,20 +58,16 @@ def build_process_report(
     for turn_index, turn in enumerate(gold_trace.get("turns", [])):
         execution = turn.get("execution", {})
         hooks = execution.get("hooks", [])
-        hook_copies = [dict(hook) for hook in hooks]
-        # A hook can only be grounded by code that has executed at or before
-        # its turn. Later cells must not retroactively validate an earlier hook.
-        grounded_hooks, _ungrounded_hooks = validate_hooks_grounded(
-            hook_copies, code_cells[: turn_index + 1]
-        )
-        grounded_ids = {id(hook) for hook in grounded_hooks}
-
         for hook_index, hook in enumerate(hooks):
             evidence = _hook_evidence(
                 hook=hook,
                 trace_success=gold_trace.get("success", False),
                 final_verified=verifier_verdict,
-                grounded=id(hook_copies[hook_index]) in grounded_ids,
+                grounded=_hook_is_grounded(
+                    hook=hook,
+                    earlier_code_cells=code_cells[:turn_index],
+                    current_code=code_cells[turn_index],
+                ),
                 seen_names=seen_names,
                 seen_hashes=seen_hashes,
                 consensus=consensus,
@@ -246,11 +244,57 @@ def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None
         if (
             not submissions
             or canonical_answer_hash is None
-            or hash_artifact(submissions[-1]) != canonical_answer_hash
+            or hash_artifact(trace.get("final_answer")) != canonical_answer_hash
+            or _exact_value_identity(submissions[-1])
+            != _exact_value_identity(trace.get("final_answer"))
         ):
             raise ValueError(f"{path} final answer is not the accepted submission")
     elif trace.get("final_answer") is not None:
         raise ValueError(f"unsuccessful {path} has a final answer")
+
+
+def _hook_is_grounded(
+    *, hook: dict[str, Any], earlier_code_cells: list[str], current_code: str
+) -> bool:
+    """Check grounding only against code that preceded the runtime hook event."""
+    event_line = hook.get("event_line")
+    current_lines = current_code.splitlines()
+    if type(event_line) is not int or event_line < 1 or event_line > len(current_lines):
+        return False
+    executed_prefix = "\n".join(current_lines[: event_line - 1])
+    hook_copy = dict(hook)
+    grounded, _ungrounded = validate_hooks_grounded(
+        [hook_copy], [*earlier_code_cells, executed_prefix]
+    )
+    return bool(grounded)
+
+
+def _exact_value_identity(value: Any) -> tuple:
+    """Return type-preserving identity for accepted-submission provenance."""
+    value = normalize_value(value)
+    if value is None:
+        return ("none",)
+    if type(value) is bool:
+        return ("bool", value)
+    if type(value) is int:
+        return ("int", value)
+    if type(value) is float:
+        if math.isnan(value):
+            return ("float", "nan")
+        return ("float", value.hex())
+    if type(value) is str:
+        return ("str", value)
+    if type(value) is list:
+        return ("list", tuple(_exact_value_identity(item) for item in value))
+    if type(value) is tuple:
+        return ("tuple", tuple(_exact_value_identity(item) for item in value))
+    if type(value) is dict:
+        items = [
+            (_exact_value_identity(key), _exact_value_identity(item))
+            for key, item in value.items()
+        ]
+        return ("dict", tuple(sorted(items, key=repr)))
+    return (type(value).__module__, type(value).__qualname__, repr(value))
 
 
 def _hook_evidence(
