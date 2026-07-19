@@ -166,6 +166,26 @@ def test_prm_export_rejects_invalid_hook_event_line():
         to_prm_samples(episode)
 
 
+def test_prm_export_preserves_unlabeled_hook_without_event_provenance():
+    episode = _episode()
+    episode["gold_trace"]["turns"][0]["execution"]["hooks"][0]["event_line"] = None
+    episode["process_report"] = build_process_report(
+        source="llm_gen",
+        gold_trace=episode["gold_trace"],
+        consistency_traces=episode["consistency_traces"],
+        verifier_verdict=True,
+    )
+
+    samples = to_prm_samples(episode, include_heuristic_hooks=True)
+
+    assert [sample["step_index"] for sample in samples] == [1, 2]
+    missing_provenance_step = episode["process_report"]["steps"][0]
+    assert missing_provenance_step["label_kind"] == "unlabeled"
+    assert missing_provenance_step["evidence"]["reasons"] == [
+        "missing_or_ambiguous_event_provenance"
+    ]
+
+
 def test_prm_export_rejects_verified_hook():
     episode = _episode()
     episode["process_report"]["steps"][0]["label_kind"] = "verified"

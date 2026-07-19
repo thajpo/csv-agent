@@ -78,47 +78,6 @@ def extract_trace_metrics(trace: TraceDict) -> dict:
     }
 
 
-def parse_hooks_from_stdout(stdout: str) -> tuple[list[HookDict], int]:
-    """Extract hook JSON objects from execution stdout.
-
-    Returns:
-        (hooks, skipped_count) - List of valid hooks and count of malformed/skipped hooks.
-    """
-    hooks = []
-    skipped = 0
-    for line in stdout.split("\n"):
-        if "📍 Hook:" in line:
-            json_start = line.find("{")
-            if json_start == -1:
-                logger.warning(f"Hook line missing JSON: {line[:80]}")
-                skipped += 1
-                continue
-            try:
-                hook_data = json.loads(line[json_start:])
-                if hook_data.get("__csv_agent_hook__"):
-                    hooks.append(
-                        HookDict(
-                            variable_name=hook_data.get("variable_name"),
-                            code_line=hook_data.get("code_line", ""),
-                            value=hook_data.get("value"),
-                            value_hash=hook_data.get("value_hash", ""),
-                            depends_on=hook_data.get("depends_on", []),
-                            description=hook_data.get("description"),
-                        )
-                    )
-                else:
-                    logger.warning(
-                        f"Hook missing __csv_agent_hook__ marker: {line[:80]}"
-                    )
-                    skipped += 1
-            except json.JSONDecodeError as e:
-                logger.warning(f"Malformed hook JSON: {e} in: {line[:80]}")
-                skipped += 1
-    if skipped:
-        logger.warning(f"Hook parsing: kept {len(hooks)}, skipped {skipped} malformed")
-    return hooks, skipped
-
-
 def parse_error_from_stderr(stderr: str) -> tuple[str | None, str | None]:
     """Extract error type and message from stderr.
 

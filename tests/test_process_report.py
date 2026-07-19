@@ -1,5 +1,7 @@
 """Tests for diagnostic process reports."""
 
+import contextlib
+import io
 import json
 from types import SimpleNamespace
 
@@ -7,9 +9,10 @@ import pytest
 
 from csv_spec import hash_artifact
 from src.core.conversation import ConversationHistory
-from src.core.environment import Environment, _bind_hook_event_lines
+from src.core.environment import Environment
 from src.datagen.process_report import build_process_report
 from src.datagen.teacher import build_trace_dict
+from src.envs.csv_env import get_setup_code
 from src.utils.parsing import extract_python_cells
 
 
@@ -275,7 +278,7 @@ def test_future_code_cannot_ground_an_earlier_hook():
             {
                 "turn_index": 0,
                 "reasoning": "Claim a future value",
-                "code": "early = 1",
+                "code": "early = 1\nhook(early, 'later = 2', name='later')",
                 "execution": {
                     "success": True,
                     "stdout": "",
@@ -349,21 +352,42 @@ def test_later_statement_in_same_cell_cannot_ground_hook():
     assert report["steps"][0]["evidence"]["code_line_grounded"] is False
 
 
-def test_hook_event_lines_are_derived_host_side_from_ordered_calls():
-    hooks = [
-        _hook("first", "hash-first", code_line="first = 1", event_line=None),
-        _hook("second", "hash-second", code_line="second = 2", event_line=None),
-    ]
+def test_runtime_hook_captures_repeated_caller_line():
+    namespace = {}
+    exec(get_setup_code(), namespace)
     code = (
-        "first = 1\n"
-        "hook(first, 'first = 1', name='first')\n"
-        "second = 2\n"
-        "hook(second, 'second = 2', name='second')"
+        "def emit(value):\n"
+        "    hook(value, 'value = current', name='current')\n"
+        "for current in range(2):\n"
+        "    emit(current)"
+    )
+    output = io.StringIO()
+
+    with contextlib.redirect_stdout(output):
+        exec(compile(code, "<cell>", "exec"), namespace, namespace)
+
+    records = [
+        json.loads(line[line.find("{") :])
+        for line in output.getvalue().splitlines()
+        if "📍 Hook:" in line
+    ]
+    assert [record["event_line"] for record in records] == [2, 2]
+
+
+def test_missing_hook_event_provenance_is_unlabeled_diagnostic():
+    report = build_process_report(
+        source="template",
+        gold_trace=_trace(hooks=[_hook("filtered", "hash-filtered", event_line=None)]),
+        consistency_traces=[],
+        verifier_verdict=True,
     )
 
-    bound = _bind_hook_event_lines(code, hooks)
-
-    assert [hook["event_line"] for hook in bound] == [2, 4]
+    hook_step = report["steps"][0]
+    assert hook_step["label"] is None
+    assert hook_step["label_kind"] == "unlabeled"
+    assert hook_step["label_source"] == "event_provenance_unavailable"
+    assert hook_step["evidence"]["code_line_grounded"] is False
+    assert hook_step["evidence"]["reasons"] == ["missing_or_ambiguous_event_provenance"]
 
 
 @pytest.mark.asyncio
@@ -376,6 +400,7 @@ async def test_execution_preserves_structured_hooks_before_stdout_truncation():
         "value_hash": "hash-value",
         "depends_on": [],
         "description": None,
+        "event_line": 2,
     }
     raw_output = (
         "x" * 60_000
@@ -671,3 +696,41 @@ def test_process_report_rejects_distinct_values_with_same_rounded_hash():
             consistency_traces=[],
             verifier_verdict=True,
         )
+
+
+@pytest.mark.parametrize(
+    ("logged_answer", "captured_answer"),
+    [(8, 7), (False, 0)],
+)
+def test_process_report_rejects_submission_record_mismatch(
+    logged_answer, captured_answer
+):
+    trace = _trace(hooks=[], answer=captured_answer)
+    trace["turns"][0]["execution"]["stdout"] = "✓ Submitted: " + json.dumps(
+        {"__csv_agent_answer__": logged_answer}
+    )
+
+    with pytest.raises(ValueError, match="does not match captured answer"):
+        build_process_report(
+            source="template",
+            gold_trace=trace,
+            consistency_traces=[],
+            verifier_verdict=True,
+        )
+
+
+@pytest.mark.parametrize("answer", ["contains ✓ Submitted: marker", "📍 Hook:"])
+def test_submission_payload_protocol_text_is_not_a_second_event(answer):
+    trace = _trace(hooks=[], answer=answer)
+    trace["turns"][0]["execution"]["stdout"] = "✓ Submitted: " + json.dumps(
+        {"__csv_agent_answer__": answer}
+    )
+
+    report = build_process_report(
+        source="template",
+        gold_trace=trace,
+        consistency_traces=[],
+        verifier_verdict=True,
+    )
+
+    assert report["steps"][0]["label_kind"] == "verified"

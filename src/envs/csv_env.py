@@ -141,6 +141,11 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
     """
     import hashlib
 
+    try:
+        raise RuntimeError
+    except RuntimeError as error:
+        event_line = error.__traceback__.tb_frame.f_back.f_lineno
+
     # Get normalized value for hashing (always hash the full value)
     normalized = normalize_value(value)
     # Round floats before hashing to ensure consistent hashes despite FP precision
@@ -173,6 +178,7 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
         "description": description,
         "code_line": code_line,
         "depends_on": depends_on or [],
+        "event_line": event_line,
     }
     _captured_hooks.append(hook_data)
 

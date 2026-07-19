@@ -511,7 +511,7 @@ def _validate_trace(*, trace: Any, path: str, prefix: str) -> TraceDict:
             if not isinstance(hook["depends_on"], list):
                 raise ValueError(f"{prefix}: {hook_path}.depends_on must be a list")
             event_line = hook["event_line"]
-            if (
+            if event_line is not None and (
                 type(event_line) is not int
                 or event_line < 1
                 or event_line > len(turn["code"].splitlines())

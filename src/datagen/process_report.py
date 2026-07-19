@@ -22,6 +22,7 @@ from csv_spec import (
     normalize_value,
 )
 from src.core.environment import validate_hooks_grounded
+from src.datagen.shared.submission import parse_submission
 from src.datagen.shared.verification import trace_answer_hash
 
 EpisodeSource = Literal["llm_gen", "template", "procedural"]
@@ -59,15 +60,17 @@ def build_process_report(
         execution = turn.get("execution", {})
         hooks = execution.get("hooks", [])
         for hook_index, hook in enumerate(hooks):
+            grounded, event_provenance_reason = _hook_grounding(
+                hook=hook,
+                earlier_code_cells=code_cells[:turn_index],
+                current_code=code_cells[turn_index],
+            )
             evidence = _hook_evidence(
                 hook=hook,
                 trace_success=gold_trace.get("success", False),
                 final_verified=verifier_verdict,
-                grounded=_hook_is_grounded(
-                    hook=hook,
-                    earlier_code_cells=code_cells[:turn_index],
-                    current_code=code_cells[turn_index],
-                ),
+                grounded=grounded,
+                event_provenance_reason=event_provenance_reason,
                 seen_names=seen_names,
                 seen_hashes=seen_hashes,
                 consensus=consensus,
@@ -187,19 +190,38 @@ def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None
         stdout = execution.get("stdout", "")
         if not isinstance(stdout, str):
             raise ValueError(f"{path}.turns[{turn_index}].execution.stdout is invalid")
-        submit_markers = [
-            offset
-            for offset in range(len(stdout))
-            if stdout.startswith("✓ Submitted:", offset)
+        stdout_lines = stdout.splitlines()
+        submission_line_indexes = [
+            line_index
+            for line_index, line in enumerate(stdout_lines)
+            if "✓ Submitted:" in line
         ]
         turn_path = f"{path}.turns[{turn_index}]"
-        if len(submit_markers) > 1:
+        if len(submission_line_indexes) > 1:
             raise ValueError(f"{turn_path} contains multiple submissions")
-        if submit_markers and submitted_answer is None:
+        if submission_line_indexes and submitted_answer is None:
             raise ValueError(f"{turn_path} submission was not captured")
-        if submit_markers:
-            later_hook = stdout.find("📍 Hook:", submit_markers[0])
-            if later_hook != -1:
+        if submission_line_indexes:
+            submission_line_index = submission_line_indexes[0]
+            submission_record, parsed = parse_submission(
+                stdout_lines[submission_line_index]
+            )
+            if (
+                not parsed
+                or not isinstance(submission_record, dict)
+                or "__csv_agent_answer__" not in submission_record
+            ):
+                raise ValueError(f"{turn_path} submission record is invalid")
+            if _exact_value_identity(
+                submission_record["__csv_agent_answer__"]
+            ) != _exact_value_identity(submitted_answer):
+                raise ValueError(
+                    f"{turn_path} submission record does not match captured answer"
+                )
+            if any(
+                "📍 Hook:" in line
+                for line in stdout_lines[submission_line_index + 1 :]
+            ):
                 raise ValueError(f"{turn_path} contains a hook after submission")
         if submitted_answer is None:
             continue
@@ -253,20 +275,22 @@ def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None
         raise ValueError(f"unsuccessful {path} has a final answer")
 
 
-def _hook_is_grounded(
+def _hook_grounding(
     *, hook: dict[str, Any], earlier_code_cells: list[str], current_code: str
-) -> bool:
+) -> tuple[bool, str | None]:
     """Check grounding only against code that preceded the runtime hook event."""
     event_line = hook.get("event_line")
     current_lines = current_code.splitlines()
+    if event_line is None:
+        return False, "missing_or_ambiguous_event_provenance"
     if type(event_line) is not int or event_line < 1 or event_line > len(current_lines):
-        return False
+        return False, "invalid_event_provenance"
     executed_prefix = "\n".join(current_lines[: event_line - 1])
     hook_copy = dict(hook)
     grounded, _ungrounded = validate_hooks_grounded(
         [hook_copy], [*earlier_code_cells, executed_prefix]
     )
-    return bool(grounded)
+    return bool(grounded), None
 
 
 def _exact_value_identity(value: Any) -> tuple:
@@ -303,6 +327,7 @@ def _hook_evidence(
     trace_success: bool,
     final_verified: bool | None,
     grounded: bool,
+    event_provenance_reason: str | None,
     seen_names: set[str],
     seen_hashes: set[str],
     consensus: Counter[str],
@@ -314,7 +339,9 @@ def _hook_evidence(
     value_hash = hook.get("value_hash")
     duplicate = bool(value_hash and value_hash in seen_hashes)
 
-    if not grounded:
+    if event_provenance_reason is not None:
+        reasons.append(event_provenance_reason)
+    elif not grounded:
         reasons.append("ungrounded_code_line")
     if not dependency_valid:
         reasons.append("invalid_dependency")
@@ -339,6 +366,8 @@ def _label_hook(
     evidence: ProcessStepEvidenceDict,
 ) -> tuple[float | None, Literal["heuristic", "unlabeled"], str]:
     """Assign an optional hook heuristic without claiming process truth."""
+    if any(reason.endswith("event_provenance") for reason in evidence["reasons"]):
+        return None, "unlabeled", "event_provenance_unavailable"
     if _is_bad_step(evidence):
         return 0.0, "heuristic", "structural_hook_heuristic"
 
