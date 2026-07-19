@@ -36,6 +36,7 @@ from csv_spec import (
 )
 from csv_spec import hash_artifact
 from csv_spec import normalize_value
+from src.utils.parsing import extract_python_cells
 
 logger = logging.getLogger(__name__)
 
@@ -75,47 +76,6 @@ def extract_trace_metrics(trace: TraceDict) -> dict:
         "max_output_chars": max_output,
         "est_tokens": total_content // 4,
     }
-
-
-def parse_hooks_from_stdout(stdout: str) -> tuple[list[HookDict], int]:
-    """Extract hook JSON objects from execution stdout.
-
-    Returns:
-        (hooks, skipped_count) - List of valid hooks and count of malformed/skipped hooks.
-    """
-    hooks = []
-    skipped = 0
-    for line in stdout.split("\n"):
-        if "📍 Hook:" in line:
-            json_start = line.find("{")
-            if json_start == -1:
-                logger.warning(f"Hook line missing JSON: {line[:80]}")
-                skipped += 1
-                continue
-            try:
-                hook_data = json.loads(line[json_start:])
-                if hook_data.get("__csv_agent_hook__"):
-                    hooks.append(
-                        HookDict(
-                            variable_name=hook_data.get("variable_name"),
-                            code_line=hook_data.get("code_line", ""),
-                            value=hook_data.get("value"),
-                            value_hash=hook_data.get("value_hash", ""),
-                            depends_on=hook_data.get("depends_on", []),
-                            description=hook_data.get("description"),
-                        )
-                    )
-                else:
-                    logger.warning(
-                        f"Hook missing __csv_agent_hook__ marker: {line[:80]}"
-                    )
-                    skipped += 1
-            except json.JSONDecodeError as e:
-                logger.warning(f"Malformed hook JSON: {e} in: {line[:80]}")
-                skipped += 1
-    if skipped:
-        logger.warning(f"Hook parsing: kept {len(hooks)}, skipped {skipped} malformed")
-    return hooks, skipped
 
 
 def parse_error_from_stderr(stderr: str) -> tuple[str | None, str | None]:
@@ -171,77 +131,71 @@ def compute_code_diff(failed_code: str, fixed_code: str) -> CodeDiffDict:
 
 def extract_reasoning_from_response(response: str) -> str:
     """Extract reasoning text from assistant response (everything before code block)."""
-    code_pattern = r"```python\n.*?```"
-    parts = re.split(code_pattern, response, flags=re.DOTALL)
-    return parts[0].strip() if parts else ""
+    code_fence = re.search(r"```(?:python|py)\n", response, flags=re.IGNORECASE)
+    return response[: code_fence.start()].strip() if code_fence else response.strip()
 
 
-def build_trace_dict(
-    final_state,
-    conversation_messages: list[dict],
-) -> TraceDict:
-    """Build TraceDict from environment final state and conversation.
+def build_trace_dict(final_state) -> TraceDict:
+    """Build TraceDict from the environment's complete execution-turn log.
 
     Includes self-correction metadata: when a turn successfully fixes
     a previous failed turn, the correction field is populated with
     error details and code diff.
     """
     turns: list[TurnDict] = []
-
-    assistant_messages = [
-        m for m in conversation_messages if m.get("role") == "assistant"
-    ]
-    execution_results_per_turn = final_state.execution_results_per_turn
-
-    # Warn on turn count mismatch
-    if len(assistant_messages) != len(execution_results_per_turn):
-        logger.warning(
-            f"Turn count mismatch: {len(assistant_messages)} assistant messages "
-            f"vs {len(execution_results_per_turn)} execution results"
-        )
+    execution_turns = getattr(final_state, "execution_turns", None)
+    if not isinstance(execution_turns, list):
+        raise ValueError("execution turn provenance is unavailable")
 
     # Track the most recent failed turn for self-correction detection
     last_failed_turn_idx: int | None = None
     last_failed_code: str = ""
     last_failed_stderr: str = ""
 
-    for turn_idx, assistant_msg in enumerate(assistant_messages):
-        response = assistant_msg["content"]
+    for turn_idx, record in enumerate(execution_turns):
+        if not isinstance(record, dict):
+            raise ValueError(f"execution_turns[{turn_idx}] is invalid")
+        response = record.get("response")
+        recorded_code_cells = record.get("code_cells")
+        exec_results = record.get("execution_results")
+        if not isinstance(response, str):
+            raise ValueError(f"execution_turns[{turn_idx}].response is invalid")
+        code_cells = extract_python_cells(response)
+        if recorded_code_cells != code_cells:
+            raise ValueError(
+                f"execution_turns[{turn_idx}].code_cells do not match response"
+            )
+        if len(code_cells) != 1:
+            raise ValueError(
+                f"execution_turns[{turn_idx}] must contain exactly one code cell"
+            )
+        if not isinstance(exec_results, list) or len(exec_results) != 1:
+            raise ValueError(
+                f"execution_turns[{turn_idx}] must contain exactly one execution result"
+            )
+
+        code = code_cells[0]
+        result = exec_results[0]
+        if getattr(result, "code", None) != code:
+            raise ValueError(
+                f"execution_turns[{turn_idx}] execution code does not match response"
+            )
         reasoning = extract_reasoning_from_response(response)
-
-        code_blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
-        code = code_blocks[0] if code_blocks else ""
-
-        # Warn if code fence detected but regex didn't match
-        if not code_blocks and "```python" in response:
-            logger.warning(
-                f"Turn {turn_idx}: code fence detected but regex found no blocks"
+        raw_hooks = getattr(result, "hooks", None)
+        if not isinstance(raw_hooks, list) or any(
+            not isinstance(hook, dict) for hook in raw_hooks
+        ):
+            raise ValueError(
+                f"execution_turns[{turn_idx}] structured hook provenance is invalid"
             )
-
-        exec_results = (
-            execution_results_per_turn[turn_idx]
-            if turn_idx < len(execution_results_per_turn)
-            else []
+        hooks = [HookDict(**hook) for hook in raw_hooks]
+        execution = ExecutionResultDict(
+            success=result.success,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            hooks=hooks,
+            submitted_answer=result.submitted_answer,
         )
-
-        if exec_results:
-            result = exec_results[0]
-            hooks, _skipped = parse_hooks_from_stdout(result.stdout)
-            execution = ExecutionResultDict(
-                success=result.success,
-                stdout=result.stdout,
-                stderr=result.stderr,
-                hooks=hooks,
-                submitted_answer=result.submitted_answer,
-            )
-        else:
-            execution = ExecutionResultDict(
-                success=True,
-                stdout="",
-                stderr="",
-                hooks=[],
-                submitted_answer=None,
-            )
 
         # Build the turn dict
         turn = TurnDict(
@@ -278,14 +232,18 @@ def build_trace_dict(
 
         turns.append(turn)
 
-    return TraceDict(
+    trace = TraceDict(
         turns=turns,
         final_answer=final_state.submitted_answer,
         final_answer_hash=hash_artifact(final_state.submitted_answer)
-        if final_state.submitted_answer
+        if final_state.submitted_answer is not None
         else None,
         success=final_state.submitted_answer is not None,
     )
+    from src.datagen.process_report import validate_trace_submissions
+
+    validate_trace_submissions(trace)
+    return trace
 
 
 # ============= Answer Comparison Helpers =============
@@ -737,42 +695,24 @@ async def execute_teacher_trace(
     conversation_messages = final_state.conversation.to_openai_messages()
     system_prompt = conversation_messages[0]["content"] if conversation_messages else ""
 
-    # Extract assistant messages (used for turn counting and UI display)
-    assistant_messages = [
-        msg for msg in conversation_messages if msg.get("role") == "assistant"
-    ]
+    execution_turns = final_state.execution_turns
 
     # Show full details for gold trace and consistency trace 1 (for visibility)
     # Other consistency traces just show summary to avoid clutter
     show_turns = trace_mode == "gold" or trace_mode.startswith("1/")
 
     if show_turns:
-        import re
-
-        code_pattern = r"```python\n(.*?)```"
-
-        # Get execution results from final_state (stored during rollout)
-        stored_results = final_state.execution_results_per_turn
-
-        for i, msg in enumerate(assistant_messages, 1):
-            response = msg["content"]
-            # Extract code cells from this message
-            turn_code_cells = re.findall(code_pattern, response, re.DOTALL)
-
-            # Get execution results unless we are at the end of conversation
-            if i - 1 < len(stored_results):
-                turn_results = stored_results[i - 1]
-                # Convert CodeCellResult objects to dicts for UI
-                execution_results = [
-                    {
-                        "success": r.success,
-                        "stdout": r.stdout,
-                        "stderr": r.stderr,
-                    }
-                    for r in turn_results
-                ]
-            else:
-                execution_results = []
+        for i, record in enumerate(execution_turns, 1):
+            response = record["response"]
+            turn_code_cells = record["code_cells"]
+            execution_results = [
+                {
+                    "success": result.success,
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                }
+                for result in record["execution_results"]
+            ]
 
             ui.print_turn(
                 turn_num=i,
@@ -783,7 +723,7 @@ async def execute_teacher_trace(
             )
     else:
         # For consistency traces 2-5, just show summary
-        ui.console.print(f"[dim]    Executed {len(assistant_messages)} turn(s)[/dim]")
+        ui.console.print(f"[dim]    Executed {len(execution_turns)} turn(s)[/dim]")
 
     # Get final answer from environment's tracked submission
     final_answer = final_state.submitted_answer
@@ -798,11 +738,11 @@ async def execute_teacher_trace(
     ui.print_trace_complete(
         success=execution_success,
         final_answer=final_answer,
-        turns=len(assistant_messages),
+        turns=len(execution_turns),
         elapsed_seconds=elapsed_seconds,
     )
 
-    trace = build_trace_dict(final_state, conversation_messages)
+    trace = build_trace_dict(final_state)
 
     return trace, conversation_messages, system_prompt, elapsed_seconds
 
@@ -967,20 +907,19 @@ async def triangulate_teacher(
             diagnostics=diagnostics,
         )
 
-    # Find majority answer by clustering (handles float tolerance and formatting differences)
-    majority_value, majority_count = get_majority_answer(
-        submitted_answers, float_tol=float_tol
-    )
-    majority_answer_hash = (
-        hash_artifact(majority_value) if majority_value is not None else None
-    )
+    from src.datagen.shared.verification import derive_llm_verification
 
-    verified = answers_match(
-        None, None, gold_trace["final_answer"], majority_value, float_tol=float_tol
+    consistency_traces = [trace for trace, _ in consistency_results]
+    verification = derive_llm_verification(
+        gold_trace=gold_trace,
+        consistency_traces=consistency_traces,
+        float_tolerance=float_tol,
     )
+    majority_answer_hash = verification.majority_answer_hash
+    majority_count = verification.majority_count
+    verified = verification.verdict is True
 
     # Display triangulation result
-    consistency_traces = [trace for trace, _ in consistency_results]
     ui.print_triangulation_result(
         gold_trace=gold_trace,
         consistency_traces=consistency_traces,

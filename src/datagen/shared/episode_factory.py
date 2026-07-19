@@ -11,7 +11,14 @@ from csv_spec import (
     TriangulationMetadataDict,
     TimingMetadataDict,
 )
-from src.datagen.shared.verification import VerificationResult, resolve_question_prompt
+from src.datagen.shared.verification import (
+    VerificationResult,
+    derive_ground_truth_verification,
+    derive_llm_verification,
+    resolve_question_prompt,
+    validate_float_tolerance,
+)
+from src.datagen.process_report import build_process_report
 
 
 ALLOWED_SOURCES = ("llm_gen", "template", "procedural")
@@ -76,19 +83,43 @@ async def create_episode(
     }
 
     consistency_traces: list[TraceDict] = verification_result.traces or []
+    float_tolerance = validate_float_tolerance(verification_result.float_tolerance)
 
-    # Calculate triangulation metadata
     n_succeeded = sum(1 for t in consistency_traces if t.get("success", False))
+    if source == "llm_gen":
+        evidence = derive_llm_verification(
+            gold_trace=gold_trace,
+            consistency_traces=consistency_traces,
+            float_tolerance=float_tolerance,
+        )
+    else:
+        evidence = derive_ground_truth_verification(
+            question=question,
+            gold_trace=gold_trace,
+            float_tolerance=float_tolerance,
+        )
+    if (
+        verification_result.match is not evidence.verdict
+        or verification_result.majority_answer_hash
+        != evidence.majority_answer_hash
+        or verification_result.success != (evidence.verdict is True)
+    ):
+        raise ValueError("Verification result disagrees with trace provenance")
 
     triangulation = TriangulationMetadataDict(
         n_consistency_runs=len(consistency_traces),
         n_consistency_succeeded=n_succeeded,
-        majority_answer_hash=verification_result.majority_answer_hash,
-        majority_count=_calculate_majority_count(
-            consistency_traces, verification_result.majority_answer_hash
-        ),
-        gold_matches_majority=verification_result.success
-        and verification_result.match is True,
+        majority_answer_hash=evidence.majority_answer_hash,
+        majority_count=evidence.majority_count,
+        gold_matches_majority=evidence.verdict is True,
+        float_tolerance=float_tolerance,
+    )
+    verified = evidence.verdict is True
+    process_report = build_process_report(
+        source=source,
+        gold_trace=gold_trace,
+        consistency_traces=consistency_traces,
+        verifier_verdict=evidence.verdict,
     )
 
     # Build timing metadata (defaults if not available)
@@ -107,19 +138,11 @@ async def create_episode(
         question=qa_dict,
         gold_trace=gold_trace,
         consistency_traces=consistency_traces,
-        verified=verification_result.success and verification_result.match is True,
+        verified=verified,
         triangulation=triangulation,
         timing=timing,
+        process_report=process_report,
         source=source,
     )
 
     return episode
-
-
-def _calculate_majority_count(
-    traces: list[TraceDict], majority_hash: str | None
-) -> int:
-    """Count how many traces match the majority answer hash."""
-    if majority_hash is None:
-        return 0
-    return sum(1 for t in traces if t.get("final_answer_hash") == majority_hash)

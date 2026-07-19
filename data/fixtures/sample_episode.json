@@ -2,6 +2,7 @@
     "episode_id": "fixture-sample-001",
     "timestamp": "2025-01-01T00:00:00.000000",
     "csv_source": "data/csv/test_data.csv",
+    "source": "llm_gen",
     "verified": true,
 
     "question": {
@@ -15,7 +16,7 @@
         "output_type": "float",
         "output_schema": null,
         "ground_truth": 42.5,
-        "ground_truth_hash": "abc123def456"
+        "ground_truth_hash": "7b713affffacc53f"
     },
 
     "gold_trace": {
@@ -35,7 +36,7 @@
             }
         ],
         "final_answer": 42.5,
-        "final_answer_hash": "abc123def456",
+        "final_answer_hash": "7b713affffacc53f",
         "success": true
     },
 
@@ -57,7 +58,7 @@
                 }
             ],
             "final_answer": 42.5,
-            "final_answer_hash": "abc123def456",
+            "final_answer_hash": "7b713affffacc53f",
             "success": true
         }
     ],
@@ -65,9 +66,50 @@
     "triangulation": {
         "n_consistency_runs": 1,
         "n_consistency_succeeded": 1,
-        "majority_answer_hash": "abc123def456",
+        "majority_answer_hash": "7b713affffacc53f",
         "majority_count": 1,
-        "gold_matches_majority": true
+        "gold_matches_majority": true,
+        "float_tolerance": 0.1
+    },
+
+    "process_report": {
+        "summary": {
+            "total_steps": 1,
+            "labeled_steps": 1,
+            "verified_steps": 1,
+            "heuristic_steps": 0,
+            "unlabeled_steps": 0,
+            "positive_steps": 1,
+            "negative_steps": 0
+        },
+        "steps": [
+            {
+                "step_index": 0,
+                "turn_index": 0,
+                "hook_index": null,
+                "step_type": "submit",
+                "code_line": "submit(...)",
+                "variable_name": "answer",
+                "value": 42.5,
+                "value_hash": "7b713affffacc53f",
+                "description": "Final submitted answer",
+                "depends_on": [],
+                "semantic_role": "final_answer",
+                "label": 1.0,
+                "label_kind": "verified",
+                "label_source": "terminal_verifier",
+                "evidence": {
+                    "final_verified": true,
+                    "trace_success": true,
+                    "code_line_grounded": true,
+                    "dependency_valid": true,
+                    "duplicate": false,
+                    "consensus_matches": 1,
+                    "consensus_total": 1,
+                    "reasons": []
+                }
+            }
+        ]
     },
 
     "timing": {

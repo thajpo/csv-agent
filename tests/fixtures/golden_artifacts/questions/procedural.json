@@ -8,9 +8,9 @@
   "code": "result = df['A'].mean()\nsubmit(result)",
   "code_hash": "codehash-001",
   "ground_truth": 42.5,
-  "ground_truth_hash": "answerhash-001",
+  "ground_truth_hash": "7b713affffacc53f",
   "ground_truth_hashes": [
-    "answerhash-001"
+    "7b713affffacc53f"
   ],
   "output_schema": "scalar:float",
   "n_steps": 1,

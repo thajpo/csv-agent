@@ -25,20 +25,46 @@ from src.datagen.analyze_procedural import (
 )
 
 
-FIXTURE_PATH = Path("tests/fixtures/mock_episodes.jsonl")
+ANALYSIS_CASES = [
+    ("procedural_mean_age", True),
+    ("procedural_max_salary", True),
+    ("procedural_min_age", False),
+    ("procedural_filter_sum", True),
+    ("procedural_groupby_count", True),
+    ("procedural_sort_first", False),
+    ("correlation_analysis", True),
+]
+
+
+@pytest.fixture
+def fixture_path(tmp_path: Path) -> Path:
+    path = tmp_path / "episodes.jsonl"
+    episodes = [
+        {
+            "episode_id": f"episode-{index}",
+            "verified": verified,
+            "question": {"template_name": template_name},
+        }
+        for index, (template_name, verified) in enumerate(ANALYSIS_CASES)
+    ]
+    path.write_text(
+        "".join(json.dumps(episode) + "\n" for episode in episodes),
+        encoding="utf-8",
+    )
+    return path
 
 
 class TestLoadEpisodes:
     """Test episode loading from JSONL."""
 
-    def test_load_episodes_from_fixture(self):
+    def test_load_episodes_from_fixture(self, fixture_path):
         """Should load all episodes from fixture file."""
-        episodes = load_episodes(FIXTURE_PATH)
+        episodes = load_episodes(fixture_path)
         assert len(episodes) == 7
 
-    def test_load_episodes_returns_list_of_dicts(self):
+    def test_load_episodes_returns_list_of_dicts(self, fixture_path):
         """Should return list of dictionaries."""
-        episodes = load_episodes(FIXTURE_PATH)
+        episodes = load_episodes(fixture_path)
         assert isinstance(episodes, list)
         assert all(isinstance(ep, dict) for ep in episodes)
 
@@ -115,9 +141,9 @@ class TestEpisodeAnalyzer:
     """Test the EpisodeAnalyzer class."""
 
     @pytest.fixture
-    def analyzer(self):
+    def analyzer(self, fixture_path):
         """Create analyzer with fixture data."""
-        episodes = load_episodes(FIXTURE_PATH)
+        episodes = load_episodes(fixture_path)
         return EpisodeAnalyzer(episodes)
 
     def test_analyzer_initialization(self, analyzer):
@@ -234,12 +260,12 @@ class TestEpisodeAnalyzer:
 class TestCLI:
     """Test CLI interface."""
 
-    def test_main_json_output(self, capsys, monkeypatch):
+    def test_main_json_output(self, capsys, monkeypatch, fixture_path):
         """Should output JSON when --json flag is used."""
         monkeypatch.setattr(
             sys,
             "argv",
-            ["analyze_procedural", "--episodes", str(FIXTURE_PATH), "--json"],
+            ["analyze_procedural", "--episodes", str(fixture_path), "--json"],
         )
         main()
         captured = capsys.readouterr()
@@ -248,10 +274,10 @@ class TestCLI:
         assert "grouping" in output
         assert "groups" in output
 
-    def test_main_table_output(self, capsys, monkeypatch):
+    def test_main_table_output(self, capsys, monkeypatch, fixture_path):
         """Should output table when no --json flag."""
         monkeypatch.setattr(
-            sys, "argv", ["analyze_procedural", "--episodes", str(FIXTURE_PATH)]
+            sys, "argv", ["analyze_procedural", "--episodes", str(fixture_path)]
         )
         main()
         captured = capsys.readouterr()
@@ -260,7 +286,7 @@ class TestCLI:
             "Procedural Questions Analysis" in captured.out or "Group" in captured.out
         )
 
-    def test_main_with_group_by(self, capsys, monkeypatch):
+    def test_main_with_group_by(self, capsys, monkeypatch, fixture_path):
         """Should respect --group-by argument."""
         monkeypatch.setattr(
             sys,
@@ -268,7 +294,7 @@ class TestCLI:
             [
                 "analyze_procedural",
                 "--episodes",
-                str(FIXTURE_PATH),
+                str(fixture_path),
                 "--group-by",
                 "operator",
                 "--json",
@@ -291,9 +317,9 @@ class TestCLI:
 class TestIntegration:
     """Integration tests with mock data."""
 
-    def test_end_to_end_analysis(self):
+    def test_end_to_end_analysis(self, fixture_path):
         """Full analysis pipeline on mock data."""
-        episodes = load_episodes(FIXTURE_PATH)
+        episodes = load_episodes(fixture_path)
         analyzer = EpisodeAnalyzer(episodes)
 
         # Test all grouping methods
@@ -316,9 +342,9 @@ class TestIntegration:
                 assert stats["total"] == stats["passed"] + stats["failed"]
                 assert 0.0 <= stats["pass_rate"] <= 1.0
 
-    def test_procedural_filtering(self):
+    def test_procedural_filtering(self, fixture_path):
         """Should correctly identify procedural questions."""
-        episodes = load_episodes(FIXTURE_PATH)
+        episodes = load_episodes(fixture_path)
         analyzer = EpisodeAnalyzer(episodes)
 
         procedural = analyzer.filter_procedural()

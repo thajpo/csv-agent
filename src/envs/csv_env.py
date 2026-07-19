@@ -141,6 +141,11 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
     """
     import hashlib
 
+    try:
+        raise RuntimeError
+    except RuntimeError as error:
+        event_line = error.__traceback__.tb_frame.f_back.f_lineno
+
     # Get normalized value for hashing (always hash the full value)
     normalized = normalize_value(value)
     # Round floats before hashing to ensure consistent hashes despite FP precision
@@ -173,6 +178,7 @@ def hook(value, code_line, name=None, description=None, depends_on=None):
         "description": description,
         "code_line": code_line,
         "depends_on": depends_on or [],
+        "event_line": event_line,
     }
     _captured_hooks.append(hook_data)
 
@@ -327,6 +333,7 @@ import contextlib
 import io
 import json
 import os
+import sys
 from pathlib import Path
 import traceback
 
@@ -450,6 +457,14 @@ Path(READY_FLAG).write_text("ready", encoding="utf-8")
 
 namespace = _create_restricted_namespace()
 execution_count = 0
+trusted_hook_code = None
+
+def json_safe_snapshot(value):
+    def snapshot_default(obj):
+        if type(obj).__module__.split(".")[0] == "numpy" and hasattr(obj, "tolist"):
+            return obj.tolist()
+        return str(obj)
+    return json.loads(json.dumps(value, default=snapshot_default))
 
 while True:
     with open(COMMAND_FIFO, "r", encoding="utf-8") as command_file:
@@ -462,6 +477,7 @@ while True:
     if request.get("reset"):
         namespace = _create_restricted_namespace()
         execution_count = 0
+        trusted_hook_code = None
         with open(RESPONSE_FIFO, "w", encoding="utf-8") as response_file:
             response_file.write(json.dumps({{"status": "ok", "reset": True}}))
         continue
@@ -476,29 +492,55 @@ while True:
     }}
     stdout_buffer = io.StringIO()
     stderr_buffer = io.StringIO()
+    trusted_hook_frames = {{}}
+    trusted_hooks = []
+
+    def capture_hook_event(frame, event, _arg):
+        if trusted_hook_code is None or frame.f_code is not trusted_hook_code:
+            return
+        frame_id = id(frame)
+        if event == "call":
+            caller = frame.f_back
+            if caller is not None and caller.f_code.co_filename == "<cell>":
+                trusted_hook_frames[frame_id] = caller.f_lineno
+        elif event == "return":
+            event_line = trusted_hook_frames.pop(frame_id, None)
+            hook_data = frame.f_locals.get("hook_data")
+            if event_line is not None and isinstance(hook_data, dict):
+                captured = json_safe_snapshot(hook_data)
+                captured["event_line"] = event_line
+                trusted_hooks.append(captured)
+
     try:
-        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
-            module_ast = ast.parse(code, mode="exec")
-            body = list(module_ast.body)
-            trailing_expr = None
-            if body and isinstance(body[-1], ast.Expr):
-                trailing_expr = body.pop()
-            if body:
-                exec_module = ast.Module(body=body, type_ignores=[])
-                exec(compile(exec_module, "<cell>", "exec"), namespace, namespace)
-            if trailing_expr is not None:
-                value = eval(
-                    compile(ast.Expression(trailing_expr.value), "<cell>", "eval"),
-                    namespace,
-                    namespace,
-                )
-                if value is not None:
-                    result["result"] = repr(value)
+        sys.setprofile(capture_hook_event)
+        try:
+            with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
+                module_ast = ast.parse(code, mode="exec")
+                body = list(module_ast.body)
+                trailing_expr = None
+                if body and isinstance(body[-1], ast.Expr):
+                    trailing_expr = body.pop()
+                if body:
+                    exec_module = ast.Module(body=body, type_ignores=[])
+                    exec(compile(exec_module, "<cell>", "exec"), namespace, namespace)
+                if trailing_expr is not None:
+                    value = eval(
+                        compile(ast.Expression(trailing_expr.value), "<cell>", "eval"),
+                        namespace,
+                        namespace,
+                    )
+                    if value is not None:
+                        result["result"] = repr(value)
+        finally:
+            sys.setprofile(None)
     except Exception:
         result["status"] = "error"
         result["result"] = traceback.format_exc()
     result["stdout"] = stdout_buffer.getvalue()
     result["stderr"] = stderr_buffer.getvalue()
+    result["hooks"] = trusted_hooks
+    if request.get("trusted_setup") and result["status"] == "ok":
+        trusted_hook_code = getattr(namespace.get("hook"), "__code__", None)
     with open(RESPONSE_FIFO, "w", encoding="utf-8") as response_file:
         response_file.write(json.dumps(result))
 """
@@ -681,6 +723,7 @@ print(f"Loaded CSV: {df.shape[0]} rows, {df.shape[1]} columns")
             code=csv_setup,
             sandbox_id=sandbox_id,
             python_state=state["python_state"],
+            trusted_setup=True,
         )
 
         return state
@@ -703,7 +746,9 @@ print(f"Loaded CSV: {df.shape[0]} rows, {df.shape[1]} columns")
         import base64
 
         # Send code to worker via FIFO
-        payload = json.dumps({"code": code})
+        payload = json.dumps(
+            {"code": code, "trusted_setup": kwargs.get("trusted_setup", False)}
+        )
         payload_b64 = base64.b64encode(payload.encode()).decode()
 
         send_command = f"""
@@ -739,6 +784,7 @@ with open('{self._RESPONSE_FIFO}', 'r') as f:
         # Update execution count
         if python_state:
             python_state["execution_count"] = response.get("execution_count", 0)
+            python_state["hooks"] = response.get("hooks", [])
 
         # Format output (same as verifiers)
         return self._format_response(response)
@@ -812,4 +858,9 @@ except UnicodeDecodeError:
 print(f"Loaded CSV: {df.shape[0]} rows, {df.shape[1]} columns")
 """
         )
-        await self.python(csv_setup, sandbox_id, python_state)
+        await self.python(
+            csv_setup,
+            sandbox_id,
+            python_state,
+            trusted_setup=True,
+        )

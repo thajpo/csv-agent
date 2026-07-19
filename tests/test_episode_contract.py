@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from csv_spec import EpisodeJSONL
+from pydantic import ValidationError
 
 
 FIXTURE_PATH = Path("data/fixtures/sample_episode.json")
@@ -49,6 +51,7 @@ class TestEpisodeSchema:
             "consistency_traces",
             "verified",
             "triangulation",
+            "process_report",
             "timing",
         }
         missing = required - set(episode.keys())
@@ -171,6 +174,7 @@ class TestRLDerivability:
             "majority_answer_hash",
             "majority_count",
             "gold_matches_majority",
+            "float_tolerance",
         }
         missing = required - set(tri.keys())
         assert not missing, f"Triangulation missing fields: {missing}"
@@ -181,6 +185,34 @@ class TestRLDerivability:
 
 class TestPRMDerivability:
     """Ensure episodes can derive PRM (Process Reward Model) training data."""
+
+    def test_process_report_structure(self, episode):
+        """Process report must separate verified and heuristic judgments."""
+        report = episode["process_report"]
+        assert "summary" in report, "process_report missing summary"
+        assert "steps" in report, "process_report missing steps"
+
+        for step in report["steps"]:
+            assert "step_index" in step, "Process step missing step_index"
+            assert step["step_type"] in {"hook", "submit"}
+            assert step["label_kind"] in {"verified", "heuristic", "unlabeled"}
+            if step["label_kind"] == "verified":
+                assert step["step_type"] == "submit"
+            assert "evidence" in step, "Process step missing evidence"
+
+    def test_fixture_exports_through_canonical_prm_path(self, episode):
+        from src.training.prepare_finetune_data import to_prm_samples
+
+        samples = to_prm_samples(episode)
+
+        assert [sample["label_kind"] for sample in samples] == ["verified"]
+
+    def test_process_report_requires_canonical_step_fields(self, episode):
+        episode["consistency_traces"] = []
+        del episode["process_report"]["steps"][0]["step_type"]
+
+        with pytest.raises(ValidationError, match="step_type"):
+            EpisodeJSONL.model_validate(episode)
 
     def test_hooks_structure_when_present(self, episode):
         """If hooks are present, they must have required fields."""

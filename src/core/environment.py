@@ -12,6 +12,7 @@ import json
 import logging
 
 import pandas as pd
+from csv_spec import parse_hook_record, validate_hook_event_line
 
 from src.core.model import APILLM
 from src.utils.parsing import (
@@ -34,6 +35,69 @@ logger = logging.getLogger(__name__)
 
 # Max output chars before truncation (~12.5K tokens at 4 chars/token)
 MAX_OUTPUT_CHARS = 50_000
+
+
+def _hook_record_identity(hook: dict) -> str:
+    fields = (
+        "variable_name",
+        "code_line",
+        "value",
+        "value_hash",
+        "depends_on",
+        "description",
+        "event_line",
+    )
+    return json.dumps(
+        {field: hook.get(field) for field in fields},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _parse_hook_records(
+    output: str, *, code: str, trusted_records: list[dict] | None = None
+) -> list[dict]:
+    """Capture hooks while distinguishing runtime events from stdout records."""
+    stdout_hooks: list[tuple[dict, str]] = []
+    for line in output.splitlines():
+        if "📍 Hook:" not in line:
+            continue
+        json_start = line.find("{")
+        if json_start == -1:
+            continue
+        try:
+            payload = json.loads(line[json_start:])
+        except json.JSONDecodeError:
+            continue
+        hook = parse_hook_record(payload)
+        if hook is None:
+            continue
+        stdout_hooks.append((hook, _hook_record_identity(payload)))
+
+    trusted_hooks: list[dict] = []
+    matched_stdout_indexes: set[int] = set()
+    for payload in trusted_records or []:
+        hook = parse_hook_record(payload, trusted_event_provenance=True)
+        if hook is None:
+            continue
+        event_line = validate_hook_event_line(code, hook.get("event_line"))
+        hook["event_line"] = event_line
+        if event_line is None:
+            hook["event_provenance_reason"] = "missing_or_ambiguous_event_provenance"
+        identity = _hook_record_identity(payload)
+        for index, (_stdout_hook, stdout_identity) in enumerate(stdout_hooks):
+            if index not in matched_stdout_indexes and stdout_identity == identity:
+                matched_stdout_indexes.add(index)
+                break
+        trusted_hooks.append(hook)
+
+    diagnostics = [
+        hook
+        for index, (hook, _identity) in enumerate(stdout_hooks)
+        if index not in matched_stdout_indexes
+    ]
+    return trusted_hooks + diagnostics
 
 
 def validate_hooks_grounded(
@@ -73,20 +137,20 @@ def validate_hooks_grounded(
             ungrounded.append(hook)
             continue
 
-        # Split hook code_line into individual lines and normalize each
-        hook_lines = code_line.split("\n")
-        all_lines_match = True
+        normalized_hook_lines = [
+            normalized
+            for hook_line in code_line.split("\n")
+            if (normalized := " ".join(hook_line.split()))
+        ]
+        if not normalized_hook_lines:
+            hook["_ungrounded_reason"] = "missing code_line"
+            ungrounded.append(hook)
+            continue
 
-        for hook_line in hook_lines:
-            normalized_hook_line = " ".join(hook_line.split())
-            if not normalized_hook_line:
-                # Skip empty lines in hook
-                continue
-
-            # Check for exact match against any normalized code line
-            if normalized_hook_line not in normalized_code_lines:
-                all_lines_match = False
-                break
+        all_lines_match = all(
+            normalized_hook_line in normalized_code_lines
+            for normalized_hook_line in normalized_hook_lines
+        )
 
         if all_lines_match:
             grounded.append(hook)
@@ -375,7 +439,7 @@ class Environment:
         self.submitted_answer = None  # Reset for new episode
         self.submission_metadata = {}  # Metadata (key_lines, etc.)
         self.code_cells = []  # Track all executed code cells
-        self.execution_results_per_turn = []  # Track execution results per turn
+        self.execution_turns = []
         self.format_reprompt_count = 0  # Track format re-prompts (force-accept after 3)
         self.hook_reprompt_count = 0  # Track hook re-prompts (force-accept after 3)
 
@@ -392,6 +456,12 @@ class Environment:
             code=code,
             sandbox_id=self.state["sandbox_id"],
             python_state=self.state["python_state"],
+        )
+        trusted_records = self.state["python_state"].pop("hooks", None)
+        hooks = _parse_hook_records(
+            output,
+            code=code,
+            trusted_records=trusted_records,
         )
 
         # Truncate massive outputs to prevent context overflow
@@ -483,6 +553,7 @@ class Environment:
         # Parse the string output into success/stdout/stderr
         result = parse_execution_result(output)
         result.code = code
+        result.hooks = hooks
 
         # Check for submitted answer in output
         submission, success = parse_submission(output)
@@ -691,7 +762,13 @@ class Environment:
                 self.submission_metadata = {}
 
         # Update state
-        self.execution_results_per_turn.append(results)
+        self.execution_turns.append(
+            {
+                "response": response,
+                "code_cells": list(code_cells),
+                "execution_results": results,
+            }
+        )
         self.conversation.add_assistant_response(response)
         self.conversation.add_user_feedback(feedback)
 

@@ -10,7 +10,7 @@ Usage:
 
     uv run python -m scripts.evaluate_model \\
         --model <your-model> \\
-        --episodes data/fixtures/mock_episodes.jsonl \\
+        --episodes episodes/test.jsonl \\
         --csv data/fixtures/mock/data.csv \\
         --format json \\
         --output eval_results/report.json

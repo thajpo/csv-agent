@@ -145,6 +145,12 @@ csvagent validate \
 
 **Key insight:** Episodes capture raw structured data (traces, hooks, corrections). Training formats (SFT, PRM, DPO) are derived at training time, not pre-baked. This means new training methods can reuse existing episodes without regeneration.
 
+Episodes also include a diagnostic `process_report` containing ordered
+hook/submit observations and the evidence available for assessing them. Only
+terminal-answer labels are externally verified. Hook judgments are explicitly
+heuristic and are excluded from PRM exports unless
+`--include-heuristic-hooks` is supplied for an experimental baseline.
+
 ---
 
 ## Configuration

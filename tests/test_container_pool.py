@@ -13,6 +13,16 @@ import asyncio
 import pytest
 import pytest_asyncio
 from src.envs.container_pool import MultiTenantContainer, WorkerAdapter
+from src.envs.csv_env import LocalCSVAnalysisEnv
+
+
+def test_worker_hook_capture_avoids_line_tracing():
+    for worker_script in (
+        LocalCSVAnalysisEnv._WORKER_SCRIPT,
+        MultiTenantContainer._WORKER_SCRIPT,
+    ):
+        assert "sys.settrace" not in worker_script
+        assert "sys.setprofile(capture_hook_event)" in worker_script
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -154,6 +164,50 @@ class TestWorkerAdapter:
 
         await adapter.python("2+2", python_state=state["python_state"])
         assert state["python_state"]["execution_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_adapter_captures_only_trusted_runtime_hooks(self, container):
+        adapter = WorkerAdapter(container, worker_id=2)
+        state = WorkerAdapter.create_state(2)
+        await adapter.reset_state(state)
+
+        await adapter.python(
+            "value = 1\nhook(value, 'value = 1', name='value')",
+            python_state=state["python_state"],
+        )
+
+        assert len(state["python_state"]["hooks"]) == 1
+        assert state["python_state"]["hooks"][0]["event_line"] == 2
+
+        await adapter.python(
+            "def hook(*args, **kwargs):\n    return None\nhook(1, 'value = 1')",
+            python_state=state["python_state"],
+        )
+
+        assert state["python_state"]["hooks"] == []
+        await adapter.reset_state(state)
+
+    @pytest.mark.asyncio
+    async def test_adapter_snapshots_json_safe_hook_values(self, container):
+        adapter = WorkerAdapter(container, worker_id=2)
+        state = WorkerAdapter.create_state(2)
+        await adapter.reset_state(state)
+
+        await adapter.python(
+            "from decimal import Decimal\n"
+            "value = {'items': [1], 'set': {2, 1}, 'decimal': Decimal('1.5')}\n"
+            "hook(value, \"value = {'items': [1]}\", name='value')\n"
+            "value['items'].append(2)",
+            python_state=state["python_state"],
+        )
+
+        hooks = state["python_state"]["hooks"]
+        assert len(hooks) == 1
+        assert hooks[0]["event_line"] == 3
+        assert hooks[0]["value"]["items"] == [1]
+        assert hooks[0]["value"]["set"] == "{1, 2}"
+        assert hooks[0]["value"]["decimal"] == "1.5"
+        await adapter.reset_state(state)
 
     @pytest.mark.asyncio
     async def test_adapter_reset_state(self, container):

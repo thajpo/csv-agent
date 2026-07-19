@@ -67,7 +67,6 @@ notes:
 - open issue #9 (Dataset-Quality Snapshot) should be used in this phase.
 
 ## Specd
-
 - HF snapshot authority and Git data cleanup | status: issued | issue: #36
 
 ## Recovery Notes

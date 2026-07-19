@@ -363,7 +363,6 @@ def cmd_silent(args):
     # Check for missing error handling in key functions
     print("\n[Key Functions Without Error Logging]")
     key_functions = [
-        ("src/datagen/teacher.py", "parse_hooks_from_stdout"),
         ("src/datagen/teacher.py", "answers_match"),
         ("src/core/environment.py", "parse_submitted_answer"),
     ]

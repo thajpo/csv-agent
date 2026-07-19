@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 import pytest
-from csv_spec import EpisodeJSONL
+from csv_spec import EpisodeJSONL, hash_artifact
 
 from src.datagen.shared.episode_factory import create_episode
 from src.datagen.shared.questions_io import validate_question
@@ -49,8 +49,12 @@ def _sample_question_artifact(source: str) -> dict:
         else "result = df['A'].mean()\nsubmit(result)",
         "code_hash": None if source == "llm_gen" else "codehash-001",
         "ground_truth": None if source == "llm_gen" else 42.5,
-        "ground_truth_hash": None if source == "llm_gen" else "answerhash-001",
-        "ground_truth_hashes": None if source == "llm_gen" else ["answerhash-001"],
+        "ground_truth_hash": None
+        if source == "llm_gen"
+        else hash_artifact(42.5),
+        "ground_truth_hashes": None
+        if source == "llm_gen"
+        else [hash_artifact(42.5)],
         "output_schema": None if source == "llm_gen" else "scalar:float",
         "n_steps": 1,
         "difficulty": "EASY",
@@ -87,7 +91,7 @@ def _sample_trace(n_turns: int = 1) -> dict:
                 }
             ],
             "final_answer": 42.5,
-            "final_answer_hash": "answerhash-001",
+            "final_answer_hash": hash_artifact(42.5),
             "success": True,
         }
 
@@ -96,7 +100,7 @@ def _sample_trace(n_turns: int = 1) -> dict:
         is_last = i == n_turns - 1
         code = f"intermediate_{i} = df['A'].mean()"
         if is_last:
-            code += "\nsubmit(intermediate_{i})"
+            code += f"\nsubmit(intermediate_{i})"
 
         turns.append(
             {
@@ -121,7 +125,7 @@ def _sample_trace(n_turns: int = 1) -> dict:
     return {
         "turns": turns,
         "final_answer": 42.5,
-        "final_answer_hash": "answerhash-001",
+        "final_answer_hash": hash_artifact(42.5),
         "success": True,
     }
 
@@ -140,7 +144,8 @@ async def _sample_episode_artifact(source: str, n_turns: int = 1) -> dict:
         match=True,
         trace=trace,
         traces=consistency_traces,
-        majority_answer_hash="answerhash-001",
+        majority_answer_hash=hash_artifact(42.5),
+        float_tolerance=0.1,
         error=None,
     )
 
@@ -241,7 +246,7 @@ async def test_episode_turn_count_and_trace_metadata(source: str, n_turns: int):
     gold_trace = episode["gold_trace"]
     assert len(gold_trace["turns"]) == n_turns
     assert [t["turn_index"] for t in gold_trace["turns"]] == list(range(n_turns))
-    assert gold_trace["final_answer_hash"] == "answerhash-001"
+    assert gold_trace["final_answer_hash"] == hash_artifact(42.5)
 
     # execution shape stays consistent for dense-reward usage
     for turn in gold_trace["turns"]:

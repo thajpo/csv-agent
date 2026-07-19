@@ -4,7 +4,7 @@ Upload episodes to HuggingFace Hub.
 
 Usage:
     uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes
-    uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --splits data/fixtures/splits_40
+    uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --splits data/episodes/splits
     uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --private
 """
 import argparse

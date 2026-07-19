@@ -362,10 +362,11 @@ async def process_llm_task(
         consistency_traces = [trace for trace, _ in result.consistency_results]
         verification_result = VerificationResult(
             success=result.verified,
-            match=result.verified,
+            match=result.verified if result.majority_answer_hash is not None else None,
             trace=result.gold_trace,
             traces=consistency_traces,
             majority_answer_hash=result.majority_answer_hash,
+            float_tolerance=float_tol,
             error=None,
         )
 

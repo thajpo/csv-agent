@@ -25,6 +25,10 @@ from csv_spec.types import (
     CodeDiffDict,
     TriangulationMetadataDict,
     TimingMetadataDict,
+    ProcessStepEvidenceDict,
+    ProcessStepReportDict,
+    ProcessReportSummaryDict,
+    ProcessReportDict,
     # Diagnostic types
     FailureCategory,
     AnswerClusterDict,
@@ -47,7 +51,12 @@ from csv_spec.types import (
 
 from csv_spec.normalization import normalize_value
 from csv_spec.hashing import hash_artifact
-from csv_spec.parsing import parse_action, parse_step_result
+from csv_spec.parsing import (
+    parse_action,
+    parse_hook_record,
+    parse_step_result,
+    validate_hook_event_line,
+)
 
 __version__ = "0.1.0"
 
@@ -65,6 +74,10 @@ __all__ = [
     "CodeDiffDict",
     "TriangulationMetadataDict",
     "TimingMetadataDict",
+    "ProcessStepEvidenceDict",
+    "ProcessStepReportDict",
+    "ProcessReportSummaryDict",
+    "ProcessReportDict",
     # Diagnostic types
     "FailureCategory",
     "AnswerClusterDict",
@@ -87,5 +100,7 @@ __all__ = [
     "normalize_value",
     "hash_artifact",
     "parse_action",
+    "parse_hook_record",
     "parse_step_result",
+    "validate_hook_event_line",
 ]

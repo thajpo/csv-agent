@@ -63,6 +63,8 @@ class HookDict(TypedDict, total=False):
     value_hash: str  # Hash of full normalized value for verification
     depends_on: list[str]  # DAG edges to prior hooks
     description: str | None
+    event_line: int | None  # 1-based source line where hook() executed
+    event_provenance_reason: str | None
 
 
 # ============= Turn-Based TypedDicts =============
@@ -135,6 +137,7 @@ class TriangulationMetadataDict(TypedDict):
     majority_answer_hash: str | None
     majority_count: int
     gold_matches_majority: bool
+    float_tolerance: float
 
 
 class TimingMetadataDict(TypedDict):
@@ -144,6 +147,65 @@ class TimingMetadataDict(TypedDict):
     consistency_elapsed: list[float]
     total_elapsed: float
     avg_elapsed: float
+
+
+# ============= Process Report Types =============
+
+
+class ProcessStepEvidenceDict(TypedDict):
+    """Observed evidence about a process step.
+
+    Evidence fields are diagnostic inputs. Except for terminal verification,
+    they do not establish that an action made useful computational progress.
+    """
+
+    final_verified: bool | None
+    trace_success: bool
+    code_line_grounded: bool
+    dependency_valid: bool
+    duplicate: bool
+    consensus_matches: int
+    consensus_total: int
+    reasons: list[str]
+
+
+class ProcessStepReportDict(TypedDict):
+    """One observed process step with verified or heuristic judgment."""
+
+    step_index: int
+    turn_index: int
+    hook_index: int | None
+    step_type: Literal["hook", "submit"]
+    code_line: str
+    variable_name: str | None
+    value: Any
+    value_hash: str | None
+    description: str | None
+    depends_on: list[str]
+    semantic_role: str | None
+    label: float | None
+    label_kind: Literal["verified", "heuristic", "unlabeled"]
+    label_source: str
+    evidence: ProcessStepEvidenceDict
+
+
+class ProcessReportSummaryDict(TypedDict):
+    """Aggregate process-step judgment counts for one episode."""
+
+    total_steps: int
+    labeled_steps: int
+    verified_steps: int
+    heuristic_steps: int
+    unlabeled_steps: int
+    positive_steps: int
+    negative_steps: int
+
+
+class ProcessReportDict(TypedDict):
+    """Ordered diagnostic process observations stored on each episode."""
+
+    summary: ProcessReportSummaryDict
+    steps: list[ProcessStepReportDict]
 
 
 # ============= Diagnostic Types =============
@@ -310,6 +372,8 @@ class Hook(BaseModel):
     depends_on: list[str] = Field(
         default_factory=list
     )  # Names of hooks this depends on (DAG edges)
+    event_line: int | None = None  # 1-based source line where hook() executed
+    event_provenance_reason: str | None = None
 
 
 # ============= Episode JSONL Schema =============
@@ -339,6 +403,7 @@ class EpisodeJSONL(BaseModel):
     verified: bool
     triangulation: TriangulationMetadataDict
     timing: TimingMetadataDict
+    process_report: ProcessReportDict
 
     # Provenance (optional)
     source: str | None = None  # "synthetic" or "llm" - tracks question origin

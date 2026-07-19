@@ -28,6 +28,7 @@ class CodeCellResult(BaseModel):
     success: bool
     stdout: str
     stderr: str
+    hooks: list[dict[str, Any]] = Field(default_factory=list)
     submitted_answer: Any | None = None
 
 

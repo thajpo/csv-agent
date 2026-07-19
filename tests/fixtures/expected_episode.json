@@ -2,6 +2,7 @@
   "episode_id": "test-episode-001",
   "timestamp": "2025-01-01T00:00:00",
   "csv_source": "data/kaggle/mirichoi0218_insurance/data.csv",
+  "source": "llm_gen",
   "question": {
     "id": "abc123",
     "question_text": "What is the mean of the column with highest variance?",
@@ -12,7 +13,7 @@
     "template_params": null,
     "output_type": "float",
     "output_schema": null,
-    "ground_truth_hash": "a1b2c3d4e5f6",
+    "ground_truth_hash": "a6488b119f72a912",
     "ground_truth": 13270.42
   },
   "gold_trace": {
@@ -20,19 +21,21 @@
       {
         "turn_index": 0,
         "reasoning": "I need to find the column with the highest variance and compute its mean. Let me first load the data and compute variance for each numeric column.",
-        "code": "import pandas as pd\n\ndf = pd.read_csv('data.csv')\nnumeric_cols = df.select_dtypes(include='number').columns\nvariances = df[numeric_cols].var()\nmax_var_col = variances.idxmax()\nhook(variances.to_dict(), name='variances')\n\nmean_val = df[max_var_col].mean()\nsubmit(mean_val)",
+        "code": "import pandas as pd\n\ndf = pd.read_csv('data.csv')\nnumeric_cols = df.select_dtypes(include='number').columns\nvariances = df[numeric_cols].var()\nmax_var_col = variances.idxmax()\nhook(variances.to_dict(), \"variances = df[numeric_cols].var()\", name='variances')\n\nmean_val = df[max_var_col].mean()\nsubmit(mean_val)",
         "execution": {
           "success": true,
-          "stdout": "hook captured: variances\n\u2713 Submitted: {\"__csv_agent_answer__\": 13270.42, \"hooks\": [{\"name\": \"variances\", \"value\": {\"age\": 14.0, \"charges\": 146661782.0}}]}",
+          "stdout": "\ud83d\udccd Hook: {\"__csv_agent_hook__\": true, \"variable_name\": \"variances\", \"code_line\": \"variances = df[numeric_cols].var()\", \"value\": {\"age\": 14.0, \"charges\": 146661782.0}, \"value_hash\": \"hash123\", \"depends_on\": [], \"description\": null, \"event_line\": 7}\n\u2713 Submitted: {\"__csv_agent_answer__\": 13270.42, \"hooks\": [{\"__csv_agent_hook__\": true, \"variable_name\": \"variances\", \"code_line\": \"variances = df[numeric_cols].var()\", \"value\": {\"age\": 14.0, \"charges\": 146661782.0}, \"value_hash\": \"hash123\", \"depends_on\": [], \"description\": null, \"event_line\": 7}]}",
           "stderr": "",
           "hooks": [
             {
               "variable_name": "variances",
-              "code_line": "hook(variances.to_dict(), name='variances')",
+              "code_line": "variances = df[numeric_cols].var()",
               "value": {"age": 14.0, "charges": 146661782.0},
               "value_hash": "hash123",
               "depends_on": [],
-              "description": null
+              "description": null,
+              "event_line": 7,
+              "event_provenance_reason": null
             }
           ],
           "submitted_answer": 13270.42
@@ -40,7 +43,7 @@
       }
     ],
     "final_answer": 13270.42,
-    "final_answer_hash": "a1b2c3d4e5f6",
+    "final_answer_hash": "a6488b119f72a912",
     "success": true
   },
   "consistency_traces": [
@@ -60,7 +63,7 @@
         }
       ],
       "final_answer": 13270.42,
-      "final_answer_hash": "a1b2c3d4e5f6",
+      "final_answer_hash": "a6488b119f72a912",
       "success": true
     },
     {
@@ -79,7 +82,7 @@
         }
       ],
       "final_answer": 13270.42,
-      "final_answer_hash": "a1b2c3d4e5f6",
+      "final_answer_hash": "a6488b119f72a912",
       "success": true
     }
   ],
@@ -87,9 +90,75 @@
   "triangulation": {
     "n_consistency_runs": 2,
     "n_consistency_succeeded": 2,
-    "majority_answer_hash": "a1b2c3d4e5f6",
+    "majority_answer_hash": "a6488b119f72a912",
     "majority_count": 2,
-    "gold_matches_majority": true
+    "gold_matches_majority": true,
+    "float_tolerance": 0.1
+  },
+  "process_report": {
+    "summary": {
+      "total_steps": 2,
+      "labeled_steps": 1,
+      "verified_steps": 1,
+      "heuristic_steps": 0,
+      "unlabeled_steps": 1,
+      "positive_steps": 1,
+      "negative_steps": 0
+    },
+    "steps": [
+      {
+        "step_index": 0,
+        "turn_index": 0,
+        "hook_index": 0,
+        "step_type": "hook",
+        "code_line": "variances = df[numeric_cols].var()",
+        "variable_name": "variances",
+        "value": {"age": 14.0, "charges": 146661782.0},
+        "value_hash": "hash123",
+        "description": null,
+        "depends_on": [],
+        "semantic_role": null,
+        "label": null,
+        "label_kind": "unlabeled",
+        "label_source": "insufficient_evidence",
+        "evidence": {
+          "final_verified": true,
+          "trace_success": true,
+          "code_line_grounded": true,
+          "dependency_valid": true,
+          "duplicate": false,
+          "consensus_matches": 0,
+          "consensus_total": 2,
+          "reasons": []
+        }
+      },
+      {
+        "step_index": 1,
+        "turn_index": 0,
+        "hook_index": null,
+        "step_type": "submit",
+        "code_line": "submit(...)",
+        "variable_name": "answer",
+        "value": 13270.42,
+        "value_hash": "a6488b119f72a912",
+        "description": "Final submitted answer",
+        "depends_on": [],
+        "semantic_role": "final_answer",
+        "label": 1.0,
+        "label_kind": "verified",
+        "label_source": "terminal_verifier",
+        "evidence": {
+          "final_verified": true,
+          "trace_success": true,
+          "code_line_grounded": true,
+          "dependency_valid": true,
+          "duplicate": false,
+          "consensus_matches": 2,
+          "consensus_total": 2,
+          "reasons": []
+        }
+      }
+    ]
   },
   "timing": {
     "gold_elapsed": 5.2,
