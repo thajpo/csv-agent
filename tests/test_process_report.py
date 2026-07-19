@@ -1042,6 +1042,45 @@ def test_process_report_rejects_captured_submission_without_logged_record():
         )
 
 
+def test_process_report_rejects_turns_appended_after_accepted_submission():
+    trace = _trace(hooks=[], answer=7)
+    trace["turns"].append(
+        {
+            "turn_index": 1,
+            "reasoning": "Unexpected later execution",
+            "code": "later = 1",
+            "execution": {
+                "success": True,
+                "stdout": "",
+                "stderr": "",
+                "hooks": [],
+                "submitted_answer": None,
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="accepted submission is not in the final turn"):
+        build_process_report(
+            source="template",
+            gold_trace=trace,
+            consistency_traces=[],
+            verifier_verdict=True,
+        )
+
+
+def test_process_report_rejects_failed_accepted_submission_execution():
+    trace = _trace(hooks=[], answer=7)
+    trace["turns"][0]["execution"]["success"] = False
+
+    with pytest.raises(ValueError, match="accepted submission execution failed"):
+        build_process_report(
+            source="template",
+            gold_trace=trace,
+            consistency_traces=[],
+            verifier_verdict=True,
+        )
+
+
 @pytest.mark.parametrize("answer", ["contains ✓ Submitted: marker", "📍 Hook:"])
 def test_submission_payload_protocol_text_is_not_a_second_event(answer):
     trace = _trace(hooks=[], answer=answer)

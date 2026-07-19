@@ -195,8 +195,9 @@ def _submission_consensus_matches(
 
 
 def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None:
-    submissions: list[Any] = []
-    for turn_index, turn in enumerate(trace.get("turns", [])):
+    turns = trace.get("turns", [])
+    submissions: list[tuple[int, Any, bool]] = []
+    for turn_index, turn in enumerate(turns):
         execution = turn.get("execution", {})
         submitted_answer = execution.get("submitted_answer")
         stdout = execution.get("stdout", "")
@@ -238,7 +239,9 @@ def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None
                 raise ValueError(f"{turn_path} contains a hook after submission")
         if submitted_answer is None:
             continue
-        submissions.append(submitted_answer)
+        submissions.append(
+            (turn_index, submitted_answer, execution.get("success") is True)
+        )
 
         code = turn.get("code", "")
         if not isinstance(code, str):
@@ -276,14 +279,21 @@ def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None
 
     canonical_answer_hash = trace_answer_hash(trace)
     if trace.get("success"):
+        accepted_turn, accepted_submission, accepted_execution_succeeded = (
+            submissions[-1] if submissions else (None, None, False)
+        )
         if (
             not submissions
             or canonical_answer_hash is None
             or hash_artifact(trace.get("final_answer")) != canonical_answer_hash
-            or _exact_value_identity(submissions[-1])
+            or _exact_value_identity(accepted_submission)
             != _exact_value_identity(trace.get("final_answer"))
         ):
             raise ValueError(f"{path} final answer is not the accepted submission")
+        if accepted_turn != len(turns) - 1:
+            raise ValueError(f"{path} accepted submission is not in the final turn")
+        if not accepted_execution_succeeded:
+            raise ValueError(f"{path} accepted submission execution failed")
     elif trace.get("final_answer") is not None:
         raise ValueError(f"unsuccessful {path} has a final answer")
 
