@@ -599,7 +599,6 @@ class CompositionalQuestionGenerator:
                             gold_trace=accepted["_trace"],
                             consistency_traces=[],
                             verifier_verdict=True,
-                            majority_count=triangulation["majority_count"],
                         ),
                         source=accepted.get("source"),
                     )

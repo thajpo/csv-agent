@@ -97,7 +97,6 @@ async def create_episode(
         gold_trace=gold_trace,
         consistency_traces=consistency_traces,
         verifier_verdict=verification_result.match,
-        majority_count=triangulation["majority_count"],
     )
 
     # Build timing metadata (defaults if not available)

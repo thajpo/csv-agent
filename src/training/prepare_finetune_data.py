@@ -19,7 +19,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-from csv_spec import ProcessReportDict
+from csv_spec import ProcessReportDict, hash_artifact
 from pydantic import TypeAdapter, ValidationError
 
 
@@ -215,7 +215,6 @@ def to_prm_samples(
     """
     question = episode.get("question", {})
     gold_trace = episode.get("gold_trace") or episode.get("teacher_gold_trace", {})
-    turns = gold_trace.get("turns", [])
     episode_id = episode.get("episode_id", "<unknown>")
     if "process_report" not in episode:
         raise ValueError(
@@ -231,12 +230,14 @@ def to_prm_samples(
             f"Episode {episode_id!r} has malformed process_report; "
             "regenerate episodes before PRM conversion"
         ) from exc
-    process_steps = process_report["steps"]
     _validate_process_report_semantics(
-        process_steps=process_steps,
-        turns=turns,
+        process_report=process_report,
+        gold_trace=gold_trace,
+        consistency_traces=episode.get("consistency_traces", []),
         episode_id=episode_id,
     )
+    process_steps = process_report["steps"]
+    turns = gold_trace["turns"]
 
     if not turns or not process_steps:
         return []
@@ -301,13 +302,92 @@ def to_prm_samples(
 
 def _validate_process_report_semantics(
     *,
-    process_steps: list[dict[str, Any]],
-    turns: list[dict[str, Any]],
+    process_report: dict[str, Any],
+    gold_trace: Any,
+    consistency_traces: Any,
     episode_id: Any,
 ) -> None:
     prefix = f"Episode {episode_id!r} has inconsistent process_report"
 
-    for expected_step_index, step in enumerate(process_steps):
+    if not isinstance(gold_trace, dict):
+        raise ValueError(f"{prefix}: gold_trace must be an object")
+    turns = gold_trace.get("turns")
+    if not isinstance(turns, list):
+        raise ValueError(f"{prefix}: gold_trace.turns must be a list")
+    trace_success = gold_trace.get("success")
+    if not isinstance(trace_success, bool):
+        raise ValueError(f"{prefix}: gold_trace.success must be a boolean")
+    if not isinstance(consistency_traces, list):
+        raise ValueError(f"{prefix}: consistency_traces must be a list")
+
+    successful_consistency_hashes: list[str | None] = []
+    for trace_index, trace in enumerate(consistency_traces):
+        if not isinstance(trace, dict) or not isinstance(trace.get("success"), bool):
+            raise ValueError(
+                f"{prefix}: consistency_traces[{trace_index}] must contain a "
+                "boolean success field"
+            )
+        if trace["success"]:
+            successful_consistency_hashes.append(trace.get("final_answer_hash"))
+
+    expected_observations: list[tuple[str, int, int | None, Any]] = []
+    submitted_step_indices: list[int] = []
+    for turn_index, turn in enumerate(turns):
+        if not isinstance(turn, dict):
+            raise ValueError(
+                f"{prefix}: gold_trace.turns[{turn_index}] must be an object"
+            )
+        if turn.get("turn_index") != turn_index:
+            raise ValueError(
+                f"{prefix}: gold_trace.turns[{turn_index}].turn_index must be "
+                f"{turn_index}"
+            )
+        execution = turn.get("execution")
+        if not isinstance(execution, dict):
+            raise ValueError(
+                f"{prefix}: gold_trace.turns[{turn_index}].execution must be an object"
+            )
+        hooks = execution.get("hooks")
+        if not isinstance(hooks, list):
+            raise ValueError(
+                f"{prefix}: gold_trace.turns[{turn_index}].execution.hooks must be "
+                "a list"
+            )
+        for hook_index, hook in enumerate(hooks):
+            if not isinstance(hook, dict):
+                raise ValueError(
+                    f"{prefix}: gold_trace.turns[{turn_index}].execution.hooks"
+                    f"[{hook_index}] must be an object"
+                )
+            expected_observations.append(("hook", turn_index, hook_index, hook))
+
+        submitted_answer = execution.get("submitted_answer")
+        if submitted_answer is not None:
+            expected_observations.append(("submit", turn_index, None, submitted_answer))
+            submitted_step_indices.append(len(expected_observations) - 1)
+
+    if trace_success and not submitted_step_indices:
+        raise ValueError(
+            f"{prefix}: successful gold_trace must contain a submitted answer"
+        )
+
+    process_steps = process_report["steps"]
+    if len(process_steps) != len(expected_observations):
+        raise ValueError(
+            f"{prefix}: steps must cover trace hooks and submissions one-to-one; "
+            f"expected {len(expected_observations)}, got {len(process_steps)}"
+        )
+
+    accepted_step_index = (
+        submitted_step_indices[-1] if trace_success and submitted_step_indices else None
+    )
+
+    for expected_step_index, (step, expected) in enumerate(
+        zip(process_steps, expected_observations, strict=True)
+    ):
+        expected_step_type, expected_turn_index, expected_hook_index, source_value = (
+            expected
+        )
         step_index = step["step_index"]
         if step_index != expected_step_index:
             raise ValueError(
@@ -316,13 +396,18 @@ def _validate_process_report_semantics(
             )
 
         turn_index = step["turn_index"]
-        if turn_index < 0 or turn_index >= len(turns):
+        if turn_index != expected_turn_index:
             raise ValueError(
-                f"{prefix}: steps[{step_index}].turn_index {turn_index} is out of "
-                f"range for {len(turns)} trace turns"
+                f"{prefix}: steps[{step_index}].turn_index must be "
+                f"{expected_turn_index}, got {turn_index}"
             )
 
         step_type = step["step_type"]
+        if step_type != expected_step_type:
+            raise ValueError(
+                f"{prefix}: steps[{step_index}].step_type must be "
+                f"{expected_step_type!r}, got {step_type!r}"
+            )
         label_kind = step["label_kind"]
         label = step["label"]
 
@@ -347,19 +432,187 @@ def _validate_process_report_semantics(
 
         hook_index = step["hook_index"]
         if step_type == "submit":
-            if hook_index is not None:
+            if hook_index != expected_hook_index:
                 raise ValueError(
                     f"{prefix}: steps[{step_index}] submit steps must not have a "
                     "hook_index"
                 )
+            _validate_submit_observation(
+                step=step,
+                submitted_answer=source_value,
+                accepted=step_index == accepted_step_index,
+                gold_trace=gold_trace,
+                trace_success=trace_success,
+                successful_consistency_hashes=successful_consistency_hashes,
+                prefix=prefix,
+            )
             continue
 
-        hooks = turns[turn_index].get("execution", {}).get("hooks", [])
-        if hook_index is None or hook_index < 0 or hook_index >= len(hooks):
+        if hook_index != expected_hook_index:
             raise ValueError(
-                f"{prefix}: steps[{step_index}].hook_index {hook_index} is out of "
-                f"range for {len(hooks)} hooks in turn {turn_index}"
+                f"{prefix}: steps[{step_index}].hook_index must be "
+                f"{expected_hook_index}, got {hook_index}"
             )
+        _validate_hook_observation(
+            step=step,
+            hook=source_value,
+            prefix=prefix,
+        )
+
+    expected_summary = _summarize_process_steps(process_steps)
+    if process_report["summary"] != expected_summary:
+        raise ValueError(
+            f"{prefix}: summary does not match the report steps; "
+            f"expected {expected_summary!r}"
+        )
+
+
+def _validate_hook_observation(
+    *,
+    step: dict[str, Any],
+    hook: dict[str, Any],
+    prefix: str,
+) -> None:
+    expected_fields = {
+        "code_line": hook.get("code_line", ""),
+        "variable_name": hook.get("variable_name"),
+        "value": hook.get("value"),
+        "value_hash": hook.get("value_hash"),
+        "description": hook.get("description"),
+        "depends_on": hook.get("depends_on", []),
+    }
+    for field, expected_value in expected_fields.items():
+        if step[field] != expected_value:
+            raise ValueError(
+                f"{prefix}: steps[{step['step_index']}].{field} does not match "
+                "the source hook"
+            )
+
+
+def _validate_submit_observation(
+    *,
+    step: dict[str, Any],
+    submitted_answer: Any,
+    accepted: bool,
+    gold_trace: dict[str, Any],
+    trace_success: bool,
+    successful_consistency_hashes: list[str | None],
+    prefix: str,
+) -> None:
+    step_index = step["step_index"]
+    if step["value"] != submitted_answer:
+        raise ValueError(
+            f"{prefix}: steps[{step_index}].value does not match the source submission"
+        )
+
+    if accepted:
+        if gold_trace.get("final_answer") != submitted_answer:
+            raise ValueError(
+                f"{prefix}: accepted submission does not match gold_trace.final_answer"
+            )
+        expected_hash = gold_trace.get("final_answer_hash") or hash_artifact(
+            submitted_answer
+        )
+    else:
+        expected_hash = hash_artifact(submitted_answer)
+    if step["value_hash"] != expected_hash:
+        raise ValueError(
+            f"{prefix}: steps[{step_index}].value_hash does not match the source "
+            "submission"
+        )
+
+    expected_identity = {
+        "code_line": "submit(...)",
+        "variable_name": "answer",
+        "description": "Final submitted answer",
+        "depends_on": [],
+        "semantic_role": "final_answer",
+    }
+    for field, expected_value in expected_identity.items():
+        if step[field] != expected_value:
+            raise ValueError(
+                f"{prefix}: steps[{step_index}].{field} is not canonical for a "
+                "submission"
+            )
+
+    evidence = step["evidence"]
+    required_evidence = {
+        "final_verified",
+        "trace_success",
+        "consensus_matches",
+        "consensus_total",
+    }
+    missing_evidence = sorted(required_evidence.difference(evidence))
+    if missing_evidence:
+        raise ValueError(
+            f"{prefix}: steps[{step_index}].evidence is missing "
+            f"{', '.join(missing_evidence)}"
+        )
+    if evidence["trace_success"] is not trace_success:
+        raise ValueError(
+            f"{prefix}: steps[{step_index}].evidence.trace_success does not match "
+            "gold_trace.success"
+        )
+
+    expected_consensus_matches = sum(
+        1
+        for answer_hash in successful_consistency_hashes
+        if answer_hash == expected_hash
+    )
+    if evidence["consensus_matches"] != expected_consensus_matches:
+        raise ValueError(
+            f"{prefix}: steps[{step_index}].evidence.consensus_matches must be "
+            f"{expected_consensus_matches}"
+        )
+    if evidence["consensus_total"] != len(successful_consistency_hashes):
+        raise ValueError(
+            f"{prefix}: steps[{step_index}].evidence.consensus_total must be "
+            f"{len(successful_consistency_hashes)}"
+        )
+
+    if not accepted:
+        expected_label = (None, "unlabeled", "rejected_submission", None)
+    elif evidence["final_verified"] is None:
+        expected_label = (None, "unlabeled", "verifier_unavailable", None)
+    else:
+        verdict = evidence["final_verified"]
+        expected_label = (
+            1.0 if verdict else 0.0,
+            "verified",
+            "terminal_verifier",
+            verdict,
+        )
+
+    actual_label = (
+        step["label"],
+        step["label_kind"],
+        step["label_source"],
+        evidence["final_verified"],
+    )
+    if actual_label != expected_label:
+        status = "accepted" if accepted else "rejected"
+        raise ValueError(
+            f"{prefix}: steps[{step_index}] has label metadata inconsistent with "
+            f"the {status} submission"
+        )
+
+
+def _summarize_process_steps(
+    steps: list[dict[str, Any]],
+) -> dict[str, int]:
+    return {
+        "total_steps": len(steps),
+        "labeled_steps": sum(1 for step in steps if step["label"] is not None),
+        "verified_steps": sum(1 for step in steps if step["label_kind"] == "verified"),
+        "heuristic_steps": sum(
+            1 for step in steps if step["label_kind"] == "heuristic"
+        ),
+        "unlabeled_steps": sum(
+            1 for step in steps if step["label_kind"] == "unlabeled"
+        ),
+        "positive_steps": sum(1 for step in steps if step["label"] == 1.0),
+        "negative_steps": sum(1 for step in steps if step["label"] == 0.0),
+    }
 
 
 def convert_episodes(

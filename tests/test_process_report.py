@@ -49,7 +49,6 @@ def test_template_hook_is_heuristic_and_submit_is_verified():
         gold_trace=_trace(hooks=[_hook("filtered", "hash-filtered")]),
         consistency_traces=[],
         verifier_verdict=True,
-        majority_count=1,
     )
 
     assert report["summary"] == {
@@ -110,7 +109,6 @@ def test_llm_consensus_never_becomes_a_verified_process_label():
         gold_trace=gold,
         consistency_traces=consistency,
         verifier_verdict=True,
-        majority_count=2,
     )
 
     hook_step, submit_step = report["steps"]
@@ -127,7 +125,6 @@ def test_llm_hook_without_consensus_remains_unlabeled():
         gold_trace=_trace(hooks=[_hook("filtered", "hash-filtered")]),
         consistency_traces=[],
         verifier_verdict=True,
-        majority_count=1,
     )
 
     hook_step, submit_step = report["steps"]
@@ -205,6 +202,58 @@ def test_only_accepted_submission_receives_verifier_label():
     assert accepted["value_hash"] == "accepted-answer-hash"
     assert accepted["label"] == 1.0
     assert accepted["label_kind"] == "verified"
+
+
+def test_submit_consensus_is_counted_per_submission_hash():
+    trace = {
+        "turns": [
+            {
+                "turn_index": 0,
+                "reasoning": "Rejected submission",
+                "code": "submit(1)",
+                "execution": {
+                    "success": True,
+                    "stdout": "",
+                    "stderr": "",
+                    "hooks": [],
+                    "submitted_answer": 1,
+                },
+            },
+            {
+                "turn_index": 1,
+                "reasoning": "Accepted submission",
+                "code": "submit(7)",
+                "execution": {
+                    "success": True,
+                    "stdout": "",
+                    "stderr": "",
+                    "hooks": [],
+                    "submitted_answer": 7,
+                },
+            },
+        ],
+        "final_answer": 7,
+        "final_answer_hash": "answer-7",
+        "success": True,
+    }
+    consistency_traces = [
+        _trace(hooks=[], answer=7),
+        _trace(hooks=[], answer=7),
+        _trace(hooks=[], answer=7, success=False),
+    ]
+
+    report = build_process_report(
+        source="llm_gen",
+        gold_trace=trace,
+        consistency_traces=consistency_traces,
+        verifier_verdict=True,
+    )
+
+    rejected, accepted = report["steps"]
+    assert rejected["evidence"]["consensus_matches"] == 0
+    assert rejected["evidence"]["consensus_total"] == 2
+    assert accepted["evidence"]["consensus_matches"] == 2
+    assert accepted["evidence"]["consensus_total"] == 2
 
 
 def test_future_code_cannot_ground_an_earlier_hook():
@@ -291,6 +340,8 @@ def test_hookless_trace_still_has_verified_terminal_observation():
     assert report["summary"]["heuristic_steps"] == 0
     assert report["steps"][0]["step_type"] == "submit"
     assert report["steps"][0]["label_kind"] == "verified"
+    assert report["steps"][0]["evidence"]["consensus_matches"] == 0
+    assert report["steps"][0]["evidence"]["consensus_total"] == 0
 
 
 def test_unknown_verifier_verdict_leaves_terminal_observation_unlabeled():

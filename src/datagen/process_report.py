@@ -29,7 +29,6 @@ def build_process_report(
     gold_trace: TraceDict,
     consistency_traces: list[TraceDict],
     verifier_verdict: bool | None,
-    majority_count: int = 0,
 ) -> ProcessReportDict:
     """Build a step-level process report from gold and consistency traces."""
     steps: list[ProcessStepReportDict] = []
@@ -116,8 +115,10 @@ def build_process_report(
                 code_line_grounded=True,
                 dependency_valid=True,
                 duplicate=False,
-                consensus_matches=majority_count,
-                consensus_total=max(consensus_total, majority_count),
+                consensus_matches=_submission_consensus_matches(
+                    consistency_traces, answer_hash
+                ),
+                consensus_total=consensus_total,
                 reasons=[] if accepted else ["submission_not_accepted"],
             )
             if not accepted:
@@ -168,6 +169,16 @@ def _consensus_counts(consistency_traces: list[TraceDict]) -> Counter[str]:
         for value_hash in hashes_in_trace:
             counts[value_hash] += 1
     return counts
+
+
+def _submission_consensus_matches(
+    consistency_traces: list[TraceDict], answer_hash: str
+) -> int:
+    return sum(
+        1
+        for trace in consistency_traces
+        if trace.get("success") and trace.get("final_answer_hash") == answer_hash
+    )
 
 
 def _hook_evidence(
