@@ -17,7 +17,7 @@ If you modify any type, you MUST update:
 """
 
 from enum import Enum
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Any, Literal, NamedTuple, TypedDict, Union
 from datetime import datetime
 
@@ -124,6 +124,109 @@ class TraceDict(TypedDict):
     final_answer: Any | None
     final_answer_hash: str | None
     success: bool  # Did execution complete with submit()?
+
+
+# ============= Prefix-Value Research Types =============
+
+
+class TrajectoryPrefix(BaseModel):
+    """Public agent state at a completed turn boundary.
+
+    The prefix intentionally excludes the expected answer and its hashes. Those
+    are private verifier inputs and must never become critic features.
+    """
+
+    prefix_id: str
+    episode_id: str
+    csv_source: str
+    system_prompt: str
+    question_text: str
+    turns: list[TurnDict]
+    max_turns: int = Field(gt=0)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_nonterminal_boundary(self) -> "TrajectoryPrefix":
+        if len(self.turns) >= self.max_turns:
+            raise ValueError("prefix must leave at least one continuation turn")
+        for expected_index, turn in enumerate(self.turns):
+            if turn.get("turn_index") != expected_index:
+                raise ValueError("prefix turns must be contiguous and zero-indexed")
+            execution = turn.get("execution", {})
+            if execution.get("submitted_answer") is not None:
+                raise ValueError("prefix must not contain a terminal submission")
+        return self
+
+
+class ContinuationPolicy(BaseModel):
+    """Frozen actor settings that give a prefix value its meaning."""
+
+    model: str
+    sampling_args: dict[str, Any]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PrefixContinuation(BaseModel):
+    """One attempted continuation and its terminal-verifier judgment."""
+
+    rollout_index: int = Field(ge=0)
+    seed: int | None = None
+    trace: TraceDict | None = None
+    verifier_verdict: bool | None = None
+    error: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> "PrefixContinuation":
+        if self.verifier_verdict is not None and self.trace is None:
+            raise ValueError("a verifier verdict requires a continuation trace")
+        if self.error is not None and self.verifier_verdict is not None:
+            raise ValueError("errored continuations cannot carry verifier labels")
+        return self
+
+
+class PrefixValueRecord(BaseModel):
+    """Auditable Monte Carlo estimate of future success from one prefix."""
+
+    prefix: TrajectoryPrefix
+    policy: ContinuationPolicy
+    continuations: list[PrefixContinuation]
+    attempted_continuations: int = Field(ge=0)
+    labeled_continuations: int = Field(ge=0)
+    successful_continuations: int = Field(ge=0)
+    value: float | None = Field(default=None, ge=0.0, le=1.0)
+    code_commit: str
+    dataset_revision: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_aggregate(self) -> "PrefixValueRecord":
+        attempted = len(self.continuations)
+        labeled = sum(
+            outcome.verifier_verdict is not None for outcome in self.continuations
+        )
+        successes = sum(
+            outcome.verifier_verdict is True for outcome in self.continuations
+        )
+        expected_value = successes / labeled if labeled else None
+
+        if self.attempted_continuations != attempted:
+            raise ValueError("attempted_continuations does not match outcomes")
+        if self.labeled_continuations != labeled:
+            raise ValueError("labeled_continuations does not match verifier verdicts")
+        if self.successful_continuations != successes:
+            raise ValueError(
+                "successful_continuations does not match verifier verdicts"
+            )
+        if self.value != expected_value:
+            raise ValueError(
+                "value must equal successful divided by labeled continuations"
+            )
+        return self
 
 
 # ============= Metadata TypedDicts =============
