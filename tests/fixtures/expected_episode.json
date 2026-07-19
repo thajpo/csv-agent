@@ -20,19 +20,20 @@
       {
         "turn_index": 0,
         "reasoning": "I need to find the column with the highest variance and compute its mean. Let me first load the data and compute variance for each numeric column.",
-        "code": "import pandas as pd\n\ndf = pd.read_csv('data.csv')\nnumeric_cols = df.select_dtypes(include='number').columns\nvariances = df[numeric_cols].var()\nmax_var_col = variances.idxmax()\nhook(variances.to_dict(), name='variances')\n\nmean_val = df[max_var_col].mean()\nsubmit(mean_val)",
+        "code": "import pandas as pd\n\ndf = pd.read_csv('data.csv')\nnumeric_cols = df.select_dtypes(include='number').columns\nvariances = df[numeric_cols].var()\nmax_var_col = variances.idxmax()\nhook(variances.to_dict(), \"variances = df[numeric_cols].var()\", name='variances')\n\nmean_val = df[max_var_col].mean()\nsubmit(mean_val)",
         "execution": {
           "success": true,
-          "stdout": "hook captured: variances\n\u2713 Submitted: {\"__csv_agent_answer__\": 13270.42, \"hooks\": [{\"name\": \"variances\", \"value\": {\"age\": 14.0, \"charges\": 146661782.0}}]}",
+          "stdout": "\ud83d\udccd Hook: {\"__csv_agent_hook__\": true, \"variable_name\": \"variances\", \"code_line\": \"variances = df[numeric_cols].var()\", \"value\": {\"age\": 14.0, \"charges\": 146661782.0}, \"value_hash\": \"hash123\", \"depends_on\": [], \"description\": null, \"event_line\": 7}\n\u2713 Submitted: {\"__csv_agent_answer__\": 13270.42, \"hooks\": [{\"__csv_agent_hook__\": true, \"variable_name\": \"variances\", \"code_line\": \"variances = df[numeric_cols].var()\", \"value\": {\"age\": 14.0, \"charges\": 146661782.0}, \"value_hash\": \"hash123\", \"depends_on\": [], \"description\": null, \"event_line\": 7}]}",
           "stderr": "",
           "hooks": [
             {
               "variable_name": "variances",
-              "code_line": "hook(variances.to_dict(), name='variances')",
+              "code_line": "variances = df[numeric_cols].var()",
               "value": {"age": 14.0, "charges": 146661782.0},
               "value_hash": "hash123",
               "depends_on": [],
-              "description": null
+              "description": null,
+              "event_line": 7
             }
           ],
           "submitted_answer": 13270.42
@@ -108,7 +109,7 @@
         "turn_index": 0,
         "hook_index": 0,
         "step_type": "hook",
-        "code_line": "hook(variances.to_dict(), name='variances')",
+        "code_line": "variances = df[numeric_cols].var()",
         "variable_name": "variances",
         "value": {"age": 14.0, "charges": 146661782.0},
         "value_hash": "hash123",

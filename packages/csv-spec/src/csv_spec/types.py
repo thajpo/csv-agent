@@ -371,6 +371,7 @@ class Hook(BaseModel):
     depends_on: list[str] = Field(
         default_factory=list
     )  # Names of hooks this depends on (DAG edges)
+    event_line: int | None = None  # 1-based source line where hook() executed
 
 
 # ============= Episode JSONL Schema =============

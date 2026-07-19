@@ -99,6 +99,22 @@ class TestPipelineContract:
         assert reloaded.gold_trace == episode.gold_trace
         assert len(reloaded.consistency_traces) == len(episode.consistency_traces)
 
+    def test_fixture_process_report_is_canonical(self, expected_episode_path):
+        """Test that fixture diagnostics match their trace provenance."""
+        from src.datagen.process_report import build_process_report
+
+        with open(expected_episode_path) as f:
+            data = json.load(f)
+
+        expected_report = build_process_report(
+            source="template",
+            gold_trace=data["gold_trace"],
+            consistency_traces=data["consistency_traces"],
+            verifier_verdict=True,
+        )
+
+        assert data["process_report"] == expected_report
+
     def test_episode_jsonl_format(self, expected_episode_path):
         """Test that episodes work in JSONL format (one per line)."""
         from csv_spec import EpisodeJSONL

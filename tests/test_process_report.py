@@ -25,6 +25,7 @@ def _trace(*, hooks: list[dict], answer=7, success=True) -> dict:
                 "reasoning": "Solve",
                 "code": (
                     "filtered = df[df['x'] > 1]\n"
+                    "hook(filtered, \"filtered = df[df['x'] > 1]\", name='filtered')\n"
                     "total = filtered['y'].sum()\n"
                     "submit(total)"
                 ),
@@ -427,6 +428,56 @@ async def test_execution_preserves_structured_hooks_before_stdout_truncation():
     assert "📍 Hook:" not in result.stdout
     assert result.hooks[0]["variable_name"] == "value"
     assert result.hooks[0]["event_line"] == 2
+
+
+@pytest.mark.asyncio
+async def test_execution_does_not_trust_fabricated_hook_event_line():
+    hook_payload = {
+        "__csv_agent_hook__": True,
+        "variable_name": "value",
+        "code_line": "value = 1",
+        "value": 1,
+        "value_hash": "hash-value",
+        "depends_on": [],
+        "description": None,
+        "event_line": 2,
+    }
+
+    class FakeSandbox:
+        async def python(self, **_kwargs):
+            return "📍 Hook: " + json.dumps(hook_payload)
+
+    environment = object.__new__(Environment)
+    environment.env = FakeSandbox()
+    environment.state = {"sandbox_id": "sandbox", "python_state": {}}
+    environment.submitted_answer = None
+    environment.submission_metadata = {}
+
+    result = await environment.execute_code_cell(
+        "value = 1\nprint('fabricated hook record')"
+    )
+
+    assert result.hooks[0]["event_line"] is None
+
+
+def test_report_does_not_ground_event_line_without_hook_call():
+    trace = _trace(hooks=[_hook("filtered", "hash-filtered")])
+    trace["turns"][0]["code"] = (
+        "filtered = df[df['x'] > 1]\nprint('fabricated hook record')\nsubmit(filtered)"
+    )
+
+    report = build_process_report(
+        source="template",
+        gold_trace=trace,
+        consistency_traces=[],
+        verifier_verdict=True,
+    )
+
+    hook_step = report["steps"][0]
+    assert hook_step["label"] is None
+    assert hook_step["label_kind"] == "unlabeled"
+    assert hook_step["evidence"]["code_line_grounded"] is False
+    assert hook_step["evidence"]["reasons"] == ["missing_or_ambiguous_event_provenance"]
 
 
 def test_same_value_hash_is_duplicate_even_when_hook_is_renamed():

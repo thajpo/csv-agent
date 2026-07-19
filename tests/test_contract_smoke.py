@@ -8,7 +8,9 @@ from csv_spec import (
     parse_action,
     parse_step_result,
     CodeAction,
+    Hook,
     StepResult,
+    validate_hook_event_line,
 )
 
 
@@ -103,8 +105,8 @@ KeyError: 'nonexistent_column'"""
 
     def test_parse_hooks(self):
         """Parse output with hook() calls."""
-        output = """📍 Hook: {"__csv_agent_hook__": true, "variable_name": "mean_age", "value": 54.3, "value_hash": "abc123", "code_line": "mean_age = df['age'].mean()"}
-📍 Hook: {"__csv_agent_hook__": true, "variable_name": "filtered", "value": {"type": "DataFrame", "shape": [10, 3]}, "value_hash": "def456", "code_line": "filtered = df[df['age'] > 50]"}
+        output = """📍 Hook: {"__csv_agent_hook__": true, "variable_name": "mean_age", "value": 54.3, "value_hash": "abc123", "code_line": "mean_age = df['age'].mean()", "event_line": 2}
+📍 Hook: {"__csv_agent_hook__": true, "variable_name": "filtered", "value": {"type": "DataFrame", "shape": [10, 3]}, "value_hash": "def456", "code_line": "filtered = df[df['age'] > 50]", "event_line": 4}
 ✓ Submitted: {"__csv_agent_answer__": 54.3, "hooks": []}"""
 
         result = parse_step_result(output)
@@ -113,17 +115,35 @@ KeyError: 'nonexistent_column'"""
         assert result.terminal is True
         assert len(result.hooks) == 2
         assert result.hooks[0]["variable_name"] == "mean_age"
+        assert result.hooks[0]["event_line"] == 2
         assert result.hooks[1]["variable_name"] == "filtered"
 
     def test_parse_hooks_in_submission(self):
         """Parse hooks embedded in submission."""
-        output = """✓ Submitted: {"__csv_agent_answer__": 42, "hooks": [{"__csv_agent_hook__": true, "variable_name": "result", "value": 42, "value_hash": "xyz", "code_line": "result = 42"}]}"""
+        output = """✓ Submitted: {"__csv_agent_answer__": 42, "hooks": [{"__csv_agent_hook__": true, "variable_name": "result", "value": 42, "value_hash": "xyz", "code_line": "result = 42", "event_line": 2}]}"""
 
         result = parse_step_result(output)
 
         assert result.terminal is True
         assert len(result.hooks) == 1
         assert result.hooks[0]["variable_name"] == "result"
+        assert result.hooks[0]["event_line"] == 2
+
+    def test_hook_model_preserves_event_line(self):
+        hook = Hook(code_line="value = 1", value_hash="hash", event_line=2)
+
+        assert hook.event_line == 2
+
+    def test_hook_event_line_requires_one_direct_call(self):
+        assert validate_hook_event_line("value = 1\nhook(value, 'value = 1')", 2) == 2
+        assert validate_hook_event_line("value = 1\nprint(value)", 2) is None
+        assert (
+            validate_hook_event_line(
+                "value = 1\nhook(value, 'value = 1'); hook(value, 'value = 1')",
+                2,
+            )
+            is None
+        )
 
 
 class TestContractFlow:

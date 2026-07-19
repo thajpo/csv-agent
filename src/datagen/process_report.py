@@ -20,6 +20,7 @@ from csv_spec import (
     TraceDict,
     hash_artifact,
     normalize_value,
+    validate_hook_event_line,
 )
 from src.core.environment import validate_hooks_grounded
 from src.datagen.shared.submission import parse_submission
@@ -219,8 +220,7 @@ def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None
                     f"{turn_path} submission record does not match captured answer"
                 )
             if any(
-                "📍 Hook:" in line
-                for line in stdout_lines[submission_line_index + 1 :]
+                "📍 Hook:" in line for line in stdout_lines[submission_line_index + 1 :]
             ):
                 raise ValueError(f"{turn_path} contains a hook after submission")
         if submitted_answer is None:
@@ -285,6 +285,8 @@ def _hook_grounding(
         return False, "missing_or_ambiguous_event_provenance"
     if type(event_line) is not int or event_line < 1 or event_line > len(current_lines):
         return False, "invalid_event_provenance"
+    if validate_hook_event_line(current_code, event_line) is None:
+        return False, "missing_or_ambiguous_event_provenance"
     executed_prefix = "\n".join(current_lines[: event_line - 1])
     hook_copy = dict(hook)
     grounded, _ungrounded = validate_hooks_grounded(

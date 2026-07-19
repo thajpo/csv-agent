@@ -17,7 +17,12 @@ def _episode() -> dict:
             {
                 "turn_index": 0,
                 "reasoning": "Filter and aggregate",
-                "code": "filtered = df[df['x'] > 1]\nsubmit(7)",
+                "code": (
+                    "filtered = df[df['x'] > 1]\n"
+                    "hook(filtered, \"filtered = df[df['x'] > 1]\", name='filtered')\n"
+                    "hook(1, 'unused = 1', name='unused')\n"
+                    "submit(7)"
+                ),
                 "execution": {
                     "success": True,
                     "stdout": "ok",
@@ -39,7 +44,7 @@ def _episode() -> dict:
                             "value_hash": "hash-unused",
                             "description": None,
                             "depends_on": [],
-                            "event_line": 2,
+                            "event_line": 3,
                         },
                     ],
                     "submitted_answer": 7,
@@ -55,7 +60,11 @@ def _episode() -> dict:
             {
                 "turn_index": 0,
                 "reasoning": "Check independently",
-                "code": "filtered = df[df['x'] > 1]\nsubmit(7)",
+                "code": (
+                    "filtered = df[df['x'] > 1]\n"
+                    "hook(filtered, \"filtered = df[df['x'] > 1]\", name='filtered')\n"
+                    "submit(7)"
+                ),
                 "execution": {
                     "success": True,
                     "stdout": "ok",
@@ -521,6 +530,8 @@ def test_prm_export_rejects_forged_ground_truth_verdict():
 def test_prm_export_rejects_ambiguous_imported_submissions(code: str):
     episode = _episode()
     episode["gold_trace"]["turns"][0]["code"] = code
+    for hook in episode["gold_trace"]["turns"][0]["execution"]["hooks"]:
+        hook["event_line"] = None
 
     with pytest.raises(ValueError, match="submission|submitted operation"):
         to_prm_samples(episode)

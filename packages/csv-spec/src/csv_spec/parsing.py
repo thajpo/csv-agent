@@ -9,8 +9,9 @@ IMPORTANT: This is a CONTRACT file. If you change these functions, you MUST upda
 2. Trainer (rl_env.py, prompts) - how it formats actions and consumes results
 """
 
-import re
+import ast
 import json
+import re
 from typing import Any
 
 from csv_spec.types import (
@@ -19,6 +20,49 @@ from csv_spec.types import (
     StepResult,
     HookDict,
 )
+
+
+def parse_hook_record(hook_data: Any) -> HookDict | None:
+    """Parse one hook protocol record without trusting its source location."""
+    if (
+        not isinstance(hook_data, dict)
+        or hook_data.get("__csv_agent_hook__") is not True
+    ):
+        return None
+
+    event_line = hook_data.get("event_line")
+    if event_line is not None and (type(event_line) is not int or event_line < 1):
+        event_line = None
+
+    return HookDict(
+        variable_name=hook_data.get("variable_name"),
+        code_line=hook_data.get("code_line", ""),
+        value=hook_data.get("value"),
+        value_hash=hook_data.get("value_hash", ""),
+        depends_on=hook_data.get("depends_on", []),
+        description=hook_data.get("description"),
+        event_line=event_line,
+    )
+
+
+def validate_hook_event_line(code: str, event_line: Any) -> int | None:
+    """Retain an event line only when it identifies one direct hook() call."""
+    if type(event_line) is not int or event_line < 1:
+        return None
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return None
+
+    matching_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "hook"
+        and node.lineno == event_line
+    ]
+    return event_line if len(matching_calls) == 1 else None
 
 
 def parse_action(model_output: str) -> ActionSpec | None:
@@ -95,18 +139,9 @@ def parse_step_result(
             if json_start == -1:
                 continue
             try:
-                hook_data = json.loads(line[json_start:])
-                if hook_data.get("__csv_agent_hook__"):
-                    hooks.append(
-                        HookDict(
-                            variable_name=hook_data.get("variable_name"),
-                            code_line=hook_data.get("code_line", ""),
-                            value=hook_data.get("value"),
-                            value_hash=hook_data.get("value_hash", ""),
-                            depends_on=hook_data.get("depends_on", []),
-                            description=hook_data.get("description"),
-                        )
-                    )
+                hook = parse_hook_record(json.loads(line[json_start:]))
+                if hook is not None:
+                    hooks.append(hook)
             except json.JSONDecodeError:
                 # Malformed hook - skip but don't fail
                 pass
@@ -123,17 +158,9 @@ def parse_step_result(
                 # Also capture hooks from submission if present
                 if "hooks" in data and isinstance(data["hooks"], list):
                     for hook_data in data["hooks"]:
-                        if hook_data.get("__csv_agent_hook__"):
-                            hooks.append(
-                                HookDict(
-                                    variable_name=hook_data.get("variable_name"),
-                                    code_line=hook_data.get("code_line", ""),
-                                    value=hook_data.get("value"),
-                                    value_hash=hook_data.get("value_hash", ""),
-                                    depends_on=hook_data.get("depends_on", []),
-                                    description=hook_data.get("description"),
-                                )
-                            )
+                        hook = parse_hook_record(hook_data)
+                        if hook is not None and hook not in hooks:
+                            hooks.append(hook)
         except json.JSONDecodeError:
             # Malformed submission - treat as error
             success = False

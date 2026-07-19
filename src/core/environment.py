@@ -12,6 +12,7 @@ import json
 import logging
 
 import pandas as pd
+from csv_spec import parse_hook_record, validate_hook_event_line
 
 from src.core.model import APILLM
 from src.utils.parsing import (
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 MAX_OUTPUT_CHARS = 50_000
 
 
-def _parse_hook_records(output: str, *, code_line_count: int) -> list[dict]:
+def _parse_hook_records(output: str, *, code: str) -> list[dict]:
     """Capture structured hook records before presentation output is truncated."""
     hooks: list[dict] = []
     for line in output.splitlines():
@@ -49,26 +50,11 @@ def _parse_hook_records(output: str, *, code_line_count: int) -> list[dict]:
             payload = json.loads(line[json_start:])
         except json.JSONDecodeError:
             continue
-        if not isinstance(payload, dict) or not payload.get("__csv_agent_hook__"):
+        hook = parse_hook_record(payload)
+        if hook is None:
             continue
-        event_line = payload.get("event_line")
-        if (
-            type(event_line) is not int
-            or event_line < 1
-            or event_line > code_line_count
-        ):
-            event_line = None
-        hooks.append(
-            {
-                "variable_name": payload.get("variable_name"),
-                "code_line": payload.get("code_line", ""),
-                "value": payload.get("value"),
-                "value_hash": payload.get("value_hash", ""),
-                "depends_on": payload.get("depends_on", []),
-                "description": payload.get("description"),
-                "event_line": event_line,
-            }
-        )
+        hook["event_line"] = validate_hook_event_line(code, hook.get("event_line"))
+        hooks.append(hook)
     return hooks
 
 
@@ -429,7 +415,7 @@ class Environment:
             sandbox_id=self.state["sandbox_id"],
             python_state=self.state["python_state"],
         )
-        hooks = _parse_hook_records(output, code_line_count=len(code.splitlines()))
+        hooks = _parse_hook_records(output, code=code)
 
         # Truncate massive outputs to prevent context overflow
         # Preserve the ✓ Submitted: line intact (it contains the answer JSON)
