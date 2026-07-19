@@ -459,6 +459,13 @@ namespace = _create_restricted_namespace()
 execution_count = 0
 trusted_hook_code = None
 
+def json_safe_snapshot(value):
+    def snapshot_default(obj):
+        if type(obj).__module__.split(".")[0] == "numpy" and hasattr(obj, "tolist"):
+            return obj.tolist()
+        return str(obj)
+    return json.loads(json.dumps(value, default=snapshot_default))
+
 while True:
     with open(COMMAND_FIFO, "r", encoding="utf-8") as command_file:
         payload = command_file.read()
@@ -490,7 +497,7 @@ while True:
 
     def capture_hook_event(frame, event, _arg):
         if trusted_hook_code is None or frame.f_code is not trusted_hook_code:
-            return capture_hook_event
+            return
         frame_id = id(frame)
         if event == "call":
             caller = frame.f_back
@@ -500,13 +507,12 @@ while True:
             event_line = trusted_hook_frames.pop(frame_id, None)
             hook_data = frame.f_locals.get("hook_data")
             if event_line is not None and isinstance(hook_data, dict):
-                captured = dict(hook_data)
+                captured = json_safe_snapshot(hook_data)
                 captured["event_line"] = event_line
                 trusted_hooks.append(captured)
-        return capture_hook_event
 
     try:
-        sys.settrace(capture_hook_event)
+        sys.setprofile(capture_hook_event)
         try:
             with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
                 module_ast = ast.parse(code, mode="exec")
@@ -526,7 +532,7 @@ while True:
                     if value is not None:
                         result["result"] = repr(value)
         finally:
-            sys.settrace(None)
+            sys.setprofile(None)
     except Exception:
         result["status"] = "error"
         result["result"] = traceback.format_exc()

@@ -100,12 +100,13 @@ def build_process_report(
             )
             steps.append(step)
 
-            name = hook.get("variable_name")
-            if name:
-                seen_names.add(name)
-            value_hash = hook.get("value_hash")
-            if value_hash:
-                seen_hashes.add(value_hash)
+            if event_provenance_reason is None:
+                name = hook.get("variable_name")
+                if name:
+                    seen_names.add(name)
+                value_hash = hook.get("value_hash")
+                if value_hash:
+                    seen_hashes.add(value_hash)
 
         submitted = execution.get("submitted_answer")
         if submitted is not None:
@@ -162,12 +163,18 @@ def _consensus_counts(consistency_traces: list[TraceDict]) -> Counter[str]:
     for trace in consistency_traces:
         if not trace.get("success"):
             continue
-        hashes_in_trace = {
-            hook.get("value_hash")
-            for turn in trace.get("turns", [])
-            for hook in turn.get("execution", {}).get("hooks", [])
-            if hook.get("value_hash")
-        }
+        hashes_in_trace: set[str] = set()
+        code_cells = [turn.get("code", "") for turn in trace.get("turns", [])]
+        for turn_index, turn in enumerate(trace.get("turns", [])):
+            for hook in turn.get("execution", {}).get("hooks", []):
+                _grounded, provenance_reason = _hook_grounding(
+                    hook=hook,
+                    earlier_code_cells=code_cells[:turn_index],
+                    current_code=code_cells[turn_index],
+                )
+                value_hash = hook.get("value_hash")
+                if provenance_reason is None and value_hash:
+                    hashes_in_trace.add(value_hash)
         for value_hash in hashes_in_trace:
             counts[value_hash] += 1
     return counts

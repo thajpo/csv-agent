@@ -75,7 +75,7 @@ def _parse_hook_records(
             continue
         stdout_hooks.append((hook, _hook_record_identity(payload)))
 
-    unmatched_trusted: list[dict] = []
+    trusted_hooks: list[dict] = []
     matched_stdout_indexes: set[int] = set()
     for payload in trusted_records or []:
         hook = parse_hook_record(payload, trusted_event_provenance=True)
@@ -84,19 +84,20 @@ def _parse_hook_records(
         event_line = validate_hook_event_line(code, hook.get("event_line"))
         hook["event_line"] = event_line
         if event_line is None:
-            hook["event_provenance_reason"] = (
-                "missing_or_ambiguous_event_provenance"
-            )
+            hook["event_provenance_reason"] = "missing_or_ambiguous_event_provenance"
         identity = _hook_record_identity(payload)
         for index, (_stdout_hook, stdout_identity) in enumerate(stdout_hooks):
             if index not in matched_stdout_indexes and stdout_identity == identity:
-                stdout_hooks[index] = (hook, identity)
                 matched_stdout_indexes.add(index)
                 break
-        else:
-            unmatched_trusted.append(hook)
+        trusted_hooks.append(hook)
 
-    return [hook for hook, _identity in stdout_hooks] + unmatched_trusted
+    diagnostics = [
+        hook
+        for index, (hook, _identity) in enumerate(stdout_hooks)
+        if index not in matched_stdout_indexes
+    ]
+    return trusted_hooks + diagnostics
 
 
 def validate_hooks_grounded(

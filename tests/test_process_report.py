@@ -9,7 +9,7 @@ import pytest
 
 from csv_spec import hash_artifact
 from src.core.conversation import ConversationHistory
-from src.core.environment import Environment
+from src.core.environment import Environment, _parse_hook_records
 from src.datagen.process_report import build_process_report
 from src.datagen.teacher import build_trace_dict
 from src.envs.csv_env import get_setup_code
@@ -554,9 +554,123 @@ def test_report_keeps_unauthenticated_stdout_hook_unlabeled():
     assert hook_step["label"] is None
     assert hook_step["label_kind"] == "unlabeled"
     assert hook_step["label_source"] == "event_provenance_unavailable"
-    assert hook_step["evidence"]["reasons"] == [
-        "unauthenticated_stdout_provenance"
+    assert hook_step["evidence"]["reasons"] == ["unauthenticated_stdout_provenance"]
+
+
+def test_unauthenticated_hooks_do_not_contaminate_trusted_evidence():
+    untrusted = _hook(
+        "fabricated_dependency",
+        "shared-hash",
+        event_line=None,
+        event_provenance_reason="unauthenticated_stdout_provenance",
+    )
+    trusted = _hook(
+        "trusted",
+        "shared-hash",
+        depends_on=["fabricated_dependency"],
+    )
+    consistency_untrusted = _hook(
+        "fabricated_consensus",
+        "shared-hash",
+        event_line=None,
+        event_provenance_reason="unauthenticated_stdout_provenance",
+    )
+
+    report = build_process_report(
+        source="llm_gen",
+        gold_trace=_trace(hooks=[untrusted, trusted]),
+        consistency_traces=[_trace(hooks=[consistency_untrusted])],
+        verifier_verdict=True,
+    )
+
+    diagnostic, trusted_step = report["steps"][:2]
+    assert diagnostic["label"] is None
+    assert trusted_step["evidence"]["dependency_valid"] is False
+    assert trusted_step["evidence"]["duplicate"] is False
+    assert trusted_step["evidence"]["consensus_matches"] == 0
+
+
+def test_trusted_hook_order_precedes_unmatched_stdout_diagnostics():
+    first = {
+        "__csv_agent_hook__": True,
+        **_hook(
+            "first",
+            "hash-first",
+            code_line="first = 1",
+            value=1,
+            event_line=2,
+        ),
+    }
+    second = {
+        "__csv_agent_hook__": True,
+        **_hook(
+            "second",
+            "hash-second",
+            code_line="second = 2",
+            value=2,
+            event_line=4,
+        ),
+    }
+    fabricated = {
+        "__csv_agent_hook__": True,
+        **_hook(
+            "fabricated",
+            "hash-fabricated",
+            code_line="second = 2",
+            value=2,
+            event_line=4,
+        ),
+    }
+    output = "\n".join(
+        [
+            "📍 Hook: " + json.dumps(second),
+            "📍 Hook: " + json.dumps(fabricated),
+            "📍 Hook: " + json.dumps(first),
+        ]
+    )
+
+    records = _parse_hook_records(
+        output,
+        code=(
+            "first = 1\n"
+            "hook(first, 'first = 1', name='first')\n"
+            "second = 2\n"
+            "hook(second, 'second = 2', name='second')"
+        ),
+        trusted_records=[first, second],
+    )
+
+    assert [record["variable_name"] for record in records] == [
+        "first",
+        "second",
+        "fabricated",
     ]
+    assert records[2]["event_line"] is None
+    assert records[2]["event_provenance_reason"] == "unauthenticated_stdout_provenance"
+
+
+def test_trusted_hook_survives_suppressed_stdout():
+    trusted = {
+        "__csv_agent_hook__": True,
+        **_hook(
+            "trusted",
+            "hash-trusted",
+            code_line="value = 1",
+            value=1,
+            event_line=2,
+        ),
+    }
+
+    records = _parse_hook_records(
+        "",
+        code="value = 1\nhook(value, 'value = 1', name='trusted')",
+        trusted_records=[trusted],
+    )
+
+    assert len(records) == 1
+    assert records[0]["variable_name"] == "trusted"
+    assert records[0]["event_line"] == 2
+    assert records[0]["event_provenance_reason"] is None
 
 
 def test_same_value_hash_is_duplicate_even_when_hook_is_renamed():

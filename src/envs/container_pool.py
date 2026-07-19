@@ -188,6 +188,13 @@ print(f"Parent loaded CSV: {{df.shape[0]}} rows, {{df.shape[1]}} columns", file=
 with open("/tmp/setup_code.py", "r") as _f:
     SETUP_INJECT = _f.read()
 
+def json_safe_snapshot(value):
+    def snapshot_default(obj):
+        if type(obj).__module__.split(".")[0] == "numpy" and hasattr(obj, "tolist"):
+            return obj.tolist()
+        return str(obj)
+    return json.loads(json.dumps(value, default=snapshot_default))
+
 def run_worker(worker_id: int):
     """Worker process main loop."""
     global df  # Needed because reload_csv assigns to df
@@ -296,7 +303,7 @@ def run_worker(worker_id: int):
 
             def capture_hook_event(frame, event, _arg):
                 if trusted_hook_code is None or frame.f_code is not trusted_hook_code:
-                    return capture_hook_event
+                    return
                 frame_id = id(frame)
                 if event == "call":
                     caller = frame.f_back
@@ -306,13 +313,12 @@ def run_worker(worker_id: int):
                     event_line = trusted_hook_frames.pop(frame_id, None)
                     hook_data = frame.f_locals.get("hook_data")
                     if event_line is not None and isinstance(hook_data, dict):
-                        captured = dict(hook_data)
+                        captured = json_safe_snapshot(hook_data)
                         captured["event_line"] = event_line
                         trusted_hooks.append(captured)
-                return capture_hook_event
 
             try:
-                sys.settrace(capture_hook_event)
+                sys.setprofile(capture_hook_event)
                 try:
                     with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
                         module_ast = ast.parse(code, mode="exec")
@@ -327,7 +333,7 @@ def run_worker(worker_id: int):
                             if value is not None:
                                 result["result"] = repr(value)
                 finally:
-                    sys.settrace(None)
+                    sys.setprofile(None)
             except Exception:
                 result["status"] = "error"
                 result["result"] = traceback.format_exc()
