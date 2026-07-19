@@ -37,7 +37,6 @@ from src.datagen.shared.questions_io import load_questions
 from src.datagen.shared.verification import (
     VerificationResult,
     resolve_question_prompt,
-    triangulation_verdict,
     verify_question,
 )
 from src.datagen.teacher import batch_triangulate
@@ -363,13 +362,11 @@ async def process_llm_task(
         consistency_traces = [trace for trace, _ in result.consistency_results]
         verification_result = VerificationResult(
             success=result.verified,
-            match=triangulation_verdict(
-                verified=result.verified,
-                majority_answer_hash=result.majority_answer_hash,
-            ),
+            match=result.verified if result.majority_answer_hash is not None else None,
             trace=result.gold_trace,
             traces=consistency_traces,
             majority_answer_hash=result.majority_answer_hash,
+            float_tolerance=float_tol,
             error=None,
         )
 

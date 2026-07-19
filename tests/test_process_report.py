@@ -1,5 +1,6 @@
 """Tests for diagnostic process reports."""
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -10,6 +11,7 @@ from src.datagen.teacher import build_trace_dict
 
 
 def _trace(*, hooks: list[dict], answer=7, success=True) -> dict:
+    final_answer = answer if success else None
     return {
         "turns": [
             {
@@ -25,12 +27,14 @@ def _trace(*, hooks: list[dict], answer=7, success=True) -> dict:
                     "stdout": "",
                     "stderr": "",
                     "hooks": hooks,
-                    "submitted_answer": answer,
+                    "submitted_answer": final_answer,
                 },
             }
         ],
-        "final_answer": answer,
-        "final_answer_hash": f"answer-{answer}",
+        "final_answer": final_answer,
+        "final_answer_hash": hash_artifact(final_answer)
+        if final_answer is not None
+        else None,
         "success": success,
     }
 
@@ -185,7 +189,7 @@ def test_only_accepted_submission_receives_verifier_label():
             },
         ],
         "final_answer": 2,
-        "final_answer_hash": "accepted-answer-hash",
+        "final_answer_hash": hash_artifact(2),
         "success": True,
     }
 
@@ -204,7 +208,7 @@ def test_only_accepted_submission_receives_verifier_label():
     assert rejected["label_source"] == "rejected_submission"
     assert rejected["evidence"]["final_verified"] is None
     assert accepted["value"] == 2
-    assert accepted["value_hash"] == "accepted-answer-hash"
+    assert accepted["value_hash"] == hash_artifact(2)
     assert accepted["label"] == 1.0
     assert accepted["label_kind"] == "verified"
 
@@ -238,7 +242,7 @@ def test_submit_consensus_is_counted_per_submission_hash():
             },
         ],
         "final_answer": 7,
-        "final_answer_hash": "answer-7",
+        "final_answer_hash": hash_artifact(7),
         "success": True,
     }
     consistency_traces = [
@@ -296,7 +300,7 @@ def test_future_code_cannot_ground_an_earlier_hook():
             },
         ],
         "final_answer": 2,
-        "final_answer_hash": "answer-2",
+        "final_answer_hash": hash_artifact(2),
         "success": True,
     }
 
@@ -368,12 +372,29 @@ def test_unknown_verifier_verdict_leaves_terminal_observation_unlabeled():
 
 @pytest.mark.parametrize("answer", [0, False, ""])
 def test_trace_builder_hashes_falsy_answers(answer):
+    result = SimpleNamespace(
+        success=True,
+        stdout=(
+            "✓ Submitted: "
+            + json.dumps({"__csv_agent_answer__": answer})
+        ),
+        stderr="",
+        submitted_answer=answer,
+    )
     state = SimpleNamespace(
         submitted_answer=answer,
-        execution_results_per_turn=[],
+        execution_results_per_turn=[[result]],
     )
 
-    trace = build_trace_dict(state, [])
+    trace = build_trace_dict(
+        state,
+        [
+            {
+                "role": "assistant",
+                "content": f"Solve\n```python\nsubmit({answer!r})\n```",
+            }
+        ],
+    )
 
     assert trace["success"] is True
     assert trace["final_answer_hash"] == hash_artifact(answer)
@@ -397,3 +418,24 @@ def test_submit_consensus_falls_back_to_hashing_falsy_answers(answer):
     assert terminal["value_hash"] == hash_artifact(answer)
     assert terminal["evidence"]["consensus_matches"] == 1
     assert terminal["evidence"]["consensus_total"] == 1
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "submit(7)\nafter = 1",
+        "submit(7)\nsubmit(8)",
+        "submit(7)\nhook(7, 'value = 7')",
+    ],
+)
+def test_process_report_rejects_nonterminal_or_multiple_submissions(code: str):
+    trace = _trace(hooks=[])
+    trace["turns"][0]["code"] = code
+
+    with pytest.raises(ValueError, match="submission|submitted operation"):
+        build_process_report(
+            source="template",
+            gold_trace=trace,
+            consistency_traces=[],
+            verifier_verdict=True,
+        )

@@ -3,10 +3,12 @@
 Test-first development for the episode factory module.
 """
 
+import copy
+
 import pytest
 from datetime import datetime
 
-from csv_spec import EpisodeJSONL, TraceDict, TriangulationResult
+from csv_spec import EpisodeJSONL, TraceDict, TriangulationResult, hash_artifact
 from src.datagen.shared.verification import VerificationResult, verify_llm
 
 
@@ -23,8 +25,8 @@ def sample_question() -> dict:
         "template_name": "test_template",
         "template_params": {"column": "age"},
         "output_type": "float",
-        "ground_truth_hash": "abc123",
-        "ground_truth_hashes": ["abc123", "def456"],
+        "ground_truth_hash": hash_artifact(42.5),
+        "ground_truth_hashes": [hash_artifact(42.5)],
         "ground_truth": 42.5,
     }
 
@@ -37,7 +39,7 @@ def sample_trace() -> TraceDict:
             {
                 "turn_index": 0,
                 "reasoning": "Calculate average",
-                "code": "result = df['age'].mean()",
+                "code": "result = df['age'].mean()\nsubmit(result)",
                 "execution": {
                     "success": True,
                     "stdout": "",
@@ -48,7 +50,7 @@ def sample_trace() -> TraceDict:
             }
         ],
         "final_answer": 42.5,
-        "final_answer_hash": "abc123",
+        "final_answer_hash": hash_artifact(42.5),
         "success": True,
     }
 
@@ -61,7 +63,8 @@ def sample_verification_result_success(sample_trace: TraceDict) -> VerificationR
         match=True,
         trace=sample_trace,
         traces=[],
-        majority_answer_hash="abc123",
+        majority_answer_hash=hash_artifact(42.5),
+        float_tolerance=0.1,
         error=None,
     )
 
@@ -69,12 +72,18 @@ def sample_verification_result_success(sample_trace: TraceDict) -> VerificationR
 @pytest.fixture
 def sample_verification_result_failure(sample_trace: TraceDict) -> VerificationResult:
     """Sample failed verification result."""
+    mismatch_trace = copy.deepcopy(sample_trace)
+    mismatch_trace["turns"][0]["code"] = "submit(99)"
+    mismatch_trace["turns"][0]["execution"]["submitted_answer"] = 99
+    mismatch_trace["final_answer"] = 99
+    mismatch_trace["final_answer_hash"] = hash_artifact(99)
     return VerificationResult(
         success=False,
         match=False,
-        trace=sample_trace,
+        trace=mismatch_trace,
         traces=[],
-        majority_answer_hash=None,
+        majority_answer_hash=hash_artifact(99),
+        float_tolerance=0.1,
         error="Answer mismatch",
     )
 
@@ -89,7 +98,7 @@ def sample_verification_result_consistency(
             {
                 "turn_index": 0,
                 "reasoning": "Calculate",
-                "code": "result = df['age'].mean()",
+                "code": "result = df['age'].mean()\nsubmit(result)",
                 "execution": {
                     "success": True,
                     "stdout": "",
@@ -100,7 +109,7 @@ def sample_verification_result_consistency(
             }
         ],
         "final_answer": 42.5,
-        "final_answer_hash": "abc123",
+        "final_answer_hash": hash_artifact(42.5),
         "success": True,
     }
     return VerificationResult(
@@ -108,7 +117,8 @@ def sample_verification_result_consistency(
         match=True,
         trace=sample_trace,
         traces=[consistency_trace, consistency_trace],
-        majority_answer_hash="abc123",
+        majority_answer_hash=hash_artifact(42.5),
+        float_tolerance=0.1,
         error=None,
     )
 
@@ -169,7 +179,7 @@ class TestCreateEpisode:
         assert episode.process_report["steps"][0]["label_kind"] == "verified"
 
     @pytest.mark.asyncio
-    async def test_create_episode_preserves_unknown_verifier_verdict(
+    async def test_create_episode_rejects_unknown_verdict_with_available_evidence(
         self,
         sample_question: dict,
         sample_trace: TraceDict,
@@ -182,21 +192,17 @@ class TestCreateEpisode:
             trace=sample_trace,
             traces=[],
             majority_answer_hash=None,
+            float_tolerance=0.1,
             error=None,
         )
 
-        episode = await create_episode(
-            question=sample_question,
-            verification_result=verification_result,
-            source="template",
-            csv_path="/path/to/data.csv",
-        )
-
-        terminal = episode.process_report["steps"][0]
-        assert episode.verified is False
-        assert terminal["label"] is None
-        assert terminal["label_kind"] == "unlabeled"
-        assert terminal["evidence"]["final_verified"] is None
+        with pytest.raises(ValueError, match="disagrees with trace provenance"):
+            await create_episode(
+                question=sample_question,
+                verification_result=verification_result,
+                source="template",
+                csv_path="/path/to/data.csv",
+            )
 
     @pytest.mark.asyncio
     async def test_create_episode_llm_consistency(
@@ -310,7 +316,7 @@ class TestCreateEpisode:
         assert episode.question["id"] == "test-123"
         assert episode.question["difficulty"] == "EASY"
         assert episode.question["template_name"] == "test_template"
-        assert episode.question["ground_truth_hash"] == "abc123"
+        assert episode.question["ground_truth_hash"] == hash_artifact(42.5)
 
     @pytest.mark.asyncio
     async def test_create_episode_generates_episode_id(
@@ -370,6 +376,7 @@ class TestEpisodeFactoryErrorHandling:
             trace=None,
             traces=[],
             majority_answer_hash=None,
+            float_tolerance=0.1,
             error="Execution failed",
         )
 
@@ -398,6 +405,7 @@ class TestEpisodeFactoryErrorHandling:
             trace=None,
             traces=[],
             majority_answer_hash=None,
+            float_tolerance=0.1,
             error="Ground truth hash mismatch",
         )
 

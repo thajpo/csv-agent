@@ -73,20 +73,20 @@ def validate_hooks_grounded(
             ungrounded.append(hook)
             continue
 
-        # Split hook code_line into individual lines and normalize each
-        hook_lines = code_line.split("\n")
-        all_lines_match = True
+        normalized_hook_lines = [
+            normalized
+            for hook_line in code_line.split("\n")
+            if (normalized := " ".join(hook_line.split()))
+        ]
+        if not normalized_hook_lines:
+            hook["_ungrounded_reason"] = "missing code_line"
+            ungrounded.append(hook)
+            continue
 
-        for hook_line in hook_lines:
-            normalized_hook_line = " ".join(hook_line.split())
-            if not normalized_hook_line:
-                # Skip empty lines in hook
-                continue
-
-            # Check for exact match against any normalized code line
-            if normalized_hook_line not in normalized_code_lines:
-                all_lines_match = False
-                break
+        all_lines_match = all(
+            normalized_hook_line in normalized_code_lines
+            for normalized_hook_line in normalized_hook_lines
+        )
 
         if all_lines_match:
             grounded.append(hook)

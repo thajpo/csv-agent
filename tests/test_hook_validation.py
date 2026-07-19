@@ -106,6 +106,15 @@ class TestHookGrounding:
         assert len(ungrounded) == 1
         assert ungrounded[0]["_ungrounded_reason"] == "missing code_line"
 
+    def test_whitespace_only_multiline_code_line(self):
+        hooks = [{"code_line": "  \n\t"}]
+
+        grounded, ungrounded = validate_hooks_grounded(hooks, ["x = 1"])
+
+        assert grounded == []
+        assert len(ungrounded) == 1
+        assert ungrounded[0]["_ungrounded_reason"] == "missing code_line"
+
     def test_multiple_hooks_mixed(self):
         """Should correctly categorize mix of grounded and ungrounded hooks."""
         hooks = [

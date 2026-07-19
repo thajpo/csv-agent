@@ -174,6 +174,7 @@ class TestRLDerivability:
             "majority_answer_hash",
             "majority_count",
             "gold_matches_majority",
+            "float_tolerance",
         }
         missing = required - set(tri.keys())
         assert not missing, f"Triangulation missing fields: {missing}"

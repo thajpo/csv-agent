@@ -560,6 +560,7 @@ class CompositionalQuestionGenerator:
                         majority_answer_hash=accepted.get("ground_truth_hash"),
                         majority_count=1,
                         gold_matches_majority=True,
+                        float_tolerance=config.float_tolerance,
                     )
                     episode = EpisodeJSONL(
                         episode_id=str(uuid.uuid4()),

@@ -7,6 +7,7 @@ does not prove that a hook made useful computational progress.
 
 from __future__ import annotations
 
+import ast
 from collections import Counter
 from typing import Any, Literal
 
@@ -19,6 +20,7 @@ from csv_spec import (
     hash_artifact,
 )
 from src.core.environment import validate_hooks_grounded
+from src.datagen.shared.verification import trace_answer_hash
 
 EpisodeSource = Literal["llm_gen", "template", "procedural"]
 
@@ -31,6 +33,11 @@ def build_process_report(
     verifier_verdict: bool | None,
 ) -> ProcessReportDict:
     """Build a step-level process report from gold and consistency traces."""
+    validate_trace_submissions(gold_trace, path="gold_trace")
+    for trace_index, trace in enumerate(consistency_traces):
+        validate_trace_submissions(
+            trace, path=f"consistency_traces[{trace_index}]"
+        )
     steps: list[ProcessStepReportDict] = []
     code_cells = [turn.get("code", "") for turn in gold_trace.get("turns", [])]
     consensus = _consensus_counts(consistency_traces)
@@ -103,10 +110,13 @@ def build_process_report(
         submitted = execution.get("submitted_answer")
         if submitted is not None:
             accepted = turn_index == accepted_submit_turn
-            if accepted:
-                answer_hash = trace_answer_hash(gold_trace) or hash_artifact(submitted)
-            else:
-                answer_hash = hash_artifact(submitted)
+            answer_hash = (
+                trace_answer_hash(gold_trace)
+                if accepted
+                else hash_artifact(submitted)
+            )
+            if answer_hash is None:
+                raise ValueError("accepted submission hash is unavailable")
             evidence = ProcessStepEvidenceDict(
                 final_verified=verifier_verdict if accepted else None,
                 trace_success=gold_trace.get("success", False),
@@ -179,14 +189,74 @@ def _submission_consensus_matches(
     )
 
 
-def trace_answer_hash(trace: TraceDict) -> str | None:
-    stored_hash = trace.get("final_answer_hash")
-    if stored_hash:
-        return stored_hash
-    answer = trace.get("final_answer")
-    if answer is None:
-        return None
-    return hash_artifact(answer)
+def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None:
+    submissions: list[Any] = []
+    for turn_index, turn in enumerate(trace.get("turns", [])):
+        execution = turn.get("execution", {})
+        submitted_answer = execution.get("submitted_answer")
+        stdout = execution.get("stdout", "")
+        if not isinstance(stdout, str):
+            raise ValueError(f"{path}.turns[{turn_index}].execution.stdout is invalid")
+        submit_markers = [
+            offset
+            for offset in range(len(stdout))
+            if stdout.startswith("✓ Submitted:", offset)
+        ]
+        turn_path = f"{path}.turns[{turn_index}]"
+        if len(submit_markers) > 1:
+            raise ValueError(f"{turn_path} contains multiple submissions")
+        if submit_markers and submitted_answer is None:
+            raise ValueError(f"{turn_path} submission was not captured")
+        if submit_markers:
+            later_hook = stdout.find("📍 Hook:", submit_markers[0])
+            if later_hook != -1:
+                raise ValueError(f"{turn_path} contains a hook after submission")
+        if submitted_answer is None:
+            continue
+        submissions.append(submitted_answer)
+
+        code = turn.get("code", "")
+        if not isinstance(code, str):
+            raise ValueError(f"{turn_path}.code is invalid")
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as exc:
+            raise ValueError(f"{turn_path} code is not parseable") from exc
+
+        parents = {
+            id(child): parent
+            for parent in ast.walk(tree)
+            for child in ast.iter_child_nodes(parent)
+        }
+        submit_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "submit"
+        ]
+        if len(submit_calls) != 1:
+            raise ValueError(
+                f"{turn_path} must contain exactly one submitted operation"
+            )
+        submit_call = submit_calls[0]
+        submit_statement = parents.get(id(submit_call))
+        if (
+            not isinstance(submit_statement, ast.Expr)
+            or submit_statement.value is not submit_call
+            or not tree.body
+            or tree.body[-1] is not submit_statement
+        ):
+            raise ValueError(f"{turn_path} submission must be the terminal operation")
+
+    canonical_answer_hash = trace_answer_hash(trace)
+    if trace.get("success"):
+        if not submissions or submissions[-1] != trace.get("final_answer"):
+            raise ValueError(f"{path} final answer is not the accepted submission")
+        if canonical_answer_hash is None:
+            raise ValueError(f"{path} final answer hash is unavailable")
+    elif trace.get("final_answer") is not None:
+        raise ValueError(f"unsuccessful {path} has a final answer")
 
 
 def _hook_evidence(

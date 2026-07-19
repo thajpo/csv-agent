@@ -3,6 +3,7 @@ import tempfile
 
 import pytest
 
+from csv_spec import hash_artifact
 from src.datagen.shared.questions_io import load_questions, validate_question
 from src.datagen.shared.verification import verify_synthetic
 
@@ -50,7 +51,7 @@ async def test_verify_synthetic_does_not_fallback_to_legacy_answer_key(monkeypat
         return (
             {
                 "success": True,
-                "final_answer_hash": "actual-hash",
+                "final_answer_hash": hash_artifact(1),
                 "final_answer": 1,
             },
             [],
@@ -80,7 +81,7 @@ async def test_verify_synthetic_uses_unified_ground_truth_key(monkeypatch):
         return (
             {
                 "success": True,
-                "final_answer_hash": "actual-hash",
+                "final_answer_hash": hash_artifact(1),
                 "final_answer": 1,
             },
             [],

@@ -24,7 +24,13 @@ from pydantic import TypeAdapter, ValidationError
 from src.datagen.process_report import (
     EpisodeSource,
     build_process_report,
+    validate_trace_submissions,
+)
+from src.datagen.shared.verification import (
+    derive_ground_truth_verification,
+    derive_llm_verification,
     trace_answer_hash,
+    validate_float_tolerance,
 )
 
 
@@ -371,6 +377,7 @@ def _canonical_report_inputs(
         "majority_answer_hash",
         "majority_count",
         "gold_matches_majority",
+        "float_tolerance",
     }
     if not required_fields.issubset(triangulation):
         raise ValueError(f"{prefix}: triangulation provenance is incomplete")
@@ -380,6 +387,7 @@ def _canonical_report_inputs(
     majority_count = triangulation["majority_count"]
     majority_hash = triangulation["majority_answer_hash"]
     gold_matches = triangulation["gold_matches_majority"]
+    float_tolerance = triangulation["float_tolerance"]
     if type(n_runs) is not int or type(n_succeeded) is not int:
         raise ValueError(f"{prefix}: triangulation counts must be integers")
     if type(majority_count) is not int or majority_count < 0:
@@ -392,32 +400,46 @@ def _canonical_report_inputs(
         raise ValueError(
             f"{prefix}: triangulation.gold_matches_majority must be a boolean"
         )
+    try:
+        float_tolerance = validate_float_tolerance(float_tolerance)
+    except ValueError as exc:
+        raise ValueError(f"{prefix}: triangulation.float_tolerance is invalid") from exc
 
     succeeded = sum(1 for trace in consistency_traces if trace["success"])
     if n_runs != len(consistency_traces) or n_succeeded != succeeded:
         raise ValueError(f"{prefix}: triangulation counts do not match source traces")
 
     if source == "llm_gen":
-        verifier_verdict = _derive_llm_verdict(
-            verified=verified,
+        evidence = derive_llm_verification(
             gold_trace=gold_trace,
             consistency_traces=consistency_traces,
-            majority_hash=majority_hash,
-            majority_count=majority_count,
-            gold_matches=gold_matches,
-            prefix=prefix,
+            float_tolerance=float_tolerance,
         )
     else:
-        verifier_verdict = _derive_ground_truth_verdict(
-            verified=verified,
-            question=question,
-            gold_trace=gold_trace,
-            consistency_traces=consistency_traces,
-            majority_hash=majority_hash,
-            majority_count=majority_count,
-            gold_matches=gold_matches,
-            prefix=prefix,
+        if consistency_traces:
+            raise ValueError(
+                f"{prefix}: ground-truth episodes cannot use consistency traces"
+            )
+        try:
+            evidence = derive_ground_truth_verification(
+                question=question,
+                gold_trace=gold_trace,
+                float_tolerance=float_tolerance,
+            )
+        except ValueError as exc:
+            raise ValueError(f"{prefix}: {exc}") from exc
+
+    if (
+        majority_hash != evidence.majority_answer_hash
+        or majority_count != evidence.majority_count
+        or gold_matches != (evidence.verdict is True)
+        or verified != (evidence.verdict is True)
+    ):
+        raise ValueError(
+            f"{prefix}: triangulation metadata disagrees with source traces"
         )
+
+    verifier_verdict = evidence.verdict
 
     return (
         cast(EpisodeSource, source),
@@ -482,84 +504,23 @@ def _validate_trace(*, trace: Any, path: str, prefix: str) -> TraceDict:
         if submitted_answer is not None:
             submissions.append(submitted_answer)
 
+    try:
+        canonical_answer_hash = trace_answer_hash(cast(TraceDict, trace))
+        validate_trace_submissions(cast(TraceDict, trace), path=path)
+    except ValueError as exc:
+        raise ValueError(f"{prefix}: {exc}") from exc
+
     if trace["success"]:
         if not submissions or submissions[-1] != trace["final_answer"]:
             raise ValueError(
                 f"{prefix}: {path} final answer is not the accepted submission"
             )
-        if trace_answer_hash(cast(TraceDict, trace)) is None:
+        if canonical_answer_hash is None:
             raise ValueError(f"{prefix}: {path} final answer hash is unavailable")
     elif trace["final_answer"] is not None:
         raise ValueError(f"{prefix}: unsuccessful {path} has a final answer")
 
     return cast(TraceDict, trace)
-
-
-def _derive_llm_verdict(
-    *,
-    verified: bool,
-    gold_trace: TraceDict,
-    consistency_traces: list[TraceDict],
-    majority_hash: str | None,
-    majority_count: int,
-    gold_matches: bool,
-    prefix: str,
-) -> bool | None:
-    if majority_hash is None:
-        if majority_count != 0 or gold_matches or verified:
-            raise ValueError(f"{prefix}: no-majority triangulation is inconsistent")
-        return None
-
-    succeeded_hashes = {
-        trace_answer_hash(trace) for trace in consistency_traces if trace["success"]
-    }
-    succeeded_count = sum(1 for trace in consistency_traces if trace["success"])
-    if (
-        majority_count < 1
-        or majority_count > succeeded_count
-        or majority_hash not in succeeded_hashes
-    ):
-        raise ValueError(f"{prefix}: triangulation majority lacks trace provenance")
-    if verified != gold_matches:
-        raise ValueError(f"{prefix}: verified disagrees with triangulation verdict")
-    if gold_matches and not gold_trace["success"]:
-        raise ValueError(f"{prefix}: failed gold trace cannot match the majority")
-    return gold_matches
-
-
-def _derive_ground_truth_verdict(
-    *,
-    verified: bool,
-    question: dict[str, Any],
-    gold_trace: TraceDict,
-    consistency_traces: list[TraceDict],
-    majority_hash: str | None,
-    majority_count: int,
-    gold_matches: bool,
-    prefix: str,
-) -> bool | None:
-    if consistency_traces:
-        raise ValueError(
-            f"{prefix}: ground-truth episodes cannot use consistency traces"
-        )
-    expected_hashes = question.get("ground_truth_hashes") or [
-        question.get("ground_truth_hash")
-    ]
-    expected_hashes = [value for value in expected_hashes if value is not None]
-    if not gold_trace["success"] or not expected_hashes or majority_hash is None:
-        if majority_count != 0 or verified or gold_matches:
-            raise ValueError(
-                f"{prefix}: ground-truth verdict lacks verifier provenance"
-            )
-        return None
-
-    if majority_count not in {0, 1}:
-        raise ValueError(f"{prefix}: ground-truth majority_count is invalid")
-    if majority_hash != trace_answer_hash(gold_trace):
-        raise ValueError(f"{prefix}: verifier answer hash does not match gold_trace")
-    if verified != gold_matches:
-        raise ValueError(f"{prefix}: verified disagrees with ground-truth verdict")
-    return verified
 
 
 def convert_episodes(

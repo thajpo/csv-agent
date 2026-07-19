@@ -77,7 +77,8 @@
     "n_consistency_succeeded": 1,
     "majority_answer_hash": "multihash-aaa111",
     "majority_count": 1,
-    "gold_matches_majority": true
+    "gold_matches_majority": true,
+    "float_tolerance": 0.1
   },
   "timing": {
     "gold_elapsed": 1.0,

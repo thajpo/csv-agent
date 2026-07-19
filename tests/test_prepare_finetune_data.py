@@ -4,11 +4,13 @@ import copy
 
 import pytest
 
+from csv_spec import hash_artifact
 from src.datagen.process_report import build_process_report
 from src.training.prepare_finetune_data import convert_episodes, to_prm_samples
 
 
 def _episode() -> dict:
+    answer_hash = hash_artifact(7)
     gold_trace = {
         "turns": [
             {
@@ -42,7 +44,7 @@ def _episode() -> dict:
             }
         ],
         "final_answer": 7,
-        "final_answer_hash": "answer-7",
+        "final_answer_hash": answer_hash,
         "success": True,
     }
     consistency_trace = {
@@ -63,7 +65,7 @@ def _episode() -> dict:
             }
         ],
         "final_answer": 7,
-        "final_answer_hash": "answer-7",
+        "final_answer_hash": answer_hash,
         "success": True,
     }
     episode = {
@@ -75,17 +77,19 @@ def _episode() -> dict:
             "source": "llm_gen",
             "question_text": "Compute the answer",
             "hint": "Use the filtered rows",
-            "ground_truth_hash": "answer-7",
-            "ground_truth_hashes": ["answer-7"],
+            "ground_truth": 7,
+            "ground_truth_hash": answer_hash,
+            "ground_truth_hashes": [answer_hash],
         },
         "gold_trace": gold_trace,
         "consistency_traces": [consistency_trace],
         "triangulation": {
             "n_consistency_runs": 1,
             "n_consistency_succeeded": 1,
-            "majority_answer_hash": "answer-7",
+            "majority_answer_hash": answer_hash,
             "majority_count": 1,
             "gold_matches_majority": True,
+            "float_tolerance": 0.1,
         },
     }
     episode["process_report"] = build_process_report(
@@ -353,6 +357,7 @@ def test_prm_export_allows_valid_report_without_eligible_labels():
         "majority_answer_hash": None,
         "majority_count": 0,
         "gold_matches_majority": False,
+        "float_tolerance": 0.1,
     }
     episode["process_report"] = build_process_report(
         source="llm_gen",
@@ -362,3 +367,159 @@ def test_prm_export_allows_valid_report_without_eligible_labels():
     )
 
     assert to_prm_samples(episode) == []
+
+
+def test_prm_export_recomputes_llm_verdict_from_tolerant_majority():
+    episode = _episode()
+    near_trace = copy.deepcopy(episode["consistency_traces"][0])
+    near_trace["turns"][0]["execution"]["submitted_answer"] = 7.05
+    near_trace["final_answer"] = 7.05
+    near_trace["final_answer_hash"] = hash_artifact(7.05)
+    far_trace = copy.deepcopy(near_trace)
+    far_trace["turns"][0]["execution"]["submitted_answer"] = 9
+    far_trace["final_answer"] = 9
+    far_trace["final_answer_hash"] = hash_artifact(9)
+    episode["consistency_traces"] = [
+        episode["consistency_traces"][0],
+        near_trace,
+        far_trace,
+    ]
+    episode["triangulation"].update(
+        {
+            "n_consistency_runs": 3,
+            "n_consistency_succeeded": 3,
+            "majority_count": 2,
+        }
+    )
+    episode["process_report"] = build_process_report(
+        source="llm_gen",
+        gold_trace=episode["gold_trace"],
+        consistency_traces=episode["consistency_traces"],
+        verifier_verdict=True,
+    )
+
+    assert [sample["label"] for sample in to_prm_samples(episode)] == [1.0]
+
+
+def test_prm_export_rejects_forged_llm_verdict_metadata():
+    episode = _episode()
+    episode["verified"] = False
+    episode["triangulation"]["gold_matches_majority"] = False
+    episode["process_report"] = build_process_report(
+        source="llm_gen",
+        gold_trace=episode["gold_trace"],
+        consistency_traces=episode["consistency_traces"],
+        verifier_verdict=False,
+    )
+
+    with pytest.raises(ValueError, match="metadata disagrees with source traces"):
+        to_prm_samples(episode)
+
+
+def test_prm_export_rejects_forged_llm_majority():
+    episode = _episode()
+    second_match = copy.deepcopy(episode["consistency_traces"][0])
+    minority = copy.deepcopy(second_match)
+    minority["turns"][0]["execution"]["submitted_answer"] = 9
+    minority["final_answer"] = 9
+    minority["final_answer_hash"] = hash_artifact(9)
+    episode["consistency_traces"] = [
+        episode["consistency_traces"][0],
+        second_match,
+        minority,
+    ]
+    episode["verified"] = False
+    episode["triangulation"].update(
+        {
+            "n_consistency_runs": 3,
+            "n_consistency_succeeded": 3,
+            "majority_answer_hash": hash_artifact(9),
+            "majority_count": 1,
+            "gold_matches_majority": False,
+        }
+    )
+    episode["process_report"] = build_process_report(
+        source="llm_gen",
+        gold_trace=episode["gold_trace"],
+        consistency_traces=episode["consistency_traces"],
+        verifier_verdict=False,
+    )
+
+    with pytest.raises(ValueError, match="metadata disagrees with source traces"):
+        to_prm_samples(episode)
+
+
+def test_prm_export_rejects_forged_ground_truth_verdict():
+    episode = _episode()
+    episode["source"] = "template"
+    episode["question"]["source"] = "template"
+    episode["question"]["ground_truth"] = 999
+    episode["question"]["ground_truth_hash"] = hash_artifact(999)
+    episode["question"]["ground_truth_hashes"] = [hash_artifact(999)]
+    episode["consistency_traces"] = []
+    episode["triangulation"].update(
+        {
+            "n_consistency_runs": 0,
+            "n_consistency_succeeded": 0,
+            "majority_count": 1,
+        }
+    )
+    episode["process_report"] = build_process_report(
+        source="template",
+        gold_trace=episode["gold_trace"],
+        consistency_traces=[],
+        verifier_verdict=True,
+    )
+
+    with pytest.raises(ValueError, match="metadata disagrees with source traces"):
+        to_prm_samples(episode)
+
+
+@pytest.mark.parametrize(
+    "code",
+    ["submit(7)\nafter = 1", "submit(7)\nsubmit(8)"],
+)
+def test_prm_export_rejects_ambiguous_imported_submissions(code: str):
+    episode = _episode()
+    episode["gold_trace"]["turns"][0]["code"] = code
+
+    with pytest.raises(ValueError, match="submission|submitted operation"):
+        to_prm_samples(episode)
+
+
+def test_prm_export_rejects_final_answer_hash_mismatch():
+    episode = _episode()
+    episode["gold_trace"]["final_answer_hash"] = hash_artifact(999)
+
+    with pytest.raises(ValueError, match="final_answer_hash does not match"):
+        to_prm_samples(episode)
+
+
+def test_prm_export_allows_missing_legacy_final_answer_hash():
+    episode = _episode()
+    episode["gold_trace"]["final_answer_hash"] = None
+    episode["consistency_traces"][0]["final_answer_hash"] = None
+
+    assert [sample["label"] for sample in to_prm_samples(episode)] == [1.0]
+
+
+def test_prm_export_requires_generation_tolerance_provenance():
+    episode = _episode()
+    del episode["triangulation"]["float_tolerance"]
+
+    with pytest.raises(ValueError, match="triangulation provenance is incomplete"):
+        to_prm_samples(episode)
+
+
+def test_prm_export_rejects_missing_ground_truth_provenance():
+    episode = _episode()
+    episode["source"] = "template"
+    episode["question"]["source"] = "template"
+    episode["question"]["ground_truth_hash"] = None
+    episode["question"]["ground_truth_hashes"] = None
+    episode["consistency_traces"] = []
+    episode["triangulation"]["n_consistency_runs"] = 0
+    episode["triangulation"]["n_consistency_succeeded"] = 0
+
+    with pytest.raises(ValueError, match="ground-truth hash provenance"):
+        to_prm_samples(episode)

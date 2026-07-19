@@ -278,7 +278,7 @@ def build_trace_dict(
 
         turns.append(turn)
 
-    return TraceDict(
+    trace = TraceDict(
         turns=turns,
         final_answer=final_state.submitted_answer,
         final_answer_hash=hash_artifact(final_state.submitted_answer)
@@ -286,6 +286,10 @@ def build_trace_dict(
         else None,
         success=final_state.submitted_answer is not None,
     )
+    from src.datagen.process_report import validate_trace_submissions
+
+    validate_trace_submissions(trace)
+    return trace
 
 
 # ============= Answer Comparison Helpers =============
@@ -967,20 +971,19 @@ async def triangulate_teacher(
             diagnostics=diagnostics,
         )
 
-    # Find majority answer by clustering (handles float tolerance and formatting differences)
-    majority_value, majority_count = get_majority_answer(
-        submitted_answers, float_tol=float_tol
-    )
-    majority_answer_hash = (
-        hash_artifact(majority_value) if majority_value is not None else None
-    )
+    from src.datagen.shared.verification import derive_llm_verification
 
-    verified = answers_match(
-        None, None, gold_trace["final_answer"], majority_value, float_tol=float_tol
+    consistency_traces = [trace for trace, _ in consistency_results]
+    verification = derive_llm_verification(
+        gold_trace=gold_trace,
+        consistency_traces=consistency_traces,
+        float_tolerance=float_tol,
     )
+    majority_answer_hash = verification.majority_answer_hash
+    majority_count = verification.majority_count
+    verified = verification.verdict is True
 
     # Display triangulation result
-    consistency_traces = [trace for trace, _ in consistency_results]
     ui.print_triangulation_result(
         gold_trace=gold_trace,
         consistency_traces=consistency_traces,

@@ -16,9 +16,9 @@
     },
     "output_type": "float",
     "output_schema": "scalar:float",
-    "ground_truth_hash": "answerhash-001",
+    "ground_truth_hash": "7b713affffacc53f",
     "ground_truth_hashes": [
-      "answerhash-001"
+      "7b713affffacc53f"
     ],
     "ground_truth": 42.5
   },
@@ -39,7 +39,7 @@
       }
     ],
     "final_answer": 42.5,
-    "final_answer_hash": "answerhash-001",
+    "final_answer_hash": "7b713affffacc53f",
     "success": true
   },
   "consistency_traces": [],
@@ -47,9 +47,10 @@
   "triangulation": {
     "n_consistency_runs": 0,
     "n_consistency_succeeded": 0,
-    "majority_answer_hash": "answerhash-001",
-    "majority_count": 0,
-    "gold_matches_majority": true
+    "majority_answer_hash": "7b713affffacc53f",
+    "majority_count": 1,
+    "gold_matches_majority": true,
+    "float_tolerance": 0.1
   },
   "process_report": {
     "summary": {
@@ -70,7 +71,7 @@
         "code_line": "submit(...)",
         "variable_name": "answer",
         "value": 42.5,
-        "value_hash": "answerhash-001",
+        "value_hash": "7b713affffacc53f",
         "description": "Final submitted answer",
         "depends_on": [],
         "semantic_role": "final_answer",

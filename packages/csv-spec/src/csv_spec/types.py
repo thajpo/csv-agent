@@ -135,6 +135,7 @@ class TriangulationMetadataDict(TypedDict):
     majority_answer_hash: str | None
     majority_count: int
     gold_matches_majority: bool
+    float_tolerance: float
 
 
 class TimingMetadataDict(TypedDict):
