@@ -95,7 +95,12 @@ def build_trajectory_prefix(
 def verify_terminal_trace(
     question: Mapping[str, Any], trace: TraceDict, *, float_tolerance: float
 ) -> bool:
-    """Label a model continuation using only the existing terminal verifier."""
+    """Label a continuation using only the existing terminal verifier.
+
+    The question must carry valid ground-truth hash provenance. With that
+    provenance, exhausting the horizon without a submission is a failed
+    continuation; unavailable or inconsistent verifier evidence raises.
+    """
     evidence = derive_ground_truth_verification(
         question=question,
         gold_trace=trace,

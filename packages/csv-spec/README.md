@@ -15,7 +15,9 @@ experiment:
   flags must align with them, every completion flag must be false, at least one
   continuation turn must remain, and the conversation must end with the
   recorded assistant response plus user execution feedback. Expected answers
-  and their hashes are deliberately absent.
+  and their hashes are deliberately absent. `consumed_turns` counts every actor
+  response against the horizon, including format-invalid responses that did not
+  execute code, so it can exceed the number of recorded execution turns.
 - `ContinuationPolicy`: actor model and frozen sampling arguments that define
   what a collected value means.
 - `PrefixContinuation`: one seeded continuation, including its trace and

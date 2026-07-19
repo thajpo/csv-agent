@@ -39,7 +39,9 @@ The serialized prefix contains only public agent state: the CSV source,
 question, system prompt, exact model responses, execution results, conversation
 feedback, and remaining turn budget. Expected answers and ground-truth hashes
 remain private verifier inputs. Hook records are retained as diagnostics but do
-not control terminal acceptance or supply value labels.
+not control terminal acceptance or supply value labels. The remaining budget is
+derived from every consumed actor response, including format-invalid attempts
+that produced conversation feedback without an execution turn.
 
 ## Main Boundaries
 

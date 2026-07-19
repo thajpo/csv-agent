@@ -11,9 +11,12 @@ Run them manually when needed.
 
 ## Prefix-value canary
 
-The canary requires an episode JSONL file, access to each episode's local CSV
-(or one `--csv` override), the normal sandbox runtime, and an
-`OPENROUTER_API_KEY`. Run it from the repository root:
+The canary requires an episode JSONL file whose questions contain a nonempty
+`ground_truth_hash` or `ground_truth_hashes`, access to each episode's local CSV
+(or one `--csv` override), the normal sandbox runtime, an
+`OPENROUTER_API_KEY`, and a clean Git worktree. The clean-worktree check ensures
+that the recorded commit identifies the exact code used for collection. Run it
+from the repository root:
 
 ```bash
 uv run python scripts/experiments/collect_prefix_values.py \
@@ -28,15 +31,17 @@ continuation rollouts and their worst-case provider-request count, including
 retries. The defaults select the boundary after one completed turn, sample four
 continuations, and process one episode. `--turn-count 0` selects the initial
 state; every selected boundary must leave at least one of `--max-turns`
-available. Continuations, episodes, turns, and their combined provider-request
-budget are all capped. The base seed is offset for the source rollout and each
-continuation. The provider receives the seed when its OpenAI-compatible API
-supports that field.
+available. The hard caps are 16 continuations, 8 episodes, 20 turns, and 300
+worst-case provider requests, with the last bound calculated as episodes times
+source-plus-continuation rollouts times turns times 3 API attempts. The base
+seed is offset for the source rollout and each continuation. The provider
+receives the seed when its OpenAI-compatible API supports that field.
 
 Each output line is a validated `PrefixValueRecord`. It includes the exact
-public prefix, actor policy, seeds, continuation traces or errors, terminal
-verdicts, current Git commit, and supplied dataset revision. The value is
-successful continuations divided by all attempts only when every attempt is
-labeled. Replay, rollout, or verifier errors make the estimate unavailable
-while remaining auditable. Hooks may appear in traces as diagnostics, but they
-neither reject a submission nor define a value label.
+public prefix, actor policy, continuation seeds, continuation traces or errors,
+terminal verdicts, current Git commit, and supplied dataset revision. The value
+is successful continuations divided by all attempts only when every attempt is
+labeled. Missing verifier-hash provenance and replay, rollout, or verifier
+errors make the estimate unavailable while remaining auditable. Hooks may
+appear in traces as diagnostics, but they neither reject a submission nor
+define a value label.

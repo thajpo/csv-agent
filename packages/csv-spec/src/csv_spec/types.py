@@ -135,6 +135,8 @@ class TrajectoryPrefix(BaseModel):
 
     The prefix intentionally excludes the expected answer and its hashes. Those
     are private verifier inputs and must never become critic features.
+    ``consumed_turns`` counts all actor responses against the horizon, including
+    format-invalid responses that produced no execution turn.
     """
 
     prefix_id: str
@@ -226,10 +228,11 @@ class PrefixContinuation(BaseModel):
 
 
 class PrefixValueRecord(BaseModel):
-    """Auditable future-success estimate over completed continuations.
+    """Auditable future-success estimate over attempted continuations.
 
+    A numeric value is available only when every attempt has a verifier label.
     Infrastructure or verifier errors make the estimate unavailable instead of
-    silently inflating it or treating system failure as policy failure.
+    treating system failure as policy failure.
     """
 
     prefix: TrajectoryPrefix
