@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -223,7 +224,7 @@ def to_prm_samples(
         )
     try:
         process_report = _PROCESS_REPORT_ADAPTER.validate_python(
-            episode["process_report"]
+            episode["process_report"], strict=True
         )
     except ValidationError as exc:
         raise ValueError(
@@ -231,6 +232,11 @@ def to_prm_samples(
             "regenerate episodes before PRM conversion"
         ) from exc
     process_steps = process_report["steps"]
+    _validate_process_report_semantics(
+        process_steps=process_steps,
+        turns=turns,
+        episode_id=episode_id,
+    )
 
     if not turns or not process_steps:
         return []
@@ -291,6 +297,69 @@ def to_prm_samples(
             prefix_messages.append({"role": "user", "content": f"[stdout]:\n{stdout}"})
 
     return samples
+
+
+def _validate_process_report_semantics(
+    *,
+    process_steps: list[dict[str, Any]],
+    turns: list[dict[str, Any]],
+    episode_id: Any,
+) -> None:
+    prefix = f"Episode {episode_id!r} has inconsistent process_report"
+
+    for expected_step_index, step in enumerate(process_steps):
+        step_index = step["step_index"]
+        if step_index != expected_step_index:
+            raise ValueError(
+                f"{prefix}: steps[{expected_step_index}].step_index must be "
+                f"{expected_step_index}, got {step_index}"
+            )
+
+        turn_index = step["turn_index"]
+        if turn_index < 0 or turn_index >= len(turns):
+            raise ValueError(
+                f"{prefix}: steps[{step_index}].turn_index {turn_index} is out of "
+                f"range for {len(turns)} trace turns"
+            )
+
+        step_type = step["step_type"]
+        label_kind = step["label_kind"]
+        label = step["label"]
+
+        if label_kind == "verified" and step_type != "submit":
+            raise ValueError(
+                f"{prefix}: steps[{step_index}] verified labels are only valid "
+                "on submit steps"
+            )
+        if label_kind == "unlabeled" and label is not None:
+            raise ValueError(
+                f"{prefix}: steps[{step_index}] unlabeled steps must not have a "
+                "numeric label"
+            )
+        if label_kind != "unlabeled" and label is None:
+            raise ValueError(
+                f"{prefix}: steps[{step_index}] labeled steps require a numeric label"
+            )
+        if label is not None and not math.isfinite(label):
+            raise ValueError(
+                f"{prefix}: steps[{step_index}].label must be a finite number"
+            )
+
+        hook_index = step["hook_index"]
+        if step_type == "submit":
+            if hook_index is not None:
+                raise ValueError(
+                    f"{prefix}: steps[{step_index}] submit steps must not have a "
+                    "hook_index"
+                )
+            continue
+
+        hooks = turns[turn_index].get("execution", {}).get("hooks", [])
+        if hook_index is None or hook_index < 0 or hook_index >= len(hooks):
+            raise ValueError(
+                f"{prefix}: steps[{step_index}].hook_index {hook_index} is out of "
+                f"range for {len(hooks)} hooks in turn {turn_index}"
+            )
 
 
 def convert_episodes(

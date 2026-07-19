@@ -96,7 +96,7 @@ async def create_episode(
         source=source,
         gold_trace=gold_trace,
         consistency_traces=consistency_traces,
-        verified=verified,
+        verifier_verdict=verification_result.match,
         majority_count=triangulation["majority_count"],
     )
 

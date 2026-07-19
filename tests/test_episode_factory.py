@@ -169,6 +169,36 @@ class TestCreateEpisode:
         assert episode.process_report["steps"][0]["label_kind"] == "verified"
 
     @pytest.mark.asyncio
+    async def test_create_episode_preserves_unknown_verifier_verdict(
+        self,
+        sample_question: dict,
+        sample_trace: TraceDict,
+    ):
+        from src.datagen.shared.episode_factory import create_episode
+
+        verification_result = VerificationResult(
+            success=True,
+            match=None,
+            trace=sample_trace,
+            traces=[],
+            majority_answer_hash=None,
+            error=None,
+        )
+
+        episode = await create_episode(
+            question=sample_question,
+            verification_result=verification_result,
+            source="template",
+            csv_path="/path/to/data.csv",
+        )
+
+        terminal = episode.process_report["steps"][0]
+        assert episode.verified is False
+        assert terminal["label"] is None
+        assert terminal["label_kind"] == "unlabeled"
+        assert terminal["evidence"]["final_verified"] is None
+
+    @pytest.mark.asyncio
     async def test_create_episode_llm_consistency(
         self,
         sample_question: dict,

@@ -28,7 +28,7 @@ def build_process_report(
     source: EpisodeSource,
     gold_trace: TraceDict,
     consistency_traces: list[TraceDict],
-    verified: bool,
+    verifier_verdict: bool | None,
     majority_count: int = 0,
 ) -> ProcessReportDict:
     """Build a step-level process report from gold and consistency traces."""
@@ -64,7 +64,7 @@ def build_process_report(
             evidence = _hook_evidence(
                 hook=hook,
                 trace_success=gold_trace.get("success", False),
-                final_verified=verified,
+                final_verified=verifier_verdict,
                 grounded=id(hook_copies[hook_index]) in grounded_ids,
                 seen_names=seen_names,
                 seen_hashes=seen_hashes,
@@ -111,7 +111,7 @@ def build_process_report(
             else:
                 answer_hash = hash_artifact(submitted)
             evidence = ProcessStepEvidenceDict(
-                final_verified=verified if accepted else False,
+                final_verified=verifier_verdict if accepted else None,
                 trace_success=gold_trace.get("success", False),
                 code_line_grounded=True,
                 dependency_valid=True,
@@ -120,14 +120,14 @@ def build_process_report(
                 consensus_total=max(consensus_total, majority_count),
                 reasons=[] if accepted else ["submission_not_accepted"],
             )
-            if accepted:
-                label, label_kind, label_source = _label_submit(evidence=evidence)
-            else:
+            if not accepted:
                 label, label_kind, label_source = (
                     None,
                     "unlabeled",
                     "rejected_submission",
                 )
+            else:
+                label, label_kind, label_source = _label_submit(evidence=evidence)
             steps.append(
                 ProcessStepReportDict(
                     step_index=len(steps),
@@ -174,7 +174,7 @@ def _hook_evidence(
     *,
     hook: dict[str, Any],
     trace_success: bool,
-    final_verified: bool,
+    final_verified: bool | None,
     grounded: bool,
     seen_names: set[str],
     seen_hashes: set[str],
@@ -215,7 +215,7 @@ def _label_hook(
     if _is_bad_step(evidence):
         return 0.0, "heuristic", "structural_hook_heuristic"
 
-    if not evidence["final_verified"] or not evidence["trace_success"]:
+    if evidence.get("final_verified") is not True or not evidence["trace_success"]:
         return None, "unlabeled", "insufficient_evidence"
 
     if source in {"template", "procedural"}:
@@ -229,9 +229,12 @@ def _label_hook(
 def _label_submit(
     *,
     evidence: ProcessStepEvidenceDict,
-) -> tuple[float, Literal["verified"], str]:
+) -> tuple[float | None, Literal["verified", "unlabeled"], str]:
     """Label only the terminal answer from the task's external verifier."""
-    return (1.0 if evidence["final_verified"] else 0.0), "verified", "terminal_verifier"
+    verdict = evidence.get("final_verified")
+    if verdict is None:
+        return None, "unlabeled", "verifier_unavailable"
+    return (1.0 if verdict else 0.0), "verified", "terminal_verifier"
 
 
 def _is_bad_step(evidence: ProcessStepEvidenceDict) -> bool:

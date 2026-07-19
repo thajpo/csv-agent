@@ -156,7 +156,7 @@ class ProcessStepEvidenceDict(TypedDict, total=False):
     they do not establish that an action made useful computational progress.
     """
 
-    final_verified: bool
+    final_verified: bool | None
     trace_success: bool
     code_line_grounded: bool
     dependency_valid: bool

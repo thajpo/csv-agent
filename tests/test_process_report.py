@@ -48,7 +48,7 @@ def test_template_hook_is_heuristic_and_submit_is_verified():
         source="template",
         gold_trace=_trace(hooks=[_hook("filtered", "hash-filtered")]),
         consistency_traces=[],
-        verified=True,
+        verifier_verdict=True,
         majority_count=1,
     )
 
@@ -83,7 +83,7 @@ def test_bad_hook_evidence_is_a_negative_heuristic_not_verified_truth():
             ]
         ),
         consistency_traces=[],
-        verified=True,
+        verifier_verdict=True,
     )
 
     hook_step = report["steps"][0]
@@ -109,7 +109,7 @@ def test_llm_consensus_never_becomes_a_verified_process_label():
         source="llm_gen",
         gold_trace=gold,
         consistency_traces=consistency,
-        verified=True,
+        verifier_verdict=True,
         majority_count=2,
     )
 
@@ -126,7 +126,7 @@ def test_llm_hook_without_consensus_remains_unlabeled():
         source="llm_gen",
         gold_trace=_trace(hooks=[_hook("filtered", "hash-filtered")]),
         consistency_traces=[],
-        verified=True,
+        verifier_verdict=True,
         majority_count=1,
     )
 
@@ -145,7 +145,7 @@ def test_one_consensus_match_is_enough_for_hook_heuristic():
             _trace(hooks=[_hook("same_value", "hash-filtered")]),
             _trace(hooks=[_hook("other_value", "hash-other")]),
         ],
-        verified=True,
+        verifier_verdict=True,
     )
 
     hook_step = report["steps"][0]
@@ -191,7 +191,7 @@ def test_only_accepted_submission_receives_verifier_label():
         source="llm_gen",
         gold_trace=trace,
         consistency_traces=[],
-        verified=True,
+        verifier_verdict=True,
     )
 
     rejected, accepted = report["steps"]
@@ -200,7 +200,7 @@ def test_only_accepted_submission_receives_verifier_label():
     assert rejected["label"] is None
     assert rejected["label_kind"] == "unlabeled"
     assert rejected["label_source"] == "rejected_submission"
-    assert rejected["evidence"]["final_verified"] is False
+    assert rejected["evidence"]["final_verified"] is None
     assert accepted["value"] == 2
     assert accepted["value_hash"] == "accepted-answer-hash"
     assert accepted["label"] == 1.0
@@ -250,7 +250,7 @@ def test_future_code_cannot_ground_an_earlier_hook():
         source="template",
         gold_trace=trace,
         consistency_traces=[],
-        verified=True,
+        verifier_verdict=True,
     )
 
     hook_step = report["steps"][0]
@@ -269,7 +269,7 @@ def test_same_value_hash_is_duplicate_even_when_hook_is_renamed():
             ]
         ),
         consistency_traces=[],
-        verified=True,
+        verifier_verdict=True,
     )
 
     first_hook, second_hook = report["steps"][:2]
@@ -284,10 +284,27 @@ def test_hookless_trace_still_has_verified_terminal_observation():
         source="procedural",
         gold_trace=_trace(hooks=[]),
         consistency_traces=[],
-        verified=True,
+        verifier_verdict=True,
     )
 
     assert report["summary"]["verified_steps"] == 1
     assert report["summary"]["heuristic_steps"] == 0
     assert report["steps"][0]["step_type"] == "submit"
     assert report["steps"][0]["label_kind"] == "verified"
+
+
+def test_unknown_verifier_verdict_leaves_terminal_observation_unlabeled():
+    report = build_process_report(
+        source="procedural",
+        gold_trace=_trace(hooks=[]),
+        consistency_traces=[],
+        verifier_verdict=None,
+    )
+
+    terminal = report["steps"][0]
+    assert terminal["label"] is None
+    assert terminal["label_kind"] == "unlabeled"
+    assert terminal["label_source"] == "verifier_unavailable"
+    assert terminal["evidence"]["final_verified"] is None
+    assert report["summary"]["verified_steps"] == 0
+    assert report["summary"]["unlabeled_steps"] == 1

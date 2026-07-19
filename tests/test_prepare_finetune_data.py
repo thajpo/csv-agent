@@ -26,7 +26,24 @@ def _episode() -> dict:
                         "success": True,
                         "stdout": "ok",
                         "stderr": "",
-                        "hooks": [],
+                        "hooks": [
+                            {
+                                "variable_name": "filtered",
+                                "code_line": "filtered = df[df['x'] > 1]",
+                                "value": {"rows": 3},
+                                "value_hash": "hash-filtered",
+                                "description": None,
+                                "depends_on": [],
+                            },
+                            {
+                                "variable_name": "unused",
+                                "code_line": "unused = 1",
+                                "value": 1,
+                                "value_hash": "hash-unused",
+                                "description": None,
+                                "depends_on": [],
+                            },
+                        ],
                         "submitted_answer": 7,
                     },
                 }
@@ -145,9 +162,71 @@ def test_prm_export_rejects_malformed_process_report():
         to_prm_samples(episode)
 
 
+def test_prm_export_rejects_verified_hook():
+    episode = _episode()
+    episode["process_report"]["steps"][0]["label_kind"] = "verified"
+
+    with pytest.raises(ValueError, match="verified labels are only valid on submit"):
+        to_prm_samples(episode)
+
+
+def test_prm_export_rejects_nonnumeric_label():
+    episode = _episode()
+    episode["process_report"]["steps"][0]["label"] = "1.0"
+
+    with pytest.raises(ValueError, match="malformed process_report"):
+        to_prm_samples(episode)
+
+
+@pytest.mark.parametrize(
+    ("step_index", "label", "label_kind", "message"),
+    [
+        (2, 0.0, "unlabeled", "unlabeled steps must not have a numeric label"),
+        (0, None, "heuristic", "labeled steps require a numeric label"),
+    ],
+)
+def test_prm_export_rejects_label_kind_mismatches(
+    step_index: int,
+    label: float | None,
+    label_kind: str,
+    message: str,
+):
+    episode = _episode()
+    step = episode["process_report"]["steps"][step_index]
+    step["label"] = label
+    step["label_kind"] = label_kind
+
+    with pytest.raises(ValueError, match=message):
+        to_prm_samples(episode)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("step_index", 99),
+        ("turn_index", 99),
+    ],
+)
+def test_prm_export_rejects_out_of_range_indices(field: str, value: int):
+    episode = _episode()
+    episode["process_report"]["steps"][0][field] = value
+
+    with pytest.raises(ValueError, match=field):
+        to_prm_samples(episode)
+
+
+def test_prm_export_rejects_out_of_range_hook_index():
+    episode = _episode()
+    episode["process_report"]["steps"][0]["hook_index"] = 99
+
+    with pytest.raises(ValueError, match="hook_index"):
+        to_prm_samples(episode)
+
+
 def test_prm_export_allows_valid_report_without_eligible_labels():
     episode = _episode()
     unlabeled_step = copy.deepcopy(episode["process_report"]["steps"][2])
+    unlabeled_step["step_index"] = 0
     episode["process_report"]["steps"] = [unlabeled_step]
     episode["process_report"]["summary"] = {
         "total_steps": 1,
