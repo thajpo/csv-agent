@@ -1,6 +1,6 @@
 # Research Direction
 
-Last reviewed: 2026-07-18
+Last reviewed: 2026-07-20
 
 This document records the project's selected research direction and durable
 rationale. It is not a roadmap or task tracker.
@@ -69,6 +69,22 @@ critic demonstrates useful calibration and branch ranking.
 This direction should be reconsidered if tasks are effectively single-step,
 states cannot be replayed faithfully, rollout values contain little variation,
 or value-guided selection does not improve held-out success at equal compute.
+
+### First canary result
+
+The first value-guided selection canary completed on 2026-07-20. A linear text
+value model improved probability and ranking metrics on held-out validation
+datasets but regressed on two unseen test datasets. Random and value-guided
+selection both answered 10 of 16 test questions correctly. An oracle choosing
+from the reserved candidate outcomes also answered 10 of 16 because all three
+candidate outcomes agreed within every test question.
+
+This does not show that value-guided selection works. It shows that the current
+first-action boundary and task distribution provide too little action-sensitive
+test variation to evaluate selection, and that trainer complexity should not be
+increased until collection produces states where candidate choice can matter.
+The full frozen setup and metrics are recorded in
+`docs/research/value-canary-2026-07-20.md`.
 
 ### Parallel: Data-Conditioned Procedural Tasks
 
