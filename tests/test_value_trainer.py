@@ -1,5 +1,6 @@
 """Tests for the minimal trajectory value trainer and selection evaluation."""
 
+from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,8 @@ from src.value.dataset import (
 )
 from src.value.evaluation import prediction_metrics, selection_metrics
 from src.value.trainer import TrainedValueModel
+from scripts.experiments.evaluate_value_selection import evaluate
+from scripts.experiments.train_value_model import train
 
 
 def _example(
@@ -167,3 +170,61 @@ def test_metrics_measure_ranking_and_equal_call_selection() -> None:
     assert selection["deployment_model_calls_per_episode"]["random"] == (
         selection["deployment_model_calls_per_episode"]["value_guided"]
     )
+
+
+def _write_records(path: Path, dataset_id: str, episodes: int = 1) -> None:
+    records = []
+    for episode_index in range(episodes):
+        for candidate_index in range(2):
+            record = _record()
+            episode_id = f"{dataset_id}-episode-{episode_index}"
+            prefix = record.prefix.model_copy(
+                update={
+                    "prefix_id": f"{episode_id}:candidate-{candidate_index}",
+                    "episode_id": episode_id,
+                    "csv_source": f"data/kaggle/{dataset_id}/data.csv",
+                    "system_prompt": (
+                        "Useful correct calculation"
+                        if candidate_index == 0
+                        else "Irrelevant exploratory calculation"
+                    ),
+                }
+            )
+            records.append(record.model_copy(update={"prefix": prefix}))
+    path.write_text("".join(item.model_dump_json() + "\n" for item in records))
+
+
+def test_training_and_selection_commands_run_end_to_end(tmp_path: Path) -> None:
+    train_path = tmp_path / "train.jsonl"
+    validation_path = tmp_path / "validation.jsonl"
+    test_path = tmp_path / "test.jsonl"
+    _write_records(train_path, "train-dataset", episodes=2)
+    _write_records(validation_path, "validation-dataset")
+    _write_records(test_path, "test-dataset")
+    output_dir = tmp_path / "model"
+
+    results = train(
+        Namespace(
+            train=train_path,
+            validation=validation_path,
+            test=test_path,
+            output_dir=output_dir,
+            holdout_continuations=1,
+            seed=42,
+            max_features=1_000,
+        )
+    )
+    selection = evaluate(
+        Namespace(
+            test=test_path,
+            checkpoint=output_dir / "value_model.joblib",
+            output=tmp_path / "selection.json",
+            holdout_continuations=1,
+            seed=42,
+        )
+    )
+
+    assert results["splits"]["train"]["datasets"] == ["train-dataset"]
+    assert (output_dir / "metrics.json").is_file()
+    assert selection["episodes"] == 1
+    assert (tmp_path / "selection.json").is_file()
