@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_value_trainer import _record
+from test_value_trainer import _record
 from scripts.experiments.download_value_snapshot import write_snapshot
 
 
