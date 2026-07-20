@@ -241,6 +241,7 @@ class Environment:
         reuse_env: bool = False,
         llm=None,
         session_id: str | None = None,
+        system_prompt_suffix: str | None = None,
     ):
         # Store configs
         self.data = data
@@ -248,6 +249,7 @@ class Environment:
         self.execution = execution
         self.task = task
         self.session_id = session_id
+        self.system_prompt_suffix = system_prompt_suffix
 
         self.csv_path = data.csv_path
         if llm is not None:
@@ -275,9 +277,19 @@ class Environment:
         reuse_env: bool = False,
         llm=None,
         session_id: str | None = None,
+        system_prompt_suffix: str | None = None,
     ):
         instance = cls(
-            data, model, execution, task, env, state, reuse_env, llm, session_id
+            data,
+            model,
+            execution,
+            task,
+            env,
+            state,
+            reuse_env,
+            llm,
+            session_id,
+            system_prompt_suffix,
         )
 
         # Create env and state if not provided
@@ -314,6 +326,7 @@ class Environment:
         reuse_env: bool = False,
         llm=None,
         session_id: str | None = None,
+        system_prompt_suffix: str | None = None,
     ):
         """
         Factory with primitive args - handles config construction internally.
@@ -337,6 +350,7 @@ class Environment:
             state: Optional pre-created state dict (for pooling)
             reuse_env: If True, reset env after rollout instead of destroying
             session_id: Session ID for container isolation (for parallel execution)
+            system_prompt_suffix: Optional experiment instruction appended verbatim
 
         Returns:
             Initialized Environment ready for rollout
@@ -383,6 +397,7 @@ class Environment:
             reuse_env=reuse_env,
             llm=llm,
             session_id=session_id,
+            system_prompt_suffix=system_prompt_suffix,
         )
 
     def _load_csv(self):
@@ -411,6 +426,8 @@ class Environment:
             data_overview=self.data.data_overview,
             question=self.task.question,
         )
+        if self.system_prompt_suffix:
+            sys_prompt = f"{sys_prompt}\n\n{self.system_prompt_suffix.strip()}"
 
         # Create conversation history with context management
         conversation = ConversationHistory(

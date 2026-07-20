@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.experiments.collect_prefix_values import (
+    MAX_CANDIDATES_PER_EPISODE,
     MAX_CONTINUATIONS,
     MAX_PROVIDER_REQUESTS,
     current_commit,
@@ -34,6 +35,7 @@ def _args(episodes: Path, **overrides) -> Namespace:
         "turn_count": 1,
         "max_turns": 10,
         "continuations": 4,
+        "candidates_per_episode": 3,
     }
     values.update(overrides)
     return Namespace(**values)
@@ -61,9 +63,21 @@ def test_combined_request_budget_rejects_large_run(episodes_jsonl: Path) -> None
         validate_args(
             _args(
                 episodes_jsonl,
-                max_episodes=2,
+                max_episodes=64,
                 continuations=MAX_CONTINUATIONS,
                 max_turns=10,
+            )
+        )
+
+
+def test_candidate_cap_rejects_accidental_large_branching(
+    episodes_jsonl: Path,
+) -> None:
+    with pytest.raises(ValueError, match="candidates-per-episode"):
+        validate_args(
+            _args(
+                episodes_jsonl,
+                candidates_per_episode=MAX_CANDIDATES_PER_EPISODE + 1,
             )
         )
 

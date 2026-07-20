@@ -78,7 +78,9 @@ def _prefix(stdout: str = "3") -> TrajectoryPrefix:
     )
 
 
-def _environment(sandbox: FakeSandbox, llm=None) -> Environment:
+def _environment(
+    sandbox: FakeSandbox, llm=None, system_prompt_suffix: str | None = None
+) -> Environment:
     return Environment(
         data=DataConfig(csv_path="data/fixtures/smoke/student_performance/data.csv"),
         model=ModelConfig(model_name="fake-model"),
@@ -90,6 +92,19 @@ def _environment(sandbox: FakeSandbox, llm=None) -> Environment:
         env=sandbox,
         state={"sandbox_id": "fake", "python_state": {}},
         llm=llm or FakeLLM([]),
+        system_prompt_suffix=system_prompt_suffix,
+    )
+
+
+def test_experiment_instruction_is_part_of_recorded_system_prompt() -> None:
+    environment = _environment(
+        FakeSandbox({}), system_prompt_suffix="Do not submit on the first turn."
+    )
+
+    environment.init_state()
+
+    assert environment.conversation.system_prompt.endswith(
+        "Do not submit on the first turn."
     )
 
 

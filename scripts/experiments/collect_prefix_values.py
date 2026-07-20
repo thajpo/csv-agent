@@ -23,9 +23,16 @@ from src.value import (
 from src.core.model import API_MAX_RETRIES
 
 MAX_CONTINUATIONS = 16
-MAX_EPISODES = 8
+MAX_CANDIDATES_PER_EPISODE = 8
+MAX_SOURCE_ATTEMPTS_PER_CANDIDATE = 3
+MAX_EPISODES = 64
 MAX_TURNS = 20
-MAX_PROVIDER_REQUESTS = 300
+MAX_PROVIDER_REQUESTS = 10_000
+
+FIRST_ACTION_SUFFIX = """VALUE EXPERIMENT RULE:
+On your first turn, do not call submit(). Execute exactly one useful Python
+step and print what you learn. On later turns, finish the task and call
+submit() when you have the answer."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--turn-count", type=int, default=1)
     parser.add_argument("--max-turns", type=int, default=10)
     parser.add_argument("--continuations", type=int, default=4)
+    parser.add_argument("--candidates-per-episode", type=int, default=3)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top-p", type=float, default=1.0)
@@ -66,6 +74,11 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("turn-count must be between zero and max-turns - 1")
     if not 1 <= args.continuations <= MAX_CONTINUATIONS:
         raise ValueError(f"continuations must be between 1 and {MAX_CONTINUATIONS}")
+    if not 1 <= args.candidates_per_episode <= MAX_CANDIDATES_PER_EPISODE:
+        raise ValueError(
+            "candidates-per-episode must be between 1 and "
+            f"{MAX_CANDIDATES_PER_EPISODE}"
+        )
     request_limit = maximum_provider_requests(args)
     if request_limit > MAX_PROVIDER_REQUESTS:
         raise ValueError(
@@ -76,8 +89,19 @@ def validate_args(args: argparse.Namespace) -> None:
 
 def maximum_provider_requests(args: argparse.Namespace) -> int:
     """Worst-case HTTP requests including API retries."""
-    rollouts = args.max_episodes * (1 + args.continuations)
-    return rollouts * args.max_turns * API_MAX_RETRIES
+    source_requests = (
+        args.max_episodes
+        * args.candidates_per_episode
+        * MAX_SOURCE_ATTEMPTS_PER_CANDIDATE
+        * max(args.turn_count, 1)
+    )
+    continuation_requests = (
+        args.max_episodes
+        * args.candidates_per_episode
+        * args.continuations
+        * args.max_turns
+    )
+    return (source_requests + continuation_requests) * API_MAX_RETRIES
 
 
 def load_episodes(path: Path, limit: int) -> list[EpisodeJSONL]:
@@ -155,59 +179,86 @@ async def collect(args: argparse.Namespace) -> list[dict]:
     commit = current_commit()
     records: list[dict] = []
 
-    total_rollouts = len(episodes) * (1 + args.continuations)
-    request_limit = total_rollouts * args.max_turns * API_MAX_RETRIES
+    total_prefixes = len(episodes) * args.candidates_per_episode
+    total_rollouts = total_prefixes * (1 + args.continuations)
+    request_limit = maximum_provider_requests(
+        argparse.Namespace(**{**vars(args), "max_episodes": len(episodes)})
+    )
     print(
-        f"Collecting {len(episodes)} prefix value(s): {total_rollouts} rollouts, "
+        f"Collecting {total_prefixes} prefix value(s): {total_rollouts} rollouts, "
         f"at most {request_limit} provider requests "
         f"({args.continuations} continuations each)."
     )
 
     for episode_index, episode in enumerate(episodes):
         csv_source = str(args.csv or Path(episode.csv_source))
-        source_seed = args.seed + episode_index * (args.continuations + 1)
-        source = await run_initial_model_trace(
-            csv_source=csv_source,
-            question_text=episode.question["question_text"],
-            policy=policy,
-            max_turns=args.max_turns,
-            seed=source_seed,
-        )
-        boundary_messages, consumed_turns = select_boundary(
-            source, args.turn_count, args.max_turns
-        )
+        accepted_prefix_ids: set[str] = set()
+        source_attempt = 0
+        while len(accepted_prefix_ids) < args.candidates_per_episode:
+            if source_attempt >= (
+                args.candidates_per_episode * MAX_SOURCE_ATTEMPTS_PER_CANDIDATE
+            ):
+                raise RuntimeError(
+                    f"could not collect {args.candidates_per_episode} distinct "
+                    f"nonterminal candidates for {episode.episode_id}"
+                )
+            source_seed = (
+                args.seed
+                + episode_index * 100_000
+                + source_attempt * (args.continuations + 1)
+            )
+            source_attempt += 1
+            source = await run_initial_model_trace(
+                csv_source=csv_source,
+                question_text=episode.question["question_text"],
+                policy=policy,
+                max_turns=max(args.turn_count, 1),
+                seed=source_seed,
+                system_prompt_suffix=FIRST_ACTION_SUFFIX,
+            )
+            try:
+                boundary_messages, consumed_turns = select_boundary(
+                    source, args.turn_count, args.max_turns
+                )
+            except ValueError as error:
+                print(f"Skipping source attempt for {episode.episode_id}: {error}")
+                continue
 
-        prefix = build_trajectory_prefix(
-            episode_id=episode.episode_id,
-            csv_source=csv_source,
-            system_prompt=source.system_prompt,
-            question_text=episode.question["question_text"],
-            trace=source.trace,
-            turn_responses=source.turn_responses,
-            turn_completed=source.turn_completed,
-            conversation_messages=boundary_messages,
-            turn_count=args.turn_count,
-            consumed_turns=consumed_turns,
-            max_turns=args.max_turns,
-        )
-        continuation_seeds = [
-            source_seed + offset for offset in range(1, args.continuations + 1)
-        ]
-        record = await collect_prefix_value(
-            prefix=prefix,
-            question=episode.question,
-            policy=policy,
-            seeds=continuation_seeds,
-            float_tolerance=args.float_tolerance,
-            code_commit=commit,
-            dataset_revision=args.dataset_revision,
-        )
-        records.append(record.model_dump(mode="json"))
-        print(
-            f"{episode.episode_id}: value={record.value}, "
-            f"labeled={record.labeled_continuations}/"
-            f"{record.attempted_continuations}"
-        )
+            prefix = build_trajectory_prefix(
+                episode_id=episode.episode_id,
+                csv_source=csv_source,
+                system_prompt=source.system_prompt,
+                question_text=episode.question["question_text"],
+                trace=source.trace,
+                turn_responses=source.turn_responses,
+                turn_completed=source.turn_completed,
+                conversation_messages=boundary_messages,
+                turn_count=args.turn_count,
+                consumed_turns=consumed_turns,
+                max_turns=args.max_turns,
+            )
+            if prefix.prefix_id in accepted_prefix_ids:
+                print(f"Skipping duplicate source attempt for {episode.episode_id}")
+                continue
+            accepted_prefix_ids.add(prefix.prefix_id)
+            continuation_seeds = [
+                source_seed + offset for offset in range(1, args.continuations + 1)
+            ]
+            record = await collect_prefix_value(
+                prefix=prefix,
+                question=episode.question,
+                policy=policy,
+                seeds=continuation_seeds,
+                float_tolerance=args.float_tolerance,
+                code_commit=commit,
+                dataset_revision=args.dataset_revision,
+            )
+            records.append(record.model_dump(mode="json"))
+            print(
+                f"{episode.episode_id} candidate {len(accepted_prefix_ids)}: "
+                f"value={record.value}, labeled={record.labeled_continuations}/"
+                f"{record.attempted_continuations}"
+            )
 
     return records
 
