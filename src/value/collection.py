@@ -126,7 +126,11 @@ async def run_initial_model_trace(
     sampling_args = dict(policy.sampling_args)
     if seed is not None:
         sampling_args["seed"] = seed
-    llm = APILLM(model=policy.model, sampling_args=sampling_args)
+    llm = APILLM(
+        model=policy.model,
+        sampling_args=sampling_args,
+        timeout=policy.request_timeout_seconds,
+    )
     try:
         environment = await Environment.from_params(
             csv_path=csv_source,
@@ -168,7 +172,11 @@ async def run_model_continuation(
     sampling_args = dict(policy.sampling_args)
     if seed is not None:
         sampling_args["seed"] = seed
-    llm = APILLM(model=policy.model, sampling_args=sampling_args)
+    llm = APILLM(
+        model=policy.model,
+        sampling_args=sampling_args,
+        timeout=policy.request_timeout_seconds,
+    )
     try:
         environment = await Environment.from_params(
             csv_path=prefix.csv_source,

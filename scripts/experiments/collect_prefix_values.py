@@ -11,6 +11,7 @@ import argparse
 import asyncio
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 from csv_spec import ContinuationPolicy, EpisodeJSONL
@@ -57,6 +58,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--max-tokens", type=int, default=6000)
+    parser.add_argument("--request-timeout-seconds", type=float, default=30.0)
     parser.add_argument("--float-tolerance", type=float, default=0.1)
     return parser.parse_args()
 
@@ -165,7 +167,9 @@ def select_boundary(source, turn_count: int, max_turns: int) -> tuple[list[dict]
     return source.boundary_messages[boundary_index], consumed_turns
 
 
-async def collect(args: argparse.Namespace) -> list[dict]:
+async def collect(
+    args: argparse.Namespace, *, record_sink: Callable[[dict], None] | None = None
+) -> list[dict]:
     validate_args(args)
     episodes = load_episodes(args.episodes, args.max_episodes)
     policy = ContinuationPolicy(
@@ -175,6 +179,7 @@ async def collect(args: argparse.Namespace) -> list[dict]:
             "top_p": args.top_p,
             "max_tokens": args.max_tokens,
         },
+        request_timeout_seconds=args.request_timeout_seconds,
     )
     commit = current_commit()
     records: list[dict] = []
@@ -254,6 +259,8 @@ async def collect(args: argparse.Namespace) -> list[dict]:
                 dataset_revision=args.dataset_revision,
             )
             records.append(record.model_dump(mode="json"))
+            if record_sink is not None:
+                record_sink(records[-1])
             print(
                 f"{episode.episode_id} candidate {len(accepted_prefix_ids)}: "
                 f"value={record.value}, labeled={record.labeled_continuations}/"
@@ -265,11 +272,14 @@ async def collect(args: argparse.Namespace) -> list[dict]:
 
 async def main() -> None:
     args = parse_args()
-    records = await collect(args)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("w", encoding="utf-8") as handle:
-        for record in records:
+    args.output.write_text("")
+
+    def persist(record: dict) -> None:
+        with args.output.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+    records = await collect(args, record_sink=persist)
     print(f"Wrote {len(records)} record(s) to {args.output}")
 
 

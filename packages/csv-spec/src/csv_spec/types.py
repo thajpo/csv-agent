@@ -211,6 +211,7 @@ class ContinuationPolicy(BaseModel):
 
     model: str
     sampling_args: dict[str, Any]
+    request_timeout_seconds: float | None = Field(default=None, gt=0)
 
     model_config = ConfigDict(extra="forbid")
 

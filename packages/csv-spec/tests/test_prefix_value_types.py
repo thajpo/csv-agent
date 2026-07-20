@@ -113,7 +113,11 @@ def test_value_record_requires_aggregate_to_match_verdicts() -> None:
         consumed_turns=0,
         max_turns=3,
     )
-    policy = ContinuationPolicy(model="test-model", sampling_args={"temperature": 0.7})
+    policy = ContinuationPolicy(
+        model="test-model",
+        sampling_args={"temperature": 0.7},
+        request_timeout_seconds=30,
+    )
     continuations = [
         PrefixContinuation(
             rollout_index=0,
