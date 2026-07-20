@@ -122,6 +122,7 @@ async def run_initial_model_trace(
     max_turns: int,
     seed: int | None,
     system_prompt_suffix: str | None = None,
+    initial_user_message: str = "Begin the analysis.",
 ) -> InitialModelTrace:
     """Sample the actor once and retain each exact public turn boundary."""
     sampling_args = dict(policy.sampling_args)
@@ -143,6 +144,7 @@ async def run_initial_model_trace(
             llm=llm,
             session_id="value-source",
             system_prompt_suffix=system_prompt_suffix,
+            initial_user_message=initial_user_message,
         )
         final_state = await environment.rollout()
         trace = build_trace_dict(final_state)

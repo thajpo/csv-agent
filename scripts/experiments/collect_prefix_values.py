@@ -35,8 +35,24 @@ MAX_CONCURRENCY = 16
 
 FIRST_ACTION_SUFFIX = """VALUE EXPERIMENT RULE:
 On your first turn, do not call submit(). Execute exactly one useful Python
-step and print what you learn. On later turns, finish the task and call
-submit() when you have the answer."""
+step that directly advances the question and print what you learn. The data
+overview already shows columns, types, example rows, and basic summaries, so do
+not spend the turn only listing column names. On later turns, finish the task
+and call submit() when you have the answer."""
+
+
+def candidate_request(previous_actions: list[str]) -> str:
+    request = (
+        "Begin the analysis with one concrete, question-relevant Python action. "
+        "Do not call submit() and do not only list the column names."
+    )
+    if previous_actions:
+        exclusions = (
+            "\n\nPreviously sampled actions that must not be repeated:\n"
+            + "\n".join(f"- {action[:500]}" for action in previous_actions)
+        )
+        request += exclusions
+    return request
 
 
 def parse_args() -> argparse.Namespace:
@@ -217,6 +233,7 @@ async def collect(
         episode_records: list[dict] = []
         csv_source = str(args.csv or Path(episode.csv_source))
         accepted_action_ids: set[str] = set()
+        accepted_actions: list[str] = []
         source_attempt = 0
         while len(accepted_action_ids) < args.candidates_per_episode:
             if source_attempt >= (
@@ -240,6 +257,7 @@ async def collect(
                     max_turns=max(args.turn_count, 1),
                     seed=source_seed,
                     system_prompt_suffix=FIRST_ACTION_SUFFIX,
+                    initial_user_message=candidate_request(accepted_actions),
                 )
             try:
                 boundary_messages, consumed_turns = select_boundary(
@@ -267,6 +285,7 @@ async def collect(
                 print(f"Skipping duplicate source attempt for {episode.episode_id}")
                 continue
             accepted_action_ids.add(action_id)
+            accepted_actions.append(source.trace["turns"][0]["code"])
             continuation_seeds = [
                 source_seed + offset for offset in range(1, args.continuations + 1)
             ]

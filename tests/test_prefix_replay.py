@@ -108,6 +108,15 @@ def test_experiment_instruction_is_part_of_recorded_system_prompt() -> None:
     )
 
 
+def test_generated_data_overview_is_visible_to_the_actor() -> None:
+    environment = _environment(FakeSandbox({}))
+
+    environment.init_state()
+
+    assert "=== COLUMNS ===" in environment.conversation.system_prompt
+    assert "math score: int64" in environment.conversation.system_prompt
+
+
 @pytest.mark.asyncio
 async def test_initial_model_request_contains_a_user_message() -> None:
     llm = FakeLLM(["response"])
@@ -118,6 +127,18 @@ async def test_initial_model_request_contains_a_user_message() -> None:
 
     assert [message["role"] for message in llm.calls[0]] == ["system", "user"]
     assert llm.calls[0][-1]["content"] == "Begin the analysis."
+
+
+@pytest.mark.asyncio
+async def test_initial_model_request_can_ask_for_a_distinct_candidate() -> None:
+    llm = FakeLLM(["response"])
+    environment = _environment(FakeSandbox({}), llm=llm)
+    environment.initial_user_message = "Use a different first action."
+    environment.init_state()
+
+    await environment.get_model_response()
+
+    assert llm.calls[0][-1]["content"] == "Use a different first action."
 
 
 def test_nonterminal_submit_code_is_reprompted_before_execution() -> None:

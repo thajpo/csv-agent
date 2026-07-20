@@ -242,6 +242,7 @@ class Environment:
         llm=None,
         session_id: str | None = None,
         system_prompt_suffix: str | None = None,
+        initial_user_message: str = "Begin the analysis.",
     ):
         # Store configs
         self.data = data
@@ -250,6 +251,7 @@ class Environment:
         self.task = task
         self.session_id = session_id
         self.system_prompt_suffix = system_prompt_suffix
+        self.initial_user_message = initial_user_message
 
         self.csv_path = data.csv_path
         if llm is not None:
@@ -278,6 +280,7 @@ class Environment:
         llm=None,
         session_id: str | None = None,
         system_prompt_suffix: str | None = None,
+        initial_user_message: str = "Begin the analysis.",
     ):
         instance = cls(
             data,
@@ -290,6 +293,7 @@ class Environment:
             llm,
             session_id,
             system_prompt_suffix,
+            initial_user_message,
         )
 
         # Create env and state if not provided
@@ -327,6 +331,7 @@ class Environment:
         llm=None,
         session_id: str | None = None,
         system_prompt_suffix: str | None = None,
+        initial_user_message: str = "Begin the analysis.",
     ):
         """
         Factory with primitive args - handles config construction internally.
@@ -351,6 +356,7 @@ class Environment:
             reuse_env: If True, reset env after rollout instead of destroying
             session_id: Session ID for container isolation (for parallel execution)
             system_prompt_suffix: Optional experiment instruction appended verbatim
+            initial_user_message: First user message sent when history is empty
 
         Returns:
             Initialized Environment ready for rollout
@@ -398,6 +404,7 @@ class Environment:
             llm=llm,
             session_id=session_id,
             system_prompt_suffix=system_prompt_suffix,
+            initial_user_message=initial_user_message,
         )
 
     def _load_csv(self):
@@ -423,7 +430,7 @@ class Environment:
         sys_prompt = build_system_prompt(
             mode=self.task.mode,
             dataset_description=self.data.dataset_description,
-            data_overview=self.data.data_overview,
+            data_overview=self.data.data_overview or data_overview,
             question=self.task.question,
         )
         if self.system_prompt_suffix:
@@ -586,7 +593,7 @@ class Environment:
         """Call model and log the interaction."""
         messages = self.conversation.to_openai_messages()
         if len(messages) == 1:
-            messages.append({"role": "user", "content": "Begin the analysis."})
+            messages.append({"role": "user", "content": self.initial_user_message})
 
         try:
             response = await self.model(messages)

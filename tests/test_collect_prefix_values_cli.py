@@ -11,6 +11,7 @@ from scripts.experiments.collect_prefix_values import (
     MAX_CANDIDATES_PER_EPISODE,
     MAX_CONTINUATIONS,
     MAX_PROVIDER_REQUESTS,
+    candidate_request,
     current_commit,
     first_action_identity,
     load_episodes,
@@ -118,6 +119,16 @@ def test_first_action_identity_uses_normalized_code_not_execution() -> None:
 
     assert first_action_identity(first) == first_action_identity(repeated)
     assert first_action_identity(first) != first_action_identity(distinct)
+
+
+def test_candidate_request_excludes_previously_sampled_actions() -> None:
+    first = candidate_request([])
+    later = candidate_request(["print(df.head())", "print(df.describe())"])
+
+    assert "column names" in first
+    assert "print(df.head())" not in first
+    assert "print(df.head())" in later
+    assert "print(df.describe())" in later
 
 
 def test_boundary_selection_does_not_require_a_later_execution() -> None:
