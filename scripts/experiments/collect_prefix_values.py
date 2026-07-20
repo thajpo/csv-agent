@@ -187,7 +187,6 @@ async def collect(
         request_timeout_seconds=args.request_timeout_seconds,
     )
     commit = current_commit()
-    records: list[dict] = []
     rollout_slots = asyncio.Semaphore(args.concurrency)
 
     async def limited_continuation(prefix, continuation_policy, index, seed):
@@ -207,7 +206,8 @@ async def collect(
         f"({args.continuations} continuations each)."
     )
 
-    for episode_index, episode in enumerate(episodes):
+    async def collect_episode(episode_index, episode) -> list[dict]:
+        episode_records: list[dict] = []
         csv_source = str(args.csv or Path(episode.csv_source))
         accepted_prefix_ids: set[str] = set()
         source_attempt = 0
@@ -272,16 +272,24 @@ async def collect(
                 dataset_revision=args.dataset_revision,
                 runner=limited_continuation,
             )
-            records.append(record.model_dump(mode="json"))
+            serialized = record.model_dump(mode="json")
+            episode_records.append(serialized)
             if record_sink is not None:
-                record_sink(records[-1])
+                record_sink(serialized)
             print(
                 f"{episode.episode_id} candidate {len(accepted_prefix_ids)}: "
                 f"value={record.value}, labeled={record.labeled_continuations}/"
                 f"{record.attempted_continuations}"
             )
+        return episode_records
 
-    return records
+    episode_results = await asyncio.gather(
+        *(
+            collect_episode(episode_index, episode)
+            for episode_index, episode in enumerate(episodes)
+        )
+    )
+    return [record for episode_records in episode_results for record in episode_records]
 
 
 async def main() -> None:
