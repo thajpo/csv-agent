@@ -134,6 +134,13 @@ async def run_initial_model_trace(
         timeout=policy.request_timeout_seconds,
     )
     try:
+        source_id = hash_artifact(
+            {
+                "csv_source": csv_source,
+                "question_text": question_text,
+                "seed": seed,
+            }
+        )[:16]
         environment = await Environment.from_params(
             csv_path=csv_source,
             model=policy.model,
@@ -142,7 +149,7 @@ async def run_initial_model_trace(
             max_turns=max_turns,
             sampling_args=policy.sampling_args,
             llm=llm,
-            session_id="value-source",
+            session_id=f"value-source-{source_id}",
             system_prompt_suffix=system_prompt_suffix,
             initial_user_message=initial_user_message,
         )

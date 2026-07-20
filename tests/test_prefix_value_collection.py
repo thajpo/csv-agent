@@ -5,7 +5,11 @@ import asyncio
 import pytest
 from csv_spec import ContinuationPolicy, hash_artifact
 
-from src.value.collection import build_trajectory_prefix, collect_prefix_value
+from src.value.collection import (
+    build_trajectory_prefix,
+    collect_prefix_value,
+    run_initial_model_trace,
+)
 
 
 def _turn(index: int, code: str, *, submitted_answer=None) -> dict:
@@ -183,6 +187,62 @@ async def test_independent_continuations_run_concurrently() -> None:
 
     assert peak == 3
     assert record.value == 1.0
+
+
+@pytest.mark.asyncio
+async def test_initial_traces_use_isolated_source_sessions(monkeypatch) -> None:
+    session_ids: list[str] = []
+
+    class FakeLLM:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def aclose(self):
+            pass
+
+    class FakeState:
+        execution_turns = []
+
+        class Conversation:
+            system_prompt = "prompt"
+
+        conversation = Conversation()
+
+    class FakeEnvironment:
+        @classmethod
+        async def from_params(cls, **kwargs):
+            session_ids.append(kwargs["session_id"])
+            return cls()
+
+        async def rollout(self):
+            return FakeState()
+
+    monkeypatch.setattr("src.value.collection.APILLM", FakeLLM)
+    monkeypatch.setattr("src.value.collection.Environment", FakeEnvironment)
+    monkeypatch.setattr(
+        "src.value.collection.build_trace_dict", lambda _state: {"turns": []}
+    )
+
+    policy = ContinuationPolicy(model="test-model", sampling_args={})
+    await asyncio.gather(
+        run_initial_model_trace(
+            csv_source="one.csv",
+            question_text="Question one?",
+            policy=policy,
+            max_turns=1,
+            seed=1,
+        ),
+        run_initial_model_trace(
+            csv_source="two.csv",
+            question_text="Question two?",
+            policy=policy,
+            max_turns=1,
+            seed=2,
+        ),
+    )
+
+    assert len(set(session_ids)) == 2
+    assert all(session_id.startswith("value-source-") for session_id in session_ids)
 
 
 @pytest.mark.asyncio
