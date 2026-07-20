@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
@@ -215,19 +216,17 @@ async def collect_prefix_value(
     if not seeds:
         raise ValueError("at least one continuation seed is required")
 
-    continuations: list[PrefixContinuation] = []
-    for rollout_index, seed in enumerate(seeds):
+    async def collect_one(
+        rollout_index: int, seed: int | None
+    ) -> PrefixContinuation:
         try:
             trace = await runner(prefix, policy, rollout_index, seed)
         except Exception as error:
-            continuations.append(
-                PrefixContinuation(
-                    rollout_index=rollout_index,
-                    seed=seed,
-                    error=f"{type(error).__name__}: {error}",
-                )
+            return PrefixContinuation(
+                rollout_index=rollout_index,
+                seed=seed,
+                error=f"{type(error).__name__}: {error}",
             )
-            continue
 
         try:
             verdict = verify_terminal_trace(
@@ -235,23 +234,25 @@ async def collect_prefix_value(
                 trace,
                 float_tolerance=float_tolerance,
             )
-            continuations.append(
-                PrefixContinuation(
-                    rollout_index=rollout_index,
-                    seed=seed,
-                    trace=trace,
-                    verifier_verdict=verdict,
-                )
+            return PrefixContinuation(
+                rollout_index=rollout_index,
+                seed=seed,
+                trace=trace,
+                verifier_verdict=verdict,
             )
         except Exception as error:
-            continuations.append(
-                PrefixContinuation(
-                    rollout_index=rollout_index,
-                    seed=seed,
-                    trace=trace,
-                    error=f"{type(error).__name__}: {error}",
-                )
+            return PrefixContinuation(
+                rollout_index=rollout_index,
+                seed=seed,
+                trace=trace,
+                error=f"{type(error).__name__}: {error}",
             )
+
+    continuations = list(
+        await asyncio.gather(
+            *(collect_one(index, seed) for index, seed in enumerate(seeds))
+        )
+    )
 
     labeled = sum(item.verifier_verdict is not None for item in continuations)
     successes = sum(item.verifier_verdict is True for item in continuations)

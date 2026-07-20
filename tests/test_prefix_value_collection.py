@@ -1,5 +1,7 @@
 """Tests for verifier-grounded trajectory-prefix value collection."""
 
+import asyncio
+
 import pytest
 from csv_spec import ContinuationPolicy, hash_artifact
 
@@ -137,6 +139,50 @@ async def test_collection_with_runner_error_has_no_value_estimate() -> None:
     ]
     assert record.continuations[-1].error == "RuntimeError: sandbox unavailable"
     assert record.dataset_revision == "hf-revision"
+
+
+@pytest.mark.asyncio
+async def test_independent_continuations_run_concurrently() -> None:
+    active = 0
+    peak = 0
+
+    async def runner(_prefix, _policy, _rollout_index, _seed):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return _trace(3)
+
+    prefix = build_trajectory_prefix(
+        episode_id="episode-1",
+        csv_source="dataset/data.csv",
+        system_prompt="Solve the task.",
+        question_text="How many rows are present?",
+        trace=_trace(3),
+        turn_responses=[],
+        turn_completed=[],
+        conversation_messages=[],
+        turn_count=0,
+        consumed_turns=0,
+        max_turns=3,
+    )
+    record = await collect_prefix_value(
+        prefix=prefix,
+        question={
+            "question_text": "How many rows are present?",
+            "ground_truth": 3,
+            "ground_truth_hash": hash_artifact(3),
+        },
+        policy=ContinuationPolicy(model="test-model", sampling_args={}),
+        seeds=[1, 2, 3],
+        float_tolerance=0.1,
+        code_commit="abc123",
+        runner=runner,
+    )
+
+    assert peak == 3
+    assert record.value == 1.0
 
 
 @pytest.mark.asyncio

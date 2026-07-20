@@ -20,6 +20,7 @@ from src.value import (
     build_trajectory_prefix,
     collect_prefix_value,
     run_initial_model_trace,
+    run_model_continuation,
 )
 from src.core.model import API_MAX_RETRIES
 
@@ -29,6 +30,7 @@ MAX_SOURCE_ATTEMPTS_PER_CANDIDATE = 3
 MAX_EPISODES = 64
 MAX_TURNS = 20
 MAX_PROVIDER_REQUESTS = 10_000
+MAX_CONCURRENCY = 16
 
 FIRST_ACTION_SUFFIX = """VALUE EXPERIMENT RULE:
 On your first turn, do not call submit(). Execute exactly one useful Python
@@ -59,6 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--max-tokens", type=int, default=6000)
     parser.add_argument("--request-timeout-seconds", type=float, default=30.0)
+    parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--float-tolerance", type=float, default=0.1)
     return parser.parse_args()
 
@@ -81,6 +84,8 @@ def validate_args(args: argparse.Namespace) -> None:
             "candidates-per-episode must be between 1 and "
             f"{MAX_CANDIDATES_PER_EPISODE}"
         )
+    if not 1 <= args.concurrency <= MAX_CONCURRENCY:
+        raise ValueError(f"concurrency must be between 1 and {MAX_CONCURRENCY}")
     request_limit = maximum_provider_requests(args)
     if request_limit > MAX_PROVIDER_REQUESTS:
         raise ValueError(
@@ -183,6 +188,13 @@ async def collect(
     )
     commit = current_commit()
     records: list[dict] = []
+    rollout_slots = asyncio.Semaphore(args.concurrency)
+
+    async def limited_continuation(prefix, continuation_policy, index, seed):
+        async with rollout_slots:
+            return await run_model_continuation(
+                prefix, continuation_policy, index, seed
+            )
 
     total_prefixes = len(episodes) * args.candidates_per_episode
     total_rollouts = total_prefixes * (1 + args.continuations)
@@ -213,14 +225,15 @@ async def collect(
                 + source_attempt * (args.continuations + 1)
             )
             source_attempt += 1
-            source = await run_initial_model_trace(
-                csv_source=csv_source,
-                question_text=episode.question["question_text"],
-                policy=policy,
-                max_turns=max(args.turn_count, 1),
-                seed=source_seed,
-                system_prompt_suffix=FIRST_ACTION_SUFFIX,
-            )
+            async with rollout_slots:
+                source = await run_initial_model_trace(
+                    csv_source=csv_source,
+                    question_text=episode.question["question_text"],
+                    policy=policy,
+                    max_turns=max(args.turn_count, 1),
+                    seed=source_seed,
+                    system_prompt_suffix=FIRST_ACTION_SUFFIX,
+                )
             try:
                 boundary_messages, consumed_turns = select_boundary(
                     source, args.turn_count, args.max_turns
@@ -257,6 +270,7 @@ async def collect(
                 float_tolerance=args.float_tolerance,
                 code_commit=commit,
                 dataset_revision=args.dataset_revision,
+                runner=limited_continuation,
             )
             records.append(record.model_dump(mode="json"))
             if record_sink is not None:

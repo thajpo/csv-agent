@@ -36,6 +36,7 @@ def _args(episodes: Path, **overrides) -> Namespace:
         "max_turns": 10,
         "continuations": 4,
         "candidates_per_episode": 3,
+        "concurrency": 8,
     }
     values.update(overrides)
     return Namespace(**values)
