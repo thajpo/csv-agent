@@ -16,6 +16,7 @@ from datasets import Dataset
 from verifiers.envs.python_env import PythonEnv
 
 PACKAGES = "pandas numpy scipy scikit-learn statsmodels"
+DOCKER_COMMAND_TIMEOUT_SECONDS = 60.0
 
 # Base imports for container - normalize_value is injected dynamically
 _SETUP_IMPORTS = """
@@ -568,7 +569,10 @@ while True:
         self.execution_count = 0
 
     async def _run_docker(
-        self, *args: str, check: bool = True, timeout: float | None = None
+        self,
+        *args: str,
+        check: bool = True,
+        timeout: float | None = DOCKER_COMMAND_TIMEOUT_SECONDS,
     ) -> tuple[str, str]:
         """Run a docker command asynchronously with optional timeout."""
         proc = await asyncio.create_subprocess_exec(

@@ -143,6 +143,7 @@ def test_candidate_request_excludes_previously_sampled_actions() -> None:
     assert "print(df.head())" not in first
     assert "print(df.head())" in later
     assert "print(df.describe())" in later
+    assert "substantively different operation" in later
 
 
 @pytest.mark.asyncio

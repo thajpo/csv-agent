@@ -51,7 +51,9 @@ def candidate_request(previous_actions: list[str]) -> str:
     )
     if previous_actions:
         exclusions = (
-            "\n\nPreviously sampled actions that must not be repeated:\n"
+            "\n\nChoose a substantively different operation that reveals a "
+            "different fact, not a refactoring or reformatting of these previously "
+            "sampled actions:\n"
             + "\n".join(f"- {action[:500]}" for action in previous_actions)
         )
         request += exclusions
