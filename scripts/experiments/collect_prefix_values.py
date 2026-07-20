@@ -8,6 +8,7 @@ can require multiple turn-level model requests.
 from __future__ import annotations
 
 import argparse
+import ast
 import asyncio
 import json
 import subprocess
@@ -77,6 +78,8 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError(f"max-turns must be between 1 and {MAX_TURNS}")
     if args.turn_count < 0 or args.turn_count >= args.max_turns:
         raise ValueError("turn-count must be between zero and max-turns - 1")
+    if args.turn_count == 0 and args.candidates_per_episode != 1:
+        raise ValueError("initial-state collection requires one candidate per episode")
     if not 1 <= args.continuations <= MAX_CONTINUATIONS:
         raise ValueError(f"continuations must be between 1 and {MAX_CONTINUATIONS}")
     if not 1 <= args.candidates_per_episode <= MAX_CANDIDATES_PER_EPISODE:
@@ -171,6 +174,11 @@ def select_boundary(source, turn_count: int, max_turns: int) -> tuple[list[dict]
     return source.boundary_messages[boundary_index], consumed_turns
 
 
+def first_action_identity(source) -> str:
+    code = source.trace["turns"][0]["code"]
+    return ast.dump(ast.parse(code), include_attributes=False)
+
+
 async def collect(
     args: argparse.Namespace, *, record_sink: Callable[[dict], None] | None = None
 ) -> list[dict]:
@@ -208,9 +216,9 @@ async def collect(
     async def collect_episode(episode_index, episode) -> list[dict]:
         episode_records: list[dict] = []
         csv_source = str(args.csv or Path(episode.csv_source))
-        accepted_prefix_ids: set[str] = set()
+        accepted_action_ids: set[str] = set()
         source_attempt = 0
-        while len(accepted_prefix_ids) < args.candidates_per_episode:
+        while len(accepted_action_ids) < args.candidates_per_episode:
             if source_attempt >= (
                 args.candidates_per_episode * MAX_SOURCE_ATTEMPTS_PER_CANDIDATE
             ):
@@ -254,10 +262,11 @@ async def collect(
                 consumed_turns=consumed_turns,
                 max_turns=args.max_turns,
             )
-            if prefix.prefix_id in accepted_prefix_ids:
+            action_id = first_action_identity(source)
+            if action_id in accepted_action_ids:
                 print(f"Skipping duplicate source attempt for {episode.episode_id}")
                 continue
-            accepted_prefix_ids.add(prefix.prefix_id)
+            accepted_action_ids.add(action_id)
             continuation_seeds = [
                 source_seed + offset for offset in range(1, args.continuations + 1)
             ]
@@ -276,7 +285,7 @@ async def collect(
             if record_sink is not None:
                 record_sink(serialized)
             print(
-                f"{episode.episode_id} candidate {len(accepted_prefix_ids)}: "
+                f"{episode.episode_id} candidate {len(accepted_action_ids)}: "
                 f"value={record.value}, labeled={record.labeled_continuations}/"
                 f"{record.attempted_continuations}"
             )

@@ -12,6 +12,7 @@ from scripts.experiments.collect_prefix_values import (
     MAX_CONTINUATIONS,
     MAX_PROVIDER_REQUESTS,
     current_commit,
+    first_action_identity,
     load_episodes,
     maximum_provider_requests,
     select_boundary,
@@ -81,6 +82,42 @@ def test_candidate_cap_rejects_accidental_large_branching(
                 candidates_per_episode=MAX_CANDIDATES_PER_EPISODE + 1,
             )
         )
+
+
+def test_initial_state_rejects_multiple_identical_candidates(
+    episodes_jsonl: Path,
+) -> None:
+    with pytest.raises(ValueError, match="initial-state collection"):
+        validate_args(_args(episodes_jsonl, turn_count=0, candidates_per_episode=2))
+
+
+def test_first_action_identity_uses_normalized_code_not_execution() -> None:
+    first = SimpleNamespace(
+        trace={
+            "turns": [
+                {
+                    "code": "print( df.columns )",
+                    "execution": {"stdout": "first result"},
+                }
+            ]
+        }
+    )
+    repeated = SimpleNamespace(
+        trace={
+            "turns": [
+                {
+                    "code": "print(df.columns)",
+                    "execution": {"stdout": "different result"},
+                }
+            ]
+        }
+    )
+    distinct = SimpleNamespace(
+        trace={"turns": [{"code": "print(df.shape)", "execution": {}}]}
+    )
+
+    assert first_action_identity(first) == first_action_identity(repeated)
+    assert first_action_identity(first) != first_action_identity(distinct)
 
 
 def test_boundary_selection_does_not_require_a_later_execution() -> None:
