@@ -43,8 +43,11 @@ and call submit() when you have the answer."""
 
 def candidate_request(previous_actions: list[str]) -> str:
     request = (
-        "Begin the analysis with one concrete, question-relevant Python action. "
-        "Do not call submit() and do not only list the column names."
+        "Begin with one concrete, question-relevant intermediate action. Your "
+        "response must contain 1-3 sentences explaining that action, followed by "
+        "exactly one fenced ```python code block that prints what it learns. Do "
+        "not call submit() anywhere, do not solve the whole task in this turn, and "
+        "do not only list the column names."
     )
     if previous_actions:
         exclusions = (

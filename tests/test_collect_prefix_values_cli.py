@@ -126,6 +126,9 @@ def test_candidate_request_excludes_previously_sampled_actions() -> None:
     later = candidate_request(["print(df.head())", "print(df.describe())"])
 
     assert "column names" in first
+    assert "1-3 sentences" in first
+    assert "exactly one fenced ```python code block" in first
+    assert "Do not call submit()" in first
     assert "print(df.head())" not in first
     assert "print(df.head())" in later
     assert "print(df.describe())" in later
