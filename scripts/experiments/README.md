@@ -6,6 +6,8 @@ Run them manually when needed.
 - `investigate_failures.py`: ad-hoc failure diagnostics for triangulation output.
 - `prepare_value_episodes.py`: makes CSV-disjoint episode files from a pinned
   Hugging Face snapshot and locally downloaded Kaggle inputs.
+- `download_value_snapshot.py`: restores validated trainer JSONL files from the
+  pinned value-canary snapshot.
 - `collect_prefix_values.py`: samples distinct first actions and estimates each
   saved partial attempt from terminally verified continuations.
 - `train_value_model.py`: trains the local text value model and compares it with
@@ -58,6 +60,9 @@ Reserve the final continuation from every record, fit on the others, and then
 use that unseen outcome for the equal-call selection comparison:
 
 ```bash
+uv run python scripts/experiments/download_value_snapshot.py \
+  --output-dir data/experiments/value-canary
+
 uv run python scripts/experiments/train_value_model.py \
   --train data/experiments/value-canary/train-values.jsonl \
   --validation data/experiments/value-canary/validation-values.jsonl \

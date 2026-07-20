@@ -15,7 +15,7 @@ and value-guided selection receive the same number of model calls?
   `e19fadf8d713c5afb7fe1476e2160b9bece1233a`.
 - Collected records: private Hugging Face snapshot
   `ThaJpo/csv-agent-prefix-values-canary` at
-  `d739e297e527bbebfaf382b0e0fa92a79c94dc7e`.
+  `8fb8e1d55133a7287d2ccdc98520fb74b845dead`.
 - Collection code: `57ce0c6c89110d575466226bc7709fbca5506cd7`.
 - Actor: `qwen/qwen3-30b-a3b-instruct-2507`, temperature 0.9, top-p 0.95,
   maximum 1,200 output tokens, and four total turns.

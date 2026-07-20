@@ -1,0 +1,76 @@
+"""Download and validate a pinned prefix-value dataset from Hugging Face."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import tomllib
+from pathlib import Path
+from typing import Mapping, Sequence
+
+from csv_spec import PrefixValueRecord
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Download validated PrefixValueRecord files from Hugging Face."
+    )
+    parser.add_argument(
+        "--dataset-config",
+        type=Path,
+        default=Path("configs/datasets/value-canary.toml"),
+    )
+    parser.add_argument("--output-dir", required=True, type=Path)
+    return parser.parse_args()
+
+
+def write_snapshot(
+    dataset: Mapping[str, Sequence[Mapping[str, object]]],
+    *,
+    output_dir: Path,
+    repo: str,
+    revision: str,
+) -> dict:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    counts: dict[str, int] = {}
+    for split in ("train", "validation", "test"):
+        if split not in dataset:
+            raise ValueError(f"value snapshot is missing the {split} split")
+        records: list[str] = []
+        for row_index, row in enumerate(dataset[split]):
+            serialized = row.get("record_json")
+            if not isinstance(serialized, str):
+                raise ValueError(f"{split} row {row_index} has no record_json")
+            record = PrefixValueRecord.model_validate_json(serialized)
+            records.append(record.model_dump_json())
+        (output_dir / f"{split}-values.jsonl").write_text(
+            "".join(record + "\n" for record in records)
+        )
+        counts[split] = len(records)
+    manifest = {"repo": repo, "revision": revision, "records": counts}
+    (output_dir / "snapshot.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    )
+    return manifest
+
+
+def download(args: argparse.Namespace) -> dict:
+    from datasets import load_dataset
+
+    with args.dataset_config.open("rb") as handle:
+        config = tomllib.load(handle)
+    dataset = load_dataset(config["repo"], revision=config["revision"], token=True)
+    return write_snapshot(
+        dataset,
+        output_dir=args.output_dir,
+        repo=config["repo"],
+        revision=config["revision"],
+    )
+
+
+def main() -> None:
+    print(json.dumps(download(parse_args()), indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
