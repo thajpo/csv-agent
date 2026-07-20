@@ -105,7 +105,10 @@ def test_boundary_selection_requires_nonterminal_budget(
 
 
 def test_current_commit_rejects_dirty_worktree(monkeypatch) -> None:
+    calls: list[list[str]] = []
+
     def fake_run(*_args, **_kwargs):
+        calls.append(_args[0])
         return SimpleNamespace(stdout=" M src/value/collection.py\n")
 
     monkeypatch.setattr(
@@ -114,3 +117,6 @@ def test_current_commit_rejects_dirty_worktree(monkeypatch) -> None:
 
     with pytest.raises(RuntimeError, match="uncommitted code changes"):
         current_commit()
+
+    assert "src" in calls[0]
+    assert ".prime-rl" not in calls[0]

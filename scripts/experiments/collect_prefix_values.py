@@ -96,7 +96,18 @@ def load_episodes(path: Path, limit: int) -> list[EpisodeJSONL]:
 
 def current_commit() -> str:
     status = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=all"],
+        [
+            "git",
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            "src",
+            "packages",
+            "scripts",
+            "pyproject.toml",
+            "uv.lock",
+        ],
         check=True,
         capture_output=True,
         text=True,
