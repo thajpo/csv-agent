@@ -32,7 +32,7 @@ from src.core.prompts import (
     build_system_prompt,
     CONTINUE_MSG,
 )
-from src.datagen.shared.submission import parse_submission
+from src.datagen.shared.submission import parse_submission, validate_submission_position
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
@@ -621,6 +621,11 @@ class Environment:
     def response_is_valid(self, response: str, code_cells: list[str]) -> bool:
         """Response should have reasoning text and one code cell."""
         error_msg = get_turn_validation_feedback(response, code_cells)
+        if not error_msg and code_cells:
+            try:
+                validate_submission_position(code_cells[0])
+            except ValueError as error:
+                error_msg = str(error)
         if error_msg:
             self.conversation.add_assistant_response(response)
             error_feedback = (

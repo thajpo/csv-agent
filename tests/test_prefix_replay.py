@@ -120,6 +120,16 @@ async def test_initial_model_request_contains_a_user_message() -> None:
     assert llm.calls[0][-1]["content"] == "Begin the analysis."
 
 
+def test_nonterminal_submit_code_is_reprompted_before_execution() -> None:
+    environment = _environment(FakeSandbox({}))
+    environment.init_state()
+    code = "submit(3)\nprint('after submit')"
+    response = f"Finish the task.\n```python\n{code}\n```"
+
+    assert environment.response_is_valid(response, [code]) is False
+    assert "final top-level operation" in environment.conversation.messages[-1]["content"]
+
+
 @pytest.mark.asyncio
 async def test_replay_restores_conversation_and_turn_count() -> None:
     sandbox = FakeSandbox({"print(len(df))": "3"})

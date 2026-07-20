@@ -6,6 +6,7 @@ import pytest
 from csv_spec import hash_artifact
 from src.datagen.shared.questions_io import load_questions, validate_question
 from src.datagen.shared.verification import verify_synthetic
+from src.datagen.shared.submission import validate_submission_position
 
 
 def _synthetic_question(**overrides):
@@ -23,6 +24,16 @@ def _synthetic_question(**overrides):
     }
     question.update(overrides)
     return question
+
+
+def test_submit_must_be_the_final_top_level_operation() -> None:
+    validate_submission_position("result = 1\nsubmit(result)")
+
+    with pytest.raises(ValueError, match="final top-level"):
+        validate_submission_position("submit(1)\nprint('after')")
+
+    with pytest.raises(ValueError, match="at most one"):
+        validate_submission_position("submit(1)\nsubmit(2)")
 
 
 @pytest.mark.parametrize("legacy_key", ["_ground_truth", "_ground_truths"])

@@ -4,9 +4,45 @@ Centralizes parsing of submitted answers from execution stdout.
 Enforces strict protocol wrapper for consistency.
 """
 
-import re
+import ast
 import json
+import re
 from typing import Any
+
+
+def validate_submission_position(code: str, *, require_submission: bool = False) -> None:
+    """Require a submit call, when present, to be one final top-level statement."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return
+    parents = {
+        id(child): parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+    submit_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "submit"
+    ]
+    if not submit_calls:
+        if require_submission:
+            raise ValueError("code must contain exactly one submit() call")
+        return
+    if len(submit_calls) != 1:
+        raise ValueError("code must contain at most one submit() call")
+    submit_call = submit_calls[0]
+    submit_statement = parents.get(id(submit_call))
+    if (
+        not isinstance(submit_statement, ast.Expr)
+        or submit_statement.value is not submit_call
+        or not tree.body
+        or tree.body[-1] is not submit_statement
+    ):
+        raise ValueError("submit() must be the final top-level operation")
 
 
 def parse_submission(stdout: str) -> tuple[Any, bool]:
