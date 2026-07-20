@@ -252,16 +252,23 @@ async def collect(
                 + source_attempt * (args.continuations + 1)
             )
             source_attempt += 1
-            async with rollout_slots:
-                source = await run_initial_model_trace(
-                    csv_source=csv_source,
-                    question_text=episode.question["question_text"],
-                    policy=policy,
-                    max_turns=max(args.turn_count, 1),
-                    seed=source_seed,
-                    system_prompt_suffix=FIRST_ACTION_SUFFIX,
-                    initial_user_message=candidate_request(accepted_actions),
+            try:
+                async with rollout_slots:
+                    source = await run_initial_model_trace(
+                        csv_source=csv_source,
+                        question_text=episode.question["question_text"],
+                        policy=policy,
+                        max_turns=max(args.turn_count, 1),
+                        seed=source_seed,
+                        system_prompt_suffix=FIRST_ACTION_SUFFIX,
+                        initial_user_message=candidate_request(accepted_actions),
+                    )
+            except Exception as error:
+                print(
+                    f"Skipping source attempt for {episode.episode_id}: "
+                    f"{type(error).__name__}: {error}"
                 )
+                continue
             try:
                 boundary_messages, consumed_turns = select_boundary(
                     source, args.turn_count, args.max_turns

@@ -6,12 +6,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import scripts.experiments.collect_prefix_values as collect_module
 
 from scripts.experiments.collect_prefix_values import (
     MAX_CANDIDATES_PER_EPISODE,
     MAX_CONTINUATIONS,
     MAX_PROVIDER_REQUESTS,
     candidate_request,
+    collect,
     current_commit,
     first_action_identity,
     load_episodes,
@@ -32,6 +34,9 @@ def episodes_jsonl(tmp_path: Path) -> Path:
 def _args(episodes: Path, **overrides) -> Namespace:
     values = {
         "episodes": episodes,
+        "model": "test-model",
+        "output": Path("unused.jsonl"),
+        "dataset_revision": "dataset-revision",
         "csv": None,
         "max_episodes": 1,
         "turn_count": 1,
@@ -39,6 +44,12 @@ def _args(episodes: Path, **overrides) -> Namespace:
         "continuations": 4,
         "candidates_per_episode": 3,
         "concurrency": 8,
+        "seed": 42,
+        "temperature": 0.9,
+        "top_p": 0.95,
+        "max_tokens": 1200,
+        "request_timeout_seconds": 30.0,
+        "float_tolerance": 0.1,
     }
     values.update(overrides)
     return Namespace(**values)
@@ -132,6 +143,77 @@ def test_candidate_request_excludes_previously_sampled_actions() -> None:
     assert "print(df.head())" not in first
     assert "print(df.head())" in later
     assert "print(df.describe())" in later
+
+
+@pytest.mark.asyncio
+async def test_source_failure_consumes_retry_instead_of_aborting_collection(
+    monkeypatch, episodes_jsonl
+) -> None:
+    attempts = 0
+
+    async def flaky_source(**_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise TypeError("provider returned null content")
+        response = (
+            f"Reasoning for candidate {attempts}.\n```python\nprint({attempts})\n```"
+        )
+        return SimpleNamespace(
+            trace={
+                "turns": [
+                    {
+                        "turn_index": 0,
+                        "reasoning": f"Candidate {attempts}",
+                        "code": f"print({attempts})",
+                        "execution": {
+                            "success": True,
+                            "stdout": str(attempts),
+                            "stderr": "",
+                            "hooks": [],
+                            "submitted_answer": None,
+                        },
+                    }
+                ]
+            },
+            system_prompt="prompt",
+            turn_responses=[response],
+            turn_completed=[False],
+            boundary_messages=[
+                [
+                    {"role": "assistant", "content": response},
+                    {"role": "user", "content": "Execution completed."},
+                ]
+            ],
+            boundary_consumed_turns=[1],
+        )
+
+    class FakeRecord:
+        value = 1.0
+        labeled_continuations = 1
+        attempted_continuations = 1
+
+        def model_dump(self, **_kwargs):
+            return {"value": self.value}
+
+    async def fake_collect_prefix_value(**_kwargs):
+        return FakeRecord()
+
+    monkeypatch.setattr(collect_module, "run_initial_model_trace", flaky_source)
+    monkeypatch.setattr(
+        collect_module, "collect_prefix_value", fake_collect_prefix_value
+    )
+    monkeypatch.setattr(collect_module, "current_commit", lambda: "abc123")
+
+    args = _args(
+        episodes_jsonl,
+        candidates_per_episode=1,
+        continuations=1,
+    )
+    records = await collect(args)
+
+    assert attempts == 2
+    assert len(records) == 1
 
 
 def test_boundary_selection_does_not_require_a_later_execution() -> None:
