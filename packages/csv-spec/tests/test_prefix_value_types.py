@@ -237,3 +237,34 @@ def test_prefix_tracks_consumed_turns_separately_from_executions() -> None:
 
     assert len(prefix.turns) == 1
     assert prefix.consumed_turns == 2
+
+
+def test_prefix_allows_pruned_conversation_history() -> None:
+    messages = [
+        {"role": "assistant", "content": f"Invalid response {index}"}
+        for index in range(4)
+        for _ in (0,)
+    ]
+    interleaved: list[dict[str, str]] = []
+    for message in messages:
+        interleaved.extend(
+            [message, {"role": "user", "content": "Use one Python block."}]
+        )
+    interleaved.extend(_messages())
+
+    prefix = TrajectoryPrefix(
+        prefix_id="pruned-history",
+        episode_id="episode-1",
+        csv_source="dataset/data.csv",
+        system_prompt="Solve the CSV task using Python.",
+        question_text="How many rows are present?",
+        turns=[_turn(0)],
+        turn_responses=[_response()],
+        turn_completed=[False],
+        conversation_messages=interleaved,
+        consumed_turns=6,
+        max_turns=8,
+    )
+
+    assert len(prefix.conversation_messages) == 10
+    assert prefix.consumed_turns == 6
