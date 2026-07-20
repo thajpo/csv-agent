@@ -7,6 +7,8 @@ from src.value.collection import (
     run_model_continuation,
     verify_terminal_trace,
 )
+from src.value.dataset import ValueExample, load_value_examples, render_prefix
+from src.value.trainer import TrainedValueModel
 
 __all__ = [
     "build_trajectory_prefix",
@@ -14,4 +16,8 @@ __all__ = [
     "run_initial_model_trace",
     "run_model_continuation",
     "verify_terminal_trace",
+    "ValueExample",
+    "load_value_examples",
+    "render_prefix",
+    "TrainedValueModel",
 ]
