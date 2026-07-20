@@ -10,7 +10,9 @@ import re
 from typing import Any
 
 
-def validate_submission_position(code: str, *, require_submission: bool = False) -> None:
+def validate_submission_position(
+    code: str, *, require_submission: bool = False
+) -> None:
     """Require a submit call, when present, to be one final top-level statement."""
     try:
         tree = ast.parse(code)

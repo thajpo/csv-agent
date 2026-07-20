@@ -137,9 +137,15 @@ def test_split_guard_rejects_shared_csv_dataset() -> None:
 
 def test_value_model_overfits_fixture_and_reloads(tmp_path: Path) -> None:
     train = [
-        _example("good-1", "e1", "correct column useful output", 4, selection_verdict=True),
-        _example("good-2", "e2", "correct filter useful output", 4, selection_verdict=True),
-        _example("bad-1", "e3", "error wrong missing column", 0, selection_verdict=False),
+        _example(
+            "good-1", "e1", "correct column useful output", 4, selection_verdict=True
+        ),
+        _example(
+            "good-2", "e2", "correct filter useful output", 4, selection_verdict=True
+        ),
+        _example(
+            "bad-1", "e3", "error wrong missing column", 0, selection_verdict=False
+        ),
         _example("bad-2", "e4", "error irrelevant output", 0, selection_verdict=False),
     ]
     model = TrainedValueModel.fit(train, seed=7)
@@ -167,8 +173,9 @@ def test_metrics_measure_ranking_and_equal_call_selection() -> None:
 
     assert prediction["pairwise_ranking_accuracy"] == 1.0
     assert selection["value_guided_accuracy"] == 1.0
-    assert selection["deployment_model_calls_per_episode"]["random"] == (
-        selection["deployment_model_calls_per_episode"]["value_guided"]
+    assert (
+        selection["deployment_model_calls_per_episode"]["random"]
+        == (selection["deployment_model_calls_per_episode"]["value_guided"])
     )
 
 

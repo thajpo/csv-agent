@@ -127,7 +127,9 @@ def test_nonterminal_submit_code_is_reprompted_before_execution() -> None:
     response = f"Finish the task.\n```python\n{code}\n```"
 
     assert environment.response_is_valid(response, [code]) is False
-    assert "final top-level operation" in environment.conversation.messages[-1]["content"]
+    assert (
+        "final top-level operation" in environment.conversation.messages[-1]["content"]
+    )
 
 
 @pytest.mark.asyncio

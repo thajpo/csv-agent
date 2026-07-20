@@ -216,9 +216,7 @@ async def collect_prefix_value(
     if not seeds:
         raise ValueError("at least one continuation seed is required")
 
-    async def collect_one(
-        rollout_index: int, seed: int | None
-    ) -> PrefixContinuation:
+    async def collect_one(rollout_index: int, seed: int | None) -> PrefixContinuation:
         try:
             trace = await runner(prefix, policy, rollout_index, seed)
         except Exception as error:

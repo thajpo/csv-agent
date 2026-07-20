@@ -106,7 +106,9 @@ def load_value_examples(
                     )
                 )
             except Exception as error:
-                raise ValueError(f"invalid value record at {path}:{line_number}") from error
+                raise ValueError(
+                    f"invalid value record at {path}:{line_number}"
+                ) from error
     if not examples:
         raise ValueError(f"no value examples found in {path}")
     return examples

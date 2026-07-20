@@ -36,13 +36,19 @@ def test_prepared_splits_hold_out_complete_csv_datasets(tmp_path: Path) -> None:
     )
 
     dataset_sets = [set(manifest["datasets"][split]) for split in splits]
-    assert all(left.isdisjoint(right) for index, left in enumerate(dataset_sets) for right in dataset_sets[index + 1 :])
+    assert all(
+        left.isdisjoint(right)
+        for index, left in enumerate(dataset_sets)
+        for right in dataset_sets[index + 1 :]
+    )
     assert {split: len(rows) for split, rows in splits.items()} == {
         "train": 4,
         "validation": 2,
         "test": 2,
     }
-    assert all(Path(item.csv_source).is_file() for rows in splits.values() for item in rows)
+    assert all(
+        Path(item.csv_source).is_file() for rows in splits.values() for item in rows
+    )
 
 
 def test_preparation_fails_when_too_few_datasets_are_available(tmp_path: Path) -> None:

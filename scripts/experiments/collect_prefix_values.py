@@ -81,8 +81,7 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError(f"continuations must be between 1 and {MAX_CONTINUATIONS}")
     if not 1 <= args.candidates_per_episode <= MAX_CANDIDATES_PER_EPISODE:
         raise ValueError(
-            "candidates-per-episode must be between 1 and "
-            f"{MAX_CANDIDATES_PER_EPISODE}"
+            f"candidates-per-episode must be between 1 and {MAX_CANDIDATES_PER_EPISODE}"
         )
     if not 1 <= args.concurrency <= MAX_CONCURRENCY:
         raise ValueError(f"concurrency must be between 1 and {MAX_CONCURRENCY}")
