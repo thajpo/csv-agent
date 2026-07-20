@@ -268,3 +268,25 @@ def test_prefix_allows_pruned_conversation_history() -> None:
 
     assert len(prefix.conversation_messages) == 10
     assert prefix.consumed_turns == 6
+
+
+def test_prefix_allows_pruned_history_starting_with_user_feedback() -> None:
+    prefix = TrajectoryPrefix(
+        prefix_id="pruned-leading-feedback",
+        episode_id="episode-1",
+        csv_source="dataset/data.csv",
+        system_prompt="Solve the CSV task using Python.",
+        question_text="How many rows are present?",
+        turns=[_turn(0)],
+        turn_responses=[_response()],
+        turn_completed=[False],
+        conversation_messages=[
+            {"role": "user", "content": "Older retained execution feedback."},
+            {"role": "assistant", "content": _response()},
+            {"role": "user", "content": "Latest execution feedback."},
+        ],
+        consumed_turns=2,
+        max_turns=3,
+    )
+
+    assert prefix.conversation_messages[0]["role"] == "user"

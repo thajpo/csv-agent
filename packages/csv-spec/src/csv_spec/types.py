@@ -174,9 +174,15 @@ class TrajectoryPrefix(BaseModel):
             if message["role"] not in {"assistant", "user"}:
                 raise ValueError("prefix conversation cannot contain system messages")
         message_roles = [message["role"] for message in self.conversation_messages]
-        if message_roles != ["assistant", "user"] * (len(message_roles) // 2):
-            raise ValueError("prefix conversation roles must alternate")
-        if len(self.conversation_messages) // 2 > self.consumed_turns:
+        if any(
+            left == right
+            for left, right in zip(message_roles, message_roles[1:], strict=False)
+        ) or (message_roles and message_roles[-1] != "user"):
+            raise ValueError(
+                "prefix conversation must alternate and end with user feedback"
+            )
+        represented_turns = message_roles.count("user")
+        if represented_turns > self.consumed_turns:
             raise ValueError("conversation cannot contain more turns than consumed")
         if self.consumed_turns == 0 and self.conversation_messages:
             raise ValueError("an initial prefix cannot contain conversation messages")
