@@ -141,7 +141,14 @@ class APILLM:
                         f"Unexpected API response format. Got: {json_response}"
                     )
 
-                return json_response["choices"][0]["message"]["content"]
+                content = json_response["choices"][0]["message"].get("content")
+                if content is None:
+                    return ""
+                if not isinstance(content, str):
+                    raise ValueError(
+                        "API response message content must be text or null"
+                    )
+                return content
 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code >= 500 and attempt < max_retries - 1:
