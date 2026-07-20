@@ -109,6 +109,18 @@ def test_experiment_instruction_is_part_of_recorded_system_prompt() -> None:
 
 
 @pytest.mark.asyncio
+async def test_initial_model_request_contains_a_user_message() -> None:
+    llm = FakeLLM(["response"])
+    environment = _environment(FakeSandbox({}), llm=llm)
+    environment.init_state()
+
+    await environment.get_model_response()
+
+    assert [message["role"] for message in llm.calls[0]] == ["system", "user"]
+    assert llm.calls[0][-1]["content"] == "Begin the analysis."
+
+
+@pytest.mark.asyncio
 async def test_replay_restores_conversation_and_turn_count() -> None:
     sandbox = FakeSandbox({"print(len(df))": "3"})
     environment = _environment(sandbox)

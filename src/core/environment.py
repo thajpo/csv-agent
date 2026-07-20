@@ -585,6 +585,8 @@ class Environment:
     async def get_model_response(self) -> str:
         """Call model and log the interaction."""
         messages = self.conversation.to_openai_messages()
+        if len(messages) == 1:
+            messages.append({"role": "user", "content": "Begin the analysis."})
 
         try:
             response = await self.model(messages)
