@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from scripts.experiments.prepare_value_episodes import prepare_episode_splits
+from scripts.experiments.prepare_value_episodes import (
+    normalize_snapshot_episode,
+    prepare_episode_splits,
+)
 
 
 def _episode(serial: int, dataset_id: str, csv_source: str) -> str:
@@ -56,3 +59,14 @@ def test_preparation_fails_when_too_few_datasets_are_available(tmp_path: Path) -
             episodes_per_dataset={"train": 1, "validation": 1, "test": 1},
             seed=42,
         )
+
+
+def test_old_snapshot_diagnostics_are_regenerated_for_current_contract() -> None:
+    payload = json.loads(Path("tests/fixtures/expected_episode.json").read_text())
+    payload["triangulation"].pop("float_tolerance")
+    payload.pop("process_report")
+
+    episode = normalize_snapshot_episode(json.dumps(payload))
+
+    assert episode.triangulation["float_tolerance"] == 0.1
+    assert episode.process_report["steps"] == []

@@ -13,6 +13,30 @@ from typing import Iterable
 from csv_spec import EpisodeJSONL
 
 
+EMPTY_PROCESS_REPORT = {
+    "summary": {
+        "total_steps": 0,
+        "labeled_steps": 0,
+        "verified_steps": 0,
+        "heuristic_steps": 0,
+        "unlabeled_steps": 0,
+        "positive_steps": 0,
+        "negative_steps": 0,
+    },
+    "steps": [],
+}
+
+
+def normalize_snapshot_episode(serialized: str) -> EpisodeJSONL:
+    """Regenerate current diagnostic-only fields on the pinned old snapshot."""
+    payload = json.loads(serialized)
+    triangulation = dict(payload.get("triangulation", {}))
+    triangulation.setdefault("float_tolerance", 0.1)
+    payload["triangulation"] = triangulation
+    payload.setdefault("process_report", EMPTY_PROCESS_REPORT)
+    return EpisodeJSONL.model_validate(payload)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Prepare train, validation, and test episodes for value research."
@@ -44,7 +68,7 @@ def prepare_episode_splits(
     seen_episode_ids: set[str] = set()
     minimum_examples = max(episodes_per_dataset.values())
     for serialized in episode_json:
-        episode = EpisodeJSONL.model_validate_json(serialized)
+        episode = normalize_snapshot_episode(serialized)
         if episode.episode_id in seen_episode_ids:
             continue
         seen_episode_ids.add(episode.episode_id)
