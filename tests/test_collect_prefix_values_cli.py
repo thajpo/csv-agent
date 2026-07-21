@@ -315,6 +315,13 @@ def test_action_identity_normalizes_scoped_bindings(first: str, renamed: str) ->
     assert action_identity(first) == action_identity(renamed)
 
 
+def test_action_identity_normalizes_local_function_keyword_bindings() -> None:
+    first = "def f(value):\n    return value.mean()\nprint(f(value=df['x']))"
+    renamed = "def g(item):\n    return item.mean()\nprint(g(item=df['x']))"
+
+    assert action_identity(first) == action_identity(renamed)
+
+
 def test_candidate_request_assigns_distinct_proposal_roles() -> None:
     first = candidate_request(0)
     second = candidate_request(1)

@@ -31,6 +31,7 @@ def write_snapshot(
     output_dir: Path,
     repo: str,
     revision: str,
+    expected_records: Mapping[str, int] | None = None,
 ) -> dict:
     counts: dict[str, int] = {}
     records_by_split: dict[str, list[str]] = {}
@@ -48,6 +49,15 @@ def write_snapshot(
             episode_id = record.prefix.episode_id
             if record.collection_contract is None:
                 raise ValueError(f"{split} row {row_index} has no collection contract")
+            if (
+                record.value is None
+                or record.labeled_continuations != record.attempted_continuations
+                or record.attempted_continuations
+                != record.collection_contract.continuations
+            ):
+                raise ValueError(
+                    f"{split} row {row_index} is not a complete labeled candidate"
+                )
             if collection_contract is None:
                 collection_contract = record.collection_contract
             elif record.collection_contract != collection_contract:
@@ -71,6 +81,17 @@ def write_snapshot(
         records_by_split[split] = records
         counts[split] = len(records)
 
+    if expected_records is not None:
+        expected_counts = {
+            split: int(expected_records[split])
+            for split in ("train", "validation", "test")
+        }
+        if counts != expected_counts:
+            raise ValueError(
+                f"value snapshot record counts {counts} do not match "
+                f"expected {expected_counts}"
+            )
+
     output_dir.mkdir(parents=True, exist_ok=True)
     for split, records in records_by_split.items():
         (output_dir / f"{split}-values.jsonl").write_text(
@@ -88,12 +109,16 @@ def download(args: argparse.Namespace) -> dict:
 
     with args.dataset_config.open("rb") as handle:
         config = tomllib.load(handle)
+    expected_records = config.get("expected_records")
+    if not isinstance(expected_records, dict):
+        raise ValueError("value snapshot config must declare expected_records")
     dataset = load_dataset(config["repo"], revision=config["revision"], token=True)
     return write_snapshot(
         dataset,
         output_dir=args.output_dir,
         repo=config["repo"],
         revision=config["revision"],
+        expected_records=expected_records,
     )
 
 

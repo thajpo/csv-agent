@@ -223,17 +223,24 @@ class _BindingScope:
         return scope
 
     def resolve(self, name: str) -> str:
+        scope = self.binding_scope(name)
+        if scope is None:
+            return name
+        return scope.bindings[name]
+
+    def binding_scope(self, name: str) -> "_BindingScope | None":
         scope: _BindingScope | None = self
         skip_class_scopes = self.kind in {"function", "lambda", "comprehension"}
         while scope is not None:
             if name in scope.global_names:
-                return scope.root().bindings.get(name, name)
+                root = scope.root()
+                return root if name in root.bindings else None
             if name in scope.bindings:
-                return scope.bindings[name]
+                return scope
             scope = scope.parent
             if skip_class_scopes and scope is not None and scope.kind == "class":
                 scope = scope.parent
-        return name
+        return None
 
 
 class _BindingCollector(ast.NodeVisitor):
@@ -409,6 +416,24 @@ class _BindingNormalizer(ast.NodeTransformer):
     def __init__(self, collector: _BindingCollector) -> None:
         self.current = collector.root
         self.scopes = collector.scopes
+        self.function_keyword_bindings: dict[
+            tuple[_BindingScope, str], dict[str, str]
+        ] = {}
+        for node, function_scope in collector.scopes.items():
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            parent_scope = function_scope.parent
+            if parent_scope is None:
+                continue
+            arguments = (
+                *node.args.posonlyargs,
+                *node.args.args,
+                *node.args.kwonlyargs,
+            )
+            self.function_keyword_bindings[(parent_scope, node.name)] = {
+                argument.arg: function_scope.resolve(argument.arg)
+                for argument in arguments
+            }
 
     def _visit_arguments(self, arguments: ast.arguments) -> ast.arguments:
         for argument in (
@@ -513,6 +538,22 @@ class _BindingNormalizer(ast.NodeTransformer):
 
     def visit_Name(self, node: ast.Name) -> ast.Name:
         node.id = self.current.resolve(node.id)
+        return node
+
+    def visit_Call(self, node: ast.Call) -> ast.Call:
+        keyword_bindings: dict[str, str] = {}
+        if isinstance(node.func, ast.Name):
+            definition_scope = self.current.binding_scope(node.func.id)
+            if definition_scope is not None:
+                keyword_bindings = self.function_keyword_bindings.get(
+                    (definition_scope, node.func.id), {}
+                )
+        node.func = self.visit(node.func)
+        node.args = [self.visit(argument) for argument in node.args]
+        for keyword in node.keywords:
+            if keyword.arg is not None:
+                keyword.arg = keyword_bindings.get(keyword.arg, keyword.arg)
+            keyword.value = self.visit(keyword.value)
         return node
 
     def visit_Global(self, node: ast.Global) -> ast.Global:

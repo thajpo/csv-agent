@@ -23,6 +23,21 @@ def validate_submission_position(
         for parent in ast.walk(tree)
         for child in ast.iter_child_nodes(parent)
     }
+    submit_names = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id == "submit"
+    ]
+    indirect_submit_names = [
+        node
+        for node in submit_names
+        if not (
+            isinstance(parents.get(id(node)), ast.Call)
+            and parents[id(node)].func is node
+        )
+    ]
+    if indirect_submit_names:
+        raise ValueError("submit may only be used as a direct call")
     submit_calls = [
         node
         for node in ast.walk(tree)

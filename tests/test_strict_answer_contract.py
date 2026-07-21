@@ -36,6 +36,14 @@ def test_submit_must_be_the_final_top_level_operation() -> None:
         validate_submission_position("submit(1)\nsubmit(2)")
 
 
+def test_submit_cannot_be_called_through_an_alias() -> None:
+    with pytest.raises(ValueError, match="direct call"):
+        validate_submission_position(
+            "finish = submit\nfinish(1)\nprint('after')",
+            require_submission=True,
+        )
+
+
 @pytest.mark.parametrize("require_submission", [False, True])
 def test_submission_validation_rejects_invalid_python(require_submission) -> None:
     with pytest.raises(ValueError, match="valid Python"):

@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from csv_spec import PrefixValueCollectionContract
+from csv_spec import PrefixValueCollectionContract, PrefixValueRecord
 
 from test_value_trainer import _record
 from scripts.experiments.download_value_snapshot import write_snapshot
@@ -72,6 +72,45 @@ def test_snapshot_download_rejects_missing_split(tmp_path: Path) -> None:
             repo="owner/value-data",
             revision="abc123",
         )
+
+
+def test_snapshot_download_rejects_unexpected_split_counts(tmp_path: Path) -> None:
+    row = {"record_json": _snapshot_record().model_dump_json()}
+
+    with pytest.raises(ValueError, match="do not match expected"):
+        write_snapshot(
+            {"train": [row], "validation": [row], "test": [row]},
+            output_dir=tmp_path,
+            repo="owner/value-data",
+            revision="abc123",
+            expected_records={"train": 2, "validation": 1, "test": 1},
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_snapshot_download_rejects_incomplete_candidates(tmp_path: Path) -> None:
+    payload = _snapshot_record().model_dump(mode="json")
+    payload["continuations"][0]["verifier_verdict"] = None
+    payload["continuations"][0]["error"] = "verifier failed"
+    payload["labeled_continuations"] = 3
+    payload["successful_continuations"] = 2
+    payload["value"] = None
+    record = PrefixValueRecord.model_validate(payload)
+
+    with pytest.raises(ValueError, match="not a complete labeled candidate"):
+        write_snapshot(
+            {
+                "train": [{"record_json": record.model_dump_json()}],
+                "validation": [],
+                "test": [],
+            },
+            output_dir=tmp_path,
+            repo="owner/value-data",
+            revision="abc123",
+        )
+
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_snapshot_download_rejects_missing_collection_contract(tmp_path: Path) -> None:
