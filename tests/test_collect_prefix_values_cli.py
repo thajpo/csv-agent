@@ -261,7 +261,9 @@ def test_first_action_identity_uses_normalized_code_not_execution() -> None:
 
 def test_action_identity_normalizes_local_variable_names() -> None:
     first = "missing = df.isna().mean() * 100\nprint(missing[missing > 0])"
-    renamed = "missing_pct = df.isna().mean() * 100\nprint(missing_pct[missing_pct > 0])"
+    renamed = (
+        "missing_pct = df.isna().mean() * 100\nprint(missing_pct[missing_pct > 0])"
+    )
     distinct = "missing_pct = df.isna().sum()\nprint(missing_pct[missing_pct > 0])"
 
     assert action_identity(first) == action_identity(renamed)
