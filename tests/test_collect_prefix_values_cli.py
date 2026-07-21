@@ -12,6 +12,7 @@ from scripts.experiments.collect_prefix_values import (
     MAX_CANDIDATES_PER_EPISODE,
     MAX_CONTINUATIONS,
     MAX_PROVIDER_REQUESTS,
+    action_identity,
     build_collection_contract,
     candidate_request,
     collect,
@@ -256,6 +257,15 @@ def test_first_action_identity_uses_normalized_code_not_execution() -> None:
 
     assert first_action_identity(first) == first_action_identity(repeated)
     assert first_action_identity(first) != first_action_identity(distinct)
+
+
+def test_action_identity_normalizes_local_variable_names() -> None:
+    first = "missing = df.isna().mean() * 100\nprint(missing[missing > 0])"
+    renamed = "missing_pct = df.isna().mean() * 100\nprint(missing_pct[missing_pct > 0])"
+    distinct = "missing_pct = df.isna().sum()\nprint(missing_pct[missing_pct > 0])"
+
+    assert action_identity(first) == action_identity(renamed)
+    assert action_identity(first) != action_identity(distinct)
 
 
 def test_candidate_request_assigns_distinct_proposal_roles() -> None:

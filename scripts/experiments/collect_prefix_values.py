@@ -210,7 +210,20 @@ def first_action_identity(source) -> str:
 
 
 def action_identity(code: str) -> str:
-    return ast.dump(ast.parse(code), include_attributes=False)
+    tree = ast.parse(code)
+    local_names: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            local_names.setdefault(node.id, f"local_{len(local_names)}")
+
+    class NormalizeLocalNames(ast.NodeTransformer):
+        def visit_Name(self, node: ast.Name) -> ast.Name:
+            if node.id in local_names:
+                node.id = local_names[node.id]
+            return node
+
+    normalized = NormalizeLocalNames().visit(tree)
+    return ast.dump(normalized, include_attributes=False)
 
 
 def load_existing_records(path: Path) -> list[dict]:
