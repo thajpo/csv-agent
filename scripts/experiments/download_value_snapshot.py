@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from csv_spec import PrefixValueRecord
+from scripts.experiments.collect_prefix_values import action_identity
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,22 +32,36 @@ def write_snapshot(
     repo: str,
     revision: str,
 ) -> dict:
-    output_dir.mkdir(parents=True, exist_ok=True)
     counts: dict[str, int] = {}
+    records_by_split: dict[str, list[str]] = {}
     for split in ("train", "validation", "test"):
         if split not in dataset:
             raise ValueError(f"value snapshot is missing the {split} split")
         records: list[str] = []
+        actions_by_episode: dict[str, set[str]] = {}
         for row_index, row in enumerate(dataset[split]):
             serialized = row.get("record_json")
             if not isinstance(serialized, str):
                 raise ValueError(f"{split} row {row_index} has no record_json")
             record = PrefixValueRecord.model_validate_json(serialized)
+            episode_id = record.prefix.episode_id
+            code = record.prefix.turns[0]["code"] if record.prefix.turns else ""
+            action_id = action_identity(code) if code else "initial-state"
+            episode_actions = actions_by_episode.setdefault(episode_id, set())
+            if action_id in episode_actions:
+                raise ValueError(
+                    f"{split} repeats a first action for episode {episode_id}"
+                )
+            episode_actions.add(action_id)
             records.append(record.model_dump_json())
+        records_by_split[split] = records
+        counts[split] = len(records)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for split, records in records_by_split.items():
         (output_dir / f"{split}-values.jsonl").write_text(
             "".join(record + "\n" for record in records)
         )
-        counts[split] = len(records)
     manifest = {"repo": repo, "revision": revision, "records": counts}
     (output_dir / "snapshot.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n"
