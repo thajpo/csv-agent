@@ -16,8 +16,8 @@ def validate_submission_position(
     """Require a submit call, when present, to be one final top-level statement."""
     try:
         tree = ast.parse(code)
-    except SyntaxError:
-        return
+    except SyntaxError as error:
+        raise ValueError("code is not valid Python") from error
     parents = {
         id(child): parent
         for parent in ast.walk(tree)

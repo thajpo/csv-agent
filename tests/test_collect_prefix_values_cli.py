@@ -12,6 +12,7 @@ from scripts.experiments.collect_prefix_values import (
     MAX_CANDIDATES_PER_EPISODE,
     MAX_CONTINUATIONS,
     MAX_PROVIDER_REQUESTS,
+    build_collection_contract,
     candidate_request,
     collect,
     current_commit,
@@ -54,6 +55,130 @@ def _args(episodes: Path, **overrides) -> Namespace:
     }
     values.update(overrides)
     return Namespace(**values)
+
+
+def _contract(**overrides):
+    policy = collect_module.ContinuationPolicy(
+        model="test-model",
+        sampling_args={"temperature": 0.9},
+        request_timeout_seconds=30.0,
+    )
+    values = {
+        "code_commit": "abc123",
+        "dataset_revision": "revision",
+        "policy": policy,
+        "episode_inputs_hash": "inputs-hash",
+        "turn_count": 1,
+        "max_turns": 3,
+        "continuations": 1,
+        "candidates_per_episode": 3,
+        "seed": 42,
+        "float_tolerance": 0.1,
+    }
+    values.update(overrides)
+    return collect_module.PrefixValueCollectionContract(**values)
+
+
+def _resume_record(contract, *, labeled: bool) -> dict:
+    response = "Inspect the shape.\n```python\nprint(df.shape)\n```"
+    turns = [
+        {
+            "turn_index": 0,
+            "reasoning": "Inspect the shape.",
+            "code": "print(df.shape)",
+            "execution": {
+                "success": True,
+                "stdout": "(3, 2)",
+                "stderr": "",
+                "hooks": [],
+                "submitted_answer": None,
+            },
+        }
+    ]
+    turn_responses = [response]
+    turn_completed = [False]
+    conversation_messages = [
+        {"role": "assistant", "content": response},
+        {"role": "user", "content": "Execution completed."},
+    ]
+    consumed_turns = 1
+    if contract.turn_count == 0:
+        turns = []
+        turn_responses = []
+        turn_completed = []
+        conversation_messages = []
+        consumed_turns = 0
+    continuation = {"rollout_index": 0, "seed": 43}
+    if labeled:
+        continuation.update(
+            {
+                "trace": {
+                    "turns": [],
+                    "final_answer": None,
+                    "final_answer_hash": None,
+                    "success": False,
+                },
+                "verifier_verdict": False,
+            }
+        )
+    else:
+        continuation["error"] = "TimeoutError: transient failure"
+    return collect_module.PrefixValueRecord(
+        prefix={
+            "prefix_id": "episode-1:1:hash",
+            "episode_id": "episode-1",
+            "csv_source": "dataset/data.csv",
+            "system_prompt": "prompt",
+            "question_text": "question",
+            "turns": turns,
+            "turn_responses": turn_responses,
+            "turn_completed": turn_completed,
+            "conversation_messages": conversation_messages,
+            "consumed_turns": consumed_turns,
+            "max_turns": contract.max_turns,
+        },
+        policy=contract.policy,
+        continuations=[continuation],
+        attempted_continuations=1,
+        labeled_continuations=int(labeled),
+        successful_continuations=0,
+        value=0.0 if labeled else None,
+        code_commit=contract.code_commit,
+        dataset_revision=contract.dataset_revision,
+        collection_contract=contract,
+    ).model_dump(mode="json")
+
+
+def _initial_source(index: int) -> SimpleNamespace:
+    response = f"Reasoning for candidate {index}.\n```python\nprint({index})\n```"
+    return SimpleNamespace(
+        trace={
+            "turns": [
+                {
+                    "turn_index": 0,
+                    "reasoning": f"Candidate {index}",
+                    "code": f"print({index})",
+                    "execution": {
+                        "success": True,
+                        "stdout": str(index),
+                        "stderr": "",
+                        "hooks": [],
+                        "submitted_answer": None,
+                    },
+                }
+            ]
+        },
+        system_prompt="prompt",
+        turn_responses=[response],
+        turn_completed=[False],
+        boundary_messages=[
+            [
+                {"role": "assistant", "content": response},
+                {"role": "user", "content": "Execution completed."},
+            ]
+        ],
+        boundary_consumed_turns=[1],
+    )
 
 
 def test_defaults_are_bounded_and_fixture_loads(episodes_jsonl: Path) -> None:
@@ -148,32 +273,78 @@ def test_candidate_request_assigns_distinct_proposal_roles() -> None:
     assert "print(df.head())" not in third
 
 
-def test_resume_rejects_an_unlabeled_record() -> None:
-    policy = collect_module.ContinuationPolicy(
-        model="test-model",
-        sampling_args={"temperature": 0.9},
-        request_timeout_seconds=30.0,
-    )
-    record = {
-        "dataset_revision": "revision",
-        "policy": policy.model_dump(mode="json"),
-        "value": None,
-        "labeled_continuations": 0,
-        "attempted_continuations": 1,
-        "prefix": {
-            "episode_id": "episode-1",
-            "turns": [{"code": "print(df.shape)"}],
-        },
-    }
+def test_resume_accepts_an_incomplete_record_for_recollection() -> None:
+    contract = _contract()
 
-    with pytest.raises(ValueError, match="not fully labeled"):
+    records = validate_resume_records(
+        [_resume_record(contract, labeled=False)],
+        episode_ids={"episode-1"},
+        contract=contract,
+    )
+
+    assert records[0].value is None
+
+
+def test_resume_accepts_a_completed_initial_state_record() -> None:
+    contract = _contract(turn_count=0, candidates_per_episode=1)
+
+    records = validate_resume_records(
+        [_resume_record(contract, labeled=True)],
+        episode_ids={"episode-1"},
+        contract=contract,
+    )
+
+    assert records[0].value == 0.0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("code_commit", "different-commit"),
+        ("dataset_revision", "different-revision"),
+        (
+            "policy",
+            collect_module.ContinuationPolicy(
+                model="different-model",
+                sampling_args={"temperature": 0.9},
+                request_timeout_seconds=30.0,
+            ),
+        ),
+        ("episode_inputs_hash", "different-inputs"),
+        ("turn_count", 0),
+        ("max_turns", 4),
+        ("continuations", 2),
+        ("candidates_per_episode", 4),
+        ("seed", 99),
+        ("float_tolerance", 0.2),
+    ],
+)
+def test_resume_requires_an_exact_collection_contract(field, value) -> None:
+    original = _contract()
+    changed = original.model_copy(update={field: value})
+
+    with pytest.raises(ValueError, match="collection contract does not match"):
         validate_resume_records(
-            [record],
+            [_resume_record(original, labeled=True)],
             episode_ids={"episode-1"},
-            policy=policy,
-            dataset_revision="revision",
-            candidates_per_episode=3,
+            contract=changed,
         )
+
+
+def test_collection_contract_hashes_csv_contents(
+    episodes_jsonl: Path, tmp_path: Path
+) -> None:
+    csv_path = tmp_path / "data.csv"
+    csv_path.write_text("value\n1\n")
+    args = _args(episodes_jsonl, csv=csv_path)
+    episodes = load_episodes(episodes_jsonl, 1)
+    policy = _contract().policy
+
+    first = build_collection_contract(args, episodes, policy, "abc123")
+    csv_path.write_text("value\n2\n")
+    second = build_collection_contract(args, episodes, policy, "abc123")
+
+    assert first.episode_inputs_hash != second.episode_inputs_hash
 
 
 @pytest.mark.asyncio
@@ -187,37 +358,7 @@ async def test_source_failure_consumes_retry_instead_of_aborting_collection(
         attempts += 1
         if attempts == 1:
             raise TypeError("provider returned null content")
-        response = (
-            f"Reasoning for candidate {attempts}.\n```python\nprint({attempts})\n```"
-        )
-        return SimpleNamespace(
-            trace={
-                "turns": [
-                    {
-                        "turn_index": 0,
-                        "reasoning": f"Candidate {attempts}",
-                        "code": f"print({attempts})",
-                        "execution": {
-                            "success": True,
-                            "stdout": str(attempts),
-                            "stderr": "",
-                            "hooks": [],
-                            "submitted_answer": None,
-                        },
-                    }
-                ]
-            },
-            system_prompt="prompt",
-            turn_responses=[response],
-            turn_completed=[False],
-            boundary_messages=[
-                [
-                    {"role": "assistant", "content": response},
-                    {"role": "user", "content": "Execution completed."},
-                ]
-            ],
-            boundary_consumed_turns=[1],
-        )
+        return _initial_source(attempts)
 
     class FakeRecord:
         value = 1.0
@@ -240,11 +381,66 @@ async def test_source_failure_consumes_retry_instead_of_aborting_collection(
         episodes_jsonl,
         candidates_per_episode=1,
         continuations=1,
+        csv=episodes_jsonl,
     )
     records = await collect(args)
 
     assert attempts == 2
     assert len(records) == 1
+
+
+@pytest.mark.asyncio
+async def test_incomplete_candidate_is_persisted_and_retried(
+    monkeypatch, episodes_jsonl
+) -> None:
+    source_attempts = 0
+    collection_attempts = 0
+    persisted: list[dict] = []
+
+    async def fake_source(**_kwargs):
+        nonlocal source_attempts
+        source_attempts += 1
+        return _initial_source(source_attempts)
+
+    class FakeRecord:
+        attempted_continuations = 1
+        successful_continuations = 0
+
+        def __init__(self, labeled: bool):
+            self.labeled_continuations = int(labeled)
+            self.value = 0.0 if labeled else None
+
+        def model_dump(self, **_kwargs):
+            return {
+                "attempted_continuations": self.attempted_continuations,
+                "labeled_continuations": self.labeled_continuations,
+                "value": self.value,
+            }
+
+    async def fake_collect_prefix_value(**_kwargs):
+        nonlocal collection_attempts
+        collection_attempts += 1
+        return FakeRecord(labeled=collection_attempts > 1)
+
+    monkeypatch.setattr(collect_module, "run_initial_model_trace", fake_source)
+    monkeypatch.setattr(
+        collect_module, "collect_prefix_value", fake_collect_prefix_value
+    )
+    monkeypatch.setattr(collect_module, "current_commit", lambda: "abc123")
+
+    records = await collect(
+        _args(
+            episodes_jsonl,
+            candidates_per_episode=1,
+            continuations=1,
+            csv=episodes_jsonl,
+        ),
+        record_sink=persisted.append,
+    )
+
+    assert collection_attempts == 2
+    assert [record["value"] for record in persisted] == [None, 0.0]
+    assert [record["value"] for record in records] == [0.0]
 
 
 def test_boundary_selection_does_not_require_a_later_execution() -> None:

@@ -216,6 +216,23 @@ class ContinuationPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PrefixValueCollectionContract(BaseModel):
+    """Semantic inputs that must remain fixed across a resumed collection."""
+
+    code_commit: str
+    dataset_revision: str
+    policy: ContinuationPolicy
+    episode_inputs_hash: str
+    turn_count: int = Field(ge=0)
+    max_turns: int = Field(gt=0)
+    continuations: int = Field(gt=0)
+    candidates_per_episode: int = Field(gt=0)
+    seed: int
+    float_tolerance: float = Field(ge=0, allow_inf_nan=False)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PrefixContinuation(BaseModel):
     """One attempted continuation and its terminal-verifier judgment."""
 
@@ -253,6 +270,7 @@ class PrefixValueRecord(BaseModel):
     value: float | None = Field(default=None, ge=0.0, le=1.0)
     code_commit: str
     dataset_revision: str | None = None
+    collection_contract: PrefixValueCollectionContract | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
@@ -281,6 +299,16 @@ class PrefixValueRecord(BaseModel):
             raise ValueError(
                 "value must equal successful divided by attempted continuations"
             )
+        contract = self.collection_contract
+        if contract is not None and (
+            contract.code_commit != self.code_commit
+            or contract.dataset_revision != self.dataset_revision
+            or contract.policy != self.policy
+            or contract.turn_count != len(self.prefix.turns)
+            or contract.max_turns != self.prefix.max_turns
+            or contract.continuations != self.attempted_continuations
+        ):
+            raise ValueError("collection contract does not match value record")
         return self
 
 

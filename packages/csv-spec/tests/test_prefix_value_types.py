@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from csv_spec import (
     ContinuationPolicy,
     PrefixContinuation,
+    PrefixValueCollectionContract,
     PrefixValueRecord,
     TrajectoryPrefix,
 )
@@ -163,6 +164,55 @@ def test_value_record_requires_aggregate_to_match_verdicts() -> None:
             successful_continuations=2,
             value=None,
             code_commit="abc123",
+        )
+
+
+def test_value_record_requires_collection_contract_consistency() -> None:
+    prefix = TrajectoryPrefix(
+        prefix_id="episode-1:1",
+        episode_id="episode-1",
+        csv_source="dataset/data.csv",
+        system_prompt="Solve the CSV task using Python.",
+        question_text="How many rows are present?",
+        turns=[_turn(0)],
+        turn_responses=[_response()],
+        turn_completed=[False],
+        conversation_messages=_messages(),
+        consumed_turns=1,
+        max_turns=3,
+    )
+    policy = ContinuationPolicy(model="test-model", sampling_args={})
+    contract = PrefixValueCollectionContract(
+        code_commit="different-commit",
+        dataset_revision="hf-revision",
+        policy=policy,
+        episode_inputs_hash="inputs-hash",
+        turn_count=1,
+        max_turns=3,
+        continuations=1,
+        candidates_per_episode=3,
+        seed=42,
+        float_tolerance=0.1,
+    )
+
+    with pytest.raises(ValidationError, match="collection contract"):
+        PrefixValueRecord(
+            prefix=prefix,
+            policy=policy,
+            continuations=[
+                PrefixContinuation(
+                    rollout_index=0,
+                    trace=_trace(False),
+                    verifier_verdict=False,
+                )
+            ],
+            attempted_continuations=1,
+            labeled_continuations=1,
+            successful_continuations=0,
+            value=0.0,
+            code_commit="abc123",
+            dataset_revision="hf-revision",
+            collection_contract=contract,
         )
 
 

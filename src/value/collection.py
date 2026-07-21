@@ -11,6 +11,7 @@ from typing import Any
 from csv_spec import (
     ContinuationPolicy,
     PrefixContinuation,
+    PrefixValueCollectionContract,
     PrefixValueRecord,
     TraceDict,
     TrajectoryPrefix,
@@ -213,6 +214,7 @@ async def collect_prefix_value(
     float_tolerance: float,
     code_commit: str,
     dataset_revision: str | None = None,
+    collection_contract: PrefixValueCollectionContract | None = None,
     runner: ContinuationRunner = run_model_continuation,
 ) -> PrefixValueRecord:
     """Estimate success over all independently attempted continuations.
@@ -275,4 +277,5 @@ async def collect_prefix_value(
         ),
         code_commit=code_commit,
         dataset_revision=dataset_revision,
+        collection_contract=collection_contract,
     )

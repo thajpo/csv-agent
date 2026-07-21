@@ -36,6 +36,12 @@ def test_submit_must_be_the_final_top_level_operation() -> None:
         validate_submission_position("submit(1)\nsubmit(2)")
 
 
+@pytest.mark.parametrize("require_submission", [False, True])
+def test_submission_validation_rejects_invalid_python(require_submission) -> None:
+    with pytest.raises(ValueError, match="valid Python"):
+        validate_submission_position("submit(1", require_submission=require_submission)
+
+
 @pytest.mark.parametrize("legacy_key", ["_ground_truth", "_ground_truths"])
 def test_validate_question_rejects_legacy_answer_keys(legacy_key):
     question = _synthetic_question(**{legacy_key: 1})

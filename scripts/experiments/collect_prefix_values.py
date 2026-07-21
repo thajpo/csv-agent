@@ -10,12 +10,18 @@ from __future__ import annotations
 import argparse
 import ast
 import asyncio
+import hashlib
 import json
 import subprocess
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from csv_spec import ContinuationPolicy, EpisodeJSONL
+from csv_spec import (
+    ContinuationPolicy,
+    EpisodeJSONL,
+    PrefixValueCollectionContract,
+    PrefixValueRecord,
+)
 
 from src.value import (
     build_trajectory_prefix,
@@ -216,39 +222,86 @@ def load_existing_records(path: Path) -> list[dict]:
     return records
 
 
+def csv_source_for_episode(args: argparse.Namespace, episode: EpisodeJSONL) -> str:
+    return str(args.csv or Path(episode.csv_source))
+
+
+def build_collection_contract(
+    args: argparse.Namespace,
+    episodes: Sequence[EpisodeJSONL],
+    policy: ContinuationPolicy,
+    code_commit: str,
+) -> PrefixValueCollectionContract:
+    episode_inputs = []
+    for episode in episodes:
+        csv_source = csv_source_for_episode(args, episode)
+        csv_sha256 = hashlib.sha256(Path(csv_source).read_bytes()).hexdigest()
+        episode_inputs.append(
+            {
+                "episode_id": episode.episode_id,
+                "question": episode.question,
+                "csv_source": csv_source,
+                "csv_sha256": csv_sha256,
+            }
+        )
+    serialized_inputs = json.dumps(
+        episode_inputs,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return PrefixValueCollectionContract(
+        code_commit=code_commit,
+        dataset_revision=args.dataset_revision,
+        policy=policy,
+        episode_inputs_hash=hashlib.sha256(serialized_inputs.encode()).hexdigest(),
+        turn_count=args.turn_count,
+        max_turns=args.max_turns,
+        continuations=args.continuations,
+        candidates_per_episode=args.candidates_per_episode,
+        seed=args.seed,
+        float_tolerance=args.float_tolerance,
+    )
+
+
 def validate_resume_records(
     records: Sequence[dict],
     *,
     episode_ids: set[str],
-    policy: ContinuationPolicy,
-    dataset_revision: str,
-    candidates_per_episode: int,
-) -> None:
-    expected_policy = policy.model_dump(mode="json")
+    contract: PrefixValueCollectionContract,
+) -> list[PrefixValueRecord]:
     actions_by_episode: dict[str, set[str]] = {}
-    for record in records:
-        prefix = record.get("prefix") or {}
-        episode_id = prefix.get("episode_id")
+    validated_records: list[PrefixValueRecord] = []
+    for payload in records:
+        try:
+            record = PrefixValueRecord.model_validate(payload)
+        except Exception as error:
+            raise ValueError("resume record is invalid") from error
+        episode_id = record.prefix.episode_id
         if episode_id not in episode_ids:
             raise ValueError(f"resume record has unexpected episode: {episode_id}")
-        if record.get("dataset_revision") != dataset_revision:
-            raise ValueError("resume record dataset revision does not match")
-        if record.get("policy") != expected_policy:
-            raise ValueError("resume record continuation policy does not match")
-        if record.get("value") is None or record.get(
-            "labeled_continuations"
-        ) != record.get("attempted_continuations"):
-            raise ValueError("resume record is not fully labeled")
-        turns = prefix.get("turns") or []
-        if not turns:
+        if record.collection_contract != contract:
+            raise ValueError("resume record collection contract does not match")
+        if not record.prefix.turns and contract.turn_count != 0:
             raise ValueError("resume record has no first action")
-        action_id = action_identity(turns[0]["code"])
-        actions = actions_by_episode.setdefault(episode_id, set())
-        if action_id in actions:
-            raise ValueError(f"resume records repeat an action for {episode_id}")
-        actions.add(action_id)
-        if len(actions) > candidates_per_episode:
-            raise ValueError(f"too many resume records for {episode_id}")
+        if record.labeled_continuations == record.attempted_continuations:
+            if record.prefix.turns:
+                try:
+                    action_id = action_identity(record.prefix.turns[0]["code"])
+                except (KeyError, SyntaxError, TypeError) as error:
+                    raise ValueError(
+                        "resume record has an invalid first action"
+                    ) from error
+            else:
+                action_id = "initial-state"
+            actions = actions_by_episode.setdefault(episode_id, set())
+            if action_id in actions:
+                raise ValueError(f"resume records repeat an action for {episode_id}")
+            actions.add(action_id)
+            if len(actions) > contract.candidates_per_episode:
+                raise ValueError(f"too many resume records for {episode_id}")
+        validated_records.append(record)
+    return validated_records
 
 
 async def collect(
@@ -268,18 +321,22 @@ async def collect(
         },
         request_timeout_seconds=args.request_timeout_seconds,
     )
+    commit = current_commit()
+    contract = build_collection_contract(args, episodes, policy, commit)
     episode_ids = {episode.episode_id for episode in episodes}
-    validate_resume_records(
+    validated_existing = validate_resume_records(
         existing_records,
         episode_ids=episode_ids,
-        policy=policy,
-        dataset_revision=args.dataset_revision,
-        candidates_per_episode=args.candidates_per_episode,
+        contract=contract,
     )
     existing_by_episode = {episode_id: [] for episode_id in episode_ids}
-    for record in existing_records:
-        existing_by_episode[record["prefix"]["episode_id"]].append(record)
-    commit = current_commit()
+    prior_attempts_by_episode = {episode_id: 0 for episode_id in episode_ids}
+    for record in validated_existing:
+        prior_attempts_by_episode[record.prefix.episode_id] += 1
+        if record.labeled_continuations == record.attempted_continuations:
+            existing_by_episode[record.prefix.episode_id].append(
+                record.model_dump(mode="json")
+            )
     rollout_slots = asyncio.Semaphore(args.concurrency)
 
     async def limited_continuation(prefix, continuation_policy, index, seed):
@@ -288,7 +345,8 @@ async def collect(
                 prefix, continuation_policy, index, seed
             )
 
-    total_prefixes = len(episodes) * args.candidates_per_episode - len(existing_records)
+    completed_existing = sum(len(records) for records in existing_by_episode.values())
+    total_prefixes = len(episodes) * args.candidates_per_episode - completed_existing
     total_rollouts = total_prefixes * (1 + args.continuations)
     request_limit = maximum_provider_requests(
         argparse.Namespace(**{**vars(args), "max_episodes": len(episodes)})
@@ -301,13 +359,13 @@ async def collect(
 
     async def collect_episode(episode_index, episode) -> list[dict]:
         episode_records = list(existing_by_episode[episode.episode_id])
-        csv_source = str(args.csv or Path(episode.csv_source))
+        csv_source = csv_source_for_episode(args, episode)
         accepted_action_ids = {
             action_identity(record["prefix"]["turns"][0]["code"])
             for record in episode_records
         }
         source_attempt = 0
-        resume_seed_offset = len(episode_records) * 10_000_000
+        resume_seed_offset = prior_attempts_by_episode[episode.episode_id] * 10_000_000
         while len(accepted_action_ids) < args.candidates_per_episode:
             if source_attempt >= (
                 args.candidates_per_episode * MAX_SOURCE_ATTEMPTS_PER_CANDIDATE
@@ -367,7 +425,6 @@ async def collect(
             if action_id in accepted_action_ids:
                 print(f"Skipping duplicate source attempt for {episode.episode_id}")
                 continue
-            accepted_action_ids.add(action_id)
             continuation_seeds = [
                 source_seed + offset for offset in range(1, args.continuations + 1)
             ]
@@ -379,12 +436,21 @@ async def collect(
                 float_tolerance=args.float_tolerance,
                 code_commit=commit,
                 dataset_revision=args.dataset_revision,
+                collection_contract=contract,
                 runner=limited_continuation,
             )
             serialized = record.model_dump(mode="json")
-            episode_records.append(serialized)
             if record_sink is not None:
                 record_sink(serialized)
+            if record.labeled_continuations != record.attempted_continuations:
+                print(
+                    f"Retrying incomplete candidate for {episode.episode_id}: "
+                    f"labeled={record.labeled_continuations}/"
+                    f"{record.attempted_continuations}"
+                )
+                continue
+            accepted_action_ids.add(action_id)
+            episode_records.append(serialized)
             print(
                 f"{episode.episode_id} candidate {len(accepted_action_ids)}: "
                 f"value={record.value}, labeled={record.labeled_continuations}/"
@@ -422,6 +488,10 @@ async def main() -> None:
         record_sink=persist,
         existing_records=existing_records,
     )
+    compacted = "".join(json.dumps(record, sort_keys=True) + "\n" for record in records)
+    temporary_output = args.output.with_name(f".{args.output.name}.tmp")
+    temporary_output.write_text(compacted, encoding="utf-8")
+    temporary_output.replace(args.output)
     print(f"Wrote {len(records)} record(s) to {args.output}")
 
 
