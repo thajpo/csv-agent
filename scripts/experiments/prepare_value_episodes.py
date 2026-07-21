@@ -66,7 +66,6 @@ def prepare_episode_splits(
 ) -> tuple[dict[str, list[EpisodeJSONL]], dict]:
     grouped: dict[str, list[EpisodeJSONL]] = defaultdict(list)
     seen_episode_ids: set[str] = set()
-    minimum_examples = max(episodes_per_dataset.values())
     for serialized in episode_json:
         episode = normalize_snapshot_episode(serialized)
         if episode.episode_id in seen_episode_ids:
@@ -79,12 +78,18 @@ def prepare_episode_splits(
         episode = episode.model_copy(update={"csv_source": str(local_csv)})
         grouped[dataset_id].append(episode)
 
+    needed = sum(dataset_counts.values())
+    active_splits = [split for split, count in dataset_counts.items() if count]
+    minimum_examples = (
+        min(episodes_per_dataset[split] for split in active_splits)
+        if active_splits
+        else 0
+    )
     eligible = sorted(
         dataset_id
         for dataset_id, episodes in grouped.items()
         if len(episodes) >= minimum_examples
     )
-    needed = sum(dataset_counts.values())
     if len(eligible) < needed:
         raise ValueError(
             f"need {needed} datasets with at least {minimum_examples} episodes; "
@@ -93,15 +98,36 @@ def prepare_episode_splits(
     rng = random.Random(seed)
     rng.shuffle(eligible)
 
-    assignments: dict[str, list[str]] = {}
-    cursor = 0
-    for split in ("train", "validation", "test"):
+    split_order = ("train", "validation", "test")
+    assignments: dict[str, list[str]] = {split: [] for split in split_order}
+    remaining = eligible
+    allocation_order = sorted(
+        split_order,
+        key=lambda split: episodes_per_dataset[split],
+        reverse=True,
+    )
+    for split in allocation_order:
         count = dataset_counts[split]
-        assignments[split] = eligible[cursor : cursor + count]
-        cursor += count
+        required_episodes = episodes_per_dataset[split]
+        candidates = [
+            dataset_id
+            for dataset_id in remaining
+            if len(grouped[dataset_id]) >= required_episodes
+        ]
+        if len(candidates) < count:
+            raise ValueError(
+                f"need {count} {split} datasets with at least "
+                f"{required_episodes} episodes; found {len(candidates)}"
+            )
+        assignments[split] = candidates[:count]
+        selected = set(assignments[split])
+        remaining = [
+            dataset_id for dataset_id in remaining if dataset_id not in selected
+        ]
 
     output: dict[str, list[EpisodeJSONL]] = {}
-    for split, dataset_ids in assignments.items():
+    for split in split_order:
+        dataset_ids = assignments[split]
         selected: list[EpisodeJSONL] = []
         for dataset_id in dataset_ids:
             candidates = sorted(grouped[dataset_id], key=lambda item: item.episode_id)

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Mapping, Sequence
 
 from csv_spec import PrefixValueRecord
-from scripts.experiments.collect_prefix_values import action_identity
+from scripts.experiments.collect_prefix_values import prefix_action_identity
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,14 +39,20 @@ def write_snapshot(
             raise ValueError(f"value snapshot is missing the {split} split")
         records: list[str] = []
         actions_by_episode: dict[str, set[str]] = {}
+        collection_contract = None
         for row_index, row in enumerate(dataset[split]):
             serialized = row.get("record_json")
             if not isinstance(serialized, str):
                 raise ValueError(f"{split} row {row_index} has no record_json")
             record = PrefixValueRecord.model_validate_json(serialized)
             episode_id = record.prefix.episode_id
-            code = record.prefix.turns[0]["code"] if record.prefix.turns else ""
-            action_id = action_identity(code) if code else "initial-state"
+            if record.collection_contract is None:
+                raise ValueError(f"{split} row {row_index} has no collection contract")
+            if collection_contract is None:
+                collection_contract = record.collection_contract
+            elif record.collection_contract != collection_contract:
+                raise ValueError(f"{split} does not share one collection contract")
+            action_id = prefix_action_identity(record.prefix.turns)
             episode_actions = actions_by_episode.setdefault(episode_id, set())
             if action_id in episode_actions:
                 raise ValueError(
@@ -54,6 +60,14 @@ def write_snapshot(
                 )
             episode_actions.add(action_id)
             records.append(record.model_dump_json())
+        if collection_contract is not None:
+            expected_candidates = collection_contract.candidates_per_episode
+            for episode_id, actions in actions_by_episode.items():
+                if len(actions) != expected_candidates:
+                    raise ValueError(
+                        f"{split} episode {episode_id} has {len(actions)} candidates; "
+                        f"expected {expected_candidates}"
+                    )
         records_by_split[split] = records
         counts[split] = len(records)
 

@@ -3,13 +3,53 @@
 from pathlib import Path
 
 import pytest
+from csv_spec import PrefixValueCollectionContract
 
 from test_value_trainer import _record
 from scripts.experiments.download_value_snapshot import write_snapshot
 
 
+def _snapshot_record(
+    *,
+    episode_id: str = "episode-1",
+    candidate_id: str = "candidate-1",
+    code: str = "print(len(df))",
+    candidates_per_episode: int = 1,
+    seed: int = 42,
+):
+    record = _record()
+    turn = dict(record.prefix.turns[0])
+    turn["code"] = code
+    prefix = record.prefix.model_copy(
+        update={
+            "prefix_id": f"{episode_id}:{candidate_id}",
+            "episode_id": episode_id,
+            "turns": [turn],
+        }
+    )
+    contract = PrefixValueCollectionContract(
+        code_commit=record.code_commit,
+        dataset_revision="revision",
+        policy=record.policy,
+        episode_inputs_hash="inputs-hash",
+        turn_count=1,
+        max_turns=record.prefix.max_turns,
+        continuations=record.attempted_continuations,
+        candidates_per_episode=candidates_per_episode,
+        seed=seed,
+        float_tolerance=0.1,
+    )
+    return record.model_copy(
+        update={
+            "prefix": prefix,
+            "dataset_revision": contract.dataset_revision,
+            "collection_contract": contract,
+        }
+    )
+
+
 def test_snapshot_download_restores_validated_records(tmp_path: Path) -> None:
-    row = {"record_json": _record().model_dump_json()}
+    row = {"record_json": _snapshot_record().model_dump_json()}
     dataset = {"train": [row], "validation": [row], "test": [row]}
 
     manifest = write_snapshot(
@@ -34,10 +74,61 @@ def test_snapshot_download_rejects_missing_split(tmp_path: Path) -> None:
         )
 
 
+def test_snapshot_download_rejects_missing_collection_contract(tmp_path: Path) -> None:
+    row = {"record_json": _record().model_dump_json()}
+
+    with pytest.raises(ValueError, match="has no collection contract"):
+        write_snapshot(
+            {"train": [row], "validation": [], "test": []},
+            output_dir=tmp_path,
+            repo="owner/value-data",
+            revision="abc123",
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_snapshot_download_requires_complete_candidate_groups(tmp_path: Path) -> None:
+    row = {"record_json": _snapshot_record(candidates_per_episode=2).model_dump_json()}
+
+    with pytest.raises(
+        ValueError, match="episode episode-1 has 1 candidates; expected 2"
+    ):
+        write_snapshot(
+            {"train": [row], "validation": [], "test": []},
+            output_dir=tmp_path,
+            repo="owner/value-data",
+            revision="abc123",
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_snapshot_download_requires_one_contract_per_split(tmp_path: Path) -> None:
+    rows = [
+        {"record_json": _snapshot_record(episode_id="episode-1").model_dump_json()},
+        {
+            "record_json": _snapshot_record(
+                episode_id="episode-2", seed=99
+            ).model_dump_json()
+        },
+    ]
+
+    with pytest.raises(ValueError, match="does not share one collection contract"):
+        write_snapshot(
+            {"train": rows, "validation": [], "test": []},
+            output_dir=tmp_path,
+            repo="owner/value-data",
+            revision="abc123",
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_snapshot_download_rejects_normalized_duplicate_actions(
     tmp_path: Path,
 ) -> None:
-    first = _record()
+    first = _snapshot_record(candidates_per_episode=2)
     first_turn = dict(first.prefix.turns[0])
     first_turn["code"] = (
         "missing_percentages = df.isna().mean()\nprint(missing_percentages)"
@@ -45,7 +136,7 @@ def test_snapshot_download_rejects_normalized_duplicate_actions(
     first_prefix = first.prefix.model_copy(
         update={"prefix_id": "episode-1:candidate-1", "turns": [first_turn]}
     )
-    repeated = _record()
+    repeated = _snapshot_record(candidates_per_episode=2)
     repeated_turn = dict(repeated.prefix.turns[0])
     repeated_turn["code"] = "missing_percent = df.isna().mean()\nprint(missing_percent)"
     repeated_prefix = repeated.prefix.model_copy(

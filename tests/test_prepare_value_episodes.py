@@ -67,6 +67,36 @@ def test_preparation_fails_when_too_few_datasets_are_available(tmp_path: Path) -
         )
 
 
+def test_preparation_assigns_datasets_by_each_split_requirement(tmp_path: Path) -> None:
+    rows = []
+    for dataset_id, episode_count in (("train-ready", 6), ("test-ready", 8)):
+        csv = tmp_path / dataset_id / "data.csv"
+        csv.parent.mkdir(parents=True)
+        csv.write_text("a\n1\n")
+        rows.extend(
+            _episode(index, dataset_id, str(csv)) for index in range(episode_count)
+        )
+
+    splits, manifest = prepare_episode_splits(
+        rows,
+        local_data=tmp_path,
+        dataset_counts={"train": 1, "validation": 0, "test": 1},
+        episodes_per_dataset={"train": 6, "validation": 4, "test": 8},
+        seed=42,
+    )
+
+    assert manifest["datasets"] == {
+        "train": ["train-ready"],
+        "validation": [],
+        "test": ["test-ready"],
+    }
+    assert {split: len(episodes) for split, episodes in splits.items()} == {
+        "train": 6,
+        "validation": 0,
+        "test": 8,
+    }
+
+
 def test_old_snapshot_diagnostics_are_regenerated_for_current_contract() -> None:
     payload = json.loads(Path("tests/fixtures/expected_episode.json").read_text())
     payload["triangulation"].pop("float_tolerance")

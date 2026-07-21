@@ -211,6 +211,22 @@ def test_combined_request_budget_rejects_large_run(episodes_jsonl: Path) -> None
         )
 
 
+def test_request_budget_includes_incomplete_candidate_recollection(
+    episodes_jsonl: Path,
+) -> None:
+    args = _args(
+        episodes_jsonl,
+        max_episodes=1,
+        candidates_per_episode=8,
+        continuations=16,
+        max_turns=20,
+    )
+
+    assert maximum_provider_requests(args) == 23_112
+    with pytest.raises(ValueError, match="provider requests"):
+        validate_args(args)
+
+
 def test_candidate_cap_rejects_accidental_large_branching(
     episodes_jsonl: Path,
 ) -> None:
@@ -268,6 +284,35 @@ def test_action_identity_normalizes_local_variable_names() -> None:
 
     assert action_identity(first) == action_identity(renamed)
     assert action_identity(first) != action_identity(distinct)
+
+
+@pytest.mark.parametrize(
+    ("first", "renamed"),
+    [
+        (
+            "print(df.apply(lambda value: value + 1))",
+            "print(df.apply(lambda item: item + 1))",
+        ),
+        (
+            "def summarize(series):\n    return series.mean()\nprint(summarize(df['x']))",
+            "def calculate(values):\n    return values.mean()\nprint(calculate(df['x']))",
+        ),
+        (
+            "try:\n    print(df['x'])\nexcept KeyError as error:\n    print(error)",
+            "try:\n    print(df['x'])\nexcept KeyError as problem:\n    print(problem)",
+        ),
+        (
+            "import pandas as pd\nprint(pd.isna(df).sum())",
+            "import pandas as pandas_alias\nprint(pandas_alias.isna(df).sum())",
+        ),
+        (
+            "values = [(latest := item) for item in df['x']]\nprint(latest)",
+            "results = [(last_seen := value) for value in df['x']]\nprint(last_seen)",
+        ),
+    ],
+)
+def test_action_identity_normalizes_scoped_bindings(first: str, renamed: str) -> None:
+    assert action_identity(first) == action_identity(renamed)
 
 
 def test_candidate_request_assigns_distinct_proposal_roles() -> None:
@@ -453,6 +498,34 @@ async def test_incomplete_candidate_is_persisted_and_retried(
     assert collection_attempts == 2
     assert [record["value"] for record in persisted] == [None, 0.0]
     assert [record["value"] for record in records] == [0.0]
+
+
+@pytest.mark.asyncio
+async def test_completed_initial_state_resume_skips_recollection(
+    monkeypatch, episodes_jsonl
+) -> None:
+    episode = json.loads(episodes_jsonl.read_text())
+    episode["episode_id"] = "episode-1"
+    episodes_jsonl.write_text(json.dumps(episode) + "\n")
+    contract = _contract(turn_count=0, candidates_per_episode=1, max_turns=3)
+    monkeypatch.setattr(
+        collect_module, "build_collection_contract", lambda *_args: contract
+    )
+    monkeypatch.setattr(collect_module, "current_commit", lambda: "abc123")
+
+    records = await collect(
+        _args(
+            episodes_jsonl,
+            turn_count=0,
+            candidates_per_episode=1,
+            continuations=1,
+            max_turns=3,
+        ),
+        existing_records=[_resume_record(contract, labeled=True)],
+    )
+
+    assert len(records) == 1
+    assert records[0]["prefix"]["turns"] == []
 
 
 def test_boundary_selection_does_not_require_a_later_execution() -> None:

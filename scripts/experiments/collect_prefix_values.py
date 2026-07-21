@@ -128,18 +128,13 @@ def validate_args(args: argparse.Namespace) -> None:
 
 def maximum_provider_requests(args: argparse.Namespace) -> int:
     """Worst-case HTTP requests including API retries."""
-    source_requests = (
+    source_attempts = (
         args.max_episodes
         * args.candidates_per_episode
         * MAX_SOURCE_ATTEMPTS_PER_CANDIDATE
-        * max(args.turn_count, 1)
     )
-    continuation_requests = (
-        args.max_episodes
-        * args.candidates_per_episode
-        * args.continuations
-        * args.max_turns
-    )
+    source_requests = source_attempts * max(args.turn_count, 1)
+    continuation_requests = source_attempts * args.continuations * args.max_turns
     return (source_requests + continuation_requests) * API_MAX_RETRIES
 
 
@@ -205,25 +200,381 @@ def select_boundary(source, turn_count: int, max_turns: int) -> tuple[list[dict]
 
 
 def first_action_identity(source) -> str:
-    code = source.trace["turns"][0]["code"]
-    return action_identity(code)
+    return prefix_action_identity(source.trace["turns"])
+
+
+class _BindingScope:
+    def __init__(self, kind: str, parent: "_BindingScope | None" = None) -> None:
+        self.kind = kind
+        self.parent = parent
+        self.bindings: dict[str, str] = {}
+        self.global_names: set[str] = set()
+        self.nonlocal_names: set[str] = set()
+
+    def bind(self, name: str) -> None:
+        if name in self.global_names or name in self.nonlocal_names:
+            return
+        self.bindings.setdefault(name, f"local_{len(self.bindings)}")
+
+    def root(self) -> "_BindingScope":
+        scope = self
+        while scope.parent is not None:
+            scope = scope.parent
+        return scope
+
+    def resolve(self, name: str) -> str:
+        scope: _BindingScope | None = self
+        skip_class_scopes = self.kind in {"function", "lambda", "comprehension"}
+        while scope is not None:
+            if name in scope.global_names:
+                return scope.root().bindings.get(name, name)
+            if name in scope.bindings:
+                return scope.bindings[name]
+            scope = scope.parent
+            if skip_class_scopes and scope is not None and scope.kind == "class":
+                scope = scope.parent
+        return name
+
+
+class _BindingCollector(ast.NodeVisitor):
+    def __init__(self, tree: ast.AST) -> None:
+        self.root = _BindingScope("module")
+        self.current = self.root
+        self.scopes: dict[ast.AST, _BindingScope] = {tree: self.root}
+
+    def _enter(self, node: ast.AST, kind: str) -> _BindingScope:
+        scope = _BindingScope(kind, self.current)
+        self.scopes[node] = scope
+        self.current = scope
+        return scope
+
+    def _visit_function_context(
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef
+    ) -> None:
+        self.current.bind(node.name)
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        for default in (*node.args.defaults, *node.args.kw_defaults):
+            if default is not None:
+                self.visit(default)
+        for argument in (
+            *node.args.posonlyargs,
+            *node.args.args,
+            *node.args.kwonlyargs,
+        ):
+            if argument.annotation is not None:
+                self.visit(argument.annotation)
+        if node.args.vararg and node.args.vararg.annotation is not None:
+            self.visit(node.args.vararg.annotation)
+        if node.args.kwarg and node.args.kwarg.annotation is not None:
+            self.visit(node.args.kwarg.annotation)
+        if node.returns is not None:
+            self.visit(node.returns)
+        parent = self.current
+        self._enter(node, "function")
+        for argument in (
+            *node.args.posonlyargs,
+            *node.args.args,
+            *node.args.kwonlyargs,
+        ):
+            self.current.bind(argument.arg)
+        if node.args.vararg:
+            self.current.bind(node.args.vararg.arg)
+        if node.args.kwarg:
+            self.current.bind(node.args.kwarg.arg)
+        for statement in node.body:
+            self.visit(statement)
+        self.current = parent
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_function_context(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_function_context(node)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        for default in (*node.args.defaults, *node.args.kw_defaults):
+            if default is not None:
+                self.visit(default)
+        parent = self.current
+        self._enter(node, "lambda")
+        for argument in (
+            *node.args.posonlyargs,
+            *node.args.args,
+            *node.args.kwonlyargs,
+        ):
+            self.current.bind(argument.arg)
+        if node.args.vararg:
+            self.current.bind(node.args.vararg.arg)
+        if node.args.kwarg:
+            self.current.bind(node.args.kwarg.arg)
+        self.visit(node.body)
+        self.current = parent
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        self.current.bind(node.name)
+        for expression in (*node.decorator_list, *node.bases):
+            self.visit(expression)
+        for keyword in node.keywords:
+            self.visit(keyword.value)
+        parent = self.current
+        self._enter(node, "class")
+        for statement in node.body:
+            self.visit(statement)
+        self.current = parent
+
+    def _visit_comprehension_scope(
+        self, node: ast.AST, result_nodes: tuple[ast.AST, ...]
+    ) -> None:
+        generators = node.generators
+        self.visit(generators[0].iter)
+        parent = self.current
+        self._enter(node, "comprehension")
+        self.visit(generators[0].target)
+        for condition in generators[0].ifs:
+            self.visit(condition)
+        for generator in generators[1:]:
+            self.visit(generator.iter)
+            self.visit(generator.target)
+            for condition in generator.ifs:
+                self.visit(condition)
+        for result in result_nodes:
+            self.visit(result)
+        self.current = parent
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        self._visit_comprehension_scope(node, (node.elt,))
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        self._visit_comprehension_scope(node, (node.elt,))
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        self._visit_comprehension_scope(node, (node.elt,))
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        self._visit_comprehension_scope(node, (node.key, node.value))
+
+    def visit_Name(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.current.bind(node.id)
+
+    def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+        self.visit(node.value)
+        scope = self.current
+        while scope.kind == "comprehension" and scope.parent is not None:
+            scope = scope.parent
+        scope.bind(node.target.id)
+
+    def visit_Global(self, node: ast.Global) -> None:
+        self.current.global_names.update(node.names)
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        self.current.nonlocal_names.update(node.names)
+
+    def visit_Import(self, node: ast.Import) -> None:
+        for imported in node.names:
+            self.current.bind(imported.asname or imported.name.split(".")[0])
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        for imported in node.names:
+            if imported.name != "*":
+                self.current.bind(imported.asname or imported.name)
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        if node.type is not None:
+            self.visit(node.type)
+        if node.name is not None:
+            self.current.bind(node.name)
+        for statement in node.body:
+            self.visit(statement)
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> None:
+        if node.pattern is not None:
+            self.visit(node.pattern)
+        if node.name is not None:
+            self.current.bind(node.name)
+
+    def visit_MatchStar(self, node: ast.MatchStar) -> None:
+        if node.name is not None:
+            self.current.bind(node.name)
+
+    def visit_MatchMapping(self, node: ast.MatchMapping) -> None:
+        for pattern in node.patterns:
+            self.visit(pattern)
+        if node.rest is not None:
+            self.current.bind(node.rest)
+
+
+class _BindingNormalizer(ast.NodeTransformer):
+    def __init__(self, collector: _BindingCollector) -> None:
+        self.current = collector.root
+        self.scopes = collector.scopes
+
+    def _visit_arguments(self, arguments: ast.arguments) -> ast.arguments:
+        for argument in (
+            *arguments.posonlyargs,
+            *arguments.args,
+            *arguments.kwonlyargs,
+        ):
+            argument.arg = self.current.resolve(argument.arg)
+        if arguments.vararg:
+            arguments.vararg.arg = self.current.resolve(arguments.vararg.arg)
+        if arguments.kwarg:
+            arguments.kwarg.arg = self.current.resolve(arguments.kwarg.arg)
+        return arguments
+
+    def _visit_function_context(self, node: ast.FunctionDef | ast.AsyncFunctionDef):
+        node.name = self.current.resolve(node.name)
+        node.decorator_list = [self.visit(item) for item in node.decorator_list]
+        node.args.defaults = [self.visit(item) for item in node.args.defaults]
+        node.args.kw_defaults = [
+            self.visit(item) if item is not None else None
+            for item in node.args.kw_defaults
+        ]
+        for argument in (
+            *node.args.posonlyargs,
+            *node.args.args,
+            *node.args.kwonlyargs,
+        ):
+            if argument.annotation is not None:
+                argument.annotation = self.visit(argument.annotation)
+        if node.args.vararg and node.args.vararg.annotation is not None:
+            node.args.vararg.annotation = self.visit(node.args.vararg.annotation)
+        if node.args.kwarg and node.args.kwarg.annotation is not None:
+            node.args.kwarg.annotation = self.visit(node.args.kwarg.annotation)
+        if node.returns is not None:
+            node.returns = self.visit(node.returns)
+        parent = self.current
+        self.current = self.scopes[node]
+        node.args = self._visit_arguments(node.args)
+        node.body = [self.visit(item) for item in node.body]
+        self.current = parent
+        return node
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
+        return self._visit_function_context(node)
+
+    def visit_AsyncFunctionDef(
+        self, node: ast.AsyncFunctionDef
+    ) -> ast.AsyncFunctionDef:
+        return self._visit_function_context(node)
+
+    def visit_Lambda(self, node: ast.Lambda) -> ast.Lambda:
+        node.args.defaults = [self.visit(item) for item in node.args.defaults]
+        node.args.kw_defaults = [
+            self.visit(item) if item is not None else None
+            for item in node.args.kw_defaults
+        ]
+        parent = self.current
+        self.current = self.scopes[node]
+        node.args = self._visit_arguments(node.args)
+        node.body = self.visit(node.body)
+        self.current = parent
+        return node
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
+        node.name = self.current.resolve(node.name)
+        node.decorator_list = [self.visit(item) for item in node.decorator_list]
+        node.bases = [self.visit(item) for item in node.bases]
+        node.keywords = [self.visit(item) for item in node.keywords]
+        parent = self.current
+        self.current = self.scopes[node]
+        node.body = [self.visit(item) for item in node.body]
+        self.current = parent
+        return node
+
+    def _visit_comprehension_scope(self, node: ast.AST, result_fields: tuple[str, ...]):
+        generators = node.generators
+        generators[0].iter = self.visit(generators[0].iter)
+        parent = self.current
+        self.current = self.scopes[node]
+        generators[0].target = self.visit(generators[0].target)
+        generators[0].ifs = [self.visit(item) for item in generators[0].ifs]
+        for generator in generators[1:]:
+            generator.iter = self.visit(generator.iter)
+            generator.target = self.visit(generator.target)
+            generator.ifs = [self.visit(item) for item in generator.ifs]
+        for field in result_fields:
+            setattr(node, field, self.visit(getattr(node, field)))
+        self.current = parent
+        return node
+
+    def visit_ListComp(self, node: ast.ListComp) -> ast.ListComp:
+        return self._visit_comprehension_scope(node, ("elt",))
+
+    def visit_SetComp(self, node: ast.SetComp) -> ast.SetComp:
+        return self._visit_comprehension_scope(node, ("elt",))
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> ast.GeneratorExp:
+        return self._visit_comprehension_scope(node, ("elt",))
+
+    def visit_DictComp(self, node: ast.DictComp) -> ast.DictComp:
+        return self._visit_comprehension_scope(node, ("key", "value"))
+
+    def visit_Name(self, node: ast.Name) -> ast.Name:
+        node.id = self.current.resolve(node.id)
+        return node
+
+    def visit_Global(self, node: ast.Global) -> ast.Global:
+        root = self.current.root()
+        node.names = [root.bindings.get(name, name) for name in node.names]
+        return node
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> ast.Nonlocal:
+        node.names = [self.current.resolve(name) for name in node.names]
+        return node
+
+    def visit_Import(self, node: ast.Import) -> ast.Import:
+        for imported in node.names:
+            bound = imported.asname or imported.name.split(".")[0]
+            imported.asname = self.current.resolve(bound)
+        return node
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.ImportFrom:
+        for imported in node.names:
+            if imported.name != "*":
+                imported.asname = self.current.resolve(imported.asname or imported.name)
+        return node
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> ast.ExceptHandler:
+        if node.type is not None:
+            node.type = self.visit(node.type)
+        if node.name is not None:
+            node.name = self.current.resolve(node.name)
+        node.body = [self.visit(item) for item in node.body]
+        return node
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> ast.MatchAs:
+        if node.pattern is not None:
+            node.pattern = self.visit(node.pattern)
+        if node.name is not None:
+            node.name = self.current.resolve(node.name)
+        return node
+
+    def visit_MatchStar(self, node: ast.MatchStar) -> ast.MatchStar:
+        if node.name is not None:
+            node.name = self.current.resolve(node.name)
+        return node
+
+    def visit_MatchMapping(self, node: ast.MatchMapping) -> ast.MatchMapping:
+        node.patterns = [self.visit(item) for item in node.patterns]
+        if node.rest is not None:
+            node.rest = self.current.resolve(node.rest)
+        return node
 
 
 def action_identity(code: str) -> str:
     tree = ast.parse(code)
-    local_names: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-            local_names.setdefault(node.id, f"local_{len(local_names)}")
-
-    class NormalizeLocalNames(ast.NodeTransformer):
-        def visit_Name(self, node: ast.Name) -> ast.Name:
-            if node.id in local_names:
-                node.id = local_names[node.id]
-            return node
-
-    normalized = NormalizeLocalNames().visit(tree)
+    collector = _BindingCollector(tree)
+    collector.visit(tree)
+    normalized = _BindingNormalizer(collector).visit(tree)
     return ast.dump(normalized, include_attributes=False)
+
+
+def prefix_action_identity(turns: Sequence[dict]) -> str:
+    if not turns:
+        return "initial-state"
+    return action_identity(turns[0]["code"])
 
 
 def load_existing_records(path: Path) -> list[dict]:
@@ -298,15 +649,10 @@ def validate_resume_records(
         if not record.prefix.turns and contract.turn_count != 0:
             raise ValueError("resume record has no first action")
         if record.labeled_continuations == record.attempted_continuations:
-            if record.prefix.turns:
-                try:
-                    action_id = action_identity(record.prefix.turns[0]["code"])
-                except (KeyError, SyntaxError, TypeError) as error:
-                    raise ValueError(
-                        "resume record has an invalid first action"
-                    ) from error
-            else:
-                action_id = "initial-state"
+            try:
+                action_id = prefix_action_identity(record.prefix.turns)
+            except (KeyError, SyntaxError, TypeError) as error:
+                raise ValueError("resume record has an invalid first action") from error
             actions = actions_by_episode.setdefault(episode_id, set())
             if action_id in actions:
                 raise ValueError(f"resume records repeat an action for {episode_id}")
@@ -374,7 +720,7 @@ async def collect(
         episode_records = list(existing_by_episode[episode.episode_id])
         csv_source = csv_source_for_episode(args, episode)
         accepted_action_ids = {
-            action_identity(record["prefix"]["turns"][0]["code"])
+            prefix_action_identity(record["prefix"]["turns"])
             for record in episode_records
         }
         source_attempt = 0
