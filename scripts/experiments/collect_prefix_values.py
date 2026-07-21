@@ -41,29 +41,21 @@ not spend the turn only listing column names. On later turns, finish the task
 and call submit() when you have the answer."""
 
 
-def candidate_request(previous_actions: list[str]) -> str:
+def candidate_request(candidate_index: int) -> str:
     strategies = (
         "Choose one useful prerequisite selection or data-quality check.",
         "Choose a necessary calculation or transformation, not another broad inspection.",
         "Choose a direct partial result or consistency check that moves closer to the final answer.",
     )
-    strategy = strategies[min(len(previous_actions), len(strategies) - 1)]
-    request = (
+    strategy = strategies[min(candidate_index, len(strategies) - 1)]
+    return (
         "Begin with one concrete, question-relevant intermediate action. Your "
         "response must contain 1-3 sentences explaining that action, followed by "
         "exactly one fenced ```python code block that prints what it learns. Do "
         "not call submit() anywhere, do not solve the whole task in this turn, and "
-        f"do not only list the column names. {strategy}"
+        f"do not only list the column names. {strategy} Do not repeat or merely "
+        "reformat another candidate."
     )
-    if previous_actions:
-        exclusions = (
-            "\n\nChoose a substantively different operation that reveals a "
-            "different fact, not a refactoring or reformatting of these previously "
-            "sampled actions:\n"
-            + "\n".join(f"- {action[:500]}" for action in previous_actions)
-        )
-        request += exclusions
-    return request
 
 
 def parse_args() -> argparse.Namespace:
@@ -310,10 +302,10 @@ async def collect(
     async def collect_episode(episode_index, episode) -> list[dict]:
         episode_records = list(existing_by_episode[episode.episode_id])
         csv_source = str(args.csv or Path(episode.csv_source))
-        accepted_actions = [
-            record["prefix"]["turns"][0]["code"] for record in episode_records
-        ]
-        accepted_action_ids = {action_identity(code) for code in accepted_actions}
+        accepted_action_ids = {
+            action_identity(record["prefix"]["turns"][0]["code"])
+            for record in episode_records
+        }
         source_attempt = 0
         resume_seed_offset = len(episode_records) * 10_000_000
         while len(accepted_action_ids) < args.candidates_per_episode:
@@ -340,7 +332,9 @@ async def collect(
                         max_turns=max(args.turn_count, 1),
                         seed=source_seed,
                         system_prompt_suffix=FIRST_ACTION_SUFFIX,
-                        initial_user_message=candidate_request(accepted_actions),
+                        initial_user_message=candidate_request(
+                            len(accepted_action_ids)
+                        ),
                     )
             except Exception as error:
                 print(
@@ -374,7 +368,6 @@ async def collect(
                 print(f"Skipping duplicate source attempt for {episode.episode_id}")
                 continue
             accepted_action_ids.add(action_id)
-            accepted_actions.append(source.trace["turns"][0]["code"])
             continuation_seeds = [
                 source_seed + offset for offset in range(1, args.continuations + 1)
             ]

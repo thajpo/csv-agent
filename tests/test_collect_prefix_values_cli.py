@@ -133,20 +133,19 @@ def test_first_action_identity_uses_normalized_code_not_execution() -> None:
     assert first_action_identity(first) != first_action_identity(distinct)
 
 
-def test_candidate_request_excludes_previously_sampled_actions() -> None:
-    first = candidate_request([])
-    later = candidate_request(["print(df.head())", "print(df.describe())"])
+def test_candidate_request_assigns_distinct_proposal_roles() -> None:
+    first = candidate_request(0)
+    second = candidate_request(1)
+    third = candidate_request(2)
 
     assert "column names" in first
     assert "1-3 sentences" in first
     assert "exactly one fenced ```python code block" in first
     assert "Do not call submit()" in first
     assert "prerequisite selection" in first
-    assert "print(df.head())" not in first
-    assert "print(df.head())" in later
-    assert "print(df.describe())" in later
-    assert "substantively different operation" in later
-    assert "direct partial result" in later
+    assert "necessary calculation" in second
+    assert "direct partial result" in third
+    assert "print(df.head())" not in third
 
 
 def test_resume_rejects_an_unlabeled_record() -> None:
