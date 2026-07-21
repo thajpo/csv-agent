@@ -1,6 +1,6 @@
 # Research Direction
 
-Last reviewed: 2026-07-20
+Last reviewed: 2026-07-21
 
 This document records the project's selected research direction and durable
 rationale. It is not a roadmap or task tracker.
@@ -72,19 +72,23 @@ or value-guided selection does not improve held-out success at equal compute.
 
 ### First canary result
 
-The first value-guided selection canary completed on 2026-07-20. A linear text
-value model improved probability and ranking metrics on held-out validation
-datasets but regressed on two unseen test datasets. Random and value-guided
-selection both answered 10 of 16 test questions correctly. An oracle choosing
-from the reserved candidate outcomes also answered 10 of 16 because all three
-candidate outcomes agreed within every test question.
+The first valid value-guided selection canary completed on 2026-07-21. A linear
+text critic improved probability and ranking metrics on held-out validation
+datasets. On two unseen test datasets it ranked unequal candidate pairs at
+0.625, but its probability error and calibration were worse than simple
+baselines. Random and value-guided selection both answered 11 of 16 questions
+correctly at equal actor-model calls. An oracle choosing from the reserved
+candidate outcomes answered 15 of 16, so candidate choice genuinely could have
+improved the result.
 
-This does not show that value-guided selection works. It shows that the current
-first-action boundary and task distribution provide too little action-sensitive
-test variation to evaluate selection, and that trainer complexity should not be
-increased until collection produces states where candidate choice can matter.
-The full frozen setup and metrics are recorded in
-`docs/research/value-canary-2026-07-20.md`.
+This does not show that value-guided selection works. It is a valid negative
+result for the shallow text critic: limited ordering signal did not translate
+into improved final correctness. It also does not reject value functions in
+general. The experiment covers one actor, one early decision boundary, two test
+datasets, and one collection seed. Actor training remains premature; another
+critic experiment should first explain the held-out misrankings and justify a
+better state representation or broader label set. The frozen setup and metrics
+are recorded in `docs/research/value-canary-2026-07-20.md`.
 
 ### Parallel: Data-Conditioned Procedural Tasks
 

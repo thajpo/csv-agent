@@ -63,7 +63,7 @@ def test_value_canary_snapshot_is_pinned():
 
     assert config == {
         "repo": "ThaJpo/csv-agent-prefix-values-canary",
-        "revision": "8fb8e1d55133a7287d2ccdc98520fb74b845dead",
+        "revision": "c760ae8749272c9438ab218d1578f6520717d63a",
         "source_repo": "ThaJpo/csv-agent-template-episodes",
         "source_revision": "e19fadf8d713c5afb7fe1476e2160b9bece1233a",
     }
