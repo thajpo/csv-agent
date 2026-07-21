@@ -42,12 +42,18 @@ and call submit() when you have the answer."""
 
 
 def candidate_request(previous_actions: list[str]) -> str:
+    strategies = (
+        "Choose one useful prerequisite selection or data-quality check.",
+        "Choose a necessary calculation or transformation, not another broad inspection.",
+        "Choose a direct partial result or consistency check that moves closer to the final answer.",
+    )
+    strategy = strategies[min(len(previous_actions), len(strategies) - 1)]
     request = (
         "Begin with one concrete, question-relevant intermediate action. Your "
         "response must contain 1-3 sentences explaining that action, followed by "
         "exactly one fenced ```python code block that prints what it learns. Do "
         "not call submit() anywhere, do not solve the whole task in this turn, and "
-        "do not only list the column names."
+        f"do not only list the column names. {strategy}"
     )
     if previous_actions:
         exclusions = (

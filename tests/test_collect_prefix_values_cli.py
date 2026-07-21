@@ -141,10 +141,12 @@ def test_candidate_request_excludes_previously_sampled_actions() -> None:
     assert "1-3 sentences" in first
     assert "exactly one fenced ```python code block" in first
     assert "Do not call submit()" in first
+    assert "prerequisite selection" in first
     assert "print(df.head())" not in first
     assert "print(df.head())" in later
     assert "print(df.describe())" in later
     assert "substantively different operation" in later
+    assert "direct partial result" in later
 
 
 def test_resume_rejects_an_unlabeled_record() -> None:
