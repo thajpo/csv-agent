@@ -72,23 +72,25 @@ or value-guided selection does not improve held-out success at equal compute.
 
 ### First canary result
 
-The first valid value-guided selection canary completed on 2026-07-21. A linear
-text critic improved probability and ranking metrics on held-out validation
-datasets. On two unseen test datasets it ranked unequal candidate pairs at
-0.625, but its probability error and calibration were worse than simple
-baselines. Random and value-guided selection both answered 11 of 16 questions
-correctly at equal actor-model calls. An oracle choosing from the reserved
-candidate outcomes answered 15 of 16, so candidate choice genuinely could have
-improved the result.
+The first value-guided selection canary completed on 2026-07-21. After the
+final audit, every question had three first actions that remained distinct when
+local variable names were ignored, and every record carried its exact
+collection contract. A linear text critic improved probability metrics on the
+held-out validation datasets, but not ranking. On two unseen test datasets its
+within-question ranking was 0.467 and its probability error and calibration
+were worse than the train-success baseline. Random and value-guided selection
+both answered 10 of 16 questions correctly at equal actor-model calls. An
+oracle choosing from the reserved candidate outcomes answered 15 of 16, so
+candidate choice genuinely could have improved the result.
 
 This does not show that value-guided selection works. It is a valid negative
-result for the shallow text critic: limited ordering signal did not translate
-into improved final correctness. It also does not reject value functions in
-general. The experiment covers one actor, one early decision boundary, two test
-datasets, and one collection seed. Actor training remains premature; another
-critic experiment should first explain the held-out misrankings and justify a
-better state representation or broader label set. The frozen setup and metrics
-are recorded in `docs/research/value-canary-2026-07-20.md`.
+result for the shallow text critic: it did not learn reliable held-out ordering
+and did not improve final correctness. It also does not reject value functions
+in general. The experiment covers one actor, one early decision boundary, two
+test datasets, and one collection per split. Actor training remains premature;
+another critic experiment should first explain the held-out misrankings and
+justify a better state representation or broader label set. The frozen setup
+and metrics are recorded in `docs/research/value-canary-2026-07-20.md`.
 
 ### Parallel: Data-Conditioned Procedural Tasks
 
