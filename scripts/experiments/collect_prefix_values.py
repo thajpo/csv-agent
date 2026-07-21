@@ -12,7 +12,7 @@ import ast
 import asyncio
 import json
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from csv_spec import ContinuationPolicy, EpisodeJSONL
@@ -85,6 +85,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--request-timeout-seconds", type=float, default=30.0)
     parser.add_argument("--concurrency", type=int, default=8)
     parser.add_argument("--float-tolerance", type=float, default=0.1)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Keep valid records already present in --output and collect the rest.",
+    )
     return parser.parse_args()
 
 
@@ -197,11 +202,62 @@ def select_boundary(source, turn_count: int, max_turns: int) -> tuple[list[dict]
 
 def first_action_identity(source) -> str:
     code = source.trace["turns"][0]["code"]
+    return action_identity(code)
+
+
+def action_identity(code: str) -> str:
     return ast.dump(ast.parse(code), include_attributes=False)
 
 
+def load_existing_records(path: Path) -> list[dict]:
+    records: list[dict] = []
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                records.append(json.loads(line))
+    return records
+
+
+def validate_resume_records(
+    records: Sequence[dict],
+    *,
+    episode_ids: set[str],
+    policy: ContinuationPolicy,
+    dataset_revision: str,
+    candidates_per_episode: int,
+) -> None:
+    expected_policy = policy.model_dump(mode="json")
+    actions_by_episode: dict[str, set[str]] = {}
+    for record in records:
+        prefix = record.get("prefix") or {}
+        episode_id = prefix.get("episode_id")
+        if episode_id not in episode_ids:
+            raise ValueError(f"resume record has unexpected episode: {episode_id}")
+        if record.get("dataset_revision") != dataset_revision:
+            raise ValueError("resume record dataset revision does not match")
+        if record.get("policy") != expected_policy:
+            raise ValueError("resume record continuation policy does not match")
+        if record.get("value") is None or record.get(
+            "labeled_continuations"
+        ) != record.get("attempted_continuations"):
+            raise ValueError("resume record is not fully labeled")
+        turns = prefix.get("turns") or []
+        if not turns:
+            raise ValueError("resume record has no first action")
+        action_id = action_identity(turns[0]["code"])
+        actions = actions_by_episode.setdefault(episode_id, set())
+        if action_id in actions:
+            raise ValueError(f"resume records repeat an action for {episode_id}")
+        actions.add(action_id)
+        if len(actions) > candidates_per_episode:
+            raise ValueError(f"too many resume records for {episode_id}")
+
+
 async def collect(
-    args: argparse.Namespace, *, record_sink: Callable[[dict], None] | None = None
+    args: argparse.Namespace,
+    *,
+    record_sink: Callable[[dict], None] | None = None,
+    existing_records: Sequence[dict] = (),
 ) -> list[dict]:
     validate_args(args)
     episodes = load_episodes(args.episodes, args.max_episodes)
@@ -214,6 +270,17 @@ async def collect(
         },
         request_timeout_seconds=args.request_timeout_seconds,
     )
+    episode_ids = {episode.episode_id for episode in episodes}
+    validate_resume_records(
+        existing_records,
+        episode_ids=episode_ids,
+        policy=policy,
+        dataset_revision=args.dataset_revision,
+        candidates_per_episode=args.candidates_per_episode,
+    )
+    existing_by_episode = {episode_id: [] for episode_id in episode_ids}
+    for record in existing_records:
+        existing_by_episode[record["prefix"]["episode_id"]].append(record)
     commit = current_commit()
     rollout_slots = asyncio.Semaphore(args.concurrency)
 
@@ -223,7 +290,7 @@ async def collect(
                 prefix, continuation_policy, index, seed
             )
 
-    total_prefixes = len(episodes) * args.candidates_per_episode
+    total_prefixes = len(episodes) * args.candidates_per_episode - len(existing_records)
     total_rollouts = total_prefixes * (1 + args.continuations)
     request_limit = maximum_provider_requests(
         argparse.Namespace(**{**vars(args), "max_episodes": len(episodes)})
@@ -235,11 +302,14 @@ async def collect(
     )
 
     async def collect_episode(episode_index, episode) -> list[dict]:
-        episode_records: list[dict] = []
+        episode_records = list(existing_by_episode[episode.episode_id])
         csv_source = str(args.csv or Path(episode.csv_source))
-        accepted_action_ids: set[str] = set()
-        accepted_actions: list[str] = []
+        accepted_actions = [
+            record["prefix"]["turns"][0]["code"] for record in episode_records
+        ]
+        accepted_action_ids = {action_identity(code) for code in accepted_actions}
         source_attempt = 0
+        resume_seed_offset = len(episode_records) * 10_000_000
         while len(accepted_action_ids) < args.candidates_per_episode:
             if source_attempt >= (
                 args.candidates_per_episode * MAX_SOURCE_ATTEMPTS_PER_CANDIDATE
@@ -251,6 +321,7 @@ async def collect(
             source_seed = (
                 args.seed
                 + episode_index * 100_000
+                + resume_seed_offset
                 + source_attempt * (args.continuations + 1)
             )
             source_attempt += 1
@@ -334,13 +405,24 @@ async def collect(
 async def main() -> None:
     args = parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text("")
+    existing_records: list[dict] = []
+    if args.resume:
+        if not args.output.is_file():
+            raise ValueError("--resume requires an existing --output file")
+        existing_records = load_existing_records(args.output)
+        print(f"Resuming from {len(existing_records)} existing record(s).")
+    else:
+        args.output.write_text("")
 
     def persist(record: dict) -> None:
         with args.output.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
 
-    records = await collect(args, record_sink=persist)
+    records = await collect(
+        args,
+        record_sink=persist,
+        existing_records=existing_records,
+    )
     print(f"Wrote {len(records)} record(s) to {args.output}")
 
 

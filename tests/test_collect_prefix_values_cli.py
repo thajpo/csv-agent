@@ -19,6 +19,7 @@ from scripts.experiments.collect_prefix_values import (
     load_episodes,
     maximum_provider_requests,
     select_boundary,
+    validate_resume_records,
     validate_args,
 )
 
@@ -144,6 +145,34 @@ def test_candidate_request_excludes_previously_sampled_actions() -> None:
     assert "print(df.head())" in later
     assert "print(df.describe())" in later
     assert "substantively different operation" in later
+
+
+def test_resume_rejects_an_unlabeled_record() -> None:
+    policy = collect_module.ContinuationPolicy(
+        model="test-model",
+        sampling_args={"temperature": 0.9},
+        request_timeout_seconds=30.0,
+    )
+    record = {
+        "dataset_revision": "revision",
+        "policy": policy.model_dump(mode="json"),
+        "value": None,
+        "labeled_continuations": 0,
+        "attempted_continuations": 1,
+        "prefix": {
+            "episode_id": "episode-1",
+            "turns": [{"code": "print(df.shape)"}],
+        },
+    }
+
+    with pytest.raises(ValueError, match="not fully labeled"):
+        validate_resume_records(
+            [record],
+            episode_ids={"episode-1"},
+            policy=policy,
+            dataset_revision="revision",
+            candidates_per_episode=3,
+        )
 
 
 @pytest.mark.asyncio

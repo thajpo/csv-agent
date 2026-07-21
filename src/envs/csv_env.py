@@ -17,6 +17,7 @@ from verifiers.envs.python_env import PythonEnv
 
 PACKAGES = "pandas numpy scipy scikit-learn statsmodels"
 DOCKER_COMMAND_TIMEOUT_SECONDS = 60.0
+DOCKER_KILL_TIMEOUT_SECONDS = 5.0
 
 # Base imports for container - normalize_value is injected dynamically
 _SETUP_IMPORTS = """
@@ -583,12 +584,20 @@ while True:
         )
         try:
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
+        except asyncio.TimeoutError as error:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=DOCKER_KILL_TIMEOUT_SECONDS)
+            except asyncio.TimeoutError:
+                transport = getattr(proc, "_transport", None)
+                if transport is not None:
+                    transport.close()
             raise TimeoutError(
                 f"Docker command timed out after {timeout}s: docker {' '.join(args[:3])}..."
-            )
+            ) from error
         if check and proc.returncode != 0:
             raise RuntimeError(f"Docker command failed: {stderr.decode()}")
         return stdout.decode(), stderr.decode()
