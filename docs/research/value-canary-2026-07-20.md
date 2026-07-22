@@ -1,49 +1,41 @@
-# Value-guided selection canary
+# Value-guided selection canaries
 
-Started on 2026-07-20 and completed on 2026-07-21.
+This report records the exploratory first canary and the preregistered
+independent replication. It intentionally keeps negative and inconclusive
+results visible.
 
-## Question
+## Research question
 
-Can a small learned model rank partial CSV-agent attempts on held-out CSV
-datasets, and can that ranking improve which attempt is continued when random
-and value-guided selection receive the same number of actor-model calls?
+Can a learned model rank partial CSV-agent attempts and improve which attempt
+is continued, compared with expected random selection under the same deployed
+actor-call allowance?
 
-## Frozen setup
+## Canary 1: exploratory Qwen study
+
+The first canary was developed from 2026-07-20 through 2026-07-21.
+
+### Frozen artifacts
 
 - Source tasks: private Hugging Face snapshot
   `ThaJpo/csv-agent-template-episodes` at
   `e19fadf8d713c5afb7fe1476e2160b9bece1233a`.
-- Collected records and machine-readable results: private Hugging Face snapshot
+- Collected records: private Hugging Face snapshot
   `ThaJpo/csv-agent-prefix-values-canary` at
   `ba6e39949798eb1918d6ec6e5a8119d74eaf8bb2`.
 - Collection protocol commit:
   `b02ccf2e5bc1fc8dfe90d245860645d0bdfb64ae`.
-- Actor: `qwen/qwen3-30b-a3b-instruct-2507`, temperature 0.9, top-p 0.95,
-  maximum 1,200 output tokens, and four total turns.
-- Each question received three role-diversified first Python actions: a
-  prerequisite/check, a necessary computation, and a direct partial
-  result/check. They remained distinct after normalizing local variable names,
-  and none could submit the answer on that turn.
-- Each saved state received four continuations. The first three supplied the
-  value label; the fourth was reserved for the equal-call selection test.
-- CSV datasets were disjoint: four train datasets, two validation datasets,
-  and two test datasets.
-- Every record stored the exact collection contract, including its source-input
-  hash, code commit, policy, branching settings, tolerance, and split seed.
-- The critic was TF-IDF over the visible interaction followed by logistic
-  regression. Repeated outcomes were fitted as binomial successes and
-  failures. This tests the data and evaluation method before a neural critic.
+- Actor: `qwen/qwen3-30b-a3b-instruct-2507`, temperature 0.9, top-p
+  0.95, maximum 1,200 output tokens, and four total turns.
+- Records: 72 train, 24 validation, and 48 test candidate states. Each
+  candidate received three label continuations and one reserved continuation.
+- Dataset split: four train datasets, two validation datasets, and two test
+  datasets.
 
-The final collection contains 72 train, 24 validation, and 48 test states.
-Every question has three semantically distinct executed actions, and all 576
-continuations received terminal-verifier labels. No record was excluded for a
-provider, sandbox, replay, or verifier failure.
+Candidate actions were distinct after Python AST normalization that ignores
+local variable names. This is an implementation-level duplicate check, not a
+claim that the actions were semantically distinct.
 
-The action labels varied within 12 of 24 training questions, 1 of 8 validation
-questions, and 7 of 16 test questions. Six test questions had different
-reserved outcomes across candidates, so candidate choice could affect phase 4.
-
-## Prediction results
+### Results
 
 | Split | Model | Log loss | Brier score | Within-question ranking |
 | --- | --- | ---: | ---: | ---: |
@@ -54,56 +46,137 @@ reserved outcomes across candidates, so candidate choice could affect phase 4.
 | Test | Simple execution signals | 0.6656 | 0.2333 | 0.333 |
 | Test | Text value model | 0.6997 | 0.2431 | 0.467 |
 
-The text critic improved validation probability metrics, but validation had
-only two unequal candidate pairs and provided no ranking advantage. On the two
-unseen test datasets it was worse than the train-success baseline on log loss,
-Brier score, calibration, and ranking. Its five-bin calibration error was
-0.1438, versus 0.0880 for the train-success baseline. The critic did not learn
-a reliable held-out success estimate or ordering.
+The seeded random draw solved 10/16 questions and value-guided selection also
+solved 10/16. Averaging the reserved outcomes across all candidates gives the
+more relevant expected-random result of 11/16. A hindsight selector that sees
+the realized reserved outcomes before choosing reaches 15/16; this is a
+realized-outcome ceiling, not an oracle estimate of latent candidate values.
 
-## Equal-call selection result
+Results were clustered by dataset: both seeded random and guided selection
+solved 3/8 water-potability questions and 7/8 diabetes questions.
 
-Each method generated three candidate first actions and continued one reserved
-trajectory. Local critic scoring consumed no actor-model call.
+### Why this is exploratory rather than confirmatory
 
-- Seeded random selection: 10/16 correct, or 62.5%.
-- Value-guided selection: 10/16 correct, or 62.5%.
-- Oracle selection using reserved outcomes: 15/16 correct, or 93.75%.
-- Paired guided-minus-random difference: 0 percentage points.
-- Paired bootstrap 95% interval: -18.75 to +18.75 percentage points.
+The code and artifacts are reproducible, but the study cannot support a clean
+held-out claim:
 
-The critic improved one question that random selection missed and harmed one
-question that random selection solved. The oracle gap proves that this test had
-real selection opportunity; unlike the invalid first attempt, the tie cannot be
-explained by identical candidate states or identical reserved outcomes.
+- The same two test datasets were reused while candidate-generation defects
+  were diagnosed and corrected. Their outcomes therefore influenced the final
+  experimental procedure.
+- Two test datasets do not support meaningful across-dataset uncertainty.
+- Candidate generation used three different role-specific prompts, while the
+  saved state omitted those initial prompts. The tested procedure was
+  strategy-conditioned proposal followed by a common continuation policy.
+- The pointwise text objective could learn dataset or question difficulty even
+  though the deployment decision is a within-question ranking.
+- Dataset and template generalization were confounded: some test template
+  names did not occur in training.
+- Only seven test questions had different estimated candidate values, and only
+  six had different single reserved outcomes.
+- A single collection seed and one reserved Bernoulli outcome per candidate
+  made the selection estimate noisy.
 
-## Conclusion
+The defensible conclusion is narrow: this adaptively developed canary found no
+benefit from its TF-IDF pointwise critic. It does not provide positive evidence
+for value-guided selection, and it does not reject value functions generally.
 
-This is a valid negative result for the tested linear text critic:
+## Canary 2: independent DeepSeek replication
 
-1. A shallow text representation improved validation probability metrics, but
-   neither its probabilities nor its rankings generalized to unseen datasets.
-2. It did not improve final correctness over seeded random selection at equal
-   actor-model calls.
-3. The result does not show that value functions are useless. It covers one
-   actor, one decision boundary, two test datasets, one fixed collection per
-   split, and a small linear critic.
-4. Actor training is premature. The next value-model experiment should first
-   explain the held-out misrankings and justify a better state representation
-   or broader label set.
+Protocol frozen on 2026-07-22, before collecting any task outcomes from the
+new actor.
 
-## Invalidated preliminary runs
+### Hypothesis and primary endpoint
 
-The first supposedly corrected snapshot at
-`c760ae8749272c9438ab218d1578f6520717d63a` was also invalidated during the
-final audit. One test question contained two semantically identical missing
-percentage actions that differed only in a local variable name, and its records
-predated the exact collection contract. Its downstream numbers reproduced, but
-the snapshot did not satisfy the experiment's evidence contract.
+The primary hypothesis is that a within-question ranker trained on repeated
+continuation outcomes will select DeepSeek V4 Flash prefixes with higher
+held-out continuation success than expected random selection.
 
-An earlier snapshot at `8fb8e1d55133a7287d2ccdc98520fb74b845dead`
-was invalidated during audit. All three supposed candidates for every question
-executed the same first action, usually `print(df.columns.tolist())`; their
-different labels came only from stochastic continuations. Neither invalidated
-snapshot is evidence about action selection; both have been replaced by the
-pinned snapshot above.
+The primary endpoint is the dataset-macro-average difference:
+
+```text
+guided held-out success - mean held-out success over all candidates
+```
+
+The random term is calculated exactly from all held-out candidate outcomes;
+it is not one favorable or unfavorable seeded draw. The uncertainty interval
+uses a hierarchical bootstrap that resamples CSV datasets and then questions
+within datasets.
+
+This bounded canary counts as evidence of improvement only if the primary
+point estimate is at least five percentage points, the 95% interval excludes
+zero, and the difference is positive on at least three of four test datasets.
+Otherwise improvement is not demonstrated, even if a secondary metric moves.
+
+### Frozen data split
+
+- Source snapshot: `ThaJpo/csv-agent-template-episodes` at
+  `e19fadf8d713c5afb7fe1476e2160b9bece1233a`.
+- Split seed: `20260722`.
+- All eight datasets used by canary 1 are excluded.
+- Train: 16 questions from each of four datasets:
+  `uciml_red-wine-quality-cortez-et-al-2009`,
+  `mirichoi0218_insurance`,
+  `russellyates88_suicide-rates-overview-1985-to-2016`, and
+  `uciml_breast-cancer-wisconsin-data`.
+- Validation: eight questions from each of two datasets:
+  `fedesoriano_heart-failure-prediction` and
+  `pavansubhasht_ibm-hr-analytics-attrition-dataset`.
+- Test: eight questions from each of four datasets:
+  `neuromusic_avocado-prices`, `gregorut_videogamesales`,
+  `shivamb_netflix-shows`, and
+  `uciml_pima-indians-diabetes-database`.
+- Every validation and test template name must occur in the selected training
+  questions. This canary tests dataset transfer without simultaneously holding
+  out named task templates.
+
+Test datasets and their assignment cannot be changed after actor outcomes are
+observed.
+
+### Actor and trajectory collection
+
+- Actor: `deepseek/deepseek-v4-flash` through OpenRouter.
+- All candidates use the same system instruction, initial request, sampling
+  parameters, and continuation policy. Candidate diversity comes only from
+  independent sampling seeds.
+- Each question receives three AST-distinct nonterminal first actions.
+- Each prefix receives eight continuations. The first six form its training
+  value estimate; the final two are reserved for evaluation.
+- The initial boundary is after one executed Python turn.
+- Temperature is 0.9, top-p is 0.95, and output is capped at 1,200 tokens.
+- Terminal labels come only from the existing executable answer verifier.
+
+The remaining-turn horizon is calibrated using train datasets only. Start at
+three total turns. A calibration is usable when continuation success is
+between 15% and 85% and at least 25% of questions have different candidate
+labels. If success is higher, reduce the horizon by one; if lower, increase it
+by one. Make at most two adjustments. If no setting is usable, stop and report
+that these tasks cannot identify the value question instead of inspecting or
+changing test data.
+
+### Models and baselines
+
+The primary learned selector is TF-IDF followed by pairwise logistic ranking.
+Training examples are differences between candidates for the same question,
+so question and dataset difficulty cannot by themselves satisfy the training
+objective.
+
+Secondary comparisons are:
+
+- expected random selection;
+- the original pointwise TF-IDF value model;
+- simple execution and output-length signals; and
+- an empirical-rollout selector that chooses the highest six-rollout training
+  estimate, reported as a higher-compute reference rather than an equal-cost
+  learned selector.
+
+Hyperparameters and the selected checkpoint are frozen using train and
+validation data. Test value records remain sealed until the checkpoint and
+evaluation configuration are hashed. Test evaluation is run once.
+
+### Boundaries
+
+- No actor fine-tuning, PPO, process-hook rewards, causal task graphs, or task
+  generator redesign.
+- OpenRouter spending is capped at $15 for this replication.
+- Code, configuration, actor model, source revision, value-data revision,
+  seeds, checkpoint hash, and all negative results must be retained.

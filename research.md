@@ -72,25 +72,27 @@ or value-guided selection does not improve held-out success at equal compute.
 
 ### First canary result
 
-The first value-guided selection canary completed on 2026-07-21. After the
-final audit, every question had three first actions that remained distinct when
-local variable names were ignored, and every record carried its exact
-collection contract. A linear text critic improved probability metrics on the
-held-out validation datasets, but not ranking. On two unseen test datasets its
-within-question ranking was 0.467 and its probability error and calibration
-were worse than the train-success baseline. Random and value-guided selection
-both answered 10 of 16 questions correctly at equal actor-model calls. An
-oracle choosing from the reserved candidate outcomes answered 15 of 16, so
-candidate choice genuinely could have improved the result.
+The first value-guided selection canary completed on 2026-07-21. Its code and
+artifacts reproduce, but the study is exploratory rather than a clean held-out
+test. The two test datasets were reused while candidate-generation defects were
+fixed, candidate proposals came from different role prompts, the pointwise
+training objective did not match the within-question deployment decision, and
+two datasets cannot support useful across-dataset uncertainty.
 
-This does not show that value-guided selection works. It is a valid negative
-result for the shallow text critic: it did not learn reliable held-out ordering
-and did not improve final correctness. It also does not reject value functions
-in general. The experiment covers one actor, one early decision boundary, two
-test datasets, and one collection per split. Actor training remains premature;
-another critic experiment should first explain the held-out misrankings and
-justify a better state representation or broader label set. The frozen setup
-and metrics are recorded in `docs/research/value-canary-2026-07-20.md`.
+The TF-IDF critic ranked test candidate pairs at 0.467. It selected a successful
+reserved continuation for 10/16 questions, compared with 11/16 expected for
+uniform random selection over the same realized candidate outcomes. A seeded
+random draw happened to score 10/16. A hindsight selector that sees each
+reserved outcome before choosing scored 15/16, but that realized-outcome
+ceiling does not establish different latent candidate values.
+
+The defensible conclusion is that this adaptively developed canary found no
+benefit from its shallow pointwise critic. It provides no positive evidence for
+value guidance and does not reject value functions generally. An independent
+DeepSeek V4 Flash replication is preregistered in
+`docs/research/value-canary-2026-07-20.md`; it uses fresh datasets, one candidate
+policy, a within-question ranking objective, exact expected-random comparison,
+and dataset-clustered uncertainty. Actor training remains premature.
 
 ### Parallel: Data-Conditioned Procedural Tasks
 
