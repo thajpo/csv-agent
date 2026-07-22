@@ -32,7 +32,11 @@ from src.core.prompts import (
     build_system_prompt,
     CONTINUE_MSG,
 )
-from src.datagen.shared.submission import parse_submission, validate_submission_position
+from src.datagen.shared.submission import (
+    parse_all_submissions,
+    parse_submission,
+    validate_submission_position,
+)
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
@@ -474,6 +478,13 @@ class Environment:
             code=code,
             trusted_records=trusted_records,
         )
+        if "✓ Submitted:" in output:
+            validate_submission_position(code, require_submission=True)
+            marker_lines = [
+                line for line in output.splitlines() if line.startswith("✓ Submitted: ")
+            ]
+            if len(marker_lines) != 1 or len(parse_all_submissions(output)) != 1:
+                raise ValueError("execution must contain exactly one submission record")
 
         # Truncate massive outputs to prevent context overflow
         # Preserve the ✓ Submitted: line intact (it contains the answer JSON)
@@ -857,18 +868,18 @@ class Environment:
         The configured question, CSV path, and maximum turn budget must match
         the prefix. Sandbox cleanup follows the same rules as ``rollout``.
         """
-        configured_question = (
-            self.task.question.question_text if self.task.question else ""
-        )
-        if configured_question != prefix.question_text:
-            raise ValueError("environment question does not match prefix")
-        if self.execution.max_turns != prefix.max_turns:
-            raise ValueError("environment max_turns does not match prefix")
-        if Path(self.csv_path).resolve() != Path(prefix.csv_source).resolve():
-            raise ValueError("environment CSV does not match prefix")
-
-        self.init_state()
         try:
+            configured_question = (
+                self.task.question.question_text if self.task.question else ""
+            )
+            if configured_question != prefix.question_text:
+                raise ValueError("environment question does not match prefix")
+            if self.execution.max_turns != prefix.max_turns:
+                raise ValueError("environment max_turns does not match prefix")
+            if Path(self.csv_path).resolve() != Path(prefix.csv_source).resolve():
+                raise ValueError("environment CSV does not match prefix")
+
+            self.init_state()
             self.conversation.system_prompt = prefix.system_prompt
             await self.replay_turns(
                 prefix.turns,

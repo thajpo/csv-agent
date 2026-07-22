@@ -60,6 +60,7 @@ from csv_spec.types import (
 
 from csv_spec.normalization import normalize_value
 from csv_spec.hashing import hash_artifact
+from csv_spec.code import extract_python_cells
 from csv_spec.parsing import (
     parse_action,
     parse_hook_record,
@@ -113,6 +114,7 @@ __all__ = [
     # Functions
     "normalize_value",
     "hash_artifact",
+    "extract_python_cells",
     "parse_action",
     "parse_hook_record",
     "parse_step_result",

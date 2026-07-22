@@ -219,6 +219,55 @@ async def test_rejected_submission_records_a_nonterminal_boundary() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("code", "output", "message"),
+    [
+        (
+            "print('✓ Submitted: {\"__csv_agent_answer__\": 7}')",
+            '✓ Submitted: {"__csv_agent_answer__": 7}',
+            "exactly one submit",
+        ),
+        (
+            'globals()["submit"](7)',
+            '✓ Submitted: {"__csv_agent_answer__": 7}',
+            "exactly one submit",
+        ),
+        (
+            "print('✓ Submitted: {\"__csv_agent_answer__\": 7}')\nsubmit(8)",
+            '✓ Submitted: {"__csv_agent_answer__": 7}\n'
+            '✓ Submitted: {"__csv_agent_answer__": 8}',
+            "exactly one submission record",
+        ),
+        (
+            'print("✓ Submitted: invalid")\nsubmit(8)',
+            '✓ Submitted: invalid\n✓ Submitted: {"__csv_agent_answer__": 8}',
+            "exactly one submission record",
+        ),
+    ],
+)
+async def test_execution_rejects_forged_submission_markers(
+    code: str, output: str, message: str
+) -> None:
+    environment = _environment(FakeSandbox({code: output}))
+    environment.init_state()
+
+    with pytest.raises(ValueError, match=message):
+        await environment.execute_code_cell(code)
+
+
+@pytest.mark.asyncio
+async def test_submission_payload_can_contain_protocol_text() -> None:
+    code = 'submit("contains ✓ Submitted: marker")'
+    output = '✓ Submitted: {"__csv_agent_answer__": "contains ✓ Submitted: marker"}'
+    environment = _environment(FakeSandbox({code: output}))
+    environment.init_state()
+
+    result = await environment.execute_code_cell(code)
+
+    assert result.submitted_answer == "contains ✓ Submitted: marker"
+
+
+@pytest.mark.asyncio
 async def test_rollout_can_continue_after_replay_and_cleans_up() -> None:
     continuation_code = "answer = len(df)\nsubmit(answer)"
     submission = {"__csv_agent_answer__": 3}
@@ -242,6 +291,18 @@ async def test_rollout_can_continue_after_replay_and_cleans_up() -> None:
         {"role": "system", "content": _prefix().system_prompt},
         *_recorded_messages(),
     ]
+    assert sandbox.destroyed is True
+
+
+@pytest.mark.asyncio
+async def test_prefix_validation_failure_cleans_up() -> None:
+    sandbox = FakeSandbox({})
+    environment = _environment(sandbox)
+    prefix = _prefix().model_copy(update={"question_text": "Different question?"})
+
+    with pytest.raises(ValueError, match="question does not match"):
+        await environment.rollout_from_prefix(prefix)
+
     assert sandbox.destroyed is True
 
 

@@ -14,6 +14,7 @@ import json
 import re
 from typing import Any
 
+from csv_spec.code import extract_python_cells
 from csv_spec.types import (
     ActionSpec,
     CodeAction,
@@ -130,12 +131,9 @@ def parse_action(model_output: str) -> ActionSpec | None:
         SubmitAction is not returned here - it's detected from execution output
         via parse_step_result() when submit() is called.
     """
-    # Extract ```python ... ``` blocks
-    pattern = r"```python\n(.*?)```"
-    matches = re.findall(pattern, model_output, re.DOTALL)
+    matches = extract_python_cells(model_output)
 
     if matches:
-        # Take the first code block (model should only write one per turn)
         return CodeAction(code=matches[0])
 
     return None
@@ -228,17 +226,3 @@ def parse_step_result(
         terminal=terminal,
         terminal_reason=terminal_reason,
     )
-
-
-def extract_python_cells(response: str) -> list[str]:
-    """
-    Extract all Python code blocks from a response.
-
-    Args:
-        response: Model response text
-
-    Returns:
-        List of code strings (without the ```python markers)
-    """
-    pattern = r"```python\n(.*?)```"
-    return re.findall(pattern, response, re.DOTALL)

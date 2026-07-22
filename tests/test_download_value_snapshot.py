@@ -18,13 +18,18 @@ def _snapshot_record(
     seed: int = 42,
 ):
     record = _record()
+    response = f"Inspect rows.\n```python\n{code}\n```"
     turn = dict(record.prefix.turns[0])
     turn["code"] = code
+    messages = [dict(message) for message in record.prefix.conversation_messages]
+    messages[-2]["content"] = response
     prefix = record.prefix.model_copy(
         update={
             "prefix_id": f"{episode_id}:{candidate_id}",
             "episode_id": episode_id,
             "turns": [turn],
+            "turn_responses": [response],
+            "conversation_messages": messages,
         }
     )
     contract = PrefixValueCollectionContract(
@@ -127,6 +132,21 @@ def test_snapshot_download_rejects_missing_collection_contract(tmp_path: Path) -
     assert list(tmp_path.iterdir()) == []
 
 
+def test_snapshot_download_rejects_wrong_source_revision(tmp_path: Path) -> None:
+    row = {"record_json": _snapshot_record().model_dump_json()}
+
+    with pytest.raises(ValueError, match="does not match expected source revision"):
+        write_snapshot(
+            {"train": [row], "validation": [row], "test": [row]},
+            output_dir=tmp_path,
+            repo="owner/value-data",
+            revision="abc123",
+            expected_source_revision="different-revision",
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_snapshot_download_requires_complete_candidate_groups(tmp_path: Path) -> None:
     row = {"record_json": _snapshot_record(candidates_per_episode=2).model_dump_json()}
 
@@ -167,31 +187,18 @@ def test_snapshot_download_requires_one_contract_per_split(tmp_path: Path) -> No
 def test_snapshot_download_rejects_normalized_duplicate_actions(
     tmp_path: Path,
 ) -> None:
-    first = _snapshot_record(candidates_per_episode=2)
-    first_turn = dict(first.prefix.turns[0])
-    first_turn["code"] = (
-        "missing_percentages = df.isna().mean()\nprint(missing_percentages)"
+    first = _snapshot_record(
+        candidates_per_episode=2,
+        code="missing_percentages = df.isna().mean()\nprint(missing_percentages)",
     )
-    first_prefix = first.prefix.model_copy(
-        update={"prefix_id": "episode-1:candidate-1", "turns": [first_turn]}
-    )
-    repeated = _snapshot_record(candidates_per_episode=2)
-    repeated_turn = dict(repeated.prefix.turns[0])
-    repeated_turn["code"] = "missing_percent = df.isna().mean()\nprint(missing_percent)"
-    repeated_prefix = repeated.prefix.model_copy(
-        update={"prefix_id": "episode-1:candidate-2", "turns": [repeated_turn]}
+    repeated = _snapshot_record(
+        candidate_id="candidate-2",
+        candidates_per_episode=2,
+        code="missing_percent = df.isna().mean()\nprint(missing_percent)",
     )
     rows = [
-        {
-            "record_json": first.model_copy(
-                update={"prefix": first_prefix}
-            ).model_dump_json()
-        },
-        {
-            "record_json": repeated.model_copy(
-                update={"prefix": repeated_prefix}
-            ).model_dump_json()
-        },
+        {"record_json": first.model_dump_json()},
+        {"record_json": repeated.model_dump_json()},
     ]
 
     with pytest.raises(

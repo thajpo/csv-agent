@@ -22,6 +22,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Any, Literal, NamedTuple, TypedDict, Union
 from datetime import datetime
 
+from csv_spec.code import extract_python_cells
+
 
 # ============= Core TypedDicts =============
 
@@ -168,6 +170,13 @@ class TrajectoryPrefix(BaseModel):
         for expected_index, turn in enumerate(self.turns):
             if turn.get("turn_index") != expected_index:
                 raise ValueError("prefix turns must be contiguous and zero-indexed")
+            code_cells = extract_python_cells(self.turn_responses[expected_index])
+            if len(code_cells) != 1:
+                raise ValueError(
+                    "each turn_response must contain exactly one Python code block"
+                )
+            if turn.get("code") != code_cells[0]:
+                raise ValueError("turn code must match its turn_response code block")
         for message in self.conversation_messages:
             if set(message) != {"role", "content"}:
                 raise ValueError("conversation messages must contain role and content")
@@ -299,7 +308,16 @@ class PrefixValueRecord(BaseModel):
             raise ValueError(
                 "value must equal successful divided by attempted continuations"
             )
+        rollout_indexes = [outcome.rollout_index for outcome in self.continuations]
+        if rollout_indexes != list(range(attempted)):
+            raise ValueError("continuation rollout indexes must be contiguous")
         contract = self.collection_contract
+        if contract is not None:
+            seeds = [outcome.seed for outcome in self.continuations]
+            if any(seed is None for seed in seeds) or len(set(seeds)) != len(seeds):
+                raise ValueError(
+                    "collection contract requires distinct non-null continuation seeds"
+                )
         if contract is not None and (
             contract.code_commit != self.code_commit
             or contract.dataset_revision != self.dataset_revision

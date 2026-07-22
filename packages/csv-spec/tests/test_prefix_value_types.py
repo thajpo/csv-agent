@@ -167,6 +167,75 @@ def test_value_record_requires_aggregate_to_match_verdicts() -> None:
         )
 
 
+def test_value_record_requires_unique_continuation_identities() -> None:
+    prefix = TrajectoryPrefix(
+        prefix_id="episode-1:0",
+        episode_id="episode-1",
+        csv_source="dataset/data.csv",
+        system_prompt="Solve the CSV task using Python.",
+        question_text="How many rows are present?",
+        turns=[],
+        turn_responses=[],
+        turn_completed=[],
+        conversation_messages=[],
+        consumed_turns=0,
+        max_turns=3,
+    )
+    policy = ContinuationPolicy(model="test-model", sampling_args={})
+    contract = PrefixValueCollectionContract(
+        code_commit="abc123",
+        dataset_revision="hf-revision",
+        policy=policy,
+        episode_inputs_hash="inputs-hash",
+        turn_count=0,
+        max_turns=3,
+        continuations=2,
+        candidates_per_episode=3,
+        seed=42,
+        float_tolerance=0.1,
+    )
+    record = PrefixValueRecord(
+        prefix=prefix,
+        policy=policy,
+        continuations=[
+            PrefixContinuation(
+                rollout_index=0,
+                seed=10,
+                trace=_trace(True),
+                verifier_verdict=True,
+            ),
+            PrefixContinuation(
+                rollout_index=1,
+                seed=11,
+                trace=_trace(False),
+                verifier_verdict=False,
+            ),
+        ],
+        attempted_continuations=2,
+        labeled_continuations=2,
+        successful_continuations=1,
+        value=0.5,
+        code_commit="abc123",
+        dataset_revision="hf-revision",
+        collection_contract=contract,
+    )
+
+    duplicate_index = record.model_dump(mode="json")
+    duplicate_index["continuations"][1]["rollout_index"] = 0
+    with pytest.raises(ValidationError, match="rollout indexes"):
+        PrefixValueRecord.model_validate(duplicate_index)
+
+    duplicate_seed = record.model_dump(mode="json")
+    duplicate_seed["continuations"][1]["seed"] = 10
+    with pytest.raises(ValidationError, match="distinct non-null"):
+        PrefixValueRecord.model_validate(duplicate_seed)
+
+    missing_seed = record.model_dump(mode="json")
+    missing_seed["continuations"][1]["seed"] = None
+    with pytest.raises(ValidationError, match="distinct non-null"):
+        PrefixValueRecord.model_validate(missing_seed)
+
+
 def test_value_record_requires_collection_contract_consistency() -> None:
     prefix = TrajectoryPrefix(
         prefix_id="episode-1:1",
@@ -228,6 +297,52 @@ def test_prefix_requires_exact_turn_responses_and_boundary_messages() -> None:
             turn_responses=[],
             turn_completed=[False],
             conversation_messages=_messages(),
+            consumed_turns=1,
+            max_turns=3,
+        )
+
+    with pytest.raises(ValidationError, match="turn code must match"):
+        TrajectoryPrefix(
+            prefix_id="mismatched-code",
+            episode_id="episode-1",
+            csv_source="dataset/data.csv",
+            system_prompt="Solve the CSV task using Python.",
+            question_text="How many rows are present?",
+            turns=[_turn(0)],
+            turn_responses=["Inspect the data.\n```python\nprint(df.columns)\n```"],
+            turn_completed=[False],
+            conversation_messages=[
+                {
+                    "role": "assistant",
+                    "content": "Inspect the data.\n```python\nprint(df.columns)\n```",
+                },
+                {"role": "user", "content": "Execution completed."},
+            ],
+            consumed_turns=1,
+            max_turns=3,
+        )
+
+    with pytest.raises(ValidationError, match="exactly one Python code block"):
+        TrajectoryPrefix(
+            prefix_id="multiple-code-blocks",
+            episode_id="episode-1",
+            csv_source="dataset/data.csv",
+            system_prompt="Solve the CSV task using Python.",
+            question_text="How many rows are present?",
+            turns=[_turn(0)],
+            turn_responses=[
+                "Inspect the data.\n```python\nprint(df.shape)\n```\n"
+                "```python\nprint(df.columns)\n```"
+            ],
+            turn_completed=[False],
+            conversation_messages=[
+                {
+                    "role": "assistant",
+                    "content": "Inspect the data.\n```python\nprint(df.shape)\n```\n"
+                    "```python\nprint(df.columns)\n```",
+                },
+                {"role": "user", "content": "Execution completed."},
+            ],
             consumed_turns=1,
             max_turns=3,
         )

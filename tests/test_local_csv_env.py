@@ -58,3 +58,35 @@ async def test_timed_out_docker_command_is_killed(monkeypatch) -> None:
 
     assert process.killed
     assert process._transport.closed
+
+
+@pytest.mark.asyncio
+async def test_setup_failure_destroys_started_sandbox(monkeypatch) -> None:
+    environment = LocalCSVAnalysisEnv(
+        "data/fixtures/smoke/student_performance/data.csv",
+        session_id="setup-failure",
+    )
+    destroyed: list[str] = []
+
+    async def ensure_image() -> None:
+        return None
+
+    async def run_docker(*args, **_kwargs):
+        if args[0] == "cp":
+            raise RuntimeError("copy failed")
+        return "", ""
+
+    async def destroy_sandbox(sandbox_id: str) -> None:
+        destroyed.append(sandbox_id)
+
+    monkeypatch.setattr(environment, "_ensure_image", ensure_image)
+    monkeypatch.setattr(environment, "_run_docker", run_docker)
+    monkeypatch.setattr(environment, "destroy_sandbox", destroy_sandbox)
+    state: dict = {}
+
+    with pytest.raises(RuntimeError, match="copy failed"):
+        await environment.setup_state(state)
+
+    assert len(destroyed) == 1
+    assert destroyed[0].startswith("csv-sandbox-setup-failure-")
+    assert state == {}

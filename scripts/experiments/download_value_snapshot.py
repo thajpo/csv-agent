@@ -32,6 +32,7 @@ def write_snapshot(
     repo: str,
     revision: str,
     expected_records: Mapping[str, int] | None = None,
+    expected_source_revision: str | None = None,
 ) -> dict:
     counts: dict[str, int] = {}
     records_by_split: dict[str, list[str]] = {}
@@ -49,6 +50,16 @@ def write_snapshot(
             episode_id = record.prefix.episode_id
             if record.collection_contract is None:
                 raise ValueError(f"{split} row {row_index} has no collection contract")
+            if (
+                expected_source_revision is not None
+                and record.collection_contract.dataset_revision
+                != expected_source_revision
+            ):
+                raise ValueError(
+                    f"{split} row {row_index} dataset revision "
+                    f"{record.collection_contract.dataset_revision!r} does not match "
+                    f"expected source revision {expected_source_revision!r}"
+                )
             if (
                 record.value is None
                 or record.labeled_continuations != record.attempted_continuations
@@ -112,6 +123,9 @@ def download(args: argparse.Namespace) -> dict:
     expected_records = config.get("expected_records")
     if not isinstance(expected_records, dict):
         raise ValueError("value snapshot config must declare expected_records")
+    source_revision = config.get("source_revision")
+    if not isinstance(source_revision, str) or not source_revision:
+        raise ValueError("value snapshot config must declare source_revision")
     dataset = load_dataset(config["repo"], revision=config["revision"], token=True)
     return write_snapshot(
         dataset,
@@ -119,6 +133,7 @@ def download(args: argparse.Namespace) -> dict:
         repo=config["repo"],
         revision=config["revision"],
         expected_records=expected_records,
+        expected_source_revision=source_revision,
     )
 
 

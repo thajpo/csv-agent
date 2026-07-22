@@ -6,6 +6,7 @@ for data analysis tasks with pandas/numpy/scipy pre-loaded.
 """
 
 import asyncio
+from contextlib import suppress
 import json
 from pathlib import Path
 from typing import Any
@@ -685,59 +686,51 @@ while True:
             "-f",
             "/dev/null",
         )
-
-        # Copy CSV into container
-        await self._run_docker("cp", str(self.csv_path), f"{sandbox_id}:/data.csv")
-
-        # Note: pip install skipped as packages are in the image
-
-        # Write worker script into container
-        worker_code = self._WORKER_SCRIPT.format(
-            command_fifo=self._COMMAND_FIFO,
-            response_fifo=self._RESPONSE_FIFO,
-            ready_flag=self._READY_FLAG,
-        )
-        # Use base64 to safely transfer the script
-        import base64
-
-        worker_b64 = base64.b64encode(worker_code.encode()).decode()
-        await self._run_docker(
-            "exec",
-            sandbox_id,
-            "python",
-            "-c",
-            f"import base64; open('{self._WORKER_PATH}', 'w').write(base64.b64decode('{worker_b64}').decode())",
-        )
-
-        # Start worker in background
-        await self._run_docker(
-            "exec", "-d", sandbox_id, "python", "-u", self._WORKER_PATH
-        )
-
-        # Wait for worker to be ready
-        await self._wait_for_worker_ready(sandbox_id)
-
-        # Store state
         state["sandbox_id"] = sandbox_id
         state["python_state"] = {"ready": True, "execution_count": 0}
+        try:
+            await self._run_docker("cp", str(self.csv_path), f"{sandbox_id}:/data.csv")
+            worker_code = self._WORKER_SCRIPT.format(
+                command_fifo=self._COMMAND_FIFO,
+                response_fifo=self._RESPONSE_FIFO,
+                ready_flag=self._READY_FLAG,
+            )
+            import base64
 
-        # Run setup code (import libraries, load CSV)
-        csv_setup = (
-            SETUP_CODE
-            + """
+            worker_b64 = base64.b64encode(worker_code.encode()).decode()
+            await self._run_docker(
+                "exec",
+                sandbox_id,
+                "python",
+                "-c",
+                f"import base64; open('{self._WORKER_PATH}', 'w').write(base64.b64decode('{worker_b64}').decode())",
+            )
+            await self._run_docker(
+                "exec", "-d", sandbox_id, "python", "-u", self._WORKER_PATH
+            )
+            await self._wait_for_worker_ready(sandbox_id)
+            csv_setup = (
+                SETUP_CODE
+                + """
 try:
     df = pd.read_csv("/data.csv", na_values=['?', 'NA', 'N/A', 'na', 'n/a'], keep_default_na=True)
 except UnicodeDecodeError:
     df = pd.read_csv("/data.csv", encoding='latin-1', na_values=['?', 'NA', 'N/A', 'na', 'n/a'], keep_default_na=True)
 print(f"Loaded CSV: {df.shape[0]} rows, {df.shape[1]} columns")
 """
-        )
-        await self.python(
-            code=csv_setup,
-            sandbox_id=sandbox_id,
-            python_state=state["python_state"],
-            trusted_setup=True,
-        )
+            )
+            await self.python(
+                code=csv_setup,
+                sandbox_id=sandbox_id,
+                python_state=state["python_state"],
+                trusted_setup=True,
+            )
+        except BaseException:
+            with suppress(Exception):
+                await self.destroy_sandbox(sandbox_id)
+            state.pop("sandbox_id", None)
+            state.pop("python_state", None)
+            raise
 
         return state
 
