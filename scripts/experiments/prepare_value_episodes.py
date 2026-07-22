@@ -53,6 +53,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validation-episodes-per-dataset", type=int, default=4)
     parser.add_argument("--test-episodes-per-dataset", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--exclude-dataset",
+        action="append",
+        default=[],
+        help="Dataset id to exclude; may be repeated.",
+    )
+    parser.add_argument(
+        "--require-evaluation-templates-in-train",
+        action="store_true",
+        help="Select validation/test template names that are covered in train.",
+    )
     return parser.parse_args()
 
 
@@ -63,7 +74,10 @@ def prepare_episode_splits(
     dataset_counts: dict[str, int],
     episodes_per_dataset: dict[str, int],
     seed: int,
+    excluded_datasets: set[str] | None = None,
+    require_evaluation_templates_in_train: bool = False,
 ) -> tuple[dict[str, list[EpisodeJSONL]], dict]:
+    excluded_datasets = excluded_datasets or set()
     grouped: dict[str, list[EpisodeJSONL]] = defaultdict(list)
     seen_episode_ids: set[str] = set()
     for serialized in episode_json:
@@ -72,6 +86,8 @@ def prepare_episode_splits(
             continue
         seen_episode_ids.add(episode.episode_id)
         dataset_id = Path(episode.csv_source).parent.name
+        if dataset_id in excluded_datasets:
+            continue
         local_csv = (local_data / dataset_id / "data.csv").resolve()
         if not local_csv.is_file():
             continue
@@ -125,23 +141,148 @@ def prepare_episode_splits(
             dataset_id for dataset_id in remaining if dataset_id not in selected
         ]
 
-    output: dict[str, list[EpisodeJSONL]] = {}
-    for split in split_order:
-        dataset_ids = assignments[split]
-        selected: list[EpisodeJSONL] = []
-        for dataset_id in dataset_ids:
-            candidates = sorted(grouped[dataset_id], key=lambda item: item.episode_id)
-            split_rng = random.Random(f"{seed}:{split}:{dataset_id}")
-            split_rng.shuffle(candidates)
-            selected.extend(candidates[: episodes_per_dataset[split]])
-        output[split] = selected
+    if require_evaluation_templates_in_train:
+        output = _select_template_covered_episodes(
+            grouped,
+            assignments=assignments,
+            episodes_per_dataset=episodes_per_dataset,
+            seed=seed,
+        )
+    else:
+        output = {}
+        for split in split_order:
+            dataset_ids = assignments[split]
+            selected: list[EpisodeJSONL] = []
+            for dataset_id in dataset_ids:
+                candidates = sorted(
+                    grouped[dataset_id], key=lambda item: item.episode_id
+                )
+                split_rng = random.Random(f"{seed}:{split}:{dataset_id}")
+                split_rng.shuffle(candidates)
+                selected.extend(candidates[: episodes_per_dataset[split]])
+            output[split] = selected
 
     manifest = {
         "seed": seed,
+        "excluded_datasets": sorted(excluded_datasets),
         "datasets": assignments,
         "episodes": {split: len(rows) for split, rows in output.items()},
+        "templates": {
+            split: sorted(
+                {
+                    episode.question.get("template_name")
+                    for episode in rows
+                    if episode.question.get("template_name")
+                }
+            )
+            for split, rows in output.items()
+        },
     }
     return output, manifest
+
+
+def _select_template_covered_episodes(
+    grouped: dict[str, list[EpisodeJSONL]],
+    *,
+    assignments: dict[str, list[str]],
+    episodes_per_dataset: dict[str, int],
+    seed: int,
+) -> dict[str, list[EpisodeJSONL]]:
+    """Select eval tasks whose named templates are represented in training."""
+    train_candidates = [
+        episode
+        for dataset_id in assignments["train"]
+        for episode in grouped[dataset_id]
+    ]
+    train_templates = {
+        episode.question.get("template_name")
+        for episode in train_candidates
+        if episode.question.get("template_name")
+    }
+    output: dict[str, list[EpisodeJSONL]] = {
+        "train": [],
+        "validation": [],
+        "test": [],
+    }
+
+    for split in ("validation", "test"):
+        for dataset_id in assignments[split]:
+            candidates = [
+                episode
+                for episode in grouped[dataset_id]
+                if episode.question.get("template_name") in train_templates
+            ]
+            split_rng = random.Random(f"{seed}:{split}:{dataset_id}")
+            split_rng.shuffle(candidates)
+            count = episodes_per_dataset[split]
+            if len(candidates) < count:
+                raise ValueError(
+                    f"{dataset_id} has only {len(candidates)} evaluation episodes "
+                    "whose templates occur in train; "
+                    f"need {count}"
+                )
+            output[split].extend(candidates[:count])
+
+    required_templates = {
+        episode.question.get("template_name")
+        for split in ("validation", "test")
+        for episode in output[split]
+    }
+    selected_by_dataset: dict[str, list[EpisodeJSONL]] = {
+        dataset_id: [] for dataset_id in assignments["train"]
+    }
+    selected_ids: set[str] = set()
+    for template_name in sorted(required_templates):
+        candidates = [
+            episode
+            for episode in train_candidates
+            if episode.question.get("template_name") == template_name
+            and episode.episode_id not in selected_ids
+            and len(selected_by_dataset[Path(episode.csv_source).parent.name])
+            < episodes_per_dataset["train"]
+        ]
+        if not candidates:
+            raise ValueError(f"cannot cover evaluation template {template_name!r}")
+        candidates.sort(
+            key=lambda episode: (
+                len(selected_by_dataset[Path(episode.csv_source).parent.name]),
+                episode.episode_id,
+            )
+        )
+        chosen = candidates[0]
+        dataset_id = Path(chosen.csv_source).parent.name
+        selected_by_dataset[dataset_id].append(chosen)
+        selected_ids.add(chosen.episode_id)
+
+    for dataset_id in assignments["train"]:
+        candidates = [
+            episode
+            for episode in grouped[dataset_id]
+            if episode.episode_id not in selected_ids
+        ]
+        split_rng = random.Random(f"{seed}:train:{dataset_id}")
+        split_rng.shuffle(candidates)
+        needed = episodes_per_dataset["train"] - len(selected_by_dataset[dataset_id])
+        if len(candidates) < needed:
+            raise ValueError(
+                f"{dataset_id} cannot fill {episodes_per_dataset['train']} "
+                "training episodes after template coverage"
+            )
+        selected_by_dataset[dataset_id].extend(candidates[:needed])
+
+    output["train"] = [
+        episode
+        for dataset_id in assignments["train"]
+        for episode in selected_by_dataset[dataset_id]
+    ]
+    selected_train_templates = {
+        episode.question.get("template_name") for episode in output["train"]
+    }
+    if not required_templates <= selected_train_templates:
+        raise RuntimeError(
+            "selected training episodes do not cover evaluation templates"
+        )
+    return output
 
 
 def prepare(args: argparse.Namespace) -> dict:
@@ -165,6 +306,10 @@ def prepare(args: argparse.Namespace) -> dict:
             "test": args.test_episodes_per_dataset,
         },
         seed=args.seed,
+        excluded_datasets=set(args.exclude_dataset),
+        require_evaluation_templates_in_train=(
+            args.require_evaluation_templates_in_train
+        ),
     )
     manifest.update(
         {

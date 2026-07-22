@@ -36,7 +36,8 @@ MAX_CANDIDATES_PER_EPISODE = 8
 MAX_SOURCE_ATTEMPTS_PER_CANDIDATE = 3
 MAX_EPISODES = 64
 MAX_TURNS = 20
-MAX_PROVIDER_REQUESTS = 10_000
+DEFAULT_MAX_PROVIDER_REQUESTS = 10_000
+HARD_MAX_PROVIDER_REQUESTS = 50_000
 MAX_CONCURRENCY = 16
 
 FIRST_ACTION_SUFFIX = """VALUE EXPERIMENT RULE:
@@ -47,20 +48,15 @@ not spend the turn only listing column names. On later turns, finish the task
 and call submit() when you have the answer."""
 
 
-def candidate_request(candidate_index: int) -> str:
-    strategies = (
-        "Choose one useful prerequisite selection or data-quality check.",
-        "Choose a necessary calculation or transformation, not another broad inspection.",
-        "Choose a direct partial result or consistency check that moves closer to the final answer.",
-    )
-    strategy = strategies[min(candidate_index, len(strategies) - 1)]
+def candidate_request() -> str:
+    """Return the one proposal prompt shared by every sampled candidate."""
     return (
         "Begin with one concrete, question-relevant intermediate action. Your "
         "response must contain 1-3 sentences explaining that action, followed by "
         "exactly one fenced ```python code block that prints what it learns. Do "
         "not call submit() anywhere, do not solve the whole task in this turn, and "
-        f"do not only list the column names. {strategy} Do not repeat or merely "
-        "reformat another candidate."
+        "do not only list the column names or perform broad inspection unrelated "
+        "to the question."
     )
 
 
@@ -88,7 +84,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=6000)
     parser.add_argument("--request-timeout-seconds", type=float, default=30.0)
     parser.add_argument("--concurrency", type=int, default=8)
+    parser.add_argument(
+        "--max-provider-requests",
+        type=int,
+        default=DEFAULT_MAX_PROVIDER_REQUESTS,
+        help="Reject a configuration whose worst-case request bound exceeds this cap.",
+    )
     parser.add_argument("--float-tolerance", type=float, default=0.1)
+    parser.add_argument(
+        "--sealed",
+        action="store_true",
+        help="Do not print candidate values while collecting a held-out split.",
+    )
     parser.add_argument(
         "--resume",
         action="store_true",
@@ -118,11 +125,15 @@ def validate_args(args: argparse.Namespace) -> None:
         )
     if not 1 <= args.concurrency <= MAX_CONCURRENCY:
         raise ValueError(f"concurrency must be between 1 and {MAX_CONCURRENCY}")
+    if not 1 <= args.max_provider_requests <= HARD_MAX_PROVIDER_REQUESTS:
+        raise ValueError(
+            f"max-provider-requests must be between 1 and {HARD_MAX_PROVIDER_REQUESTS}"
+        )
     request_limit = maximum_provider_requests(args)
-    if request_limit > MAX_PROVIDER_REQUESTS:
+    if request_limit > args.max_provider_requests:
         raise ValueError(
             f"configuration permits up to {request_limit} provider requests; "
-            f"the canary limit is {MAX_PROVIDER_REQUESTS}"
+            f"the configured limit is {args.max_provider_requests}"
         )
 
 
@@ -659,6 +670,8 @@ def build_collection_contract(
         code_commit=code_commit,
         dataset_revision=args.dataset_revision,
         policy=policy,
+        source_system_prompt_suffix=FIRST_ACTION_SUFFIX,
+        source_initial_user_message=candidate_request(),
         episode_inputs_hash=hashlib.sha256(serialized_inputs.encode()).hexdigest(),
         turn_count=args.turn_count,
         max_turns=args.max_turns,
@@ -790,9 +803,7 @@ async def collect(
                         max_turns=max(args.turn_count, 1),
                         seed=source_seed,
                         system_prompt_suffix=FIRST_ACTION_SUFFIX,
-                        initial_user_message=candidate_request(
-                            len(accepted_action_ids)
-                        ),
+                        initial_user_message=candidate_request(),
                     )
             except Exception as error:
                 print(
@@ -851,11 +862,17 @@ async def collect(
                 continue
             accepted_action_ids.add(action_id)
             episode_records.append(serialized)
-            print(
-                f"{episode.episode_id} candidate {len(accepted_action_ids)}: "
-                f"value={record.value}, labeled={record.labeled_continuations}/"
-                f"{record.attempted_continuations}"
-            )
+            if args.sealed:
+                print(
+                    f"{episode.episode_id} candidate {len(accepted_action_ids)}: "
+                    "complete"
+                )
+            else:
+                print(
+                    f"{episode.episode_id} candidate {len(accepted_action_ids)}: "
+                    f"value={record.value}, labeled={record.labeled_continuations}/"
+                    f"{record.attempted_continuations}"
+                )
         return episode_records
 
     episode_results = await asyncio.gather(

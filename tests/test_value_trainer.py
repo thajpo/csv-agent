@@ -19,7 +19,7 @@ from src.value.dataset import (
     render_prefix,
 )
 from src.value.evaluation import prediction_metrics, selection_metrics
-from src.value.trainer import TrainedValueModel
+from src.value.trainer import PairwiseValueRanker, TrainedValueModel
 from scripts.experiments.evaluate_value_selection import evaluate
 from scripts.experiments.train_value_model import train
 
@@ -44,7 +44,7 @@ def _example(
         turns_left=3,
         execution_failed="error" in text,
         output_chars=len(text),
-        selection_verdict=selection_verdict,
+        selection_verdicts=(selection_verdict, selection_verdict),
     )
 
 
@@ -106,12 +106,13 @@ def _record() -> PrefixValueRecord:
     )
 
 
-def test_record_reserves_one_unseen_selection_outcome() -> None:
-    example = example_from_record(_record(), holdout_continuations=1)
+def test_record_reserves_multiple_unseen_selection_outcomes() -> None:
+    example = example_from_record(_record(), holdout_continuations=2)
 
     assert example.successes == 2
-    assert example.attempts == 3
-    assert example.selection_verdict is True
+    assert example.attempts == 2
+    assert example.selection_verdicts == (False, True)
+    assert example.held_out_target == 0.5
     assert example.dataset_id == "dataset-a"
     assert "Output: 10" in example.text
     assert "verifier_verdict" not in example.text
@@ -159,6 +160,36 @@ def test_value_model_overfits_fixture_and_reloads(tmp_path: Path) -> None:
     assert np.allclose(scores, restored.predict(train))
 
 
+def test_pairwise_ranker_learns_within_question_preferences(tmp_path: Path) -> None:
+    train = [
+        _example(
+            "a-good", "episode-a", "useful exact calculation", 4, selection_verdict=True
+        ),
+        _example(
+            "a-bad",
+            "episode-a",
+            "irrelevant broad inspection",
+            0,
+            selection_verdict=False,
+        ),
+        _example(
+            "b-good", "episode-b", "useful exact output", 4, selection_verdict=True
+        ),
+        _example("b-bad", "episode-b", "irrelevant error", 0, selection_verdict=False),
+    ]
+    ranker = PairwiseValueRanker.fit(train, seed=7)
+    scores = ranker.predict(train)
+
+    assert ranker.training_pairs == 2
+    assert scores[0] > scores[1]
+    assert scores[2] > scores[3]
+
+    checkpoint = tmp_path / "ranker.joblib"
+    ranker.save(checkpoint)
+    restored = PairwiseValueRanker.load(checkpoint)
+    assert np.allclose(scores, restored.predict(train))
+
+
 def test_metrics_measure_ranking_and_equal_call_selection() -> None:
     examples = [
         _example("a-good", "episode-a", "good", 4, selection_verdict=True),
@@ -169,13 +200,14 @@ def test_metrics_measure_ranking_and_equal_call_selection() -> None:
     scores = [0.9, 0.1, 0.8, 0.2]
 
     prediction = prediction_metrics(examples, scores)
-    selection = selection_metrics(examples, scores, seed=42)
+    selection = selection_metrics(examples, {"pairwise_ranker": scores}, seed=42)
 
     assert prediction["pairwise_ranking_accuracy"] == 1.0
-    assert selection["value_guided_accuracy"] == 1.0
+    assert selection["selectors"]["pairwise_ranker"]["dataset_macro_accuracy"] == 1.0
+    assert selection["expected_random_dataset_macro_accuracy"] == 0.5
     assert (
-        selection["deployment_model_calls_per_episode"]["random"]
-        == (selection["deployment_model_calls_per_episode"]["value_guided"])
+        selection["deployment_model_calls_per_episode"]["expected_random"]
+        == selection["deployment_model_calls_per_episode"]["learned_selector"]
     )
 
 
@@ -214,9 +246,8 @@ def test_training_and_selection_commands_run_end_to_end(tmp_path: Path) -> None:
         Namespace(
             train=train_path,
             validation=validation_path,
-            test=test_path,
             output_dir=output_dir,
-            holdout_continuations=1,
+            holdout_continuations=2,
             seed=42,
             max_features=1_000,
         )
@@ -224,14 +255,14 @@ def test_training_and_selection_commands_run_end_to_end(tmp_path: Path) -> None:
     selection = evaluate(
         Namespace(
             test=test_path,
-            checkpoint=output_dir / "value_model.joblib",
+            model_dir=output_dir,
             output=tmp_path / "selection.json",
-            holdout_continuations=1,
+            holdout_continuations=2,
             seed=42,
         )
     )
 
     assert results["splits"]["train"]["datasets"] == ["train-dataset"]
     assert (output_dir / "metrics.json").is_file()
-    assert selection["episodes"] == 1
+    assert selection["selection"]["episodes"] == 1
     assert (tmp_path / "selection.json").is_file()

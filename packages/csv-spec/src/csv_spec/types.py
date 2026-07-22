@@ -231,6 +231,8 @@ class PrefixValueCollectionContract(BaseModel):
     code_commit: str
     dataset_revision: str
     policy: ContinuationPolicy
+    source_system_prompt_suffix: str
+    source_initial_user_message: str
     episode_inputs_hash: str
     turn_count: int = Field(ge=0)
     max_turns: int = Field(gt=0)

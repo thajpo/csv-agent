@@ -24,11 +24,17 @@ class ValueExample:
     turns_left: int
     execution_failed: bool
     output_chars: int
-    selection_verdict: bool | None = None
+    selection_verdicts: tuple[bool, ...] = ()
 
     @property
     def target(self) -> float:
         return self.successes / self.attempts
+
+    @property
+    def held_out_target(self) -> float:
+        if not self.selection_verdicts:
+            raise ValueError("example has no held-out continuation outcomes")
+        return sum(self.selection_verdicts) / len(self.selection_verdicts)
 
 
 def render_prefix(prefix: TrajectoryPrefix) -> str:
@@ -72,7 +78,6 @@ def example_from_record(
         len(execution.get("stdout", "")) + len(execution.get("stderr", ""))
         for execution in executions
     )
-    selection_verdict = held_out[0].verifier_verdict if len(held_out) == 1 else None
     return ValueExample(
         prefix_id=prefix.prefix_id,
         episode_id=prefix.episode_id,
@@ -86,7 +91,9 @@ def example_from_record(
             not execution.get("success", False) for execution in executions
         ),
         output_chars=output_chars,
-        selection_verdict=selection_verdict,
+        selection_verdicts=tuple(
+            outcome.verifier_verdict is True for outcome in held_out
+        ),
     )
 
 

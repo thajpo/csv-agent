@@ -11,10 +11,18 @@ from scripts.experiments.prepare_value_episodes import (
 )
 
 
-def _episode(serial: int, dataset_id: str, csv_source: str) -> str:
+def _episode(
+    serial: int,
+    dataset_id: str,
+    csv_source: str,
+    *,
+    template_name: str | None = None,
+) -> str:
     payload = json.loads(Path("tests/fixtures/expected_episode.json").read_text())
     payload["episode_id"] = f"{dataset_id}-{serial}"
     payload["csv_source"] = csv_source
+    if template_name is not None:
+        payload["question"]["template_name"] = template_name
     return json.dumps(payload)
 
 
@@ -94,6 +102,45 @@ def test_preparation_assigns_datasets_by_each_split_requirement(tmp_path: Path) 
         "train": 6,
         "validation": 0,
         "test": 8,
+    }
+
+
+def test_preparation_excludes_datasets_and_covers_eval_templates(
+    tmp_path: Path,
+) -> None:
+    rows = []
+    for dataset_id in ("dataset-a", "dataset-b", "excluded"):
+        csv = tmp_path / dataset_id / "data.csv"
+        csv.parent.mkdir(parents=True)
+        csv.write_text("a\n1\n")
+        rows.extend(
+            _episode(
+                index,
+                dataset_id,
+                str(csv),
+                template_name=("shared" if index == 0 else f"{dataset_id}-{index}"),
+            )
+            for index in range(3)
+        )
+
+    splits, manifest = prepare_episode_splits(
+        rows,
+        local_data=tmp_path,
+        dataset_counts={"train": 1, "validation": 0, "test": 1},
+        episodes_per_dataset={"train": 2, "validation": 1, "test": 1},
+        seed=7,
+        excluded_datasets={"excluded"},
+        require_evaluation_templates_in_train=True,
+    )
+
+    train_templates = {episode.question["template_name"] for episode in splits["train"]}
+    test_templates = {episode.question["template_name"] for episode in splits["test"]}
+    assert manifest["excluded_datasets"] == ["excluded"]
+    assert test_templates <= train_templates
+    assert "excluded" not in {
+        dataset_id
+        for dataset_ids in manifest["datasets"].values()
+        for dataset_id in dataset_ids
     }
 
 

@@ -36,6 +36,8 @@ def _snapshot_record(
         code_commit=record.code_commit,
         dataset_revision="revision",
         policy=record.policy,
+        source_system_prompt_suffix="Take one intermediate action.",
+        source_initial_user_message="Begin.",
         episode_inputs_hash="inputs-hash",
         turn_count=1,
         max_turns=record.prefix.max_turns,

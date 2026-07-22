@@ -9,9 +9,9 @@ import pytest
 import scripts.experiments.collect_prefix_values as collect_module
 
 from scripts.experiments.collect_prefix_values import (
+    DEFAULT_MAX_PROVIDER_REQUESTS,
     MAX_CANDIDATES_PER_EPISODE,
     MAX_CONTINUATIONS,
-    MAX_PROVIDER_REQUESTS,
     action_identity,
     build_collection_contract,
     candidate_request,
@@ -52,7 +52,9 @@ def _args(episodes: Path, **overrides) -> Namespace:
         "top_p": 0.95,
         "max_tokens": 1200,
         "request_timeout_seconds": 30.0,
+        "max_provider_requests": DEFAULT_MAX_PROVIDER_REQUESTS,
         "float_tolerance": 0.1,
+        "sealed": False,
     }
     values.update(overrides)
     return Namespace(**values)
@@ -68,6 +70,8 @@ def _contract(**overrides):
         "code_commit": "abc123",
         "dataset_revision": "revision",
         "policy": policy,
+        "source_system_prompt_suffix": collect_module.FIRST_ACTION_SUFFIX,
+        "source_initial_user_message": candidate_request(),
         "episode_inputs_hash": "inputs-hash",
         "turn_count": 1,
         "max_turns": 3,
@@ -189,7 +193,7 @@ def test_defaults_are_bounded_and_fixture_loads(episodes_jsonl: Path) -> None:
     episodes = load_episodes(args.episodes, args.max_episodes)
 
     assert len(episodes) == 1
-    assert maximum_provider_requests(args) <= MAX_PROVIDER_REQUESTS
+    assert maximum_provider_requests(args) <= DEFAULT_MAX_PROVIDER_REQUESTS
 
 
 def test_continuation_cap_rejects_accidental_large_run(
@@ -322,19 +326,15 @@ def test_action_identity_normalizes_local_function_keyword_bindings() -> None:
     assert action_identity(first) == action_identity(renamed)
 
 
-def test_candidate_request_assigns_distinct_proposal_roles() -> None:
-    first = candidate_request(0)
-    second = candidate_request(1)
-    third = candidate_request(2)
+def test_candidate_request_is_one_shared_proposal_policy() -> None:
+    prompt = candidate_request()
 
-    assert "column names" in first
-    assert "1-3 sentences" in first
-    assert "exactly one fenced ```python code block" in first
-    assert "Do not call submit()" in first
-    assert "prerequisite selection" in first
-    assert "necessary calculation" in second
-    assert "direct partial result" in third
-    assert "print(df.head())" not in third
+    assert "column names" in prompt
+    assert "1-3 sentences" in prompt
+    assert "exactly one fenced ```python code block" in prompt
+    assert "Do not call submit()" in prompt
+    assert "prerequisite selection" not in prompt
+    assert "direct partial result" not in prompt
 
 
 def test_resume_accepts_an_incomplete_record_for_recollection() -> None:
@@ -374,6 +374,8 @@ def test_resume_accepts_a_completed_initial_state_record() -> None:
                 request_timeout_seconds=30.0,
             ),
         ),
+        ("source_system_prompt_suffix", "different suffix"),
+        ("source_initial_user_message", "different request"),
         ("episode_inputs_hash", "different-inputs"),
         ("turn_count", 0),
         ("max_turns", 4),
