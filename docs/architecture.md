@@ -1,96 +1,73 @@
-# csv-agent Architecture
+# Architecture
 
-`csv-agent` builds verified CSV-analysis training data by turning real tabular
-datasets into questions, executing candidate analyses, and saving structured
-episode traces that can later be converted into SFT, DPO, PRM, or evaluation
-formats.
+`csv-agent` has two related paths: verified episode generation and experimental
+value-guided action selection.
 
-## System Flow
+## Data generation
 
 ```text
-Kaggle/local CSV datasets
--> source/spec resolution
--> question generation
-   -> deterministic templates
-   -> procedural generators
-   -> optional LLM exploration
--> episode execution in a constrained analysis runtime
--> teacher/consistency verification
--> manifest cache and golden artifact checks
--> reusable raw trace episodes
--> downstream training/eval exports
+Kaggle or local CSV
+  -> template, procedural, or LLM question generation
+  -> model writes Python
+  -> code executes in a Docker sandbox
+  -> terminal answer is verified
+  -> raw episode trace is saved
+  -> SFT, DPO, PRM, or evaluation formats are derived later
 ```
 
-The experimental prefix-value path branches from a verified episode and runs
-separately from training-data generation:
+The raw episode is the reusable artifact. Training-specific formats should not
+be baked into generation.
+
+## Prefix-value experiment
 
 ```text
-episode question + private terminal-verifier inputs
--> fresh actor rollout
--> exact nonterminal completed-turn boundary
--> replay code cells in a fresh sandbox
--> reject the continuation if replayed execution diverges
--> seeded continuations under one recorded actor policy
--> terminal-verifier verdicts
--> auditable prefix-value JSONL record
+verified episode + private expected answer
+  -> actor samples a nonterminal first action
+  -> action is replayed in a fresh sandbox
+  -> actor samples several continuations from that exact state
+  -> terminal verifier labels each continuation
+  -> prefix and outcomes become a PrefixValueRecord
+  -> local ranker scores candidate first actions
+  -> sealed outcomes compare guided and expected-random selection
 ```
 
-The serialized prefix contains only public agent state: the CSV source,
-question, system prompt, exact model responses, execution results, conversation
-feedback, and remaining turn budget. Expected answers and ground-truth hashes
-remain private verifier inputs. Hook records are retained as diagnostics but do
-not control terminal acceptance or supply value labels. The remaining budget is
-derived from every consumed actor response, including format-invalid attempts
-that produced conversation feedback without an execution turn.
+The critic sees only public state: CSV metadata, question, system prompt,
+conversation, executed code and output, and turns remaining. Expected answers,
+answer hashes, continuation traces, and verifier verdicts are excluded from its
+input. A prefix value is tied to its actor model, sampling settings, horizon,
+seeds, Git commit, and dataset revision.
 
-## Main Boundaries
+Hooks remain trace diagnostics. They are not trusted process labels and do not
+control the terminal value target.
 
-- `src/cli.py`: single `csvagent` command surface for status, progress,
-  generation, validation, inspection, and stats.
-- `src/core/config.py`: Pydantic configuration for generation, verification,
-  triangulation, and runtime settings.
-- `src/datagen/`: question and episode generation workflows.
-- `src/value/`: experimental prefix construction, replayed continuations, and
-  terminal-verifier value collection.
-- `src/contracts/` and `packages/csv-spec/`: shared schemas/contracts for CSV
-  source specs, generated artifacts, and prefix-value records.
-- `scripts/experiments/collect_prefix_values.py`: bounded manual real-model
-  canary; it is intentionally outside the main `csvagent` CLI.
-- `tests/fixtures/golden_artifacts/`: regression fixtures that make artifact
-  drift explicit.
-- `data/datagen_manifest.jsonl`: resumable cache of processed questions and
-  template/content fingerprints.
+## Code boundaries
 
-## Engineering Claims
+- `src/core/model.py`: OpenRouter/OpenAI-compatible model client.
+- `src/core/environment.py`: conversation and rollout orchestration.
+- `src/envs/csv_env.py`: persistent Docker sandbox and execution protocol.
+- `src/datagen/`: question generation, traces, triangulation, and verification.
+- `src/value/`: prefix construction, replay, continuation labels, and critic
+  examples.
+- `packages/csv-spec/`: canonical episode and prefix-value schemas.
+- `scripts/evaluate_model.py`: small model-evaluation entry point.
+- `scripts/experiments/`: bounded value collection, training, and evaluation.
+- `configs/`: immutable dataset references and experiment configuration.
 
-- Generation is resumable: interrupted runs can restart from the manifest.
-- Training formats are derived from raw traces instead of baked into generation.
-- Artifact drift is testable through golden fixtures.
-- Path/source resolution and sandbox behavior are covered by tests.
-- Live LLM work is separated from local smoke/regression tests.
-- Prefix replay fails fast when code execution, outputs, hooks, or submissions
-  differ from the recorded boundary.
-- Prefix values are tied to a recorded actor policy, horizon, seeds, code
-  commit, and dataset revision.
+## Reliability boundaries
 
-## What Reviewers Should Inspect
+- The default test suite never makes live model calls.
+- Model code runs in Docker rather than the host Python process.
+- Prefix replay fails if recorded execution cannot be reproduced.
+- Training, validation, and test are split by CSV dataset.
+- Test continuations remain sealed until checkpoints and hashes are frozen.
+- Generated data is ignored by Git and authoritative snapshots use immutable
+  Hugging Face revisions.
 
-- `README.md` for the CLI and happy path.
-- `docs/reviewer-demo.md` for a low-cost local demo.
-- `tests/test_golden_artifact_regression_gate.py` for drift detection.
-- `tests/test_manifest.py` for resumable generation behavior.
-- `tests/test_sandbox_security.py` for runtime safety boundaries.
-- `packages/csv-spec/README.md` for the shared source-spec contract.
-- `research.md` for the selected execution-aware value-model direction.
-- `scripts/experiments/README.md` for the bounded prefix-value canary.
+## Current limitation
 
-## Current Limits
-
-- Some commands require Docker or real model/API access and are not part of the
-  default local demo path.
-- Prefix-value collection is an initial feasibility instrument, not critic
-  training or a production data pipeline; provider seed support may also vary.
-- The repo still needs a small checked-in sample trace specifically curated for
-  external reviewers.
-- Public release hygiene should include a changelog and versioned package
-  metadata once the project is treated as reusable tooling.
+The machinery can reproducibly estimate success under the existing terminal
+verifier, but the verifier rejects some mathematically equivalent answers and
+encodes some conventions that are absent from the prompt. That makes label
+validity—not model scale—the next research boundary. The concise project status
+is in [research.md](../research.md); the complete canary record is in
+[docs/research/value-canary-2026-07-20.md](research/value-canary-2026-07-20.md).
