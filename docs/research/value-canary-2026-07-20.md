@@ -153,6 +153,68 @@ by one. Make at most two adjustments. If no setting is usable, stop and report
 that these tasks cannot identify the value question instead of inspecting or
 changing test data.
 
+### Train/validation label audit
+
+Before opening the test split, the six label continuations for every train and
+validation candidate were audited. The two reserved continuations were excluded.
+The mechanical census covered 80 questions, 240 candidate prefixes, and 1,440
+label continuations:
+
+| Outcome | Continuations | Share of all labels |
+| --- | ---: | ---: |
+| Accepted terminal answer | 1,072 | 74.4% |
+| No terminal submission | 183 | 12.7% |
+| Submitted answer rejected | 171 | 11.9% |
+| Final-cell execution error | 14 | 1.0% |
+
+All 183 no-submission outcomes ended after a successful Python execution but
+without a recorded terminal answer. These are real failures under the bounded
+agent protocol, although many traces had computed or printed the requested
+quantity before exhausting the turn budget. The 14 execution errors included
+11 JSON-boundary failures involving NumPy booleans or pandas interval keys and
+three ordinary model-code errors.
+
+The 171 rejected submissions collapsed to 38 distinct
+episode-and-answer clusters. A single-reviewer semantic census classified the
+continuation-weighted outcomes as follows:
+
+| Preliminary adjudication | Rejected submissions | Interpretation |
+| --- | ---: | --- |
+| Clearly incorrect answer or task choice | 32 (18.7%) | Useful negative label |
+| Reasonable equivalent rejected | 50 (29.2%) | Likely false negative |
+| Underspecified task convention | 89 (52.0%) | Correctness cannot be inferred from the prompt alone |
+
+The equivalent-answer cases were primarily reversed group orientation for
+two-sided t-tests and Mann-Whitney tests, with the corresponding sign or
+complementary U statistic, plus semantically identical quantile interval
+labels. The underspecified cases comprised 78 outcomes affected by the hidden
+rule that any column with at least 98% unique values is "identifier-like" and
+11 outcomes using the defensible alternative of counting every member of a
+duplicate group rather than only later occurrences.
+
+This adjudication is diagnostic rather than ground truth: it was performed by
+one reviewer after seeing expected and submitted answers, and the
+identifier-like classification is itself a judgment. The strict lower-bound
+problem is nevertheless material: even counting only mathematically
+equivalent rejected answers gives 50 false-negative-looking outcomes, 29.2%
+of submitted rejections. Including underspecified conventions gives 139/171.
+
+The mechanical census is reproducible without reading test records:
+
+```bash
+uv run python scripts/experiments/audit_value_labels.py \
+  --tasks-dir data/experiments/value-deepseek-replication/tasks \
+  --values-dir data/experiments/value-deepseek-replication \
+  --output /tmp/value-label-audit.json
+```
+
+The current canary therefore measures prediction of this procedural verifier,
+including its hidden conventions and terminal protocol. It cannot, as
+currently labeled, cleanly measure general CSV reasoning quality. The frozen
+test evaluation may still be run once as a diagnostic of value selection under
+that contract, but a positive result would not repair the label-validity
+problem and a negative result would not isolate critic quality.
+
 ### Models and baselines
 
 The primary learned selector is TF-IDF followed by pairwise logistic ranking.

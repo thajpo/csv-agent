@@ -1,6 +1,6 @@
 # Research Direction
 
-Last reviewed: 2026-07-21
+Last reviewed: 2026-07-22
 
 This document records the project's selected research direction and durable
 rationale. It is not a roadmap or task tracker.
@@ -93,6 +93,17 @@ DeepSeek V4 Flash replication is preregistered in
 `docs/research/value-canary-2026-07-20.md`; it uses fresh datasets, one candidate
 policy, a within-question ranking objective, exact expected-random comparison,
 and dataset-clustered uncertainty. Actor training remains premature.
+
+The replication's train/validation label audit exposed a prior validity gate.
+Of 171 submitted answers rejected by the procedural verifier, only 32 were
+clearly incorrect in a full review of the 38 distinct answer clusters. Fifty
+were reasonable statistical or interval-label equivalents, and 89 depended on
+underspecified identifier or duplicate-count conventions. Value learning from
+terminal outcomes is only as meaningful as the terminal contract: future
+canaries must audit task/verifier agreement before treating rollout success as
+a reasoning-quality target. The current frozen replication can still diagnose
+selection under its recorded verifier, but cannot cleanly support a claim about
+general CSV reasoning.
 
 ### Parallel: Data-Conditioned Procedural Tasks
 
