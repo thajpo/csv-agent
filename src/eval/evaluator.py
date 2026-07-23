@@ -111,9 +111,9 @@ class Evaluator:
             if raw_expected_hashes
             else ([expected_hash] if expected_hash else [])
         )
-        if expected_answer is None and not expected_hashes:
+        if not expected_hashes:
             raise ValueError(
-                f"episode {episode.episode_id} has no terminal-verifier ground truth"
+                f"episode {episode.episode_id} has no terminal-verifier hash provenance"
             )
 
         # Run model inference (student mode - no hint)

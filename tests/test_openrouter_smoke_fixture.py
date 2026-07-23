@@ -48,3 +48,21 @@ async def test_evaluator_uses_current_episode_ground_truth_contract(monkeypatch)
     assert result.execution_success is True
     assert result.final_answer_correct is True
     assert result.expected_answer == 2796
+
+
+@pytest.mark.asyncio
+async def test_evaluator_rejects_missing_hash_provenance_before_rollout(
+    monkeypatch,
+) -> None:
+    async def unexpected_from_params(**_kwargs):
+        raise AssertionError("rollout must not start without verifier hashes")
+
+    monkeypatch.setattr(
+        "src.eval.evaluator.Environment.from_params", unexpected_from_params
+    )
+    episode = Evaluator(model="unused").load_episodes(SMOKE_EPISODES)[0]
+    episode.question["ground_truth_hash"] = None
+    episode.question["ground_truth_hashes"] = None
+
+    with pytest.raises(ValueError, match="hash provenance"):
+        await Evaluator(model="unused").evaluate_episode(episode)
