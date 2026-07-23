@@ -70,48 +70,34 @@ This direction should be reconsidered if tasks are effectively single-step,
 states cannot be replayed faithfully, rollout values contain little variation,
 or value-guided selection does not improve held-out success at equal compute.
 
-### First canary result
+### Current status: paused after two canaries
 
-The first value-guided selection canary completed on 2026-07-21. Its code and
-artifacts reproduce, but the study is exploratory rather than a clean held-out
-test. The two test datasets were reused while candidate-generation defects were
-fixed, candidate proposals came from different role prompts, the pointwise
-training objective did not match the within-question deployment decision, and
-two datasets cannot support useful across-dataset uncertainty.
+The value infrastructure now supports replayed prefixes, repeated continuation
+labels, dataset-disjoint splits, frozen critics, and equal-call selection
+evaluation. Neither canary demonstrated useful value guidance:
 
-The TF-IDF critic ranked test candidate pairs at 0.467. It selected a successful
-reserved continuation for 10/16 questions, compared with 11/16 expected for
-uniform random selection over the same realized candidate outcomes. A seeded
-random draw happened to score 10/16. A hindsight selector that sees each
-reserved outcome before choosing scored 15/16, but that realized-outcome
-ceiling does not establish different latent candidate values.
+- The exploratory Qwen critic selected 10/16 successful continuations versus
+  11/16 expected under uniform selection.
+- The independent DeepSeek pairwise critic reached 73.44% success versus
+  70.31% expected random selection. The 3.12-point difference had a 95%
+  interval of -6.25 to 11.98 points and failed every preregistered evidence
+  gate.
 
-The defensible conclusion is that this adaptively developed canary found no
-benefit from its shallow pointwise critic. It provides no positive evidence for
-value guidance and does not reject value functions generally. An independent
-DeepSeek V4 Flash replication is preregistered in
-`docs/research/value-canary-2026-07-20.md`; it uses fresh datasets, one candidate
-policy, a within-question ranking objective, exact expected-random comparison,
-and dataset-clustered uncertainty. Actor training remains premature.
+The main blocker is now label validity. In the DeepSeek train/validation audit,
+50/171 rejected submissions were reasonable statistical equivalents and 89
+depended on underspecified identifier or duplicate-count conventions. The
+current evidence cannot isolate critic quality from verifier noise and does not
+justify a larger critic, actor training, or PPO.
 
-The replication's train/validation label audit exposed a prior validity gate.
-Of 171 submitted answers rejected by the procedural verifier, only 32 were
-clearly incorrect in a full review of the 38 distinct answer clusters. Fifty
-were reasonable statistical or interval-label equivalents, and 89 depended on
-underspecified identifier or duplicate-count conventions. Value learning from
-terminal outcomes is only as meaningful as the terminal contract: future
-canaries must audit task/verifier agreement before treating rollout success as
-a reasoning-quality target. The current frozen replication can still diagnose
-selection under its recorded verifier, but cannot cleanly support a claim about
-general CSV reasoning.
+Resume value research only after an explicit, equivalence-aware terminal
+contract passes a pre-test label audit. That work should create a new dataset
+revision and fresh canary rather than reinterpret the frozen results.
 
-The frozen DeepSeek test was subsequently evaluated once. The pairwise critic
-reached 73.44% held-out success against 70.31% expected random selection, a
-3.12-point difference with a dataset-clustered 95% interval from -6.25 to 11.98
-points. It improved two of four datasets and ranked unequal candidate pairs at
-53.49%. This failed every preregistered evidence gate, so improvement was not
-demonstrated. The current evidence does not justify actor training or a larger
-critic; terminal-contract validity should be repaired and measured first.
+Continuation sources:
+
+- [Detailed methods and results](docs/research/value-canary-2026-07-20.md)
+- [Pinned DeepSeek snapshot](configs/value/deepseek-canary.toml)
+- [Implementation and review history](https://github.com/thajpo/csv-agent/pull/39)
 
 ### Parallel: Data-Conditioned Procedural Tasks
 
