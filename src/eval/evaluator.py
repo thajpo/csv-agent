@@ -105,9 +105,12 @@ class Evaluator:
         # Expected answer from the canonical EpisodeJSONL question contract.
         expected_answer = episode.question.get("ground_truth")
         expected_hash = episode.question.get("ground_truth_hash")
-        expected_hashes = set(episode.question.get("ground_truth_hashes") or [])
-        if expected_hash:
-            expected_hashes.add(expected_hash)
+        raw_expected_hashes = episode.question.get("ground_truth_hashes")
+        expected_hashes = set(
+            raw_expected_hashes
+            if raw_expected_hashes
+            else ([expected_hash] if expected_hash else [])
+        )
         if expected_answer is None and not expected_hashes:
             raise ValueError(
                 f"episode {episode.episode_id} has no terminal-verifier ground truth"
@@ -133,13 +136,16 @@ class Evaluator:
             # Compare answers
             if execution_success:
                 actual_hash = hash_artifact(actual_answer)
-                final_answer_correct = actual_hash in expected_hashes or answers_match(
-                    hash1=expected_hash,
-                    hash2=actual_hash,
-                    val1=expected_answer,
-                    val2=actual_answer,
-                    float_tol=self.float_tol,
-                    p_value_tol=self.p_value_tol,
+                final_answer_correct = actual_hash in expected_hashes or any(
+                    answers_match(
+                        hash1=accepted_hash,
+                        hash2=actual_hash,
+                        val1=expected_answer,
+                        val2=actual_answer,
+                        float_tol=self.float_tol,
+                        p_value_tol=self.p_value_tol,
+                    )
+                    for accepted_hash in expected_hashes
                 )
             else:
                 final_answer_correct = False

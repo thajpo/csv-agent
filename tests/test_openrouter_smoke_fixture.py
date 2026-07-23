@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 from csv_spec import EpisodeJSONL, hash_artifact
 
+from src.datagen.process_report import validate_trace_submissions
 from src.eval.evaluator import Evaluator
 
 
@@ -21,6 +22,7 @@ def test_openrouter_smoke_fixture_matches_checked_in_csv() -> None:
     assert csv_path.is_file()
     assert len(pd.read_csv(csv_path)) == expected_answer
     assert hash_artifact(expected_answer) in episode.question["ground_truth_hashes"]
+    validate_trace_submissions(episode.gold_trace)
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@
 
 These scripts are manual research entry points, not stable `csvagent`
 subcommands. Start with the repository-level [README](../../README.md) and keep
-generated artifacts under ignored `data/experiments/` or `artifacts/` paths.
+generated artifacts under the ignored `data/experiments/` path.
 
 ## What the value canary tests
 
