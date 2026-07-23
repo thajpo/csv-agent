@@ -7,7 +7,6 @@ does not prove that a hook made useful computational progress.
 
 from __future__ import annotations
 
-import ast
 import math
 from collections import Counter
 from typing import Any, Literal
@@ -23,7 +22,7 @@ from csv_spec import (
     validate_hook_event_line,
 )
 from src.core.environment import validate_hooks_grounded
-from src.datagen.shared.submission import parse_submission
+from src.datagen.shared.submission import parse_submission, validate_submission_position
 from src.datagen.shared.verification import trace_answer_hash
 
 EpisodeSource = Literal["llm_gen", "template", "procedural"]
@@ -247,35 +246,11 @@ def validate_trace_submissions(trace: TraceDict, *, path: str = "trace") -> None
         if not isinstance(code, str):
             raise ValueError(f"{turn_path}.code is invalid")
         try:
-            tree = ast.parse(code)
-        except SyntaxError as exc:
-            raise ValueError(f"{turn_path} code is not parseable") from exc
-
-        parents = {
-            id(child): parent
-            for parent in ast.walk(tree)
-            for child in ast.iter_child_nodes(parent)
-        }
-        submit_calls = [
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Name)
-            and node.func.id == "submit"
-        ]
-        if len(submit_calls) != 1:
+            validate_submission_position(code, require_submission=True)
+        except ValueError as error:
             raise ValueError(
-                f"{turn_path} must contain exactly one submitted operation"
-            )
-        submit_call = submit_calls[0]
-        submit_statement = parents.get(id(submit_call))
-        if (
-            not isinstance(submit_statement, ast.Expr)
-            or submit_statement.value is not submit_call
-            or not tree.body
-            or tree.body[-1] is not submit_statement
-        ):
-            raise ValueError(f"{turn_path} submission must be the terminal operation")
+                f"{turn_path} submission must be the terminal operation"
+            ) from error
 
     canonical_answer_hash = trace_answer_hash(trace)
     if trace.get("success"):

@@ -54,3 +54,17 @@ def test_template_dataset_snapshot_is_pinned():
         "validation_split": "val",
         "test_split": "test",
     }
+
+
+def test_value_canary_snapshot_is_pinned():
+    config_path = REPO_ROOT / "configs/datasets/value-canary.toml"
+    with config_path.open("rb") as config_file:
+        config = tomllib.load(config_file)
+
+    assert config == {
+        "repo": "ThaJpo/csv-agent-prefix-values-canary",
+        "revision": "ba6e39949798eb1918d6ec6e5a8119d74eaf8bb2",
+        "source_repo": "ThaJpo/csv-agent-template-episodes",
+        "source_revision": "e19fadf8d713c5afb7fe1476e2160b9bece1233a",
+        "expected_records": {"train": 72, "validation": 24, "test": 48},
+    }

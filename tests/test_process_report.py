@@ -829,6 +829,7 @@ async def test_trace_builder_preserves_turns_pruned_from_conversation_history():
     environment.submitted_answer = None
     environment.submission_metadata = {}
     environment.is_completed = False
+    environment.current_turn = 0
 
     async def execute_cells(code_cells):
         turn_index = len(environment.execution_turns)
@@ -859,6 +860,7 @@ async def test_trace_builder_preserves_turns_pruned_from_conversation_history():
         code = "submit(6)" if turn_index == 5 else f"value_{turn_index} = {turn_index}"
         response = f"Reasoning for turn {turn_index}\n```python\n{code}\n```"
         await environment.process_turn(response)
+        environment.current_turn += 1
 
     retained_assistant_messages = [
         message
@@ -1059,7 +1061,9 @@ def test_process_report_rejects_turns_appended_after_accepted_submission():
         }
     )
 
-    with pytest.raises(ValueError, match="accepted submission is not in the final turn"):
+    with pytest.raises(
+        ValueError, match="accepted submission is not in the final turn"
+    ):
         build_process_report(
             source="template",
             gold_trace=trace,

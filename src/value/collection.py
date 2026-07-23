@@ -1,0 +1,281 @@
+"""Collect verifier-grounded future-success values for trajectory prefixes."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import Any
+
+from csv_spec import (
+    ContinuationPolicy,
+    PrefixContinuation,
+    PrefixValueCollectionContract,
+    PrefixValueRecord,
+    TraceDict,
+    TrajectoryPrefix,
+    hash_artifact,
+)
+
+from src.core.environment import Environment
+from src.core.model import APILLM
+from src.datagen.shared.verification import derive_ground_truth_verification
+from src.datagen.teacher import build_trace_dict
+
+ContinuationRunner = Callable[
+    [TrajectoryPrefix, ContinuationPolicy, int, int | None],
+    Awaitable[TraceDict],
+]
+
+
+@dataclass(frozen=True)
+class InitialModelTrace:
+    trace: TraceDict
+    system_prompt: str
+    turn_responses: list[str]
+    turn_completed: list[bool]
+    boundary_messages: list[list[dict[str, str]]]
+    boundary_consumed_turns: list[int]
+
+
+def build_trajectory_prefix(
+    *,
+    episode_id: str,
+    csv_source: str,
+    system_prompt: str,
+    question_text: str,
+    trace: TraceDict,
+    turn_responses: Sequence[str],
+    turn_completed: Sequence[bool],
+    conversation_messages: Sequence[Mapping[str, str]],
+    turn_count: int,
+    consumed_turns: int,
+    max_turns: int,
+) -> TrajectoryPrefix:
+    """Create a deterministic, oracle-free prefix from a recorded boundary."""
+    turns = trace.get("turns", [])
+    if turn_count < 0 or turn_count > len(turns):
+        raise ValueError("turn_count is outside the recorded trace")
+    if len(turn_responses) < turn_count:
+        raise ValueError("turn responses are unavailable at the selected boundary")
+    if len(turn_completed) < turn_count:
+        raise ValueError("turn completion states are unavailable at the boundary")
+    selected_turns = deepcopy(turns[:turn_count])
+    selected_responses = list(turn_responses[:turn_count])
+    selected_completion = list(turn_completed[:turn_count])
+    selected_messages = [dict(message) for message in conversation_messages]
+    identity = hash_artifact(
+        {
+            "episode_id": episode_id,
+            "csv_source": csv_source,
+            "system_prompt": system_prompt,
+            "question_text": question_text,
+            "turns": selected_turns,
+            "turn_responses": selected_responses,
+            "turn_completed": selected_completion,
+            "conversation_messages": selected_messages,
+            "consumed_turns": consumed_turns,
+            "max_turns": max_turns,
+        }
+    )
+    return TrajectoryPrefix(
+        prefix_id=f"{episode_id}:{turn_count}:{identity}",
+        episode_id=episode_id,
+        csv_source=csv_source,
+        system_prompt=system_prompt,
+        question_text=question_text,
+        turns=selected_turns,
+        turn_responses=selected_responses,
+        turn_completed=selected_completion,
+        conversation_messages=selected_messages,
+        consumed_turns=consumed_turns,
+        max_turns=max_turns,
+    )
+
+
+def verify_terminal_trace(
+    question: Mapping[str, Any], trace: TraceDict, *, float_tolerance: float
+) -> bool:
+    """Label a continuation using only the existing terminal verifier.
+
+    The question must carry valid ground-truth hash provenance. With that
+    provenance, exhausting the horizon without a submission is a failed
+    continuation; unavailable or inconsistent verifier evidence raises.
+    """
+    evidence = derive_ground_truth_verification(
+        question=question,
+        gold_trace=trace,
+        float_tolerance=float_tolerance,
+    )
+    if not trace.get("success") or trace.get("final_answer") is None:
+        return False
+    if evidence.verdict is None:
+        raise ValueError("terminal verifier could not label a submitted answer")
+    return evidence.verdict
+
+
+async def run_initial_model_trace(
+    *,
+    csv_source: str,
+    question_text: str,
+    policy: ContinuationPolicy,
+    max_turns: int,
+    seed: int | None,
+    system_prompt_suffix: str | None = None,
+    initial_user_message: str = "Begin the analysis.",
+) -> InitialModelTrace:
+    """Sample the actor once and retain each exact public turn boundary."""
+    sampling_args = dict(policy.sampling_args)
+    if seed is not None:
+        sampling_args["seed"] = seed
+    llm = APILLM(
+        model=policy.model,
+        sampling_args=sampling_args,
+        timeout=policy.request_timeout_seconds,
+    )
+    try:
+        source_id = hash_artifact(
+            {
+                "csv_source": csv_source,
+                "question_text": question_text,
+                "seed": seed,
+            }
+        )[:16]
+        environment = await Environment.from_params(
+            csv_path=csv_source,
+            model=policy.model,
+            question=question_text,
+            mode="student",
+            max_turns=max_turns,
+            sampling_args=policy.sampling_args,
+            llm=llm,
+            session_id=f"value-source-{source_id}",
+            system_prompt_suffix=system_prompt_suffix,
+            initial_user_message=initial_user_message,
+        )
+        final_state = await environment.rollout()
+        trace = build_trace_dict(final_state)
+        execution_turns = final_state.execution_turns
+        return InitialModelTrace(
+            trace=trace,
+            system_prompt=final_state.conversation.system_prompt,
+            turn_responses=[record["response"] for record in execution_turns],
+            turn_completed=[record["completed"] for record in execution_turns],
+            boundary_messages=[
+                deepcopy(record["conversation_messages"]) for record in execution_turns
+            ],
+            boundary_consumed_turns=[
+                record["consumed_turns"] for record in execution_turns
+            ],
+        )
+    finally:
+        await llm.aclose()
+
+
+async def run_model_continuation(
+    prefix: TrajectoryPrefix,
+    policy: ContinuationPolicy,
+    rollout_index: int,
+    seed: int | None,
+) -> TraceDict:
+    """Replay a prefix and continue it once with the configured actor."""
+    sampling_args = dict(policy.sampling_args)
+    if seed is not None:
+        sampling_args["seed"] = seed
+    llm = APILLM(
+        model=policy.model,
+        sampling_args=sampling_args,
+        timeout=policy.request_timeout_seconds,
+    )
+    try:
+        environment = await Environment.from_params(
+            csv_path=prefix.csv_source,
+            model=policy.model,
+            question=prefix.question_text,
+            mode="student",
+            max_turns=prefix.max_turns,
+            sampling_args=policy.sampling_args,
+            llm=llm,
+            session_id=f"value-{prefix.prefix_id[-8:]}-{rollout_index}",
+        )
+        final_state = await environment.rollout_from_prefix(prefix)
+        return build_trace_dict(final_state)
+    finally:
+        await llm.aclose()
+
+
+async def collect_prefix_value(
+    *,
+    prefix: TrajectoryPrefix,
+    question: Mapping[str, Any],
+    policy: ContinuationPolicy,
+    seeds: Sequence[int | None],
+    float_tolerance: float,
+    code_commit: str,
+    dataset_revision: str | None = None,
+    collection_contract: PrefixValueCollectionContract | None = None,
+    runner: ContinuationRunner = run_model_continuation,
+) -> PrefixValueRecord:
+    """Estimate success over all independently attempted continuations.
+
+    Terminal submissions are labeled only by the ground-truth verifier.
+    Replay, rollout, and verifier errors are retained without verdicts. If any
+    attempt is unlabeled, the value is unavailable rather than biased by an
+    infrastructure failure.
+    """
+    if not seeds:
+        raise ValueError("at least one continuation seed is required")
+
+    async def collect_one(rollout_index: int, seed: int | None) -> PrefixContinuation:
+        try:
+            trace = await runner(prefix, policy, rollout_index, seed)
+        except Exception as error:
+            return PrefixContinuation(
+                rollout_index=rollout_index,
+                seed=seed,
+                error=f"{type(error).__name__}: {error}",
+            )
+
+        try:
+            verdict = verify_terminal_trace(
+                question,
+                trace,
+                float_tolerance=float_tolerance,
+            )
+            return PrefixContinuation(
+                rollout_index=rollout_index,
+                seed=seed,
+                trace=trace,
+                verifier_verdict=verdict,
+            )
+        except Exception as error:
+            return PrefixContinuation(
+                rollout_index=rollout_index,
+                seed=seed,
+                trace=trace,
+                error=f"{type(error).__name__}: {error}",
+            )
+
+    continuations = list(
+        await asyncio.gather(
+            *(collect_one(index, seed) for index, seed in enumerate(seeds))
+        )
+    )
+
+    labeled = sum(item.verifier_verdict is not None for item in continuations)
+    successes = sum(item.verifier_verdict is True for item in continuations)
+    return PrefixValueRecord(
+        prefix=prefix,
+        policy=policy,
+        continuations=continuations,
+        attempted_continuations=len(continuations),
+        labeled_continuations=labeled,
+        successful_continuations=successes,
+        value=(
+            successes / len(continuations) if labeled == len(continuations) else None
+        ),
+        code_commit=code_commit,
+        dataset_revision=dataset_revision,
+        collection_contract=collection_contract,
+    )

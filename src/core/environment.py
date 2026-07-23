@@ -10,9 +10,16 @@ Refactored to use a sandboxed Python environment for code execution.
 
 import json
 import logging
+from copy import deepcopy
+from pathlib import Path
 
 import pandas as pd
-from csv_spec import parse_hook_record, validate_hook_event_line
+from csv_spec import (
+    TrajectoryPrefix,
+    TurnDict,
+    parse_hook_record,
+    validate_hook_event_line,
+)
 
 from src.core.model import APILLM
 from src.utils.parsing import (
@@ -24,9 +31,12 @@ from src.core.prompts import (
     generate_data_overview,
     build_system_prompt,
     CONTINUE_MSG,
-    FINAL_MSG,
 )
-from src.datagen.shared.submission import parse_submission
+from src.datagen.shared.submission import (
+    parse_all_submissions,
+    parse_submission,
+    validate_submission_position,
+)
 from src.core.config import DataConfig, ModelConfig, ExecutionConfig, TaskConfig
 from src.core.conversation import CodeCellResult, ConversationHistory
 from src.envs.csv_env import LocalCSVAnalysisEnv as CSVAnalysisEnv
@@ -35,6 +45,10 @@ logger = logging.getLogger(__name__)
 
 # Max output chars before truncation (~12.5K tokens at 4 chars/token)
 MAX_OUTPUT_CHARS = 50_000
+
+
+class PrefixReplayError(RuntimeError):
+    """Raised when a recorded prefix cannot be reproduced faithfully."""
 
 
 def _hook_record_identity(hook: dict) -> str:
@@ -161,30 +175,6 @@ def validate_hooks_grounded(
     return grounded, ungrounded
 
 
-HOOK_REPROMPT_MSG = """
-⚠️ YOUR SOLUTION WAS REJECTED - HOOKS ARE MISSING OR INVALID
-
-Your submission must include hook() calls that document each computational step.
-Each hook's code_line MUST be the EXACT code that was executed.
-
-REQUIRED PATTERN:
-```python
-# Step 1: Filter data
-filtered = df[df['col'] == 'value']
-hook(filtered, "filtered = df[df['col'] == 'value']", name='filtered')
-
-# Step 2: Compute result
-result = filtered['amount'].mean()
-hook(result, "result = filtered['amount'].mean()", name='result', depends_on=['filtered'])
-
-submit(result)
-```
-
-Please re-do your solution with proper hook() calls after EVERY computational step.
-The code_line argument must EXACTLY match the code you wrote.
-"""
-
-
 # Keywords that suggest a statistical/hypothesis answer needing structured format
 _STATISTICAL_KEYWORDS = {
     "yes",
@@ -239,7 +229,9 @@ class Environment:
     an LLM explores a CSV dataset using tools. It's designed to be
     pure RL logic with no presentation dependencies (uses stdlib logging).
 
-    Uses a sandboxed Python environment for code execution.
+    Uses a sandboxed Python environment for code execution. Recorded
+    nonterminal prefixes can be replayed in a fresh sandbox before continuing;
+    replay raises ``PrefixReplayError`` if execution differs from the record.
     """
 
     def __init__(
@@ -253,6 +245,8 @@ class Environment:
         reuse_env: bool = False,
         llm=None,
         session_id: str | None = None,
+        system_prompt_suffix: str | None = None,
+        initial_user_message: str = "Begin the analysis.",
     ):
         # Store configs
         self.data = data
@@ -260,6 +254,8 @@ class Environment:
         self.execution = execution
         self.task = task
         self.session_id = session_id
+        self.system_prompt_suffix = system_prompt_suffix
+        self.initial_user_message = initial_user_message
 
         self.csv_path = data.csv_path
         if llm is not None:
@@ -287,9 +283,21 @@ class Environment:
         reuse_env: bool = False,
         llm=None,
         session_id: str | None = None,
+        system_prompt_suffix: str | None = None,
+        initial_user_message: str = "Begin the analysis.",
     ):
         instance = cls(
-            data, model, execution, task, env, state, reuse_env, llm, session_id
+            data,
+            model,
+            execution,
+            task,
+            env,
+            state,
+            reuse_env,
+            llm,
+            session_id,
+            system_prompt_suffix,
+            initial_user_message,
         )
 
         # Create env and state if not provided
@@ -326,6 +334,8 @@ class Environment:
         reuse_env: bool = False,
         llm=None,
         session_id: str | None = None,
+        system_prompt_suffix: str | None = None,
+        initial_user_message: str = "Begin the analysis.",
     ):
         """
         Factory with primitive args - handles config construction internally.
@@ -349,6 +359,8 @@ class Environment:
             state: Optional pre-created state dict (for pooling)
             reuse_env: If True, reset env after rollout instead of destroying
             session_id: Session ID for container isolation (for parallel execution)
+            system_prompt_suffix: Optional experiment instruction appended verbatim
+            initial_user_message: First user message sent when history is empty
 
         Returns:
             Initialized Environment ready for rollout
@@ -395,6 +407,8 @@ class Environment:
             reuse_env=reuse_env,
             llm=llm,
             session_id=session_id,
+            system_prompt_suffix=system_prompt_suffix,
+            initial_user_message=initial_user_message,
         )
 
     def _load_csv(self):
@@ -420,9 +434,11 @@ class Environment:
         sys_prompt = build_system_prompt(
             mode=self.task.mode,
             dataset_description=self.data.dataset_description,
-            data_overview=self.data.data_overview,
+            data_overview=self.data.data_overview or data_overview,
             question=self.task.question,
         )
+        if self.system_prompt_suffix:
+            sys_prompt = f"{sys_prompt}\n\n{self.system_prompt_suffix.strip()}"
 
         # Create conversation history with context management
         conversation = ConversationHistory(
@@ -441,7 +457,6 @@ class Environment:
         self.code_cells = []  # Track all executed code cells
         self.execution_turns = []
         self.format_reprompt_count = 0  # Track format re-prompts (force-accept after 3)
-        self.hook_reprompt_count = 0  # Track hook re-prompts (force-accept after 3)
 
     def extract_python_cells(self, response: str) -> list[str]:
         """Extract ```python...``` code blocks from response."""
@@ -463,6 +478,13 @@ class Environment:
             code=code,
             trusted_records=trusted_records,
         )
+        if "✓ Submitted:" in output:
+            validate_submission_position(code, require_submission=True)
+            marker_lines = [
+                line for line in output.splitlines() if line.startswith("✓ Submitted: ")
+            ]
+            if len(marker_lines) != 1 or len(parse_all_submissions(output)) != 1:
+                raise ValueError("execution must contain exactly one submission record")
 
         # Truncate massive outputs to prevent context overflow
         # Preserve the ✓ Submitted: line intact (it contains the answer JSON)
@@ -578,19 +600,11 @@ class Environment:
 
         return result
 
-    async def handle_max_turns_reached(self) -> None:
-        """Handle reaching max turns: prompt for final output and get response."""
-
-        self.conversation.add_user_feedback(FINAL_MSG)
-
-        response = await self.get_model_response()
-
-        self.conversation.add_assistant_response(response)
-        self.is_completed = True
-
     async def get_model_response(self) -> str:
         """Call model and log the interaction."""
         messages = self.conversation.to_openai_messages()
+        if len(messages) == 1:
+            messages.append({"role": "user", "content": self.initial_user_message})
 
         try:
             response = await self.model(messages)
@@ -625,6 +639,11 @@ class Environment:
     def response_is_valid(self, response: str, code_cells: list[str]) -> bool:
         """Response should have reasoning text and one code cell."""
         error_msg = get_turn_validation_feedback(response, code_cells)
+        if not error_msg and code_cells:
+            try:
+                validate_submission_position(code_cells[0])
+            except ValueError as error:
+                error_msg = str(error)
         if error_msg:
             self.conversation.add_assistant_response(response)
             error_feedback = (
@@ -685,52 +704,6 @@ class Environment:
         # Force-accept after 3 retries
         return True, None
 
-    def _validate_hooks(self) -> tuple[bool, str | None]:
-        """Check if hooks are grounded and sufficient. Returns (valid, error_feedback).
-
-        Force-accepts after 3 failed validation attempts to prevent infinite loops.
-        """
-        if self.hook_reprompt_count >= 3:
-            return True, None  # Already at max retries, force-accept
-
-        hooks = self.submission_metadata.get("hooks", [])
-        # Ensure hooks is a list (could be string if truncated in edge cases)
-        if not isinstance(hooks, list):
-            hooks = []
-        grounded, ungrounded = validate_hooks_grounded(hooks, self.code_cells)
-
-        # Get expected hook count from question
-        expected = 2  # Default minimum
-        if self.task and self.task.question and self.task.question.n_steps:
-            expected = self.task.question.n_steps
-
-        has_ungrounded = len(ungrounded) > 0
-        insufficient = len(grounded) < expected
-
-        if not has_ungrounded and not insufficient:
-            return True, None
-
-        self.hook_reprompt_count += 1
-        if self.hook_reprompt_count >= 3:
-            return True, None  # Just hit max retries, force-accept
-
-        # Build error feedback
-        parts = [HOOK_REPROMPT_MSG]
-        if has_ungrounded:
-            parts.append(
-                f"\n❌ Found {len(ungrounded)} ungrounded hook(s) - "
-                f"code_line does not match any executed code."
-            )
-        if insufficient:
-            parts.append(
-                f"\n❌ Expected ~{expected} hooks but found only {len(grounded)} valid hook(s)."
-            )
-
-        # Clear state for retry
-        self.code_cells = []
-
-        return False, "".join(parts)
-
     # ============= Main Process Turn =============
 
     async def process_turn(self, response: str) -> None:
@@ -753,27 +726,171 @@ class Environment:
                 self.submitted_answer = None
                 self.submission_metadata = {}  # Symmetric cleanup
 
-        if done:
-            valid, error = self._validate_hooks()
-            if not valid:
-                feedback = error
-                done = False
-                self.submitted_answer = None
-                self.submission_metadata = {}
-
         # Update state
+        self.conversation.add_assistant_response(response)
+        self.conversation.add_user_feedback(feedback)
         self.execution_turns.append(
             {
                 "response": response,
                 "code_cells": list(code_cells),
                 "execution_results": results,
+                "completed": done,
+                "conversation_messages": deepcopy(self.conversation.messages),
+                "consumed_turns": self.current_turn + 1,
             }
         )
-        self.conversation.add_assistant_response(response)
-        self.conversation.add_user_feedback(feedback)
 
         if done:
             self.is_completed = True
+
+    @staticmethod
+    def _execution_for_comparison(result: CodeCellResult) -> dict:
+        return {
+            "success": result.success,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "hooks": result.hooks,
+            "submitted_answer": result.submitted_answer,
+        }
+
+    @staticmethod
+    def _replay_values_equal(left: object, right: object) -> bool:
+        """Compare JSON-like execution values with stable NaN handling."""
+        return json.dumps(
+            left,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ) == json.dumps(
+            right,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+
+    async def replay_turns(
+        self,
+        turns: list[TurnDict],
+        turn_responses: list[str],
+        conversation_messages: list[dict[str, str]],
+        consumed_turns: int,
+    ) -> None:
+        """Restore a public turn boundary after exact execution replay.
+
+        Each recorded response must contain one valid code cell. Success,
+        stdout, stderr, hooks, and submitted answer are compared exactly; any
+        divergence or terminal replay raises ``PrefixReplayError``. After the
+        checks pass, the exact recorded conversation feedback is restored.
+        """
+        if not hasattr(self, "conversation"):
+            raise RuntimeError("init_state() must be called before replay_turns()")
+        if len(turns) != len(turn_responses):
+            raise PrefixReplayError("recorded turn responses do not align with turns")
+
+        for expected_index, (turn, response) in enumerate(
+            zip(turns, turn_responses, strict=True)
+        ):
+            if turn.get("turn_index") != expected_index:
+                raise PrefixReplayError(
+                    f"turn {expected_index} is not contiguous in recorded prefix"
+                )
+
+            code_cells = self.extract_python_cells(response)
+            validation_error = get_turn_validation_feedback(response, code_cells)
+            if validation_error:
+                raise PrefixReplayError(
+                    f"turn {expected_index} cannot be replayed: {validation_error}"
+                )
+
+            await self.process_turn(response)
+            execution_results = self.execution_turns[-1]["execution_results"]
+            if len(execution_results) != 1:
+                raise PrefixReplayError(
+                    f"turn {expected_index} replayed {len(execution_results)} cells; expected 1"
+                )
+
+            actual = self._execution_for_comparison(execution_results[0])
+            expected = turn.get("execution")
+            if not self._replay_values_equal(actual, expected):
+                differing_fields = [
+                    field
+                    for field in actual
+                    if not self._replay_values_equal(
+                        actual.get(field), (expected or {}).get(field)
+                    )
+                ]
+                raise PrefixReplayError(
+                    f"turn {expected_index} replay diverged in: "
+                    f"{', '.join(differing_fields) or 'execution record'}"
+                )
+
+            if self.is_completed:
+                raise PrefixReplayError(
+                    f"turn {expected_index} submitted an answer and is not a prefix"
+                )
+            self.current_turn += 1
+
+        self.current_turn = consumed_turns
+        self.conversation.messages = deepcopy(conversation_messages)
+        self.conversation._cached_message_tokens = sum(
+            self.conversation._tokens_for_content(message["content"])
+            for message in conversation_messages
+        )
+
+    async def _continue_rollout(self) -> None:
+        """Continue from the currently initialized conversation and sandbox."""
+        while not self.is_completed:
+            if self.current_turn >= self.execution.max_turns:
+                self.is_completed = True
+                break
+
+            response = await self.get_model_response()
+            code_cells = self.extract_python_cells(response)
+            if not self.response_is_valid(response, code_cells):
+                self.current_turn += 1
+                continue
+
+            await self.process_turn(response)
+            self.current_turn += 1
+
+    async def _cleanup_sandbox(self) -> None:
+        if self.state and "sandbox_id" in self.state:
+            if self.reuse_env:
+                await self.env.reset(
+                    self.state["sandbox_id"], self.state.get("python_state")
+                )
+            else:
+                await self.env.destroy_sandbox(self.state["sandbox_id"])
+
+    async def rollout_from_prefix(self, prefix: TrajectoryPrefix) -> "Environment":
+        """Replay a matching prefix in a fresh sandbox, then finish its rollout.
+
+        The configured question, CSV path, and maximum turn budget must match
+        the prefix. Sandbox cleanup follows the same rules as ``rollout``.
+        """
+        try:
+            configured_question = (
+                self.task.question.question_text if self.task.question else ""
+            )
+            if configured_question != prefix.question_text:
+                raise ValueError("environment question does not match prefix")
+            if self.execution.max_turns != prefix.max_turns:
+                raise ValueError("environment max_turns does not match prefix")
+            if Path(self.csv_path).resolve() != Path(prefix.csv_source).resolve():
+                raise ValueError("environment CSV does not match prefix")
+
+            self.init_state()
+            self.conversation.system_prompt = prefix.system_prompt
+            await self.replay_turns(
+                prefix.turns,
+                prefix.turn_responses,
+                prefix.conversation_messages,
+                prefix.consumed_turns,
+            )
+            await self._continue_rollout()
+        finally:
+            await self._cleanup_sandbox()
+        return self
 
     async def rollout(self):
         """Execute a multi-turn rollout episode.
@@ -784,36 +901,8 @@ class Environment:
         self.init_state()
 
         try:
-            while not self.is_completed:
-                # Check if we've reached max turns BEFORE processing
-                if self.current_turn >= self.execution.max_turns:
-                    await self.handle_max_turns_reached()
-                    break
-
-                # Get model response
-                response = await self.get_model_response()
-
-                # Extract code cells and validate
-                code_cells = self.extract_python_cells(response)
-                if not self.response_is_valid(response, code_cells):
-                    # Don't increment turn counter - let model retry
-                    continue
-
-                # Process this turn (adds to conversation, executes code cells)
-                await self.process_turn(response)
-
-                # Increment turn counter
-                self.current_turn += 1
-
+            await self._continue_rollout()
         finally:
-            # Cleanup or reset sandbox
-            if self.state and "sandbox_id" in self.state:
-                if self.reuse_env:
-                    # Reset for reuse instead of destroying
-                    await self.env.reset(
-                        self.state["sandbox_id"], self.state.get("python_state")
-                    )
-                else:
-                    await self.env.destroy_sandbox(self.state["sandbox_id"])
+            await self._cleanup_sandbox()
 
         return self

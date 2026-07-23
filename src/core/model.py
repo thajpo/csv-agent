@@ -34,6 +34,7 @@ def has_gpu() -> bool:
     """Check if CUDA or ROCm GPU is available."""
     try:
         import torch
+
         has_cuda = torch.cuda.is_available()
         has_rocm = hasattr(torch.version, "hip") and torch.version.hip is not None
         return has_cuda or has_rocm
@@ -47,6 +48,10 @@ class APILLM:
 
     IMPORTANT: model parameter has no default. It MUST be provided explicitly
     from src.core.config. Do not add a default model here.
+
+    ``sampling_args`` supports ``max_tokens``, ``temperature``, ``top_p``,
+    ``seed``, ``stop``, ``presence_penalty``, and ``frequency_penalty``. A
+    non-None seed is forwarded to the OpenAI-compatible provider.
     """
 
     def __init__(
@@ -67,7 +72,7 @@ class APILLM:
         self.api_key = api_key
         self.client = httpx.AsyncClient(timeout=timeout)
         self.sampling_args = sampling_args
-    
+
     async def __call__(
         self,
         prompt: str | list[dict],
@@ -91,10 +96,31 @@ class APILLM:
                         "max_tokens": self.sampling_args.get("max_tokens", 8192),
                         "temperature": self.sampling_args.get("temperature", 0.7),
                         "top_p": self.sampling_args.get("top_p", 1.0),
+                        **(
+                            {"seed": self.sampling_args["seed"]}
+                            if self.sampling_args.get("seed") is not None
+                            else {}
+                        ),
                         # Only include optional params if explicitly set and non-default
-                        **({"stop": self.sampling_args["stop"]} if self.sampling_args.get("stop") else {}),
-                        **({"presence_penalty": self.sampling_args["presence_penalty"]} if self.sampling_args.get("presence_penalty", 0) != 0 else {}),
-                        **({"frequency_penalty": self.sampling_args["frequency_penalty"]} if self.sampling_args.get("frequency_penalty", 0) != 0 else {}),
+                        **(
+                            {"stop": self.sampling_args["stop"]}
+                            if self.sampling_args.get("stop")
+                            else {}
+                        ),
+                        **(
+                            {"presence_penalty": self.sampling_args["presence_penalty"]}
+                            if self.sampling_args.get("presence_penalty", 0) != 0
+                            else {}
+                        ),
+                        **(
+                            {
+                                "frequency_penalty": self.sampling_args[
+                                    "frequency_penalty"
+                                ]
+                            }
+                            if self.sampling_args.get("frequency_penalty", 0) != 0
+                            else {}
+                        ),
                     },
                 )
                 response.raise_for_status()
@@ -105,20 +131,29 @@ class APILLM:
                     error_code = json_response["error"].get("code")
                     if error_code == 500 and attempt < max_retries - 1:
                         # Retry on 500 errors
-                        wait_time = API_RETRY_BACKOFF_BASE ** attempt
+                        wait_time = API_RETRY_BACKOFF_BASE**attempt
                         await asyncio.sleep(wait_time)
                         continue
                     raise ValueError(f"API error: {json_response['error']}")
 
                 if "choices" not in json_response:
-                    raise ValueError(f"Unexpected API response format. Got: {json_response}")
+                    raise ValueError(
+                        f"Unexpected API response format. Got: {json_response}"
+                    )
 
-                return json_response["choices"][0]["message"]["content"]
+                content = json_response["choices"][0]["message"].get("content")
+                if content is None:
+                    return ""
+                if not isinstance(content, str):
+                    raise ValueError(
+                        "API response message content must be text or null"
+                    )
+                return content
 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code >= 500 and attempt < max_retries - 1:
                     # Retry on 5xx errors
-                    wait_time = API_RETRY_BACKOFF_BASE ** attempt
+                    wait_time = API_RETRY_BACKOFF_BASE**attempt
                     await asyncio.sleep(wait_time)
                     continue
                 # Log the error response body for debugging 4xx errors
@@ -128,14 +163,18 @@ class APILLM:
                         error_body = e.response.json()
                         print(f"⚠️  API Error {e.response.status_code}: {error_body}")
                     except Exception:
-                        print(f"⚠️  API Error {e.response.status_code}: {e.response.text[:500]}")
+                        print(
+                            f"⚠️  API Error {e.response.status_code}: {e.response.text[:500]}"
+                        )
                 raise
 
             except (httpx.ReadError, httpx.ConnectError, httpx.TimeoutException) as e:
                 # Retry on network errors (connection issues, timeouts, read errors)
                 if attempt < max_retries - 1:
-                    wait_time = API_RETRY_BACKOFF_BASE ** attempt
-                    print(f"⚠️  Network error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}. Retrying in {wait_time}s...")
+                    wait_time = API_RETRY_BACKOFF_BASE**attempt
+                    print(
+                        f"⚠️  Network error (attempt {attempt + 1}/{max_retries}): {type(e).__name__}. Retrying in {wait_time}s..."
+                    )
                     await asyncio.sleep(wait_time)
                     continue
                 raise
@@ -148,7 +187,9 @@ class APILLM:
         total_chars = sum(len(m.get("content", "")) for m in messages)
         return total_chars // 4
 
-    def _log_openrouter_error(self, error: httpx.HTTPStatusError, messages: list[dict]) -> None:
+    def _log_openrouter_error(
+        self, error: httpx.HTTPStatusError, messages: list[dict]
+    ) -> None:
         """Write a compact error report to logs/openrouter_400.log."""
         try:
             log_path = Path("logs/openrouter_400.log")
@@ -156,7 +197,9 @@ class APILLM:
 
             total_chars = sum(len(m.get("content", "")) for m in messages)
             estimated_tokens = self._estimate_tokens(messages)
-            max_message_chars = max((len(m.get("content", "")) for m in messages), default=0)
+            max_message_chars = max(
+                (len(m.get("content", "")) for m in messages), default=0
+            )
             error_text = ""
             try:
                 error_text = error.response.text
@@ -186,7 +229,7 @@ class APILLM:
                 f.write("\n---\n")
         except Exception:
             pass
-    
+
     async def aclose(self):
         """Async cleanup method."""
         if hasattr(self, "client"):
@@ -203,17 +246,17 @@ class LLM:
     ):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
-        
+
         if torch_dtype is None:
             torch_dtype = torch.bfloat16
 
         if not has_gpu():
             raise RuntimeError("No CUDA/ROCm device available")
-        
+
         # Auto-detect device if not specified (ROCm also uses "cuda" device name)
         if device is None:
             device = "cuda"
-        
+
         self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -222,7 +265,7 @@ class LLM:
             attn_implementation=attn_implementation,
         ).to(device)
         self.model.eval()
-    
+
     def __call__(
         self,
         prompt: str | list[dict],
@@ -235,15 +278,18 @@ class LLM:
             messages = [{"role": "user", "content": prompt}]
         else:
             messages = prompt
-        
+
         text = self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
             enable_thinking=False,  # Disable Qwen3 <think> mode
         )
 
         inputs = self.tokenizer(text, return_tensors="pt").to(self.device)
-        
+
         import torch
+
         with torch.no_grad():
             try:
                 outputs = self.model.generate(
@@ -260,10 +306,10 @@ class LLM:
                         "Free GPU memory, lower max_new_tokens, or adjust PYTORCH_HIP_ALLOC_CONF."
                     ) from err
                 raise
-        
+
         # Decode only the new tokens
         response = self.tokenizer.decode(
-            outputs[0][inputs.input_ids.shape[1]:],
+            outputs[0][inputs.input_ids.shape[1] :],
             skip_special_tokens=True,
         )
         return response
@@ -273,6 +319,6 @@ if __name__ == "__main__":
     print("Loading model...")
     llm = LLM()
     print("Model loaded.\n")
-    
+
     response = llm("What is 2+2? Be brief.")
     print(response)

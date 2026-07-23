@@ -3,12 +3,16 @@ csv-spec: Type contracts for csv-agent.
 
 This package defines the contract between environment and trainer:
 - Types: What actions/results look like
+- Prefix-value types: What replayable states and verifier labels look like
 - Normalization: How to canonicalize values for comparison
 - Parsing: How to extract actions from model output and results from execution
 
-If you change anything here, you MUST update both:
+If you change a shared environment/trainer contract here, you MUST update both:
 1. Environment (csv_env.py) - how it parses/validates
 2. Trainer (rl_env.py, prompts) - how it formats/consumes
+
+Prefix-value contracts are also consumed by src/core/environment.py and
+src/value/collection.py.
 """
 
 from csv_spec.types import (
@@ -21,6 +25,11 @@ from csv_spec.types import (
     ExecutionResultDict,
     TurnDict,
     TraceDict,
+    TrajectoryPrefix,
+    ContinuationPolicy,
+    PrefixValueCollectionContract,
+    PrefixContinuation,
+    PrefixValueRecord,
     CorrectionDict,
     CodeDiffDict,
     TriangulationMetadataDict,
@@ -51,6 +60,7 @@ from csv_spec.types import (
 
 from csv_spec.normalization import normalize_value
 from csv_spec.hashing import hash_artifact
+from csv_spec.code import extract_python_cells
 from csv_spec.parsing import (
     parse_action,
     parse_hook_record,
@@ -70,6 +80,11 @@ __all__ = [
     "ExecutionResultDict",
     "TurnDict",
     "TraceDict",
+    "TrajectoryPrefix",
+    "ContinuationPolicy",
+    "PrefixValueCollectionContract",
+    "PrefixContinuation",
+    "PrefixValueRecord",
     "CorrectionDict",
     "CodeDiffDict",
     "TriangulationMetadataDict",
@@ -99,6 +114,7 @@ __all__ = [
     # Functions
     "normalize_value",
     "hash_artifact",
+    "extract_python_cells",
     "parse_action",
     "parse_hook_record",
     "parse_step_result",

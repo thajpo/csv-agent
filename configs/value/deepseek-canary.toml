@@ -1,0 +1,9 @@
+repo = "ThaJpo/csv-agent-prefix-values-deepseek-canary"
+revision = "890eb10b775a224035807d9a29db3e52743d1c18"
+source_repo = "ThaJpo/csv-agent-template-episodes"
+source_revision = "e19fadf8d713c5afb7fe1476e2160b9bece1233a"
+
+[expected_records]
+train = 192
+validation = 48
+test = 96

@@ -5,6 +5,7 @@ This is the CONTRACT between environment and trainer. All shared types in one pl
 - Core types (Question, Hook)
 - Turn-based types (ExecutionResult, Turn, Trace)
 - Episode types (EpisodeJSONL)
+- Prefix-value research types (TrajectoryPrefix, PrefixValueRecord)
 - Action/Step contract types (ActionSpec, StepResult) - NEW
 - Exploration types (ExplorationTurn, ExplorationTrace)
 - TypedDicts for JSONL serialization
@@ -17,9 +18,11 @@ If you modify any type, you MUST update:
 """
 
 from enum import Enum
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Any, Literal, NamedTuple, TypedDict, Union
 from datetime import datetime
+
+from csv_spec.code import extract_python_cells
 
 
 # ============= Core TypedDicts =============
@@ -124,6 +127,209 @@ class TraceDict(TypedDict):
     final_answer: Any | None
     final_answer_hash: str | None
     success: bool  # Did execution complete with submit()?
+
+
+# ============= Prefix-Value Research Types =============
+
+
+class TrajectoryPrefix(BaseModel):
+    """Public agent state at a completed turn boundary.
+
+    The prefix intentionally excludes the expected answer and its hashes. Those
+    are private verifier inputs and must never become critic features.
+    ``consumed_turns`` counts all actor responses against the horizon, including
+    format-invalid responses that produced no execution turn.
+    """
+
+    prefix_id: str
+    episode_id: str
+    csv_source: str
+    system_prompt: str
+    question_text: str
+    turns: list[TurnDict]
+    turn_responses: list[str]
+    turn_completed: list[bool]
+    conversation_messages: list[dict[str, str]]
+    consumed_turns: int = Field(ge=0)
+    max_turns: int = Field(gt=0)
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_nonterminal_boundary(self) -> "TrajectoryPrefix":
+        if self.consumed_turns >= self.max_turns:
+            raise ValueError("prefix must leave at least one continuation turn")
+        if self.consumed_turns < len(self.turns):
+            raise ValueError("consumed_turns cannot be less than executed turns")
+        if len(self.turn_responses) != len(self.turns):
+            raise ValueError("turn_responses must align with prefix turns")
+        if len(self.turn_completed) != len(self.turns):
+            raise ValueError("turn_completed must align with prefix turns")
+        if any(self.turn_completed):
+            raise ValueError("prefix must not contain a terminal turn")
+        for expected_index, turn in enumerate(self.turns):
+            if turn.get("turn_index") != expected_index:
+                raise ValueError("prefix turns must be contiguous and zero-indexed")
+            code_cells = extract_python_cells(self.turn_responses[expected_index])
+            if len(code_cells) != 1:
+                raise ValueError(
+                    "each turn_response must contain exactly one Python code block"
+                )
+            if turn.get("code") != code_cells[0]:
+                raise ValueError("turn code must match its turn_response code block")
+        for message in self.conversation_messages:
+            if set(message) != {"role", "content"}:
+                raise ValueError("conversation messages must contain role and content")
+            if message["role"] not in {"assistant", "user"}:
+                raise ValueError("prefix conversation cannot contain system messages")
+        message_roles = [message["role"] for message in self.conversation_messages]
+        if any(
+            left == right
+            for left, right in zip(message_roles, message_roles[1:], strict=False)
+        ) or (message_roles and message_roles[-1] != "user"):
+            raise ValueError(
+                "prefix conversation must alternate and end with user feedback"
+            )
+        represented_turns = message_roles.count("user")
+        if represented_turns > self.consumed_turns:
+            raise ValueError("conversation cannot contain more turns than consumed")
+        if self.consumed_turns == 0 and self.conversation_messages:
+            raise ValueError("an initial prefix cannot contain conversation messages")
+        if self.consumed_turns > 0 and not self.conversation_messages:
+            raise ValueError("a consumed prefix must retain conversation messages")
+        if self.turns:
+            if len(self.conversation_messages) < 2:
+                raise ValueError("prefix conversation is missing the completed turn")
+            assistant, feedback = self.conversation_messages[-2:]
+            if (
+                assistant
+                != {
+                    "role": "assistant",
+                    "content": self.turn_responses[-1],
+                }
+                or feedback["role"] != "user"
+            ):
+                raise ValueError(
+                    "prefix conversation does not end at its turn boundary"
+                )
+        return self
+
+
+class ContinuationPolicy(BaseModel):
+    """Frozen actor settings that give a prefix value its meaning."""
+
+    model: str
+    sampling_args: dict[str, Any]
+    request_timeout_seconds: float | None = Field(default=None, gt=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PrefixValueCollectionContract(BaseModel):
+    """Semantic inputs that must remain fixed across a resumed collection."""
+
+    code_commit: str
+    dataset_revision: str
+    policy: ContinuationPolicy
+    source_system_prompt_suffix: str
+    source_initial_user_message: str
+    episode_inputs_hash: str
+    turn_count: int = Field(ge=0)
+    max_turns: int = Field(gt=0)
+    continuations: int = Field(gt=0)
+    candidates_per_episode: int = Field(gt=0)
+    seed: int
+    float_tolerance: float = Field(ge=0, allow_inf_nan=False)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class PrefixContinuation(BaseModel):
+    """One attempted continuation and its terminal-verifier judgment."""
+
+    rollout_index: int = Field(ge=0)
+    seed: int | None = None
+    trace: TraceDict | None = None
+    verifier_verdict: bool | None = None
+    error: str | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> "PrefixContinuation":
+        if self.verifier_verdict is not None and self.trace is None:
+            raise ValueError("a verifier verdict requires a continuation trace")
+        if self.error is not None and self.verifier_verdict is not None:
+            raise ValueError("errored continuations cannot carry verifier labels")
+        return self
+
+
+class PrefixValueRecord(BaseModel):
+    """Auditable future-success estimate over attempted continuations.
+
+    A numeric value is available only when every attempt has a verifier label.
+    Infrastructure or verifier errors make the estimate unavailable instead of
+    treating system failure as policy failure.
+    """
+
+    prefix: TrajectoryPrefix
+    policy: ContinuationPolicy
+    continuations: list[PrefixContinuation]
+    attempted_continuations: int = Field(ge=0)
+    labeled_continuations: int = Field(ge=0)
+    successful_continuations: int = Field(ge=0)
+    value: float | None = Field(default=None, ge=0.0, le=1.0)
+    code_commit: str
+    dataset_revision: str | None = None
+    collection_contract: PrefixValueCollectionContract | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_aggregate(self) -> "PrefixValueRecord":
+        attempted = len(self.continuations)
+        labeled = sum(
+            outcome.verifier_verdict is not None for outcome in self.continuations
+        )
+        successes = sum(
+            outcome.verifier_verdict is True for outcome in self.continuations
+        )
+        expected_value = (
+            successes / attempted if attempted and labeled == attempted else None
+        )
+
+        if self.attempted_continuations != attempted:
+            raise ValueError("attempted_continuations does not match outcomes")
+        if self.labeled_continuations != labeled:
+            raise ValueError("labeled_continuations does not match verifier verdicts")
+        if self.successful_continuations != successes:
+            raise ValueError(
+                "successful_continuations does not match verifier verdicts"
+            )
+        if self.value != expected_value:
+            raise ValueError(
+                "value must equal successful divided by attempted continuations"
+            )
+        rollout_indexes = [outcome.rollout_index for outcome in self.continuations]
+        if rollout_indexes != list(range(attempted)):
+            raise ValueError("continuation rollout indexes must be contiguous")
+        contract = self.collection_contract
+        if contract is not None:
+            seeds = [outcome.seed for outcome in self.continuations]
+            if any(seed is None for seed in seeds) or len(set(seeds)) != len(seeds):
+                raise ValueError(
+                    "collection contract requires distinct non-null continuation seeds"
+                )
+        if contract is not None and (
+            contract.code_commit != self.code_commit
+            or contract.dataset_revision != self.dataset_revision
+            or contract.policy != self.policy
+            or contract.turn_count != len(self.prefix.turns)
+            or contract.max_turns != self.prefix.max_turns
+            or contract.continuations != self.attempted_continuations
+        ):
+            raise ValueError("collection contract does not match value record")
+        return self
 
 
 # ============= Metadata TypedDicts =============

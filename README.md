@@ -140,6 +140,8 @@ csvagent validate \
 |----------|---------|
 | [docs/architecture.md](docs/architecture.md) | System boundaries, data flow, and reviewer inspection points |
 | [docs/reviewer-demo.md](docs/reviewer-demo.md) | Low-cost local demo path and heavier commands to skip |
+| [research.md](research.md) | Selected research direction and durable rationale |
+| [scripts/experiments/README.md](scripts/experiments/README.md) | Manual, bounded research experiments |
 | [current.md](current.md) | Active planning and spec funnel (`Institutional Knowledge`, `Beliefs`, `Brainstormed`, `Specd`) |
 | [AGENTS.md](AGENTS.md) | Repo collaboration and execution guardrails |
 
@@ -150,6 +152,13 @@ hook/submit observations and the evidence available for assessing them. Only
 terminal-answer labels are externally verified. Hook judgments are explicitly
 heuristic and are excluded from PRM exports unless
 `--include-heuristic-hooks` is supplied for an experimental baseline.
+
+The initial value-function feasibility path records a nonterminal agent state
+at an exact completed-turn boundary, recreates it in a fresh sandbox, and
+estimates future success from seeded continuations judged only by the terminal
+verifier. See the [experiment instructions](scripts/experiments/README.md) for
+the bounded real-model canary; this is a manual research workflow, not a
+`csvagent` command.
 
 ---
 
