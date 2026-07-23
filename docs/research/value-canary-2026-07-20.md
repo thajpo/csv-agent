@@ -231,9 +231,53 @@ Secondary comparisons are:
   estimate, reported as a higher-compute reference rather than an equal-cost
   learned selector.
 
-Hyperparameters and the selected checkpoint are frozen using train and
-validation data. Test value records remain sealed until the checkpoint and
-evaluation configuration are hashed. Test evaluation is run once.
+Hyperparameters and the selected checkpoint were frozen using train and
+validation data. The complete 96-record test file had SHA-256
+`c6283d7c2f918cd5a8ab2ed694b86f19b46fee679fe6732e80e38ec44b3ffe0a`.
+The primary pairwise checkpoint had SHA-256
+`558d9d35a493535d7f34443a347e453bd28c39f9013681ebc6d2b7ae8399e6c5`.
+The test evaluation was run once, after recording the label audit above.
+
+### Frozen test result
+
+The preregistered primary selector did not demonstrate improvement:
+
+| Selector | Dataset-macro success | Difference from expected random | Pairwise ranking |
+| --- | ---: | ---: | ---: |
+| Expected random | 70.31% | — | 50% by definition |
+| Pairwise TF-IDF ranker | **73.44%** | **+3.12 points** | 53.49% |
+| Pointwise TF-IDF model | 70.31% | 0.00 points | 32.56% |
+| Simple execution signals | 62.50% | -7.81 points | 39.53% |
+| Six-rollout empirical selector | 71.88% | +1.56 points | not applicable |
+| Hindsight realized-outcome ceiling | 82.81% | +12.50 points | not applicable |
+
+For the primary pairwise ranker, the hierarchical-bootstrap 95% interval for
+the difference was `[-6.25, 11.98]` percentage points. The difference was
+positive on two of four datasets, zero on one, and negative on one. It therefore
+failed all three preregistered gates: the effect was below five points, the
+interval included zero, and fewer than three datasets improved.
+
+Twenty of 32 test questions had candidate-label variation, yielding 43 unequal
+candidate pairs. This confirms that candidate selection had some realized
+headroom, but the ranker's 53.49% pairwise accuracy was only slightly above
+chance. The positive aggregate point estimate is too small and uncertain to
+distinguish learned selection from sampling variation.
+
+### Canary 2 conclusion
+
+Improvement was not demonstrated. Under the recorded procedural verifier, the
+pairwise critic produced a small positive point estimate but weak direct
+ranking accuracy and no statistically persuasive or dataset-consistent gain.
+Because the train/validation audit also found substantial false-negative-looking
+and underspecified labels, this result cannot isolate whether the limiting
+factor was the shallow state representation, label validity, task design, or
+sample size.
+
+The useful conclusion is methodological: repeated continuation outcomes and
+equal-call selection can be collected and evaluated reproducibly, but another
+value experiment should not be run on this task snapshot. A subsequent canary
+requires an explicit, equivalence-aware terminal contract and a pre-test label
+validity gate. Actor or PPO training is not justified by this evidence.
 
 ### Boundaries
 

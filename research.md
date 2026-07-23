@@ -105,6 +105,14 @@ a reasoning-quality target. The current frozen replication can still diagnose
 selection under its recorded verifier, but cannot cleanly support a claim about
 general CSV reasoning.
 
+The frozen DeepSeek test was subsequently evaluated once. The pairwise critic
+reached 73.44% held-out success against 70.31% expected random selection, a
+3.12-point difference with a dataset-clustered 95% interval from -6.25 to 11.98
+points. It improved two of four datasets and ranked unequal candidate pairs at
+53.49%. This failed every preregistered evidence gate, so improvement was not
+demonstrated. The current evidence does not justify actor training or a larger
+critic; terminal-contract validity should be repaired and measured first.
+
 ### Parallel: Data-Conditioned Procedural Tasks
 
 > Can we generate broad, verifiable CSV environments in which the observed
