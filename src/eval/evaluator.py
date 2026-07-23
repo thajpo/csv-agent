@@ -18,7 +18,7 @@ import json
 import time
 
 from src.core.environment import Environment
-from csv_spec import EpisodeJSONL
+from csv_spec import EpisodeJSONL, hash_artifact
 from src.datagen.teacher import answers_match
 from src.eval.metrics import EvalResult, EvalMetrics
 
@@ -102,9 +102,16 @@ class Evaluator:
         question_text = episode.question["question_text"]
         difficulty = episode.question.get("difficulty")
 
-        # Expected answer from teacher gold trace
-        expected_answer = episode.rl_verification_data["expected_final_answer"]
-        expected_hash = episode.rl_verification_data.get("expected_final_answer_hash")
+        # Expected answer from the canonical EpisodeJSONL question contract.
+        expected_answer = episode.question.get("ground_truth")
+        expected_hash = episode.question.get("ground_truth_hash")
+        expected_hashes = set(episode.question.get("ground_truth_hashes") or [])
+        if expected_hash:
+            expected_hashes.add(expected_hash)
+        if expected_answer is None and not expected_hashes:
+            raise ValueError(
+                f"episode {episode.episode_id} has no terminal-verifier ground truth"
+            )
 
         # Run model inference (student mode - no hint)
         try:
@@ -125,9 +132,10 @@ class Evaluator:
 
             # Compare answers
             if execution_success:
-                final_answer_correct = answers_match(
+                actual_hash = hash_artifact(actual_answer)
+                final_answer_correct = actual_hash in expected_hashes or answers_match(
                     hash1=expected_hash,
-                    hash2=None,  # Don't have hash for actual answer
+                    hash2=actual_hash,
                     val1=expected_answer,
                     val2=actual_answer,
                     float_tol=self.float_tol,
