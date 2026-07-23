@@ -240,6 +240,12 @@ The test evaluation was run once, after recording the label audit above.
 
 ### Frozen test result
 
+The complete value-record snapshot is private and pinned at
+`ThaJpo/csv-agent-prefix-values-deepseek-canary` revision
+`890eb10b775a224035807d9a29db3e52743d1c18` (192 train, 48 validation, and
+96 test candidate records). `configs/value/deepseek-canary.toml` records the
+source and value revisions plus expected split counts.
+
 The preregistered primary selector did not demonstrate improvement:
 
 | Selector | Dataset-macro success | Difference from expected random | Pairwise ranking |
