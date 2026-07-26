@@ -4,12 +4,14 @@ Main evaluation logic for CSV agent models.
 This module implements the Evaluator class which:
 1. Loads episodes from JSONL files
 2. Runs model inference using Environment.rollout()
-3. Compares answers using answers_match() from teacher.py
+3. Compares submitted answers with the canonical question ground-truth contract
+   using hashes and answers_match() from teacher.py
 4. Computes aggregate metrics
 
 Key design decisions:
 - REUSE Environment.rollout() for execution (same path as training)
-- REUSE answers_match() for comparison (existing float tolerance logic)
+- REUSE answers_match() for comparison (existing float tolerance logic), while
+  requiring terminal-verifier hash provenance from the episode question
 - Async throughout for parallel evaluation
 """
 
@@ -84,8 +86,15 @@ class Evaluator:
 
         Protocol:
         1. Extract question from episode
-        2. Run Environment.rollout() (no hint - student mode)
-        3. Compare final answer using answers_match()
+        2. Require at least one terminal-verifier hash from the episode question
+        3. Run Environment.rollout() (no hint - student mode)
+        4. Compare the submitted answer against every accepted hash using
+           hash equality or answers_match() for equivalent values
+
+        Episodes without `ground_truth_hash` or `ground_truth_hashes` fail
+        before the model rollout starts. `ground_truth_hashes` supports
+        controlled multi-outcome questions; `ground_truth` supplies the
+        canonical value used by the tolerant comparison fallback.
 
         Args:
             episode: Episode to evaluate

@@ -77,6 +77,12 @@ three actor turns (plus automatic retries on transient failures). A correct run
 reports `Accuracy: 100.0% (1/1)`; a model failure is still a valid smoke result
 if the report is written and the failure is recorded.
 
+Evaluation episodes must use the canonical `question.ground_truth` value and
+provide `question.ground_truth_hash` or a non-empty
+`question.ground_truth_hashes` list. The evaluator checks the submitted answer
+against every accepted hash, with the existing tolerant comparison as a
+fallback, and rejects missing hash provenance before starting a rollout.
+
 Use any OpenRouter model slug with `--model`. Keep the model ID, sampling
 settings, dataset revision, and Git commit in experiment notes; changing any of
 them changes the policy being evaluated.

@@ -5,6 +5,14 @@ Type contracts for `csv-agent` question and episode artifacts.
 This package contains shared schema models and normalization helpers used by
 the main application and tests.
 
+## Episode verification fields
+
+`EpisodeJSONL.question` is the canonical source for terminal evaluation. Its
+`ground_truth` field is the value used for tolerant comparisons, and
+`ground_truth_hash` or the non-empty `ground_truth_hashes` list records the
+terminal-verifier provenance. Evaluators compare a submitted answer with every
+accepted hash and fail before rollout when no hash provenance is present.
+
 ## Prefix-value contracts
 
 The package exports four Pydantic models for the execution-aware value
