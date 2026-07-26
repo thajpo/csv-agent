@@ -26,7 +26,9 @@ def test_openrouter_smoke_fixture_matches_checked_in_csv() -> None:
 
 
 @pytest.mark.asyncio
-async def test_evaluator_uses_current_episode_ground_truth_contract(monkeypatch) -> None:
+async def test_evaluator_uses_current_episode_ground_truth_contract(
+    monkeypatch,
+) -> None:
     class FakeState:
         submitted_answer = 2796
         current_turn = 1
@@ -38,9 +40,7 @@ async def test_evaluator_uses_current_episode_ground_truth_contract(monkeypatch)
     async def fake_from_params(**_kwargs):
         return FakeEnvironment()
 
-    monkeypatch.setattr(
-        "src.eval.evaluator.Environment.from_params", fake_from_params
-    )
+    monkeypatch.setattr("src.eval.evaluator.Environment.from_params", fake_from_params)
     episode = Evaluator(model="unused").load_episodes(SMOKE_EPISODES)[0]
 
     result = await Evaluator(model="unused").evaluate_episode(episode)
