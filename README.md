@@ -1,274 +1,161 @@
 # csv-agent
 
-Synthetic training data generation pipeline for CSV analysis agents. Uses teacher triangulation to create verified question-answer pairs with execution traces.
+`csv-agent` is a research repository for execution-grounded CSV agents. It can
+generate verified CSV-analysis episodes, run models against those episodes in a
+Docker sandbox, and test whether a learned value model can choose promising
+partial attempts.
 
-## Setup
+The current value-function result is **negative/inconclusive**, not a claimed
+improvement. The useful output is a reproducible experimental path and a clear
+measurement problem to solve next.
 
-```bash
-uv sync
-```
+## Current result
 
-## CLI
+| Actor | Expected random selection | Value-guided selection | Conclusion |
+| --- | ---: | ---: | --- |
+| Qwen canary | 11/16 | 10/16 | No benefit observed |
+| DeepSeek V4 Flash replication | 70.31% | 73.44% | +3.12 pp; 95% CI [-6.25, 11.98] |
 
-All commands go through `csvagent`:
+The DeepSeek improvement was below the preregistered five-point threshold, its
+interval crossed zero, and only two of four test datasets improved. More
+importantly, an audit found that many rejected model answers were reasonable
+equivalents or depended on conventions hidden from the prompt. The present
+critic therefore predicts the existing verifier contract, not clean semantic
+correctness. See [research.md](research.md) for the short handoff and
+[the full report](docs/research/value-canary-2026-07-20.md) for the evidence.
 
-```bash
-csvagent                    # Interactive menu
-csvagent status             # Data inventory
-csvagent progress           # Detailed progress with time estimates
-csvagent generate ...       # Generate questions or episodes
-csvagent run ...            # Full pipeline
-csvagent inspect ...        # Inspect data
-csvagent validate ...       # Debug single question
-csvagent stats              # Coverage report
-```
+## Start from a fresh clone
 
----
+Prerequisites:
 
-## Quick Start
-
-```bash
-# 1. Check what data you have
-csvagent status
-
-# 2. Quick end-to-end test (~30 seconds)
-csvagent run --test
-
-# 3. Generate everything
-csvagent run --all
-```
-
----
-
-## Pipeline
-
-### Status & Progress
+- Git
+- [uv](https://docs.astral.sh/uv/) for Python and dependency management
+- Docker, running locally, for model-executed Python code
+- an OpenRouter API key only for live model calls
 
 ```bash
-csvagent status      # Quick data inventory
-csvagent progress    # Detailed progress with time estimates
+git clone https://github.com/thajpo/csv-agent.git
+cd csv-agent
+uv python install 3.13
+uv sync --dev
+uv run csvagent --help
 ```
 
-Example output:
-```
-csv-agent Data Generation Pipeline
-  Datasets     77 available
-  Questions    synthetic 1,399 (63 datasets) | llm 1,504 (75 datasets)
-  Episodes     synthetic 11/11 verified (100%) | llm 0/0 verified (0%)
-
-Next: csvagent generate episodes --llm-gen
-```
-
-### Generate Questions
-
-Two paths:
-
-| Path | Speed | Determinism | Use Case |
-|------|-------|-------------|----------|
-| **Synthetic** | Fast | Deterministic | Scale, reproducibility |
-| **LLM** | Slow | Non-deterministic | Exploration, diversity |
+Run the same local checks as CI. They make no paid model calls:
 
 ```bash
-csvagent generate questions --template     # Template-based
-csvagent generate questions --procedural   # Program/procedural
-csvagent generate questions --llm-gen      # LLM exploration
-csvagent generate questions --all --dry-run
+uv run --with ruff ruff check .
+uv run pytest -q
 ```
 
-### Generate Episodes
+The default test configuration excludes tests marked `live`. Run a focused
+test while iterating with `uv run pytest -q tests/test_value_trainer.py`.
 
-Episodes are verified question-answer traces for training.
+## Make one OpenRouter-backed agent run
+
+The checked-in smoke episode asks the model to inspect a checked-in CSV and
+submit its row count. It is intentionally tiny, but it exercises the real
+OpenRouter client, conversation loop, Docker sandbox, Python execution, final
+submission, verifier, and report writer.
 
 ```bash
-# Preview first (always safe)
-csvagent generate episodes --template --dry-run
-csvagent generate episodes --procedural --dry-run
-csvagent generate episodes --llm-gen --dry-run
+export OPENROUTER_API_KEY="your-key"
+docker info >/dev/null
 
-# Generate (appends by default - won't overwrite existing)
-csvagent generate episodes --template
-csvagent generate episodes --procedural
-csvagent generate episodes --llm-gen
-
-# Start fresh (explicit overwrite)
-csvagent generate episodes --template --fresh
+uv run python scripts/evaluate_model.py \
+  --model deepseek/deepseek-v4-flash \
+  --episodes data/fixtures/openrouter-smoke.jsonl \
+  --output /tmp/csv-agent-openrouter-smoke.md \
+  --max-turns 3 \
+  --temperature 0 \
+  --concurrency 1
 ```
 
-**Safe defaults:**
-- Pre-flight summary shows progress before running
-- Append mode by default (skips already-processed questions)
-- Use `--fresh` to explicitly overwrite existing data
+The first run builds the `csv-analysis-env` Docker image and may take a few
+minutes. The command evaluates one episode, so the provider receives at most
+three actor turns (plus automatic retries on transient failures). A correct run
+reports `Accuracy: 100.0% (1/1)`; a model failure is still a valid smoke result
+if the report is written and the failure is recorded.
 
-### Full Pipeline
+Evaluation episodes must use the canonical `question.ground_truth` value and
+provide `question.ground_truth_hash` or a non-empty
+`question.ground_truth_hashes` list. The evaluator checks the submitted answer
+against every accepted hash, with the existing tolerant comparison as a
+fallback, and rejects missing hash provenance before starting a rollout.
+
+Use any OpenRouter model slug with `--model`. Keep the model ID, sampling
+settings, dataset revision, and Git commit in experiment notes; changing any of
+them changes the policy being evaluated.
+
+## Reproduce the frozen value-selector result
+
+The DeepSeek prefix records are stored in a private, immutable Hugging Face
+snapshot. With access to `ThaJpo/csv-agent-prefix-values-deepseek-canary`:
 
 ```bash
-csvagent run --all          # Full pipeline (questions + episodes)
-csvagent run --template     # Template only
-csvagent run --procedural   # Procedural only
-csvagent run --llm-gen      # LLM only
-csvagent run --test         # Quick e2e test (~30 seconds)
+uv run hf auth login
+
+uv run python scripts/experiments/download_value_snapshot.py \
+  --dataset-config configs/value/deepseek-canary.toml \
+  --output-dir data/experiments/deepseek-canary
+
+uv run python scripts/experiments/train_value_model.py \
+  --train data/experiments/deepseek-canary/train-values.jsonl \
+  --validation data/experiments/deepseek-canary/validation-values.jsonl \
+  --output-dir data/experiments/deepseek-canary/model
+
+uv run python scripts/experiments/evaluate_value_selection.py \
+  --test data/experiments/deepseek-canary/test-values.jsonl \
+  --model-dir data/experiments/deepseek-canary/model \
+  --output data/experiments/deepseek-canary/model/test-selection.json
 ```
 
----
+These commands do not call OpenRouter; they retrain and evaluate the local
+scikit-learn selectors from already collected records. Exact collection and
+interpretation details live in
+[scripts/experiments/README.md](scripts/experiments/README.md).
 
-## Inspection & Debugging
+## Repository map
+
+- `src/core/`: model client, prompts, conversation loop, and environment
+  orchestration.
+- `src/envs/`: Docker-backed Python execution for CSV analysis.
+- `src/datagen/`: question, trace, and terminal-verification pipelines.
+- `src/value/`: prefix construction, replay, continuation collection, and value
+  training inputs.
+- `packages/csv-spec/`: shared episode and prefix-value contracts.
+- `scripts/experiments/`: bounded research commands kept outside the main CLI.
+- `configs/`: pinned dataset and experiment inputs.
+- `data/fixtures/`: small deterministic inputs tracked by Git. Generated and
+  downloaded data under `data/` is ignored.
+
+See [docs/architecture.md](docs/architecture.md) for the data flow.
+
+## Data and credentials
+
+Generated datasets belong on Hugging Face at an immutable commit revision;
+source Kaggle datasets are restored through the Kaggle API. Git tracks only
+small deterministic fixtures under `data/fixtures/`. Never commit provider,
+Hugging Face, or Kaggle credentials.
+
+The frozen dataset references used by current research are:
+
+- source episodes: `ThaJpo/csv-agent-template-episodes` at
+  `e19fadf8d713c5afb7fe1476e2160b9bece1233a`
+- DeepSeek prefix values: `ThaJpo/csv-agent-prefix-values-deepseek-canary` at
+  `890eb10b775a224035807d9a29db3e52743d1c18`
+
+## Generation CLI
+
+The older data-generation path remains available, but it is not the current
+research priority:
 
 ```bash
-# Coverage report
-csvagent stats
-csvagent stats --gaps       # Show missing data
-
-# Inspect outputs
-csvagent inspect questions --source template  # Preview template questions
-csvagent inspect questions --source all --show-hint        # With hints
-csvagent inspect episodes --verified          # Show verified episodes
-csvagent inspect trace abc123                 # Deep-dive single episode
-
-# Debug single question
-csvagent validate \
-    --csv data/fixtures/base/data.csv \
-    --questions-file data/questions_synthetic/dataset/questions.json \
-    --index 0 \
-    --show-code
+uv run csvagent generate questions --template --dry-run
+uv run csvagent generate episodes --template --dry-run
+uv run csvagent run --template --test --dry-run
 ```
 
----
-
-## Documentation
-
-| Document | Purpose |
-|----------|---------|
-| [docs/architecture.md](docs/architecture.md) | System boundaries, data flow, and reviewer inspection points |
-| [docs/reviewer-demo.md](docs/reviewer-demo.md) | Low-cost local demo path and heavier commands to skip |
-| [research.md](research.md) | Selected research direction and durable rationale |
-| [scripts/experiments/README.md](scripts/experiments/README.md) | Manual, bounded research experiments |
-| [current.md](current.md) | Active planning and spec funnel (`Institutional Knowledge`, `Beliefs`, `Brainstormed`, `Specd`) |
-| [AGENTS.md](AGENTS.md) | Repo collaboration and execution guardrails |
-
-**Key insight:** Episodes capture raw structured data (traces, hooks, corrections). Training formats (SFT, PRM, DPO) are derived at training time, not pre-baked. This means new training methods can reuse existing episodes without regeneration.
-
-Episodes also include a diagnostic `process_report` containing ordered
-hook/submit observations and the evidence available for assessing them. Only
-terminal-answer labels are externally verified. Hook judgments are explicitly
-heuristic and are excluded from PRM exports unless
-`--include-heuristic-hooks` is supplied for an experimental baseline.
-
-The initial value-function feasibility path records a nonterminal agent state
-at an exact completed-turn boundary, recreates it in a fresh sandbox, and
-estimates future success from seeded continuations judged only by the terminal
-verifier. See the [experiment instructions](scripts/experiments/README.md) for
-the bounded real-model canary; this is a manual research workflow, not a
-`csvagent` command.
-
----
-
-## Configuration
-
-Settings are in `src/core/config.py` (Pydantic models). Key fields:
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `teacher_model` | `openai/gpt-oss-120b` | Model for episode generation |
-| `question_gen_model` | `openai/gpt-oss-120b` | Model for question generation |
-| `max_turns` | `10` | Max conversation turns per episode |
-| `n_consistency` | `7` | Number of consistency traces for triangulation |
-| `n_question_slots` | `4` | Parallel questions per container |
-| `float_tolerance` | `0.1` | Tolerance for float comparison |
-| `dynamic_triangulation` | `true` | Adjust consistency by difficulty |
-| `triangulation_by_difficulty` | `{EASY: 2, MEDIUM: 2, HARD: 4, VERY_HARD: 6}` | Per-difficulty consistency |
-
----
-
-## Caching & Incremental Generation
-
-The pipeline uses a manifest (`data/datagen_manifest.jsonl`) to track processed questions. This enables:
-
-- **Skip redundant work** - Already-processed questions are skipped automatically
-- **Resume interrupted runs** - Just re-run the command, it picks up where it left off
-- **Template change detection** - When template code changes, only affected questions re-run
-
-```bash
-# View manifest summary
-csvagent manifest
-
-# Force re-run of failed questions
-uv run python -m src.datagen.validate_synthetic --questions-dir data/questions_synthetic --output data/episodes/episodes_synthetic.jsonl --retry-failed
-
-# To fully reset cache, delete the manifest file
-rm data/datagen_manifest.jsonl
-```
-
-The manifest tracks fingerprints based on:
-- **Synthetic**: template code + params + dataset content hash
-- **LLM**: normalized question text + dataset content hash
-
-Changing template code automatically invalidates cached results for that template.
-
----
-
-## Adding Datasets from Kaggle
-
-```bash
-uv sync --extra kaggle
-
-# Download datasets
-uv run python scripts/kaggle/download_datasets.py --limit 10
-```
-
----
-
-## Reproducible Dataset Snapshot
-
-Generated training episodes live in the private Hugging Face dataset configured
-in `configs/datasets/template.toml`. Training and evaluation runs should load
-the recorded commit revision rather than the mutable `main` revision:
-
-```python
-from datasets import load_dataset
-
-dataset = load_dataset(
-    "ThaJpo/csv-agent-template-episodes",
-    revision="e19fadf8d713c5afb7fe1476e2160b9bece1233a",
-    token=True,
-)
-```
-
-Raw Kaggle CSVs are not duplicated in Git or Hugging Face. The pinned HF
-snapshot contains `data/kaggle/manifest.json` with the source dataset refs;
-download those inputs through the Kaggle API when a run needs them. Git tracks
-only deterministic files under `data/fixtures/**`.
-
----
-
-## Upload to HuggingFace
-
-```bash
-huggingface-cli login  # one-time
-
-uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes
-uv run python scripts/upload_hf.py --repo your-username/csv-agent-episodes --private
-```
-
----
-
-## Tests
-
-Non-Docker smoke subset:
-
-```bash
-uv run pytest -q \
-  tests/test_manifest.py \
-  tests/test_golden_artifact_regression_gate.py \
-  tests/test_episode_contract.py \
-  tests/test_artifact_path_resolver.py \
-  tests/test_strict_answer_contract.py \
-  tests/test_robust_matching.py \
-  tests/test_shared_filters.py \
-  tests/test_cli_entrypoint_contract.py
-```
-
-Full suite, including Docker-backed sandbox/container tests:
-
-```bash
-uv run pytest tests/ -v
-```
+Run `uv run csvagent <command> --help` before a paid or large operation. New
+value research should not resume until verifier labels are valid enough to
+distinguish mathematically equivalent answers from real failures.

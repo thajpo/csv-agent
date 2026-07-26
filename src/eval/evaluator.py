@@ -4,12 +4,14 @@ Main evaluation logic for CSV agent models.
 This module implements the Evaluator class which:
 1. Loads episodes from JSONL files
 2. Runs model inference using Environment.rollout()
-3. Compares answers using answers_match() from teacher.py
+3. Compares submitted answers with the canonical question ground-truth contract
+   using hashes and answers_match() from teacher.py
 4. Computes aggregate metrics
 
 Key design decisions:
 - REUSE Environment.rollout() for execution (same path as training)
-- REUSE answers_match() for comparison (existing float tolerance logic)
+- REUSE answers_match() for comparison (existing float tolerance logic), while
+  requiring terminal-verifier hash provenance from the episode question
 - Async throughout for parallel evaluation
 """
 
@@ -18,7 +20,7 @@ import json
 import time
 
 from src.core.environment import Environment
-from csv_spec import EpisodeJSONL
+from csv_spec import EpisodeJSONL, hash_artifact
 from src.datagen.teacher import answers_match
 from src.eval.metrics import EvalResult, EvalMetrics
 
@@ -84,8 +86,15 @@ class Evaluator:
 
         Protocol:
         1. Extract question from episode
-        2. Run Environment.rollout() (no hint - student mode)
-        3. Compare final answer using answers_match()
+        2. Require at least one terminal-verifier hash from the episode question
+        3. Run Environment.rollout() (no hint - student mode)
+        4. Compare the submitted answer against every accepted hash using
+           hash equality or answers_match() for equivalent values
+
+        Episodes without `ground_truth_hash` or `ground_truth_hashes` fail
+        before the model rollout starts. `ground_truth_hashes` supports
+        controlled multi-outcome questions; `ground_truth` supplies the
+        canonical value used by the tolerant comparison fallback.
 
         Args:
             episode: Episode to evaluate
@@ -102,9 +111,19 @@ class Evaluator:
         question_text = episode.question["question_text"]
         difficulty = episode.question.get("difficulty")
 
-        # Expected answer from teacher gold trace
-        expected_answer = episode.rl_verification_data["expected_final_answer"]
-        expected_hash = episode.rl_verification_data.get("expected_final_answer_hash")
+        # Expected answer from the canonical EpisodeJSONL question contract.
+        expected_answer = episode.question.get("ground_truth")
+        expected_hash = episode.question.get("ground_truth_hash")
+        raw_expected_hashes = episode.question.get("ground_truth_hashes")
+        expected_hashes = set(
+            raw_expected_hashes
+            if raw_expected_hashes
+            else ([expected_hash] if expected_hash else [])
+        )
+        if not expected_hashes:
+            raise ValueError(
+                f"episode {episode.episode_id} has no terminal-verifier hash provenance"
+            )
 
         # Run model inference (student mode - no hint)
         try:
@@ -125,13 +144,17 @@ class Evaluator:
 
             # Compare answers
             if execution_success:
-                final_answer_correct = answers_match(
-                    hash1=expected_hash,
-                    hash2=None,  # Don't have hash for actual answer
-                    val1=expected_answer,
-                    val2=actual_answer,
-                    float_tol=self.float_tol,
-                    p_value_tol=self.p_value_tol,
+                actual_hash = hash_artifact(actual_answer)
+                final_answer_correct = actual_hash in expected_hashes or any(
+                    answers_match(
+                        hash1=accepted_hash,
+                        hash2=actual_hash,
+                        val1=expected_answer,
+                        val2=actual_answer,
+                        float_tol=self.float_tol,
+                        p_value_tol=self.p_value_tol,
+                    )
+                    for accepted_hash in expected_hashes
                 )
             else:
                 final_answer_correct = False

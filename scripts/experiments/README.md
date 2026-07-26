@@ -1,80 +1,106 @@
-Experimental and ad-hoc analysis scripts.
+# Research experiments
 
-These are intentionally not part of the automated `tests/` suite.
-Run them manually when needed.
+These scripts are manual research entry points, not stable `csvagent`
+subcommands. Start with the repository-level [README](../../README.md) and keep
+generated artifacts under the ignored `data/experiments/` path.
 
-- `investigate_failures.py`: ad-hoc failure diagnostics for triangulation output.
-- `prepare_value_episodes.py`: makes CSV-disjoint episode files from a pinned
-  Hugging Face snapshot and locally downloaded Kaggle inputs.
-- `download_value_snapshot.py`: restores validated trainer JSONL files from the
-  pinned value-canary snapshot.
-- `collect_prefix_values.py`: samples distinct first actions and estimates each
-  saved partial attempt from terminally verified continuations.
-- `train_value_model.py`: trains the local text value model and compares it with
-  average-success and simple-execution baselines.
-- `evaluate_value_selection.py`: compares random and value-guided candidate
-  selection on one reserved continuation per candidate.
+## What the value canary tests
 
-## Prefix-value canary
+For each CSV question, an OpenRouter actor samples several distinct first
+actions. Each resulting nonterminal state is replayed in a fresh Docker
+sandbox, then continued multiple times. The terminal verifier labels those
+continuations. A local value model is trained to rank the first actions and is
+compared with expected random selection under the same deployed actor-call
+budget.
 
-The canary requires an episode JSONL file whose questions contain a nonempty
-`ground_truth_hash` or `ground_truth_hashes`, access to each episode's local CSV
-(or one `--csv` override), the normal sandbox runtime, an
-`OPENROUTER_API_KEY`, and a clean Git worktree. The clean-worktree check ensures
-that the recorded commit identifies the exact code used for collection. Run it
-from the repository root:
+This is a test of bounded action selection, not evidence that the agent is
+self-improving. Current labels also inherit known semantic problems from the
+terminal verifier.
 
-```bash
-uv run python scripts/experiments/collect_prefix_values.py \
-  --episodes data/episodes/template.jsonl \
-  --model qwen/qwen3-30b-a3b-instruct-2507 \
-  --dataset-revision <immutable-hugging-face-commit> \
-  --output artifacts/prefix-values.jsonl
-```
+## Reproduce the frozen DeepSeek result
 
-Before starting, the command reports one source rollout plus the requested
-continuation rollouts and their worst-case provider-request count, including
-retries. The defaults select the boundary after one completed turn, sample four
-continuations, and process one episode. `--turn-count 0` selects the initial
-state; every selected boundary must leave at least one of `--max-turns`
-available. The hard caps are 16 continuations, 8 candidate actions per episode,
-64 episodes, 20 turns, 16 concurrent rollouts, and 10,000 worst-case provider
-requests. The request bound includes source resampling, continuation turns, and
-three API attempts per request. Each completed record is appended immediately
-so an interrupted batch retains its finished evidence. The base seed is offset
-for the source rollout and each continuation. The provider receives the seed
-when its OpenAI-compatible API supports that field.
-
-Each output line is a validated `PrefixValueRecord`. It includes the exact
-public prefix, actor policy, continuation seeds, continuation traces or errors,
-terminal verdicts, current Git commit, and supplied dataset revision. The value
-is successful continuations divided by all attempts only when every attempt is
-labeled. Missing verifier-hash provenance and replay, rollout, or verifier
-errors make the estimate unavailable while remaining auditable. Hooks may
-appear in traces as diagnostics, but they neither reject a submission nor
-define a value label.
-
-## Train and test selection
-
-Reserve the final continuation from every record, fit on the others, and then
-use that unseen outcome for the equal-call selection comparison:
+Requirements: the normal `uv sync --dev` setup, Hugging Face authentication,
+and access to the private dataset named in
+`configs/value/deepseek-canary.toml`. No OpenRouter calls are made during this
+reproduction.
 
 ```bash
+uv run hf auth login
+
 uv run python scripts/experiments/download_value_snapshot.py \
-  --output-dir data/experiments/value-canary
+  --dataset-config configs/value/deepseek-canary.toml \
+  --output-dir data/experiments/deepseek-canary
 
 uv run python scripts/experiments/train_value_model.py \
-  --train data/experiments/value-canary/train-values.jsonl \
-  --validation data/experiments/value-canary/validation-values.jsonl \
-  --test data/experiments/value-canary/test-values.jsonl \
-  --output-dir data/experiments/value-canary/model
+  --train data/experiments/deepseek-canary/train-values.jsonl \
+  --validation data/experiments/deepseek-canary/validation-values.jsonl \
+  --output-dir data/experiments/deepseek-canary/model
 
 uv run python scripts/experiments/evaluate_value_selection.py \
-  --test data/experiments/value-canary/test-values.jsonl \
-  --checkpoint data/experiments/value-canary/model/value_model.joblib \
-  --output data/experiments/value-canary/model/selection.json
+  --test data/experiments/deepseek-canary/test-values.jsonl \
+  --model-dir data/experiments/deepseek-canary/model \
+  --output data/experiments/deepseek-canary/model/test-selection.json
 ```
 
-The trainer refuses overlapping CSV datasets. Its input renderer uses the
-system prompt, visible conversation, tool feedback, and turns left; it never
-reads expected answers, continuation traces, or verifier outcomes as features.
+The pinned snapshot contains 192 train, 48 validation, and 96 test candidate
+records. The expected primary result is:
+
+```text
+expected random success: 70.31%
+pairwise-guided success: 73.44%
+difference:              +3.12 percentage points
+95% hierarchical CI:     [-6.25, 11.98]
+positive datasets:       2/4
+```
+
+The trainer saves three models and a `model-freeze.json` containing input and
+checkpoint hashes. The evaluator verifies that freeze before opening the
+sealed test records. It uses the two reserved continuations per candidate;
+the six training continuations are never reused as the selection outcome.
+
+## Collect a new bounded OpenRouter dataset
+
+Do this only after defining a new hypothesis and resolving the verifier-label
+problem described in [research.md](../../research.md). Collection costs money,
+requires Docker, and deliberately refuses a dirty Git worktree so every record
+identifies the code that produced it.
+
+Inputs must be JSONL episodes with terminal-verifier hashes and locally
+available CSVs. The command below is illustrative; choose the episode snapshot,
+immutable revision, request cap, and output path before running it.
+
+```bash
+export OPENROUTER_API_KEY="your-key"
+docker info >/dev/null
+
+uv run python scripts/experiments/collect_prefix_values.py \
+  --episodes data/experiments/tasks/train.jsonl \
+  --model deepseek/deepseek-v4-flash \
+  --dataset-revision <immutable-source-snapshot-commit> \
+  --output data/experiments/new-canary/train-values.jsonl \
+  --max-episodes 1 \
+  --candidates-per-episode 3 \
+  --continuations 2 \
+  --max-turns 3 \
+  --concurrency 1 \
+  --max-provider-requests 100
+```
+
+Before making a request, the collector prints and validates its worst-case
+provider-call bound. It appends each completed record immediately and supports
+`--resume`. Hard caps prevent accidentally unbounded collection. Run
+`uv run python scripts/experiments/collect_prefix_values.py --help` for every
+contract field and cap.
+
+Each `PrefixValueRecord` preserves the public state shown to the critic, actor
+policy, continuation seeds and outcomes, Git commit, source dataset revision,
+and collection contract. Expected answers remain private verifier inputs.
+Hooks are diagnostic only and do not supply value labels.
+
+## Other scripts
+
+- `prepare_value_episodes.py`: create CSV-disjoint episode splits from a pinned
+  source snapshot and locally restored Kaggle inputs.
+- `investigate_failures.py`: ad hoc triangulation diagnostics.
+- `test_pass_rates*.py` and `test_verbalization*.py`: historical manual probes;
+  they are not part of pytest or the frozen value result.
